@@ -12,12 +12,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { banc } from './aide.mjs';
 import { baseMigree } from './base.mjs';
-import { ADAPTATEURS, configIa, configIaLocale, creerConnecteurLocal } from '../noyau/ia/connecteur.mjs';
+import { ADAPTATEURS, causeEchec, configIa, configIaLocale, creerConnecteurLocal } from '../noyau/ia/connecteur.mjs';
 import { recupererPage, verifierAdresseHttps } from '../noyau/ia/recherche.mjs';
 import { lireAdresses } from '../noyau/ia/assistant.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
@@ -25,7 +26,8 @@ import { argumentsServeur, creerGestionnaireIaLocale, environnementMoteur, estNo
 import { cheminsIaLocale, dossierRefuse, etatInstallationIaLocale } from '../serveur/ia-locale/installation.mjs';
 import { creerIaLocale } from '../serveur/ia-locale/service.mjs';
 import { lancerTravailleurIaLocale } from '../serveur/ia-locale/lanceur.mjs';
-import { executerTravailleur } from '../serveur/ia-locale/travailleur.mjs';
+import { executerTravailleur, prendreVerrouTravailleur } from '../serveur/ia-locale/travailleur.mjs';
+import { creerFetchLocal, fetchLocal } from '../serveur/ia-locale/transport.mjs';
 import { lireOptions, lirePaquetsOutils, recommandation, telechargerVerifie } from '../serveur/ia-locale/installer.mjs';
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
@@ -53,10 +55,12 @@ const s = http.createServer((req, res) => {
   req.on('data', d => (corps += d));
   req.on('end', () => {
     appendFileSync(journal, corps + '\\n');
+    // « LENT:<ms> » dans un message : génération longue (aucun en-tête avant la fin, comme llama-server).
+    const lent = /LENT:(\\d+)/.exec(corps);
     setTimeout(() => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '{"ok": true}' } }], usage: { prompt_tokens: 12, completion_tokens: 5 }, timings: { predicted_per_second: 7.5, prompt_per_second: 60 } }));
-    }, 30);
+    }, lent ? Number(lent[1]) : 30);
   });
 });
 s.listen(Number(opt('--port')), opt('--host'));
@@ -273,6 +277,177 @@ test('connecteur local : adresse 127.0.0.1 construite ici seulement, clé du mot
   assert.equal(conf.modele, 'qwen2.5-7b');
   assert.equal(configIaLocale({}).threads, 8);
   assert.equal(configIa({ IA_FOURNISSEUR: 'local' }).modeDefaut, 'local');
+});
+
+// ------------------------------------------------------------------ Transport local (délais d'undici)
+
+/** Faux moteur HTTP minimal : répond après `retard.ms` (aucun en-tête avant), ou coupe la connexion. */
+async function moteurHttp(retard) {
+  const s = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      if (retard.couper) {
+        req.socket.destroy();
+        return;
+      }
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }], timings: { predicted_per_second: 6.4 } }));
+      }, retard.ms);
+    });
+  });
+  await new Promise(ok => s.listen(0, '127.0.0.1', ok));
+  return { port: s.address().port, fermer: () => new Promise(ok => s.close(ok)) };
+}
+
+function gestionnaireFactice(port, incidents) {
+  return { executer: async (fn, o) => fn({ port, cle: 'cle-moteur', limite: Date.now() + o.delai }), noterMesure: () => undefined, noterIncident: (texte, code) => incidents.push({ texte, code }) };
+}
+
+test('transport local : génération plus longue que le délai d’en-têtes d’undici → réussit (node:http) ; le fetch global échouait (cause journalisée)', async () => {
+  const retard = { ms: 600 };
+  const m = await moteurHttp(retard);
+  try {
+    const incidents = [];
+    const g = gestionnaireFactice(m.port, incidents);
+    const messages = [{ role: 'user', content: 'x' }];
+    // Reproduction : un client qui abandonne après 200 ms sans en-têtes (undici : 300 s) → la VRAIE cause est rendue et journalisée.
+    const commeUndici = creerConnecteurLocal(g, { fetch: creerFetchLocal({ delaiEntetesMs: 200 }) });
+    await assert.rejects(commeUndici.discuter(messages), e => e.code === 'ia-delai-connexion' && e.statut === 504 && e.cause === 'UND_ERR_HEADERS_TIMEOUT');
+    assert.match(incidents[0].texte, /UND_ERR_HEADERS_TIMEOUT/);
+    assert.equal(incidents[0].code, 'ia-delai-connexion');
+    // Même chose avec le vrai undici (headersTimeout réglé à 200 ms), s'il est présent dans node_modules.
+    let undici = null;
+    try {
+      undici = await import('undici');
+    } catch {
+      undici = null;
+    }
+    if (undici?.Agent && undici?.fetch) {
+      // (minuteries d'undici à la seconde près : réponse à 2,5 s pour un délai d'en-têtes de 200 ms)
+      retard.ms = 2500;
+      const agent = new undici.Agent({ headersTimeout: 200 });
+      const vraiUndici = creerConnecteurLocal(g, { fetch: (url, init) => undici.fetch(url, { ...init, dispatcher: agent }) });
+      await assert.rejects(vraiUndici.discuter(messages), e => e.code === 'ia-delai-connexion' && e.cause === 'UND_ERR_HEADERS_TIMEOUT');
+      await agent.close();
+      retard.ms = 600;
+    }
+    // Le transport du moteur local (défaut de creerIaLocale) : aucun délai d'en-têtes → la réponse arrive.
+    const r = await creerConnecteurLocal(g, { fetch: fetchLocal }).discuter(messages);
+    assert.equal(r.texte, '{"ok":true}');
+    assert.equal(r.vitesse, 6.4);
+    // Le délai GLOBAL (IA_LOCALE_DELAI_MIN) reste appliqué par l'AbortSignal.
+    retard.ms = 1800;
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal, delai: 10 }).discuter(messages), e => e.code === 'ia-delai');
+    // Moteur qui coupe la connexion pendant le calcul : code précis.
+    retard.couper = true;
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal }).discuter(messages), e => e.code === 'ia-locale-coupee' && e.cause === 'ECONNRESET');
+  } finally {
+    await m.fermer();
+  }
+  // Moteur arrêté (plus rien n'écoute) : « ia-locale-arretee », pas un vague « injoignable ».
+  const incidents = [];
+  await assert.rejects(creerConnecteurLocal(gestionnaireFactice(m.port, incidents), { fetch: fetchLocal }).discuter([]), e => e.code === 'ia-locale-arretee');
+  assert.match(incidents[0].texte, /ECONNREFUSED/);
+  // Transport réservé au moteur local.
+  await assert.rejects(fetchLocal('http://example.com/v1/chat/completions', { method: 'POST' }), e => e.cause?.code === 'ADRESSE_REFUSEE');
+  await assert.rejects(fetchLocal('https://127.0.0.1:1234/', {}), e => e.cause?.code === 'ADRESSE_REFUSEE');
+  assert.equal(causeEchec(new TypeError('fetch failed', { cause: { code: 'UND_ERR_HEADERS_TIMEOUT' } })), 'UND_ERR_HEADERS_TIMEOUT');
+  assert.equal(causeEchec(new TypeError('fetch failed', { cause: { code: 'cle secrète' } })), 'inconnue');
+});
+
+test('concurrence : requête longue du processus de fond → ni arrêt pour inactivité, ni nettoyage par l’app ou le cron, ni second moteur', async () => {
+  const inst = installationFactice();
+  const journal = join(inst.racine, 'moteur.log');
+  try {
+    const fond = gestionnaire(inst, { inactiviteMs: 100, role: 'travailleur' });
+    const connecteur = creerConnecteurLocal(fond, { fetch: fetchLocal });
+    const requete = connecteur.discuter([{ role: 'user', content: 'LENT:1500' }]);
+    while (!fond.etat().enMarche) await attendre(20);
+    const pid = JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid;
+    await attendre(300);
+    // Le cron et l'app (démarrage, test de connexion) pendant le calcul : le moteur légitime n'est pas touché.
+    assert.equal(nettoyerOrphelinIaLocale({ dossier: inst.c.dossier, journal, role: 'cron' }).raison, 'en-service');
+    const app = gestionnaire(inst, { attenteVerrouMs: 200, role: 'app' });
+    await assert.rejects(app.executer(async () => true), e => e.code === 'ia-locale-occupee');
+    assert.equal(app.etat().ailleurs, true);
+    assert.equal(processusVivant(pid), true, 'inactivité (100 ms) dépassée mais requête en cours : moteur gardé');
+    assert.equal((await requete).texte, '{"ok": true}');
+    assert.equal(existsSync(inst.c.cle), true, 'clé intacte');
+    // Après la requête : arrêt pour inactivité.
+    await attendre(800);
+    assert.equal(processusVivant(pid), false);
+    assert.doesNotMatch(readFileSync(journal, 'utf8'), /orphelin/);
+  } finally {
+    inst.nettoyer();
+  }
+});
+
+test('concurrence : moteur tué PENDANT une requête → code précis, signal journalisé, erreur visible de l’app ; jamais le verrou ni la clé d’un autre', async () => {
+  const inst = installationFactice();
+  const journal = join(inst.racine, 'moteur.log');
+  const enfants = [];
+  try {
+    const fond = gestionnaire(inst, { inactiviteMs: 5000, role: 'travailleur' });
+    const app = gestionnaire(inst, { role: 'app' });
+    const requete = creerConnecteurLocal(fond, { fetch: fetchLocal }).discuter([{ role: 'user', content: 'LENT:5000' }]);
+    while (!fond.etat().enMarche) await attendre(20);
+    await attendre(200);
+    process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
+    await assert.rejects(requete, e => ['ia-locale-coupee', 'ia-locale-arretee'].includes(e.code));
+    await attendre(100);
+    const texte = readFileSync(journal, 'utf8');
+    assert.match(texte, /requête échouée après \d+ s : ia-locale-(coupee|arretee) \(cause [A-Z]+\)/);
+    assert.match(texte, /arrêté de façon imprévue \(signal SIGKILL\)/);
+    assert.ok(['ia-locale-coupee', 'ia-locale-arretee', 'ia-locale-arret'].includes(app.etat().derniereErreur?.code), 'erreur du processus de fond visible dans l’Administration IA');
+    assert.equal(existsSync(inst.c.verrouServeur), false);
+    // Redémarrage réussi : l'erreur est effacée partout.
+    assert.equal((await creerConnecteurLocal(fond, { fetch: fetchLocal }).discuter([])).texte, '{"ok": true}');
+    assert.equal(app.etat().derniereErreur, null);
+    // Un autre processus a pris le moteur entre-temps (verrou et clé à lui) : la sortie de NOTRE moteur n'y touche pas.
+    const pid = JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid;
+    const autre = JSON.stringify({ proprietaire: process.pid, jeton: 'autre', pid: null, majLe: new Date().toISOString() });
+    writeFileSync(inst.c.verrouServeur, autre);
+    writeFileSync(inst.c.cle, 'cle-de-l-autre\n');
+    process.kill(pid, 'SIGKILL');
+    await attendre(300);
+    assert.equal(readFileSync(inst.c.verrouServeur, 'utf8'), autre);
+    assert.equal(readFileSync(inst.c.cle, 'utf8'), 'cle-de-l-autre\n');
+    // Nettoyage pendant qu'un autre processus remplace le verrou orphelin par le sien : le nouveau verrou et la nouvelle clé restent.
+    const vieux = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
+    enfants.push(vieux);
+    writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: 2 ** 22 + 12345, jeton: 'vieux', pid: vieux.pid, majLe: new Date(Date.now() - 3_600_000).toISOString() }));
+    const nouveau = JSON.stringify({ proprietaire: process.pid, jeton: 'nouveau', pid: null, majLe: new Date().toISOString() });
+    const n = nettoyerOrphelinIaLocale({
+      dossier: inst.c.dossier,
+      lire: () => {
+        rmSync(inst.c.verrouServeur);
+        writeFileSync(inst.c.verrouServeur, nouveau);
+        writeFileSync(inst.c.cle, 'nouvelle-cle\n');
+        return [];
+      },
+    });
+    assert.equal(n.raison, 'remplace');
+    assert.equal(readFileSync(inst.c.verrouServeur, 'utf8'), nouveau);
+    assert.equal(readFileSync(inst.c.cle, 'utf8'), 'nouvelle-cle\n');
+  } finally {
+    for (const e of enfants) e.kill('SIGKILL');
+    inst.nettoyer();
+  }
+});
+
+test('processus de fond : verrou créé d’un coup avec son pid (jamais vide) ; un second processus renonce', () => {
+  const inst = installationFactice();
+  try {
+    const ch = inst.c.verrouTravailleur;
+    assert.equal(prendreVerrouTravailleur(ch, process.pid), true);
+    assert.equal(readFileSync(ch, 'utf8'), String(process.pid));
+    assert.equal(prendreVerrouTravailleur(ch, 999_999), false);
+    assert.equal(readFileSync(ch, 'utf8'), String(process.pid));
+    assert.deepEqual(readdirSync(inst.c.etat).filter(f => f.endsWith('.tmp')), []);
+  } finally {
+    inst.nettoyer();
+  }
 });
 
 // ------------------------------------------------------------------ Choix du moteur dans le service

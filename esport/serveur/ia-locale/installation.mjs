@@ -100,6 +100,7 @@ export function cheminsIaLocale(dossier = dossierIaLocaleParDefaut()) {
     verrouServeur: join(etat, 'serveur.json'),
     cle: join(etat, 'cle'),
     mesures: join(etat, 'mesures.json'),
+    incident: join(etat, 'incident.json'),
     verrouTravailleur: join(etat, 'travailleur.verrou'),
   };
 }

@@ -596,7 +596,8 @@
   "Post dépublié ou supprimé": "Post unpublished or deleted",
   "Annonce désactivée pour ce compte": "Announcement disabled for this account",
   "Salon Discord changé depuis l’annonce : message non modifiable": "Discord channel changed since the announcement: message cannot be edited",
-  "Annonce supprimée dans Discord : rien à modifier": "Announcement deleted in Discord: nothing to edit"
+  "Annonce supprimée dans Discord : rien à modifier": "Announcement deleted in Discord: nothing to edit",
+  "L’IA locale ne répond plus : son moteur s’est arrêté (voir ~/logs/esport-ia-locale.log).": "The local AI no longer responds: its engine stopped (see ~/logs/esport-ia-locale.log)."
  },
  "motifs": [
   [
@@ -886,6 +887,18 @@
   [
    "^Adresse du profil invalide : https:// sur (.+), page du compte\\.$",
    "Invalid profile address: https:// on $1, the account page."
+  ],
+  [
+   "^Service d’IA injoignable \\((.+)\\)\\.$",
+   "AI service unreachable ($1)."
+  ],
+  [
+   "^La connexion au service d’IA a expiré avant sa réponse \\((.+)\\)\\.$",
+   "The connection to the AI service timed out before its response ($1)."
+  ],
+  [
+   "^Le moteur d’IA locale a coupé la connexion pendant le calcul \\((.+) ; voir ~/logs/esport-ia-locale\\.log\\)\\.$",
+   "The local AI engine closed the connection during the computation ($1; see ~/logs/esport-ia-locale.log)."
   ]
  ]
 }

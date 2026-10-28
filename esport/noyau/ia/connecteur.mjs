@@ -178,21 +178,64 @@ async function lireBorne(reponse, max) {
  * Un échange « chat completions » : requête de l'adaptateur, délai, lecture bornée, erreurs au code
  * stable dont le message ne contient JAMAIS la clé. Partagé par le connecteur d'API et l'IA locale.
  */
-async function echanger({ adaptateur, config, messages, options, fetchIa, delai, maintenant }) {
+/**
+ * Cause technique d'un échec de `fetch` (code système ou d'undici : ECONNREFUSED, ECONNRESET,
+ * UND_ERR_HEADERS_TIMEOUT…), pour le journal et le message. Seulement un code court en majuscules (jamais
+ * un texte libre qui pourrait contenir une adresse ou une clé).
+ */
+export function causeEchec(e) {
+  for (const v of [e?.cause?.code, e?.code, e?.cause?.cause?.code, e?.cause?.name, e?.name]) {
+    const c = String(v ?? '');
+    if (/^[A-Z][A-Z0-9_]{1,39}$/.test(c)) return c;
+    if (/^[A-Za-z]{2,40}Error$/.test(c) && c !== 'TypeError' && c !== 'Error') return c;
+  }
+  return 'inconnue';
+}
+
+const COUPURES = new Set(['ECONNRESET', 'EPIPE', 'UND_ERR_SOCKET', 'UND_ERR_CLOSED', 'ECONNABORTED']);
+const DELAIS_CLIENT = new Set(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT', 'ETIMEDOUT']);
+
+/** Erreur stable d'un `fetch` échoué (code précis pour l'IA locale), avec sa cause technique jointe. */
+function erreurTransport(e, local) {
+  const cause = causeEchec(e);
+  let err;
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') err = echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
+  else if (DELAIS_CLIENT.has(cause)) err = echec(504, 'ia-delai-connexion', `La connexion au service d’IA a expiré avant sa réponse (${cause}).`);
+  else if (local && cause === 'ECONNREFUSED') err = echec(502, 'ia-locale-arretee', 'L’IA locale ne répond plus : son moteur s’est arrêté (voir ~/logs/esport-ia-locale.log).');
+  else if (local && COUPURES.has(cause)) err = echec(502, 'ia-locale-coupee', `Le moteur d’IA locale a coupé la connexion pendant le calcul (${cause} ; voir ~/logs/esport-ia-locale.log).`);
+  else err = echec(502, 'ia-injoignable', `Service d’IA injoignable${cause !== 'inconnue' ? ` (${cause})` : ''}.`);
+  err.cause = cause;
+  return err;
+}
+
+async function echanger({ adaptateur, config, messages, options, fetchIa, delai, maintenant, journaliser = null }) {
   const { url, init } = adaptateur.requete(config, messages, options);
   const debut = maintenant();
+  const local = config.fournisseur === 'local';
   let r;
   try {
     r = await fetchIa(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(options.delai ?? delai) });
   } catch (e) {
-    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
-    throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
+    const err = erreurTransport(e, local);
+    try {
+      journaliser?.(`requête échouée après ${Math.round((maintenant() - debut) / 1000)} s : ${err.code} (cause ${err.cause})`, err.code);
+    } catch {
+      // Journal indisponible : l'erreur reste rendue.
+    }
+    throw err;
   }
   const texte = await lireBorne(r, TAILLE_MAX_REPONSE_IA).catch(() => null);
   if (r.status === 401 || r.status === 403) throw echec(502, 'ia-cle-refusee', 'Le service d’IA refuse la clé d’API (vérifiez IA_API_CLE).');
   if (r.status === 429) throw echec(502, 'ia-limite-fournisseur', 'Le service d’IA limite les appels (quota du fournisseur atteint) : réessayez plus tard.');
   if (r.status === 404) throw echec(502, 'ia-modele', 'Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE et IA_API_URL).');
-  if (!r.ok) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
+  if (!r.ok) {
+    try {
+      journaliser?.(`réponse HTTP ${r.status} après ${Math.round((maintenant() - debut) / 1000)} s`, 'ia-injoignable');
+    } catch {
+      // Journal indisponible.
+    }
+    throw echec(502, 'ia-injoignable', `Service d’IA injoignable (HTTP ${r.status}).`);
+  }
   let json;
   try {
     json = texte === null ? null : JSON.parse(texte);
@@ -200,14 +243,22 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
     json = null;
   }
   const sortie = json ? adaptateur.reponse(json) : null;
-  if (!sortie) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+  if (!sortie) {
+    try {
+      journaliser?.(`réponse illisible après ${Math.round((maintenant() - debut) / 1000)} s (${texte === null ? 'corps coupé ou trop long' : `${texte.length} caractères`})`, 'ia-reponse');
+    } catch {
+      // Journal indisponible.
+    }
+    throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+  }
   return { ...sortie, dureeMs: maintenant() - debut };
 }
 
 /**
  * Connecteur prêt à l'emploi. `fetch` est injectable (tests : faux serveur, jamais de réseau réel).
  * `discuter(messages, options)` → { texte, jetons, dureeMs } ; erreurs : ErreurEsport au code stable
- * (ia-non-configuree, ia-cle-refusee, ia-limite-fournisseur, ia-delai, ia-injoignable, ia-reponse),
+ * (ia-non-configuree, ia-cle-refusee, ia-limite-fournisseur, ia-delai, ia-delai-connexion, ia-injoignable,
+ * ia-reponse ; IA locale : ia-locale-arretee, ia-locale-coupee),
  * dont le message ne contient JAMAIS la clé.
  */
 export function creerConnecteur(config, { fetch: fetchIa = (...a) => globalThis.fetch(...a), delai = DELAI_IA_MS, maintenant = () => Date.now() } = {}) {
@@ -270,6 +321,8 @@ export function configIaLocale(env = process.env) {
  * réservée au serveur local géré (jamais une adresse venue de la configuration, d'une page ou du modèle).
  */
 export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax = 4096, delai = 20 * 60_000, fetch: fetchIa = (...a) => globalThis.fetch(...a), maintenant = () => Date.now() } = {}) {
+  // Diagnostic : la cause réelle d'un échec va dans ~/logs/esport-ia-locale.log (via le gestionnaire).
+  const journaliser = (texte, code) => gestionnaire?.noterIncident?.(texte, code);
   const adaptateur = ADAPTATEURS['openai-chat'];
   return {
     local: true,
@@ -283,7 +336,7 @@ export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax
           if (!Number.isInteger(port) || port < 1024 || port > 65535) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
           const config = { fournisseur: 'local', modele, url: `http://127.0.0.1:${port}/v1/chat/completions`, lireCle: () => cle };
           const reste = Math.max(1000, limite - maintenant());
-          return echanger({ adaptateur, config, messages, options: { ...options, json: options.json ?? true, maxJetons: Math.min(options.maxJetons ?? jetonsMax, jetonsMax), delai: reste }, fetchIa, delai: reste, maintenant });
+          return echanger({ adaptateur, config, messages, options: { ...options, json: options.json ?? true, maxJetons: Math.min(options.maxJetons ?? jetonsMax, jetonsMax), delai: reste }, fetchIa, delai: reste, maintenant, journaliser });
         },
         { delai: total },
       );

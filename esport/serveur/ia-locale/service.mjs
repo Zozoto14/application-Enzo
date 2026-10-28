@@ -16,6 +16,7 @@ import { configIaLocale, creerConnecteurLocal } from '../../noyau/ia/connecteur.
 import { creerGestionnaireIaLocale } from './gestionnaire.mjs';
 import { MODELES_IA_LOCALE, dossierIaLocaleParDefaut, etatInstallationIaLocale } from './installation.mjs';
 import { lancerTravailleurIaLocale } from './lanceur.mjs';
+import { fetchLocal } from './transport.mjs';
 
 /** Réglages + état de l'installation (rapide : quelques lectures de fichiers, aucun lancement). */
 export function chargerIaLocale(env = process.env) {
@@ -49,9 +50,11 @@ export function creerIaLocale(reglages, { role = 'app', gestionnaire, lancer = l
       // Processus de fond : il attend que l'app libère le moteur (test de connexion récent).
       attenteVerrouMs: role === 'travailleur' ? reglages.inactiviteMs + 2 * 60_000 : 10_000,
       log: journal,
+      role,
     });
   }
-  const connecteur = g ? creerConnecteurLocal(g, { modele: reglages.modele, jetonsMax: reglages.jetonsMax, delai: reglages.delaiMs, ...(fetch ? { fetch } : {}) }) : null;
+  // Transport node:http (pas le fetch global : undici coupe à 300 s sans en-têtes, voir transport.mjs).
+  const connecteur = g ? creerConnecteurLocal(g, { modele: reglages.modele, jetonsMax: reglages.jetonsMax, delai: reglages.delaiMs, fetch: fetch ?? fetchLocal }) : null;
   // Le cron ne démarre pas de moteur mais doit savoir que l'IA locale est installée (pour lancer le processus de fond).
   const pret = Boolean(inst.installe && (connecteur || role === 'cron'));
   return {

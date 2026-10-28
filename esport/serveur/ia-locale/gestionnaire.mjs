@@ -22,7 +22,7 @@
 
 import { spawn as spawnNode } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname } from 'node:path';
 import { echec } from '../../noyau/outils.mjs';
@@ -67,6 +67,20 @@ function ecrireAtomique(chemin, contenu, mode = 0o600) {
   renameSync(tmp, chemin);
 }
 
+/**
+ * Ligne de diagnostic dans ~/logs/esport-ia-locale.log (même fichier que les sorties du moteur) : qui
+ * (pid, rôle) a fait quoi et pourquoi. Jamais de clé ni de port. Sans `journal` : rien (tests).
+ */
+export function noterIaLocale(journal, texte, role = null) {
+  if (!journal) return;
+  try {
+    mkdirSync(dirname(journal), { recursive: true });
+    appendFileSync(journal, `${new Date().toISOString()} [esport] IA locale${role ? ` (${role}, pid ${process.pid})` : ` (pid ${process.pid})`} : ${texte}\n`);
+  } catch {
+    // Journal indisponible : sans conséquence.
+  }
+}
+
 /** Arrête un processus orphelin (SIGKILL), s'il est bien à nous. */
 function tuerSiNotre(pid, fichierCle, lire) {
   if (!Number.isInteger(pid) || pid <= 1 || !processusVivant(pid) || !estNotreServeur(pid, fichierCle, lire)) return false;
@@ -96,7 +110,7 @@ export function verrouActif(v, maintenant = Date.now()) {
  * verrou et la clé. Appelé au démarrage de l'app, par le cron et avant chaque démarrage. Rend
  * `{ nettoye, pid?, raison }`.
  */
-export function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lire = ligneDeCommande } = {}) {
+export function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lire = ligneDeCommande, journal = null, role = null } = {}) {
   const c = cheminsIaLocale(dossier);
   if (!existsSync(c.verrouServeur)) return { nettoye: false, raison: 'aucun' };
   const v = lireVerrou(c.verrouServeur);
@@ -108,12 +122,25 @@ export function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lir
       return { nettoye: false, raison: 'aucun' };
     }
     rmSync(c.verrouServeur, { force: true });
+    noterIaLocale(journal, 'verrou du moteur illisible retiré.', role);
     return { nettoye: true, raison: 'illisible' };
   }
   if (verrouActif(v, maintenant)) return { nettoye: false, raison: 'en-service' };
+  // Toujours le MÊME verrou (un autre processus a pu le remplacer entre-temps par le sien) ?
+  const toujours = () => lireVerrou(c.verrouServeur)?.jeton === v.jeton;
+  if (!toujours()) return { nettoye: false, raison: 'remplace' };
+  const age = Math.round((maintenant - Date.parse(v.majLe ?? '')) / 1000);
   const tue = tuerSiNotre(v.pid, c.cle, lire);
-  rmSync(c.verrouServeur, { force: true });
+  // La clé AVANT le verrou, et seulement si l'ancien verrou est toujours là : tant qu'il existe, personne
+  // n'a pu prendre le moteur ni écrire une nouvelle clé.
+  if (!toujours()) return { nettoye: tue, raison: 'remplace', ...(tue ? { pid: v.pid } : {}) };
   rmSync(c.cle, { force: true });
+  if (toujours()) rmSync(c.verrouServeur, { force: true });
+  noterIaLocale(
+    journal,
+    `moteur orphelin nettoyé (propriétaire pid ${v.proprietaire} ${processusVivant(v.proprietaire) ? 'vivant' : 'disparu'}, dernier battement il y a ${Number.isFinite(age) ? `${age} s` : '?'}${tue ? `, moteur pid ${v.pid} arrêté` : ''}).`,
+    role,
+  );
   return { nettoye: true, raison: 'orphelin', ...(tue ? { pid: v.pid } : {}) };
 }
 
@@ -204,6 +231,7 @@ export function creerGestionnaireIaLocale({
   maintenant = () => Date.now(),
   lire = ligneDeCommande,
   log = console,
+  role = null,
 } = {}) {
   const c = cheminsIaLocale(dossier);
   const jeton = randomBytes(8).toString('hex');
@@ -218,6 +246,19 @@ export function creerGestionnaireIaLocale({
   let derniereErreur = null;
 
   const iso = t => new Date(t).toISOString();
+  const noter = texte => noterIaLocale(journal, texte, role);
+
+  /** Erreur notée ici ET partagée entre processus (etat/incident.json) : l'Administration IA la montre. */
+  function noterErreur(code, texte) {
+    derniereErreur = { code, le: iso(maintenant()) };
+    if (texte) noter(texte);
+    try {
+      preparerDossier();
+      ecrireAtomique(c.incident, JSON.stringify({ ...derniereErreur, role }));
+    } catch {
+      // Sans gravité.
+    }
+  }
 
   function preparerDossier() {
     mkdirSync(c.etat, { recursive: true, mode: 0o700 });
@@ -243,7 +284,7 @@ export function creerGestionnaireIaLocale({
       const v = lireVerrou(c.verrouServeur);
       if (v?.jeton === jeton) return true;
       if (verrouActif(v, maintenant())) return false;
-      const n = nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire });
+      const n = nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role });
       if (n.nettoye) log.warn?.(`[esport] IA locale : serveur orphelin nettoyé${n.pid ? ` (pid ${n.pid})` : ''}.`);
       else if (n.raison !== 'aucun') return false;
     }
@@ -256,9 +297,12 @@ export function creerGestionnaireIaLocale({
     ecrireAtomique(c.verrouServeur, JSON.stringify({ ...v, ...patch, majLe: iso(maintenant()) }));
   }
 
+  /** Retire NOTRE verrou et la clé (jamais ceux d'un autre processus : son moteur en dépend). */
   function libererVerrou() {
     const v = lireVerrou(c.verrouServeur);
-    if (v?.jeton === jeton) rmSync(c.verrouServeur, { force: true });
+    if (v?.jeton !== jeton) return;
+    rmSync(c.cle, { force: true });
+    rmSync(c.verrouServeur, { force: true });
   }
 
   function ouvrirJournal() {
@@ -293,7 +337,6 @@ export function creerGestionnaireIaLocale({
     }
     try {
       libererVerrou();
-      rmSync(c.cle, { force: true });
     } catch {
       // Sortie du processus : au mieux.
     }
@@ -329,17 +372,18 @@ export function creerGestionnaireIaLocale({
         detached: false,
       });
       const fini = { code: null, termine: false };
-      enfant.on('exit', code => {
+      enfant.on('exit', (code, signal) => {
         fini.termine = true;
-        fini.code = code;
+        fini.code = code ?? signal;
         if (serveur?.enfant === enfant) {
           serveur = null;
           enMarche.delete(moi);
           clearInterval(battement);
           clearTimeout(minuteurRepos);
           libererVerrou();
-          rmSync(c.cle, { force: true });
-          if (code !== 0 && code !== null) derniereErreur = { code: 'ia-locale-arret', le: iso(maintenant()) };
+          // Arrêt imprévu (plantage, mémoire, processus tué par un tiers) : noté, avec le signal reçu. (Nos
+          // propres arrêts — inactivité, échec de démarrage, sortie — retirent `serveur` avant de tuer : pas ici.)
+          if (!(code === 0 && !signal)) noterErreur('ia-locale-arret', `moteur pid ${enfant.pid} arrêté de façon imprévue (${signal ? `signal ${signal}` : `code ${code}`})${actif ? ' PENDANT une requête' : ''}.`);
         }
       });
       enfant.on('error', () => {
@@ -368,7 +412,7 @@ export function creerGestionnaireIaLocale({
       enMarche.add(moi);
       surveillerSortie();
       dernierDemarrageMs = maintenant() - debut;
-      derniereErreur = null;
+      effacerErreur();
       log.log?.(`[esport] IA locale démarrée en ${Math.round(dernierDemarrageMs / 1000)} s (127.0.0.1, ${threads} fils).`);
     } catch (e) {
       clearInterval(battement);
@@ -381,14 +425,35 @@ export function creerGestionnaireIaLocale({
       }
       serveur = null;
       libererVerrou();
-      rmSync(c.cle, { force: true });
-      derniereErreur = { code: e?.code ?? 'ia-locale-demarrage', le: iso(maintenant()) };
-      if (e?.code) throw e;
+      if (e?.code) {
+        derniereErreur = { code: e.code, le: iso(maintenant()) };
+        if (e.code !== 'ia-locale-occupee') noter(`démarrage refusé : ${e.code}.`);
+        throw e;
+      }
       log.error?.(`[esport] IA locale : démarrage impossible (${e?.message ?? e}).`);
+      noterErreur('ia-locale-demarrage', `démarrage impossible : ${e?.message ?? e}.`);
       throw echec(503, 'ia-locale-demarrage', 'L’IA locale n’a pas pu démarrer (voir ~/logs/esport-ia-locale.log).');
     } finally {
       if (typeof fd === 'number') closeSync(fd);
     }
+  }
+
+  function effacerErreur() {
+    derniereErreur = null;
+    try {
+      rmSync(c.incident, { force: true });
+    } catch {
+      // Sans gravité.
+    }
+  }
+
+  /** Dernière erreur, de ce processus ou d'un autre (processus de fond) : la plus récente des deux. */
+  function erreurRecente() {
+    const partagee = lireJson(c.incident);
+    const ok = partagee && typeof partagee.code === 'string' && Number.isFinite(Date.parse(partagee.le ?? ''));
+    if (!ok) return derniereErreur;
+    if (!derniereErreur || Date.parse(partagee.le) > Date.parse(derniereErreur.le)) return { code: partagee.code, le: partagee.le };
+    return derniereErreur;
   }
 
   async function arreter() {
@@ -418,7 +483,6 @@ export function creerGestionnaireIaLocale({
     await parti;
     clearTimeout(dur);
     libererVerrou();
-    rmSync(c.cle, { force: true });
     log.log?.('[esport] IA locale arrêtée.');
     return true;
   }
@@ -490,13 +554,15 @@ export function creerGestionnaireIaLocale({
         file: file.length + (actif ? 1 : 0),
         dernierUsage: dernierUsage ? iso(dernierUsage) : null,
         dernierDemarrageMs,
-        derniereErreur,
+        derniereErreur: erreurRecente(),
         mesure: lireJson(c.mesures),
       };
     },
     /** Dernière vitesse mesurée (jetons générés par seconde), partagée entre processus (etat/mesures.json). */
     noterMesure({ jetonsParSeconde, dureeMs }) {
       if (!Number.isFinite(jetonsParSeconde) && !Number.isFinite(dureeMs)) return;
+      // Une requête vient de réussir : l'erreur notée avant n'a plus cours.
+      effacerErreur();
       try {
         preparerDossier();
         ecrireAtomique(c.mesures, JSON.stringify({ jetonsParSeconde: Number.isFinite(jetonsParSeconde) ? Math.round(jetonsParSeconde * 10) / 10 : null, dureeMs: Number.isFinite(dureeMs) ? dureeMs : null, le: iso(maintenant()) }));
@@ -504,6 +570,12 @@ export function creerGestionnaireIaLocale({
         // Mesure perdue : sans gravité.
       }
     },
-    nettoyerOrphelin: () => nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire }),
+    nettoyerOrphelin: () => nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role }),
+    /** Diagnostic d'une requête échouée (cause réelle), avec l'état du moteur à cet instant. */
+    noterIncident(texte, code = null) {
+      const moteur = serveur ? `moteur pid ${serveur.pid} ${processusVivant(serveur.pid) ? 'toujours en marche' : 'disparu'}` : 'moteur arrêté';
+      if (code) noterErreur(code, `${texte} ; ${moteur}.`);
+      else noter(`${texte} ; ${moteur}.`);
+    },
   };
 }

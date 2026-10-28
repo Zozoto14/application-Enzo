@@ -369,6 +369,12 @@ function resumeVersion(v: VersionJeu): string {
 
 const STATUTS_EN_COURS = ['attente', 'en_cours'];
 
+/** Minutes écoulées depuis une date ISO (0 si illisible) : progression d'un brouillon en cours. */
+function minutesDepuis(iso: string | null | undefined): number {
+  const t = Date.parse(iso ?? '');
+  return Number.isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 60_000)) : 0;
+}
+
 function AssistantIa({ theme, api, large, liste, onRelire }: { theme: ThemeHub; api: ApiJeux; large: boolean; liste: ListeJeux | undefined; onRelire(id: string): void }) {
   const [nom, setNom] = useState('');
   const [urls, setUrls] = useState('');
@@ -436,6 +442,7 @@ function AssistantIa({ theme, api, large, liste, onRelire }: { theme: ThemeHub; 
               <Badge theme={theme} texte={trJeux(`jeux.statut.${t.statut}`)} ton={t.statut === 'pret' ? 'accent' : t.statut === 'echec' ? 'critique' : t.statut === 'valide' ? 'ok' : 'neutre'} />
             </View>
             <Text style={attenue(theme, 12)}>{`${dateCourte(t.creeLe)}${t.demandePar?.pseudo ? ` · ${t.demandePar.pseudo}` : ''}`}</Text>
+            {t.statut === 'en_cours' ? <Text style={attenue(theme, 12)} testID={`esport-jeux-brouillon-${t.id}-depuis`}>{trnJeux('jeux.en_cours_depuis', minutesDepuis(t.majLe))}</Text> : null}
             {t.erreur ? <Text style={{ color: theme.critique, fontSize: 12 }}>{t.erreur.message}</Text> : null}
             {t.statut === 'pret' ? <BoutonHub theme={theme} titre={trJeux('jeux.relire')} variante="plein" onPress={() => onRelire(t.id)} testID={`esport-jeux-brouillon-${t.id}-relire`} /> : null}
           </View>

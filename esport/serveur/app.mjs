@@ -18,6 +18,7 @@ import { chargerConfigEsport, problemesConfig } from './config.mjs';
 import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
 import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
+import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
@@ -34,7 +35,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
   // IA locale : moteur resté orphelin après un redémarrage de l'app (Passenger) arrêté tout de suite.
   if (config.iaLocale?.installation?.installe) {
     try {
-      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier });
+      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'app' });
       if (n.nettoye) console.warn(`[esport] IA locale : moteur orphelin arrêté${n.pid ? ` (pid ${n.pid})` : ''}.`);
     } catch (e) {
       console.error('[esport] IA locale : nettoyage impossible', e?.message ?? e);

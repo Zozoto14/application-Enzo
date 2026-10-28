@@ -23,6 +23,7 @@ import { chargerConfigEsport } from './config.mjs';
 import { lancerTravailleur } from './transcription/lanceur.mjs';
 import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
+import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { lancerTravailleurIaLocale } from './ia-locale/lanceur.mjs';
 import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
@@ -57,7 +58,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
   // IA locale : le cron ne calcule pas lui-même ; il arrête un moteur orphelin et lance le processus de fond.
   try {
     if (config.iaLocale?.installation?.installe) {
-      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier });
+      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'cron' });
       if (n.nettoye) rapport.push({ tache: 'IA locale : moteur orphelin', ok: true, n: n.pid ? 1 : 0 });
     }
     const local = creerIaLocale(config.iaLocale, { role: 'cron', lancer: lancerIaLocale });

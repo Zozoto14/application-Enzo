@@ -13,10 +13,11 @@
  * `executerTravailleur` est injectable (services, horloge, pause) pour les tests.
  */
 
-import { closeSync, mkdirSync, openSync, rmSync, utimesSync, writeSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { linkSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { setPriority } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { cheminsIaLocale } from './installation.mjs';
+import { cheminsIaLocale, journalIaLocaleParDefaut } from './installation.mjs';
 import { travailleurActif } from './lanceur.mjs';
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
@@ -71,15 +72,22 @@ export async function executerTravailleur({ jeux, local, inactiviteMs = 5 * 60_0
 
 // ------------------------------------------------------------------ Verrou du processus de fond
 
+/**
+ * Prend le verrou du processus de fond. Création ATOMIQUE avec son contenu (fichier temporaire puis lien
+ * exclusif) : un autre processus ne peut jamais lire un verrou vide, le croire mort et le retirer (deux
+ * processus de fond, deux moteurs).
+ */
 export function prendreVerrouTravailleur(chemin, pid = process.pid) {
   if (!travailleurActif(chemin)) rmSync(chemin, { force: true });
+  const tmp = `${chemin}.${pid}.${randomBytes(4).toString('hex')}.tmp`;
   try {
-    const fd = openSync(chemin, 'wx', 0o600);
-    writeSync(fd, String(pid));
-    closeSync(fd);
+    writeFileSync(tmp, String(pid), { mode: 0o600, flag: 'wx' });
+    linkSync(tmp, chemin);
     return true;
   } catch {
     return false;
+  } finally {
+    rmSync(tmp, { force: true });
   }
 }
 
@@ -127,7 +135,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   const local = creerIaLocale(reglages, { role: 'travailleur' });
   try {
-    nettoyerOrphelinIaLocale({ dossier: reglages.dossier });
+    nettoyerOrphelinIaLocale({ dossier: reglages.dossier, journal: journalIaLocaleParDefaut(), role: 'travailleur' });
     const jeux = servicesJeux({ base, socle: {}, ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, local }, travauxIa: 'synchrone' });
     const bilan = await executerTravailleur({
       jeux,

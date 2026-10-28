@@ -159,6 +159,34 @@ Le compte o2switch a de la marge (40 cœurs, 48 Go), mais le serveur est **parta
 et la mémoire du compte (limites « LVE »). Gardez 8 fils au plus ; si cPanel › **Resource Usage** signale des fautes,
 passez à `IA_LOCALE_THREADS=4` ou au modèle `--petit`.
 
+## Dépannage
+
+Tout ce qui concerne le moteur est noté dans **`~/logs/esport-ia-locale.log`** : sorties de `llama-server`, et des
+lignes `[esport] IA locale (rôle, pid …)` qui disent **qui** a fait quoi (`app`, `travailleur` = processus de fond,
+`cron`) : requête échouée avec sa **cause technique** (`ECONNRESET`, `ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`…) et
+l'état du moteur à cet instant, moteur arrêté de façon imprévue (avec le **signal** reçu : `SIGKILL` = tué, souvent
+par la limite mémoire LVE), moteur orphelin nettoyé (propriétaire, âge du dernier battement). La « dernière erreur » de
+la carte **Moteur de l'IA** est partagée entre l'app et le processus de fond (`etat/incident.json`), effacée dès
+qu'une requête réussit.
+
+| Message / code | Cause probable | Que faire |
+| --- | --- | --- |
+| Brouillon en échec « Service d'IA injoignable » alors que **Tester l'IA locale** réussit (avant octobre 2026) | Le `fetch` de Node (undici) abandonne une requête après **300 s sans en-têtes** ; llama-server n'en envoie qu'à la fin de la génération (un brouillon dure 5 à 15 min). **Corrigé** : le moteur local est appelé par `node:http` sans ce délai (`esport/serveur/ia-locale/transport.mjs`) ; seul `IA_LOCALE_DELAI_MIN` borne la requête. | Mettre à jour l'app (déploiement), redémarrer l'app, relancer le brouillon. |
+| `ia-delai-connexion` | Un client HTTP a expiré avant la réponse (cause dans le message : `UND_ERR_HEADERS_TIMEOUT`…) | Ne devrait plus arriver pour l'IA locale ; sinon, signaler avec la ligne du journal. |
+| `ia-delai` | La requête a dépassé `IA_LOCALE_DELAI_MIN` (20 min, attente comprise) | Moins de pages de référence, `IA_LOCALE_JETONS_MAX` plus bas, modèle `--petit`, ou délai plus long. |
+| `ia-locale-coupee` | Le moteur a coupé la connexion pendant le calcul (arrêté ou redémarré) | Chercher juste au-dessus dans le journal « arrêté de façon imprévue (signal …) » ; `SIGKILL` sans ligne « orphelin nettoyé » = limite mémoire : cPanel › Resource Usage, `IA_LOCALE_CONTEXTE=8192` ou `--petit`. |
+| `ia-locale-arretee` | Plus rien n'écoute : le moteur s'était déjà arrêté | Idem. |
+| `ia-locale-arret` (carte) | Le moteur s'est arrêté de lui-même | Idem ; voir les dernières lignes de `llama-server` dans le journal. |
+| `ia-locale-demarrage` | Le moteur n'a pas démarré (binaire, modèle, mémoire, chargement > `IA_LOCALE_DEMARRAGE_S`) | La raison exacte est dans le journal (« démarrage impossible : … »). |
+| `ia-locale-occupee` | Un autre processus (souvent le processus de fond en plein brouillon) tient le moteur | Attendre la fin du brouillon ; le test de connexion n'interrompt jamais un calcul. |
+
+Garanties (testées dans `esport/test/ia-locale.test.mjs`) : un moteur dont le propriétaire est vivant et bat (toutes
+les 30 s) n'est **jamais** arrêté par l'app, le cron ou un autre processus ; l'arrêt pour inactivité n'a pas lieu pendant
+une requête (le minuteur ne repart qu'à la fin) ; un processus ne retire jamais le verrou ni la clé d'un autre, même
+quand il nettoie un orphelin au moment où un autre processus reprend le moteur ; le verrou du processus de fond est créé
+d'un coup avec son pid (jamais deux processus de fond). Pendant un brouillon, la liste affiche « Calcul en cours depuis
+N minutes ».
+
 ## Désinstaller
 
 ```bash
@@ -179,6 +207,7 @@ Esport. L'assistant revient à la clé d'API (ou se coupe s'il n'y en a pas).
 | `esport/serveur/ia-locale/outils-compilation.lock` | Paquets conda-forge figés du compilateur (adresse + SHA-256) |
 | `esport/serveur/ia-locale/gestionnaire.mjs` | Démarrage à la demande, verrou, orphelins, file d'attente, arrêt |
 | `esport/serveur/ia-locale/service.mjs` | Branchement dans l'app, le cron et le processus de fond |
+| `esport/serveur/ia-locale/transport.mjs` | Appel HTTP du moteur local (`node:http`, sans les délais de 300 s d'undici) |
 | `esport/serveur/ia-locale/lanceur.mjs`, `travailleur.mjs` | Processus de fond |
 | `esport/noyau/ia/connecteur.mjs` | `configIaLocale`, `creerConnecteurLocal` |
 | `esport/noyau/ia/consignes-compactes.mjs` | Consignes et schémas JSON pour un petit modèle |
