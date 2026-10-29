@@ -68,7 +68,14 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
         large={large}
         titre={trTb('titre')}
         sous={donnees ? `${trnTb('fiches', donnees.fiches.length)} · ${portee}` : portee}
-        action={moi ? <BoutonHub theme={theme} titre={trTb('ma_fiche')} variante="plein" onPress={() => setOuvert({ compte: moi.compte, edition: true })} testID="esport-trombi-ma-fiche" /> : undefined}
+        action={
+          moi || droitsBadges?.gerer ? (
+            <>
+              {droitsBadges?.gerer ? <BoutonHub theme={theme} titre={trTb('badges.gerer')} onPress={() => setGestion(true)} testID="esport-trombi-badges-gerer-bouton" /> : null}
+              {moi ? <BoutonHub theme={theme} titre={trTb('ma_fiche')} variante="plein" onPress={() => setOuvert({ compte: moi.compte, edition: true })} testID="esport-trombi-ma-fiche" /> : null}
+            </>
+          ) : undefined
+        }
         actions={[
           droitsBadges?.gerer && { titre: trTb('badges.gerer'), onPress: () => setGestion(true), testID: 'esport-trombi-badges-gerer' },
           droitsBadges?.attribuer && !selection && { titre: trTb('selection.commencer'), onPress: () => setSelection(new Set()), testID: 'esport-trombi-selection' },

@@ -10,25 +10,20 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Interrupteur } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import type { ApiTrombi, BadgeCatalogue } from '../../trombi/api';
 import { trTb, trnTb, type CleTb } from '../../i18n/trombi';
-import { trCm } from '../../i18n/cm';
 import { Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Squelette, attenue, texte } from '../design';
-import { PALETTE, Teinte } from '../cm/commun';
 import { PuceBadge } from './commun';
-
-const COULEUR_VALIDE = /^#[0-9a-fA-F]{6}$/;
-
-type Brouillon = { id: string; nom: string; couleur: string; libre: string; icone: string; reserve: boolean };
+import { FormulaireBadge, brouillonValide, brouillonVide, type BrouillonBadge } from './FormulaireBadge';
 
 export function GestionBadges({ theme, api, fondateur, onChange, testID = 'esport-trombi-badges' }: { theme: ThemeHub; api: ApiTrombi; fondateur: boolean; onChange?(): unknown; testID?: string }) {
   const { erreur, avis, agir, enCours } = useAgir();
   const [badges, setBadges] = useState<BadgeCatalogue[] | undefined>();
-  const [brouillon, setBrouillon] = useState<Brouillon | undefined>();
-  const [creation, setCreation] = useState<Brouillon | undefined>();
+  const [brouillon, setBrouillon] = useState<BrouillonBadge | undefined>();
+  const [creation, setCreation] = useState<BrouillonBadge | undefined>();
   const [suppression, setSuppression] = useState<string | undefined>();
 
   const charger = useCallback(async () => setBadges((await api.catalogueBadges()).badges), [api]);
@@ -55,28 +50,7 @@ export function GestionBadges({ theme, api, fondateur, onChange, testID = 'espor
       return trTb('badges.ordonne');
     });
   };
-  const libreOk = (b: Brouillon) => !b.libre || COULEUR_VALIDE.test(b.libre);
-
-  const editeur = (b: Brouillon, maj: (b: Brouillon) => void, prefixe: string) => (
-    <View style={{ gap: ESP.xs }}>
-      <PuceBadge theme={theme} badge={{ nom: b.nom || trTb('badges.nom'), couleur: b.couleur, icone: b.icone, teamNom: null }} />
-      <Champ theme={theme} libelle={trTb('badges.nom')} valeur={b.nom} onChanger={nom => maj({ ...b, nom })} maxLength={32} testID={`${prefixe}-nom`} />
-      <Champ theme={theme} libelle={trTb('badges.icone')} valeur={b.icone} placeholder="★" onChanger={icone => maj({ ...b, icone })} maxLength={16} testID={`${prefixe}-icone`} />
-      <View style={[styles.ligne, { gap: 0 }]} accessibilityRole="radiogroup" accessibilityLabel={trTb('badges.couleur')}>
-        {PALETTE.map(([couleur, cle]) => (
-          <Teinte key={couleur} theme={theme} couleur={couleur} choisie={b.couleur.toLowerCase() === couleur} libelle={trCm(cle)} onPress={() => maj({ ...b, couleur, libre: '' })} testID={`${prefixe}-couleur-${couleur.slice(1)}`} />
-        ))}
-      </View>
-      <Champ theme={theme} libelle={trTb('badges.couleur_libre')} valeur={b.libre} placeholder={b.couleur} onChanger={libre => maj({ ...b, libre, couleur: COULEUR_VALIDE.test(libre) ? libre.toLowerCase() : b.couleur })} maxLength={7} testID={`${prefixe}-libre`} />
-      {!libreOk(b) ? <Text style={{ color: theme.critique, fontSize: 13 }}>{trTb('badges.couleur_invalide')}</Text> : null}
-      {fondateur ? (
-        <View style={[styles.ligne, { gap: ESP.xs }]}>
-          <Interrupteur theme={theme} libelle={trTb('badges.reserve')} valeur={b.reserve} onChanger={reserve => maj({ ...b, reserve })} testID={`${prefixe}-reserve`} />
-          <Text style={attenue(theme)}>{`${trTb('badges.reserve')} — ${trTb('badges.reserve_aide')}`}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
+  const editeur = (b: BrouillonBadge, maj: (b: BrouillonBadge) => void, prefixe: string) => <FormulaireBadge theme={theme} brouillon={b} maj={maj} prefixe={prefixe} fondateur={fondateur} />;
 
   return (
     <View style={{ gap: ESP.s }} testID={testID}>
@@ -129,7 +103,7 @@ export function GestionBadges({ theme, api, fondateur, onChange, testID = 'espor
                     theme={theme}
                     titre={trTb('enregistrer')}
                     variante="plein"
-                    desactive={!libreOk(brouillon) || !brouillon.nom.trim() || Boolean(enCours)}
+                    desactive={!brouillonValide(brouillon) || Boolean(enCours)}
                     onPress={() =>
                       void fait('modifier', async () => {
                         await api.modifierBadge(b.id, { nom: brouillon.nom, couleur: brouillon.couleur, icone: brouillon.icone, ...(fondateur && brouillon.reserve !== b.reserve ? { reserve: brouillon.reserve } : {}) });
@@ -181,7 +155,7 @@ export function GestionBadges({ theme, api, fondateur, onChange, testID = 'espor
               theme={theme}
               titre={trTb('badges.nouveau')}
               variante="plein"
-              desactive={!libreOk(creation) || !creation.nom.trim() || Boolean(enCours)}
+              desactive={!brouillonValide(creation) || Boolean(enCours)}
               onPress={() =>
                 void fait('creer', async () => {
                   await api.creerBadge({ nom: creation.nom, couleur: creation.couleur, icone: creation.icone, ...(fondateur && creation.reserve ? { reserve: true } : {}) });
@@ -196,7 +170,7 @@ export function GestionBadges({ theme, api, fondateur, onChange, testID = 'espor
         </View>
       ) : (
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre={trTb('badges.nouveau')} onPress={() => setCreation({ id: '', nom: '', couleur: PALETTE[5][0], libre: '', icone: '', reserve: false })} testID={`${testID}-nouveau`} />
+          <BoutonHub theme={theme} titre={trTb('badges.nouveau')} onPress={() => setCreation(brouillonVide())} testID={`${testID}-nouveau`} />
         </View>
       )}
     </View>

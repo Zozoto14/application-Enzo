@@ -121,6 +121,7 @@ export function FicheTrombi({
             theme={theme}
             api={api}
             fiche={fiche}
+            onCatalogue={onModifiee}
             onFini={f => {
               setBadges(false);
               if (f) {

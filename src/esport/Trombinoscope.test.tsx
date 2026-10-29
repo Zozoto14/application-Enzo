@@ -22,7 +22,11 @@ const theme = themeHub('nuit');
 const relaisReel = fabrique.relais;
 const clientReel = fabrique.client;
 
+/** L'acteur gère-t-il le catalogue (permission membres.badges.gerer) ? Annoncé par la fiche (`attribution.gerer`). */
+let gererCatalogue = true;
+
 afterEach(() => {
+  gererCatalogue = true;
   fabrique.relais = relaisReel;
   fabrique.client = clientReel;
   oublierSessions();
@@ -95,7 +99,7 @@ const ficheTom = (niveau: FicheTrombi['niveau']): FicheTrombi => ({
   reseaux: [{ reseau: 'x', url: 'https://x.com/Tom_GG', identifiant: 'Tom_GG', libelle: '' }],
   badges: TROMBI.fiches[0].badges,
   ...(niveau !== 'membre'
-    ? { attribution: { portees: [{ id: 'club', nom: null }, { id: 'team-a', nom: 'Team Alpha' }], actuelles: [{ id: 'badge-capitaine', portee: 'team-a' }, { id: 'badge-igl', portee: 'club' }], catalogue: CATALOGUE, fondateur: false } }
+    ? { attribution: { portees: [{ id: 'club', nom: null }, { id: 'team-a', nom: 'Team Alpha' }], actuelles: [{ id: 'badge-capitaine', portee: 'team-a' }, { id: 'badge-igl', portee: 'club' }], catalogue: CATALOGUE, fondateur: false, gerer: gererCatalogue } }
     : {}),
 });
 
@@ -119,6 +123,7 @@ const ficheLea: FicheTrombi = {
 
 function fauxClient(niveau: FicheTrombi['niveau']) {
   const appels: Array<{ chemin: string; methode: string; corps?: unknown }> = [];
+  let catalogue = [...CATALOGUE];
   const moi = { compte: 'lea12345', superAdmin: false, profil: { pseudo: 'Léa', riotId: null, discord: null }, peutCreerTeam: false, peutGererJeux: false, langue: 'fr' } as Moi;
   const requete = async <R,>(chemin: string, methode = 'GET', corps?: unknown): Promise<R> => {
     appels.push({ chemin, methode, corps });
@@ -128,6 +133,15 @@ function fauxClient(niveau: FicheTrombi['niveau']) {
     if (c === '/trombi/fiches/tom12345') return ficheTom(niveau) as R;
     if (c === '/trombi/fiches/lea12345' && methode === 'PATCH') return { ...ficheLea, version: 2, ...(corps as object) } as R;
     if (c === '/trombi/fiches/lea12345' || c === '/trombi/fiches/moi') return ficheLea as R;
+    if (c === '/trombi/badges' && methode === 'POST') {
+      const { nom, couleur, icone } = corps as { nom: string; couleur: string; icone?: string };
+      catalogue = [...catalogue, badge('badge-pilier', nom, catalogue.length, { couleur, icone: icone ?? '', membres: 0 })];
+      return { badges: catalogue } as R;
+    }
+    if (c === '/trombi/badges/badge-igl' && methode === 'PATCH') {
+      catalogue = catalogue.map(b => (b.id === 'badge-igl' ? { ...b, ...(corps as object) } : b));
+      return { badges: catalogue } as R;
+    }
     if (c === '/trombi/badges' && methode === 'GET') return { droits: TROMBI.droits.badges, badges: CATALOGUE } as R;
     if (c === '/trombi/badges/badge-capitaine' && methode === 'DELETE') return { badges: CATALOGUE.filter(b => b.id !== 'badge-capitaine'), retires: 2 } as R;
     if (c === '/trombi/badges/badge-rookie/membres') return { modifies: 2 } as R;
@@ -337,5 +351,83 @@ describe('page Membres', () => {
     await fireEvent.press(screen.getByTestId('esport-trombi-badges-badge-capitaine-supprimer-ok'));
     await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/badges/badge-capitaine' && a.methode === 'DELETE')).toBe(true));
     expect(await screen.findByText('Badge supprimé : retiré de 2 membres.')).toBeTruthy();
+  });
+
+  it('badges : « + Nouveau badge » depuis le panneau d’attribution — créé, ajouté à la liste et coché dans sa section, cases déjà cochées conservées', async () => {
+    const appels = await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-tom12345'));
+    await screen.findByTestId('esport-trombi-fiche-tom12345');
+    await fireEvent.press(screen.getByTestId('esport-trombi-fiche-badges-attribuer'));
+    await screen.findByTestId('esport-trombi-badges-membre');
+    // Une case cochée à la main, non enregistrée, avant la création.
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-badge-streamer-club'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-nouveau-team-a'));
+    expect(screen.getByTestId('esport-trombi-badges-membre-creation-ok').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.changeText(screen.getByTestId('esport-trombi-badges-membre-creation-nom'), 'Pilier');
+    await fireEvent.changeText(screen.getByTestId('esport-trombi-badges-membre-creation-icone'), '🛡️');
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-creation-ok'));
+    await waitFor(() => expect(appels.find(a => a.chemin === '/trombi/badges' && a.methode === 'POST')).toBeTruthy());
+    expect(appels.find(a => a.chemin === '/trombi/badges' && a.methode === 'POST')!.corps).toMatchObject({ nom: 'Pilier', icone: '🛡️' });
+    const caseNeuve = await screen.findByTestId('esport-trombi-badges-membre-badge-pilier-team-a');
+    expect(caseNeuve.props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-pilier-club').props.accessibilityState?.checked).toBe(false);
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-streamer-club').props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-igl-club').props.accessibilityState?.checked).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/fiches/tom12345/badges')).toBe(true));
+    const corps = appels.find(a => a.chemin === '/trombi/fiches/tom12345/badges')!.corps as { badges: Array<{ id: string; portee: string }> };
+    expect(corps.badges).toEqual(expect.arrayContaining([{ id: 'badge-pilier', portee: 'team-a' }, { id: 'badge-streamer', portee: 'club' }, { id: 'badge-capitaine', portee: 'team-a' }]));
+  });
+
+  it('badges : le crayon modifie un badge depuis le panneau ; les cases cochées restent', async () => {
+    const appels = await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-tom12345'));
+    await screen.findByTestId('esport-trombi-fiche-tom12345');
+    await fireEvent.press(screen.getByTestId('esport-trombi-fiche-badges-attribuer'));
+    await screen.findByTestId('esport-trombi-badges-membre');
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-badge-rookie-club'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-modifier-badge-igl-club'));
+    await fireEvent.changeText(screen.getByTestId('esport-trombi-badges-membre-edition-nom'), 'In-game leader');
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-edition-couleur-f87462'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-edition-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/badges/badge-igl' && a.methode === 'PATCH')).toBe(true));
+    expect(appels.find(a => a.chemin === '/trombi/badges/badge-igl')!.corps).toMatchObject({ nom: 'In-game leader', couleur: '#f87462' });
+    expect((await screen.findAllByText('In-game leader')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-igl-club').props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-rookie-club').props.accessibilityState?.checked).toBe(true);
+    // Gestionnaire complet, sans perdre les cases.
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-gerer'));
+    await screen.findByTestId('esport-trombi-badges-membre-gestionnaire');
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-gestion-retour'));
+    expect((await screen.findByTestId('esport-trombi-badges-membre-badge-rookie-club')).props.accessibilityState?.checked).toBe(true);
+  });
+
+  it('badges : sans la permission du catalogue, le panneau ne propose ni création, ni crayon, ni gestionnaire', async () => {
+    gererCatalogue = false;
+    await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-tom12345'));
+    await screen.findByTestId('esport-trombi-fiche-tom12345');
+    await fireEvent.press(screen.getByTestId('esport-trombi-fiche-badges-attribuer'));
+    await screen.findByTestId('esport-trombi-badges-membre');
+    expect(screen.queryByTestId('esport-trombi-badges-membre-nouveau-club')).toBeNull();
+    expect(screen.queryByTestId('esport-trombi-badges-membre-modifier-badge-igl-club')).toBeNull();
+    expect(screen.queryByTestId('esport-trombi-badges-membre-gerer')).toBeNull();
+  });
+
+  it('badges : bouton « Gérer les badges » visible dans l’en-tête avec la permission, absent sans', async () => {
+    await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-gerer-bouton'));
+    await screen.findByTestId('esport-trombi-badges');
+  });
+
+  it('badges : pas de bouton « Gérer les badges » dans l’en-tête sans la permission', async () => {
+    const sauve = TROMBI.droits.badges.gerer;
+    TROMBI.droits.badges.gerer = false;
+    try {
+      await monter('staff');
+      expect(screen.queryByTestId('esport-trombi-badges-gerer-bouton')).toBeNull();
+    } finally {
+      TROMBI.droits.badges.gerer = sauve;
+    }
   });
 });

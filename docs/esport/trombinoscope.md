@@ -91,10 +91,16 @@ postes de jeu (« Duelliste ») et le rôle de team (« Joueur »), sans les rem
 
 ### Créer et ranger les badges (catalogue du club)
 
-**Membres › Trombinoscope › menu « ⋯ » › Gérer les badges** : créer, renommer, couleur (palette ou couleur libre
+**Membres › Trombinoscope › bouton « Gérer les badges »** (à côté de « Ma fiche », et dans le menu « ⋯ ») : créer, renommer, couleur (palette ou couleur libre
 `#rrggbb`), icône / emoji facultative (un symbole, 4 caractères au plus), **ordre** (↑ ↓ : c'est l'ordre des puces
 partout), **supprimer définitivement** (« Modifier » › « Supprimer ») : la confirmation annonce le nombre de
 membres qui le portent ; il leur est retiré à tous. 80 badges au plus, noms uniques (sans tenir compte de la casse).
+
+Qui a la permission `membres.badges.gerer` peut aussi, **depuis le panneau « Badges » d'une fiche**, créer un badge
+(« + Nouveau badge » : nom, couleur, emoji facultatif — il est créé puis **coché** pour le membre, dans la section
+« Tout le club » ou « Pour <team> » où on l'a créé), modifier un badge (crayon ✎ : nom, couleur, emoji) et ouvrir le
+gestionnaire complet (« Gérer tous les badges… »). Les cases déjà cochées mais pas encore enregistrées sont conservées.
+Sans la permission, le panneau reste inchangé (`attribution.gerer` de la fiche).
 
 Badges proposés par défaut (modifiables, supprimables) : **CEO**, **Second CEO**, **Responsable CM**, **Correspondant
 CM**, Capitaine, IGL, Coach, Manager, Streamer, Créateur de contenu, Ambassadeur, Remplaçant, Rookie.

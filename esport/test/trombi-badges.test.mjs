@@ -108,6 +108,7 @@ test('permissions : le joueur ne s’attribue rien ; le Manager sa team (pas lui
   const d = await ok('/trombi/fiches/tom12345/badges', s.man12345, PUT({ badges: [{ id: 'badge-capitaine', portee: A.teamId }, 'badge-igl'] }));
   assert.deepEqual(d.badges.map(x => [x.nom, x.teamNom]), [['Capitaine', 'Team Alpha'], ['IGL', null]]);
   assert.deepEqual(d.attribution.portees.map(p => p.id), ['club', A.teamId]);
+  assert.equal(d.attribution.gerer, false, 'le Manager attribue mais ne gère pas le catalogue');
   assert.equal((await api('/trombi/fiches/moi/badges', s.man12345, PUT({ badges: ['badge-manager'] }))).corps.code, 'badge-soi');
   assert.equal((await api('/trombi/fiches/zoe12345/badges', s.man12345, PUT({ badges: ['badge-rookie'] }))).statut, 404, 'fiche hors de sa vue');
   assert.equal((await api('/trombi/badges', s.man12345, { methode: 'POST', corps: { nom: 'Pilier', couleur: '#123456' } })).statut, 403);
@@ -163,6 +164,7 @@ test('badges automatiques : « CEO » au Fondateur SEUL (jamais attribuable), Re
   await ok('/trombi/fiches/tom12345/badges', s.fondateur, PUT({ badges: ['badge-ambassadeur'] }));
   await ok('/trombi/fiches/tom12345/badges', s.cm123456, PUT({ badges: ['badge-igl'] }));
   assert.deepEqual(await badgesDe(s.cm123456, 'tom12345'), ['IGL', 'Ambassadeur']);
+  assert.equal((await ok('/trombi/fiches/tom12345', s.cm123456)).attribution.gerer, true, 'le Responsable CM gère le catalogue');
   assert.equal((await ok('/trombi/fiches/tom12345', s.cm123456)).attribution.actuelles.some(a => a.id === 'badge-ambassadeur'), false);
   // Le rôle change : Corentin n'est plus Correspondant CM → plus de badge.
   const aff = await b.base.premier("SELECT id FROM cm_affectations WHERE compte_id = 'cor12345'", []);

@@ -125,6 +125,8 @@ export interface AttributionBadges {
   actuelles: Array<{ id: string; portee: string }>;
   catalogue: BadgeCatalogue[];
   fondateur: boolean;
+  /** L'acteur gère le catalogue (permission membres.badges.gerer) : créer / modifier un badge depuis la fiche. */
+  gerer?: boolean;
 }
 export const PORTEE_CLUB = 'club';
 

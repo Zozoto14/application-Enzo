@@ -321,6 +321,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
               actuelles: b.attributions.filter(a => !a.auto && portees.includes(a.portee) && (db.tout || !b.catalogue.find(c => c.id === a.badge)?.reserve)).map(a => ({ id: a.badge, portee: a.portee })),
               catalogue: b.catalogue,
               fondateur: db.tout,
+              gerer: db.club,
             },
           }
         : {}),
