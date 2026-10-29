@@ -13,8 +13,8 @@
  * que du JSON lu par JSON.parse puis validé par schéma (champs inconnus jetés, textes bornés, images et
  * sources en https publiques) ; rien n'est exécuté ni appliqué sans la validation du Fondateur.
  *
- * `appeler(genre, messages, options)` est fourni par le service (plafond mensuel, compteur d'usage, choix
- * IA locale / clé d'API). Option `compact` (IA locale, petit modèle) : consignes plus directes avec un
+ * `appeler(genre, messages, options)` est fourni par le service (plafonds mensuels par moteur, compteur d'usage,
+ * ordre de repli des moteurs : API principale, API secondaire, IA locale). Option `compact` (IA locale, petit modèle) : consignes plus directes avec un
  * exemple, moins de pages, et un schéma JSON (`options.schema`) qui contraint la sortie du moteur local ;
  * le brouillon y est fait en ÉTAPES (petites requêtes successives, voir consignes-compactes.mjs) ; la lecture
  * stricte des réponses est la même dans les deux cas. `etape({ n, total, cle, libelle, lecture?, ecrits? })`
@@ -268,11 +268,14 @@ A map leaving the competitive pool is a "modification" with "actif": false, not 
   return { ...v, pagesLues: pages.map(p => ({ url: p.url, titre: p.titre })), pagesEchecs: echecs };
 }
 
-/** Test de connexion : un tout petit échange (`cible` : « local » ou « api » pour tester l'un des deux). */
+/**
+ * Test de connexion : un tout petit échange (`cible` : « api », « api2 » ou « local » pour tester un seul moteur).
+ * Effort de raisonnement au plus bas (modèle à raisonnement : réponse plus rapide).
+ */
 export async function testerConnexion({ appeler, cible }) {
   const r = await appeler('test', [
     { role: 'system', content: 'Answer with ONE JSON object only.' },
     { role: 'user', content: 'Return {"ok": true}.' },
-  ], { maxJetons: 200, delai: 30_000, schema: SCHEMA_TEST, ...(cible ? { cible } : {}) });
-  return { reponse: Boolean(extraireJson(r.texte)?.ok), dureeMs: r.dureeMs ?? null };
+  ], { maxJetons: 200, delai: 30_000, effort: 'low', schema: SCHEMA_TEST, ...(cible ? { cible } : {}) });
+  return { reponse: Boolean(extraireJson(r.texte)?.ok), dureeMs: r.dureeMs ?? null, ...(r.moteur ? { moteur: r.moteur } : {}) };
 }

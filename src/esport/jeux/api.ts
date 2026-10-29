@@ -194,6 +194,31 @@ export interface PropositionJeu {
   creeLe: string;
 }
 export type ModeIa = 'local' | 'api' | 'local-api';
+/** Moteurs de l'IA : API principale, API secondaire, IA locale (docs/esport/ia-api.md). */
+export type MoteurIa = 'api' | 'api2' | 'local';
+/** Tâches qui ont chacune leur ordre de repli : profils de jeu, tâches légères (traductions, posts CM, transcription). */
+export type TacheIa = 'profils' | 'leger';
+export type OrdresIa = Record<TacheIa, MoteurIa[]>;
+/** Un moteur dans l'Administration IA : jamais la valeur de la clé, seulement présente ou absente. */
+export interface EtatMoteurIa {
+  id: MoteurIa;
+  configure: boolean;
+  raison: string | null;
+  pret: boolean;
+  fournisseur: string | null;
+  modele: string | null;
+  hote: string | null;
+  cle: 'presente' | 'absente' | null;
+  externe: boolean;
+  raisonnement: boolean;
+  effort: string | null;
+  images: boolean;
+  appelsMois: number;
+  erreursMois: number;
+  plafond: number | null;
+  latenceMoyenneMs: number | null;
+  dernierAppel: { le: string; genre: string; statut: string; dureeMs: number | null; erreur: string | null } | null;
+}
 /** IA locale (llama.cpp sur le serveur) : installation, moteur en marche ou non, mesures. */
 export interface EtatIaLocale {
   installe: boolean;
@@ -232,8 +257,13 @@ export interface EtatIa {
   /** Modes utilisables avec ce qui est installé / configuré. */
   modesPossibles?: ModeIa[];
   local?: EtatIaLocale;
-  reglages: { quotaAppels: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa };
-  usage: { mois: string; appels: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondVerifications: number };
+  /** Les trois moteurs (API principale, secondaire, IA locale) et leurs statistiques du mois. */
+  moteurs?: EtatMoteurIa[];
+  /** Ordre de repli de chaque tâche (réglé ici, sinon IA_ORDRE / IA_ORDRE_LEGER). */
+  ordres?: OrdresIa;
+  ordresDefaut?: OrdresIa;
+  reglages: { quotaAppels: number; quotaAppelsApi2?: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa; ordres?: OrdresIa };
+  usage: { mois: string; appels: number; appelsApi2?: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondAppelsApi2?: number; plafondVerifications: number };
   dernierAppel: { le: string; genre: string; statut: string; fournisseur?: string | null; modele: string | null; dureeMs: number | null; erreur: string | null; jeu: string | null } | null;
   verifications: Array<{ id: string; jeu: string; statut: string; declenchement: string; erreur: { code: string; message: string } | null; le: string; finiLe: string | null }>;
 }
@@ -272,8 +302,9 @@ export function apiJeux(client: ClientEsport) {
     decider: (cle: string, d: { acceptees: string[]; refusees: string[]; corrections?: Record<string, unknown> }) =>
       client.requete<{ acceptees: number; refusees: number; obsoletes: number; jeu: ProfilJeu }>(`${j(cle)}/propositions/decider`, 'POST', d),
     etatIa: () => client.requete<EtatIa>('/jeux/ia'),
-    reglerIa: (r: Partial<EtatIa['reglages']>) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
-    testerIa: (cible?: 'local' | 'api') => client.requete<{ ok: boolean; reponse?: boolean; dureeMs?: number | null; cible?: 'local' | 'api'; erreur?: { code: string; message: string }; etat: EtatIa }>('/jeux/ia/test', 'POST', cible ? { cible } : {}),
+    reglerIa: (r: Partial<Omit<EtatIa['reglages'], 'ordres'>> & { ordres?: Partial<Record<TacheIa, MoteurIa[] | null>> }) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
+    testerIa: (cible?: MoteurIa) =>
+      client.requete<{ ok: boolean; reponse?: boolean; dureeMs?: number | null; cible?: MoteurIa; moteur?: MoteurIa; erreur?: { code: string; message: string }; etat: EtatIa }>('/jeux/ia/test', 'POST', cible ? { cible } : {}),
     gestionnaires: async () => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires')).gestionnaires,
     reglerGestionnaires: async (d: { ajouter?: string[]; retirer?: string[] }) => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires', 'PUT', d)).gestionnaires,
     lancerBrouillon: (d: { nom: string; urls?: string[]; consignes?: string; jeu?: string }) => client.requete<TravailIa>('/jeux/ia/brouillons', 'POST', d),

@@ -82,18 +82,25 @@ capacités ; flèches, zones, textes, étapes, partage et playbook marchent comm
 
 ## L'assistant IA (facultatif)
 
-Deux moteurs possibles, à la place l'un de l'autre ou ensemble :
+Jusqu'à trois moteurs, essayés dans un **ordre de repli** ([ia-api.md](ia-api.md)) :
 
-- une **clé d'API** d'un fournisseur : [docs/o2switch.md, partie I](../o2switch.md) (lignes `IA_API_URL`,
-  `IA_API_CLE`, `IA_MODELE` de `~/.appdashboard/esport.env`). Tout fournisseur qui a une API « chat completions »
-  compatible OpenAI convient (OpenAI, Mistral, Gemini, DeepSeek, Groq…) ; le connecteur a un adaptateur par format
-  d'API (`esport/noyau/ia/connecteur.mjs`) pour en ajouter d'autres plus tard ;
+- une **API principale** et une **API secondaire** : [docs/o2switch.md, partie I](../o2switch.md) (lignes
+  `IA_API_URL`, `IA_API_CLE`, `IA_MODELE` et `IA_API2_URL`, `IA_API2_CLE`, `IA_MODELE2` de
+  `~/.appdashboard/esport.env`). Tout fournisseur qui a une API « chat completions » compatible OpenAI convient
+  (**NVIDIA**, OpenAI, Mistral, Gemini, DeepSeek, Groq…) ; configuration conseillée : NVIDIA Mistral Large
+  (`mistralai/mistral-large-4-1t-a52b`) en principal pour les profils de jeu, NVIDIA `openai/gpt-oss-20b` en
+  secondaire ; le connecteur a un adaptateur par format d'API (`esport/noyau/ia/connecteur.mjs`) pour en ajouter
+  d'autres plus tard ;
 - une **IA locale** installée sur le serveur (llama.cpp + Qwen2.5-7B-Instruct, `IA_FOURNISSEUR=local`) : gratuite,
   plus lente, avec des consignes adaptées à un petit modèle et une sortie JSON contrainte :
   [ia-locale.md](ia-locale.md) et [docs/o2switch.md, partie J](../o2switch.md).
 
-Le Fondateur choisit dans **Administration IA** : **IA locale**, **Clé API** ou **Locale d'abord, API en secours**.
-Sans aucun des deux, tout se fait à la main : le bouton **Préparer avec l'IA** est grisé avec une explication.
+Le Fondateur règle dans **Administration IA › Ordre de repli** l'ordre des moteurs pour les **profils de jeu**
+(brouillons, vérifications ; défaut : API principale, puis secondaire, puis IA locale — `IA_ORDRE`). Un moteur en
+panne, limité par le fournisseur (429) ou à son plafond du mois passe la main au suivant ; si toutes les API échouent,
+le travail est repris par l'IA locale (consignes compactes, dans le processus de fond). Sans aucun moteur, tout se
+fait à la main : le bouton **Préparer avec l'IA** est grisé avec une explication. Les données envoyées à une API
+externe quittent le serveur (avertissement affiché dans l'Administration IA).
 
 ### Préparer avec l'IA
 
@@ -128,11 +135,12 @@ site qui l'héberge est affiché, **Aperçu** la montre sur demande.
 
 ### Plafonds et Administration IA (Fondateur)
 
-**Jeux › Administration IA** : **moteur de l'IA** (IA locale, clé d'API, ou locale d'abord avec l'API en secours) et
-état de l'IA locale (modèle, en marche ou arrêtée, dernière vitesse, dernier temps de réponse, **Tester l'IA locale**),
-fournisseur et modèle détectés, adresse de l'API, clé **présente ou absente** (jamais
-sa valeur), mode de recherche, **Tester la connexion**, plafonds mensuels réglables (défaut : **30 appels** au modèle et
-**8 vérifications** par mois) avec le compteur du mois, dernier appel (date, but, résultat, durée), dernières
+**Jeux › Administration IA** : **moteurs de l'IA** (API principale, API secondaire, IA locale : fournisseur, modèle,
+clé **présente ou absente** — jamais sa valeur —, appels et erreurs du mois, temps de réponse, dernier appel, un bouton
+**Tester** par moteur, avertissement de confidentialité), **ordre de repli** par tâche, état de l'IA locale (modèle,
+en marche ou arrêtée, dernière vitesse, dernier temps de réponse, **Tester l'IA locale**), adresse de l'API principale,
+mode de recherche, **Tester la connexion**, plafonds mensuels réglables **par moteur** (défaut : **30 appels** à l'API
+principale, **200** à l'API secondaire, et **8 vérifications** par mois) avec le compteur du mois, dernier appel (date, but, résultat, durée), dernières
 vérifications, et la **délégation** de la gestion des profils (permission globale `jeux.gerer`, sans l'Administration
 de l'IA). Un brouillon coûte 1 ou 2 appels (choix des pages, puis brouillon), une vérification aussi, un test 1. Au-delà
 d'un plafond, plus aucun appel jusqu'au mois suivant (429 « Plafond mensuel … atteint »), et une limite de débit

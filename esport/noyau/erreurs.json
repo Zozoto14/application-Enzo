@@ -684,7 +684,17 @@
   "Ce badge est automatique : il suit le rôle du club.": "This badge is automatic: it follows the club role.",
   "Portée illisible.": "Unreadable scope.",
   "Cette team n’est pas dans votre périmètre, ou le membre n’en fait pas partie.": "This team is outside your scope, or the member is not in it.",
-  "Badge réservé au Fondateur.": "Badge reserved to the Founder."
+  "Badge réservé au Fondateur.": "Badge reserved to the Founder.",
+  "Images : 4 au plus.": "Images: 4 at most.",
+  "Image refusée : data:image/png|jpeg|webp|gif en base64 (4 Mo au plus) ou adresse https.": "Image refused: base64 data:image/png|jpeg|webp|gif (4 MB at most) or https address.",
+  "Ce moteur d’IA ne lit pas les images.": "This AI engine cannot read images.",
+  "Le service d’IA a signalé une erreur pendant sa réponse.": "The AI service reported an error during its answer.",
+  "Le service d’IA limite les appels (quota ou débit du fournisseur atteint) : réessayez plus tard.": "The AI service is limiting calls (provider quota or rate limit reached): try again later.",
+  "Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).": "Incomplete answer from the AI service (token limit reached, reasoning included).",
+  "Le service d’IA refuse la requête : modèle ou paramètres non acceptés.": "The AI service rejects the request: model or parameters not accepted.",
+  "Ordre de repli : 1 à 3 moteurs parmi api, api2 et local, sans doublon.": "Fallback order: 1 to 3 engines among api, api2 and local, without duplicates.",
+  "Le service d’IA refuse la clé d’API (vérifiez IA_API2_CLE).": "The AI service rejects the API key (check IA_API2_CLE).",
+  "Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE2 et IA_API2_URL).": "Model or address unknown to the AI service (check IA_MODELE2 and IA_API2_URL)."
  },
  "motifs": [
   [
@@ -1038,6 +1048,18 @@
   [
    "^(\\d+) badges au plus par membre\\.$",
    "$1 badges at most per member."
+  ],
+  [
+   "^Le service d’IA refuse la requête \\(HTTP (\\d+)\\) : modèle ou paramètres non acceptés\\.$",
+   "The AI service rejects the request (HTTP $1): model or parameters not accepted."
+  ],
+  [
+   "^Plafond mensuel d’appels à l’IA atteint \\(moteur principal ; réglable dans Administration › IA\\)\\.$",
+   "Monthly AI call limit reached (main engine; adjustable in Administration › AI)."
+  ],
+  [
+   "^Plafond mensuel d’appels à l’IA atteint \\(moteur secondaire ; réglable dans Administration › IA\\)\\.$",
+   "Monthly AI call limit reached (secondary engine; adjustable in Administration › AI)."
   ]
  ]
 }

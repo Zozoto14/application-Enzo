@@ -3,8 +3,9 @@
 L'assistant des profils de jeu ([profils-jeu.md](profils-jeu.md)) peut travailler **sans clé d'API** : une IA
 installée **sur le serveur o2switch lui-même**, calculée sur le processeur (pas de carte graphique). Elle est gratuite
 et rien ne sort du serveur, mais elle est **plus lente** qu'un service d'IA externe : un brouillon de profil prend
-plusieurs minutes au lieu de quelques secondes. Elle s'utilise **à la place** de la clé d'API, ou **en plus** (locale
-d'abord, l'API en secours).
+plusieurs minutes au lieu de quelques secondes. C'est l'un des trois moteurs de l'IA (avec l'API principale et l'API
+secondaire, voir [ia-api.md](ia-api.md)) : seule, en tête de l'**ordre de repli** avec les API en secours, ou en
+dernier recours quand les API sont en panne, limitées (429) ou à leur plafond.
 
 Installation pas à pas : [docs/o2switch.md, partie J](../o2switch.md). Ce document explique le fonctionnement.
 
@@ -62,7 +63,7 @@ Le moteur ne tourne **pas en continu** (serveur partagé) :
   seul est arrêté au démarrage de l'app, à chaque passage du cron (toutes les 5 min) et avant tout nouveau démarrage.
   Seul un processus dont la ligne de commande porte **notre** fichier de clé est arrêté, jamais un autre ;
 - **file d'attente** : une requête à la fois (le modèle occupe tous ses fils), 4 en attente au plus (au-delà : « IA
-  locale occupée », et en mode « Locale d'abord » l'API prend le relais) ;
+  locale occupée », et si une API la suit dans l'ordre de repli, elle prend le relais) ;
 - priorité la plus basse (`nice 19`), **8 fils de calcul** par défaut (`IA_LOCALE_THREADS`), contexte de **8 192
   jetons** (`IA_LOCALE_CONTEXTE` ; moins de mémoire qu'avant, et les requêtes en étapes y tiennent largement), pas
   d'attente active des fils, pas de cache mémoire entre requêtes (`--cache-ram 0` ; le début commun des requêtes
@@ -93,19 +94,21 @@ Les **travaux** (brouillons, vérifications) sont donc exécutés par un **proce
 Seul le **test de connexion** (Administration IA) tourne dans l'app elle-même (une petite requête ; le moteur s'y
 arrête après 1 minute pour laisser la place au processus de fond).
 
-## Choisir le moteur (Administration IA)
+## Choisir sa place (Administration IA › Ordre de repli)
 
-**Esport › Jeux › Administration IA › Moteur de l'IA** (Fondateur) :
+**Esport › Jeux › Administration IA › Ordre de repli** (Fondateur), pour les profils de jeu et pour les tâches
+légères (détails : [ia-api.md](ia-api.md)) :
 
-| Mode | Effet |
+| Ordre (profils de jeu) | Effet |
 | --- | --- |
-| **IA locale** | Tout passe par le moteur du serveur. Pas de plafond mensuel (rien n'est payé) : la durée (20 min par requête) et la concurrence (une à la fois) sont bornées à la place. |
-| **Clé API** | Le fonctionnement d'avant : le fournisseur externe, avec les plafonds mensuels d'appels et de vérifications. |
-| **Locale d'abord, API en secours** | Le moteur local d'abord ; s'il échoue (démarrage impossible, trop long, occupé, réponse illisible), la clé d'API prend le relais pour cet appel (compté dans le plafond de l'API). |
+| **IA locale** seule | Tout passe par le moteur du serveur. Pas de plafond mensuel (rien n'est payé) : la durée (20 min par requête) et la concurrence (une à la fois) sont bornées à la place. |
+| **API principale, API secondaire** | Les fournisseurs externes, avec les plafonds mensuels par moteur. |
+| **IA locale, puis les API** | Le moteur local d'abord (consignes compactes) ; s'il échoue (démarrage impossible, trop long, occupé, réponse illisible), le travail est repris par les API (compté dans leurs plafonds). |
+| **Les API, puis l'IA locale** (défaut) | Les API d'abord ; si elles échouent toutes (panne, limite 429, plafond), le travail repasse en attente et le **processus de fond** le refait avec l'IA locale. |
 
-Sans choix enregistré : `IA_FOURNISSEUR=local` → « IA locale » (ou « Locale d'abord » si une clé d'API existe) ;
-sinon « Clé API », ou « IA locale » si elle est installée et qu'il n'y a pas de clé. Seuls les modes possibles avec ce
-qui est installé et configuré sont proposés.
+Sans ordre enregistré : `IA_ORDRE` (défaut `api,api2,local`) ; `IA_FOURNISSEUR=local` met l'IA locale en tête
+(`local,api,api2`). Un moteur absent (pas installé, pas de clé) est sauté. L'ancien réglage « IA locale / Clé API /
+Locale d'abord » est converti en ordre (`local` ; `api,api2` ; `local,api,api2`).
 
 La carte montre aussi : modèle, fils de calcul, **en marche / arrêtée**, **dernière vitesse** (jetons générés par
 seconde, mesurée à chaque requête, sinon celle du `--test`), **dernier temps de réponse**, requêtes en attente, dernière
@@ -164,7 +167,7 @@ textes bornés, images et sources https publiques), et rien n'est enregistré sa
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `IA_FOURNISSEUR=local` | — | Mode par défaut « IA locale » (« Locale d'abord » si une clé d'API existe) |
+| `IA_FOURNISSEUR=local` | — | IA locale en tête de l'ordre des profils de jeu par défaut (`local,api,api2`) |
 | `IA_LOCALE_MODELE` | `qwen2.5-7b` | `qwen2.5-7b` ou `qwen3-4b` (installé avec `--petit`) |
 | `IA_LOCALE_THREADS` | `8` | Fils de calcul (1 à 32) |
 | `IA_LOCALE_DOSSIER` | `~/.appdashboard/ia-locale` | Dossier de l'installation (absolu, hors `public_html` et du dépôt) |
@@ -242,7 +245,8 @@ compilé n'a que `llama-server`, la variante `socket` couvre alors le cas « san
 10 s au repos, puis calcul continu ; relevé chaque seconde (mémoire, processeur). Il conclut par **TUÉ PAR NOUS**,
 **TUÉ PAR L'EXTÉRIEUR** (avec ce que les variantes éliminent : port, nombre de fils, calcul), **PLANTAGE DU MOTEUR**
 ou **LE MOTEUR TIENT**, et affiche un **message prêt à envoyer au support o2switch** (heures UTC, phase, fils, mémoire,
-processeur ; ni clé, ni port, ni domaine). En attendant la réponse : mode « Clé API » dans l'Administration IA.
+processeur ; ni clé, ni port, ni domaine). En attendant la réponse : retirez l'IA locale de l'ordre de repli dans
+l'Administration IA.
 
 ### Un seul moteur pour tout le compte
 
@@ -287,7 +291,7 @@ par nous ou non), signaux de nos programmes vers lui, dernières lignes du moteu
 | `ia-locale-refus` | Le moteur a répondu par une erreur (code HTTP et type dans le message) | Le message complet est dans le journal (« requête échouée »). |
 | `ia-reponse-tronquee` | Une étape a atteint sa limite d'écriture (`finish_reason: length`) | Relancer ; `IA_LOCALE_JETONS_MAX` borne aussi chaque étape. |
 | `brouillon-en-cours` | Un brouillon de ce jeu attend ou calcule déjà | Attendre qu'il soit prêt (la liste montre l'étape en cours ou la place dans la file). |
-| « Service d'IA injoignable » en mode **Locale d'abord** | Le moteur local a échoué et la **clé d'API** de secours a échoué à son tour (adresse ou réseau) : c'est le seul chemin qui passe encore par le `fetch` global ; l'IA locale, elle, est toujours appelée par `transport.mjs` (app, processus de fond, installateur). | Corriger `IA_API_URL` / `IA_API_CLE`, ou choisir le mode « IA locale ». |
+| « Service d'IA injoignable » avec l'IA locale en tête de l'ordre | Le moteur local a échoué et les **API** de secours ont échoué à leur tour (adresse ou réseau) : c'est le seul chemin qui passe encore par le `fetch` global ; l'IA locale, elle, est toujours appelée par `transport.mjs` (app, processus de fond, installateur). | Corriger `IA_API_URL` / `IA_API_CLE` (ou `IA_API2_*`), ou ne garder que l'IA locale dans l'ordre de repli. |
 | `ia-locale-arretee` | Plus rien n'écoute : le moteur s'était déjà arrêté | Idem. |
 | `ia-locale-arret` (carte) | Le moteur s'est arrêté de lui-même | Idem ; voir les dernières lignes de `llama-server` dans le journal. |
 | `ia-locale-demarrage` | Le moteur n'a pas démarré (binaire, modèle, mémoire, chargement > `IA_LOCALE_DEMARRAGE_S`) | La raison exacte est dans le journal (« démarrage impossible : … »). |

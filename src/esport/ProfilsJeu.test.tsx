@@ -13,7 +13,7 @@ import { ModeAffichageForce } from '../ui/mobile';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from './client';
 import { definirLangue } from './i18n';
 import { phraseNotification } from './libelles';
-import type { DonneesJeu, EtatIa, ListeJeux, ProfilJeu, PropositionJeu, TravailIa } from './jeux/api';
+import type { DonneesJeu, EtatIa, EtatMoteurIa, ListeJeux, ProfilJeu, PropositionJeu, TravailIa } from './jeux/api';
 import { assetsDepuisProfil, cartesDuPool, libelleFormat, oublierProfilsTeams } from './jeux/profil';
 import { assetsRepli } from './strats/assets';
 import { Assistant } from './ui/Assistant';
@@ -307,19 +307,46 @@ test('Administration IA (Fondateur) : fournisseur, modèle, clé présente sans 
   expect(screen.queryByTestId('esport-jeux-onglet-admin')).toBeNull();
 });
 
-test('Administration IA : IA locale (modèle, état, vitesse, temps de réponse), choix du moteur, test de l’IA locale', async () => {
+test('Administration IA : moteurs (clé présente sans sa valeur, confidentialité), test par moteur, ordre de repli par tâche, IA locale', async () => {
+  const moteur = (id: 'api' | 'api2' | 'local', autres: Partial<EtatMoteurIa>): EtatMoteurIa => ({
+    id,
+    configure: true,
+    raison: null,
+    pret: true,
+    fournisseur: 'nvidia',
+    modele: null,
+    hote: 'integrate.api.nvidia.com',
+    cle: 'presente',
+    externe: true,
+    raisonnement: false,
+    effort: null,
+    images: false,
+    appelsMois: 0,
+    erreursMois: 0,
+    plafond: null,
+    latenceMoyenneMs: null,
+    dernierAppel: null,
+    ...autres,
+  });
   const LOCAL: EtatIa = {
     ...ETAT,
-    mode: 'local-api',
+    mode: 'api',
     modesPossibles: ['local', 'api', 'local-api'],
-    reglages: { ...ETAT.reglages, mode: 'local-api' },
+    reglages: { ...ETAT.reglages, quotaAppelsApi2: 200, mode: 'api' },
+    usage: { ...ETAT.usage, appelsApi2: 7, plafondAppelsApi2: 200 },
+    moteurs: [
+      moteur('api', { modele: 'mistralai/mistral-large-4-1t-a52b', raisonnement: true, effort: 'high', images: true, appelsMois: 4, plafond: 30, latenceMoyenneMs: 12_300 }),
+      moteur('api2', { modele: 'openai/gpt-oss-20b', raisonnement: true, appelsMois: 7, erreursMois: 2, plafond: 200, dernierAppel: { le: '2026-10-20T09:00:00.000Z', genre: 'traduction', statut: 'echec', dureeMs: 900, erreur: 'ia-limite-fournisseur' } }),
+      moteur('local', { fournisseur: 'local', modele: 'Qwen2.5-7B-Instruct (Q4_K_M)', hote: null, cle: null, externe: false }),
+    ],
+    ordres: { profils: ['api', 'api2', 'local'], leger: ['api2', 'api', 'local'] },
     local: { installe: true, raison: null, modele: 'qwen2.5-7b', nomModele: 'Qwen2.5-7B-Instruct (Q4_K_M)', threads: 8, contexte: 16384, enMarche: false, file: 0, derniereVitesse: { jetonsParSeconde: 6.4, le: null, source: 'requete' }, dernierTempsReponseMs: 41_500 },
   };
   const { client, requete } = clientJeux();
   const base = requete.getMockImplementation()!;
   requete.mockImplementation(async (chemin: string, methode = 'GET', corps?: unknown) => {
     if (chemin === '/jeux/ia') return LOCAL;
-    if (chemin === '/jeux/ia/reglages') return { ...LOCAL, mode: (corps as { mode: 'local' }).mode };
+    if (chemin === '/jeux/ia/reglages') return LOCAL;
     if (chemin === '/jeux/ia/test') return { ok: true, reponse: true, dureeMs: 30_000, cible: 'local', etat: LOCAL };
     return base(chemin, methode, corps);
   });
@@ -333,11 +360,30 @@ test('Administration IA : IA locale (modèle, état, vitesse, temps de réponse)
   await fireEvent.press(screen.getByTestId('esport-jeux-admin-tester-local'));
   expect(await screen.findByText('Connexion réussie (30 s).')).toBeTruthy();
   expect(requete).toHaveBeenCalledWith('/jeux/ia/test', 'POST', { cible: 'local' });
-  // En mode « locale d'abord », le bouton de la carte API teste la clé d'API seule.
-  await fireEvent.press(screen.getByTestId('esport-jeux-admin-tester'));
-  expect(requete).toHaveBeenCalledWith('/jeux/ia/test', 'POST', { cible: 'api' });
-  await fireEvent.press(screen.getByTestId('esport-jeux-admin-mode-local'));
-  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { mode: 'local' });
+  // Moteurs : fournisseur, modèle, clé présente (jamais sa valeur), appels, erreurs, avertissement de confidentialité.
+  const moteurs = await screen.findByTestId('esport-jeux-admin-moteurs');
+  expect(within(moteurs).getByText(/quittent le serveur/)).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-moteur-api')).getByText('mistralai/mistral-large-4-1t-a52b')).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-moteur-api')).getByText('4 / 30')).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-moteur-api')).getByText('oui (effort high)')).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-moteur-api2')).getByText('présente (jamais affichée)')).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-moteur-api2-erreurs')).getByText('2')).toBeTruthy();
+  expect(screen.queryByTestId('esport-jeux-admin-moteur-local-cle')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-moteur-api2-tester'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/test', 'POST', { cible: 'api2' });
+  expect(await screen.findByTestId('esport-jeux-admin-moteur-api2-test')).toBeTruthy();
+  // Ordre de repli : tâches légères, l'API principale passe devant ; retour à l'ordre par défaut des profils.
+  expect(within(screen.getByTestId('esport-jeux-admin-ordre-leger')).getByText('1. API secondaire (openai/gpt-oss-20b)')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-ordre-leger-api-monter'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { ordres: { leger: ['api', 'api2', 'local'] } });
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-ordre-profils-local-retirer'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { ordres: { profils: ['api', 'api2'] } });
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-ordre-profils-defaut'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { ordres: { profils: null } });
+  // Plafond du moteur secondaire.
+  await fireEvent.changeText(screen.getByTestId('esport-jeux-admin-quota-api2'), '150');
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-quota-enregistrer'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', expect.objectContaining({ quotaAppelsApi2: 150 }));
 });
 
 test('anglais : la page Jeux suit la langue', async () => {

@@ -353,7 +353,15 @@ test('quota : plafond mensuel d’appels (compteur d’usage), test de connexion
   assert.equal(etat.cle, 'presente');
   assert.equal(etat.modele, 'modele-exemple');
   assert.equal(etat.hote, 'ia-exemple.fr');
-  assert.deepEqual(etat.reglages, { quotaAppels: 30, quotaVerifications: 8, autoActif: true, mode: 'api' });
+  assert.deepEqual(etat.reglages, {
+    quotaAppels: 30,
+    quotaAppelsApi2: 200,
+    quotaVerifications: 8,
+    autoActif: true,
+    mode: 'api',
+    ordres: { profils: ['api', 'api2', 'local'], leger: ['api2', 'api', 'local'] },
+    ordresPersonnalises: { profils: false, leger: false },
+  });
   assert.ok(!JSON.stringify(etat).includes(CLE_FACTICE));
   assert.equal((await b.appel('/jeux/ia/reglages', { methode: 'PUT', jeton: f, corps: { quotaAppels: -1 } })).corps.code, 'quota');
   etat = (await b.appel('/jeux/ia/reglages', { methode: 'PUT', jeton: f, corps: { quotaAppels: 3, autoActif: false } })).corps;

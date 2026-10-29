@@ -10,8 +10,9 @@
  *    confiance, acceptées ou refusées UNE PAR UNE (rien n'est appliqué tout seul) ;
  *  - Assistant IA : « Préparer avec l'IA » (nom du jeu, pages de référence facultatives) → brouillon à
  *    relire et corriger, puis à valider ;
- *  - Administration IA (Fondateur) : fournisseur et modèle détectés, clé présente ou absente (jamais sa
- *    valeur), plafonds mensuels et compteur d'usage, dernier appel, test de connexion, délégations.
+ *  - Administration IA (Fondateur) : les moteurs (API principale, API secondaire, IA locale) avec fournisseur,
+ *    modèle, clé présente ou absente (jamais sa valeur), appels, erreurs et latence, un test par moteur ; l'ordre
+ *    de repli de chaque tâche ; plafonds mensuels par moteur, dernier appel, délégations (docs/esport/ia-api.md).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -20,7 +21,7 @@ import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport, type ClientEsport, type CompteEsport } from '../../client';
 import { dateCourte } from '../../libelles';
-import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type ModeIa } from '../../jeux/api';
+import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type EtatMoteurIa, type MoteurIa, type TacheIa } from '../../jeux/api';
 import { donneesVides, hote, oublierProfilsTeams } from '../../jeux/profil';
 import { trJeux, trnJeux, type CleJeux } from '../../i18n/jeux';
 import { PageEsport } from '../CadreEsport';
@@ -611,37 +612,119 @@ function Propositions({ theme, api, large, propositions, onDecide }: { theme: Th
 
 // ------------------------------------------------------------------ Administration de l'IA (Fondateur)
 
-/** Moteur de l'IA (locale, clé d'API, locale d'abord) et état de l'IA locale installée sur le serveur. */
-function CarteIaLocale({ theme, etat, enCours, ligne, onMode, onTester, test }: {
+/** Nom court d'un moteur (« API principale », « API secondaire », « IA locale »). */
+const nomMoteur = (m: MoteurIa) => trJeux(`jeux.moteur.${m}`);
+const TACHES: TacheIa[] = ['profils', 'leger'];
+
+/**
+ * Les moteurs de l'IA (API principale, API secondaire, IA locale) : fournisseur, modèle, clé présente ou
+ * absente (JAMAIS sa valeur), appels et erreurs du mois, latence, dernier appel, et un test par moteur.
+ * Avertissement de confidentialité : ce qui part vers une API externe quitte le serveur.
+ */
+function CarteMoteursIa({ theme, etat, enCours, ligne, onTester, tests }: {
   theme: ThemeHub;
   etat: EtatIa;
   enCours: string | undefined;
   ligne: (libelle: string, valeur: string, testID?: string) => React.ReactElement;
-  onMode: (m: ModeIa) => void;
+  onTester: (m: MoteurIa) => void;
+  tests: Partial<Record<MoteurIa, string>>;
+}) {
+  const moteurs = etat.moteurs ?? [];
+  return (
+    <Carte theme={theme} testID="esport-jeux-admin-moteurs">
+      <TitreCarte theme={theme} titre={trJeux('jeux.moteurs_ia')} sous={trJeux('jeux.moteurs_ia_aide')} />
+      <Text style={{ ...texte(theme, 13), fontWeight: '600' }} testID="esport-jeux-admin-confidentialite">{trJeux('jeux.confidentialite_ia')}</Text>
+      {moteurs.map(m => {
+        const fournisseur = m.id === 'local' ? trJeux('jeux.moteur.local') : m.fournisseur ? trJeux(`jeux.fournisseur.${FOURNISSEURS_CONNUS.find(f => f === m.fournisseur) ?? 'autre'}`) : '—';
+        const etatMoteur = m.pret ? trJeux('jeux.moteur_pret') : m.id === 'local' ? trJeux('jeux.local_non_installee') : trJeux(`jeux.raison_ia.${RAISONS_CONNUES.find(r => r === m.raison) ?? 'cle-absente'}`);
+        const d = m.dernierAppel;
+        return (
+          <View key={m.id} style={{ gap: 4, paddingTop: ESP.s, borderTopWidth: 1, borderColor: theme.ligne }} testID={`esport-jeux-admin-moteur-${m.id}`}>
+            <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+              <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{nomMoteur(m.id)}</Text>
+              <Badge theme={theme} texte={etatMoteur} ton={m.pret ? 'ok' : 'alerte'} />
+            </View>
+            {ligne(trJeux('jeux.fournisseur'), fournisseur)}
+            {ligne(trJeux('jeux.modele'), m.modele ?? '—', `esport-jeux-admin-moteur-${m.id}-modele`)}
+            {m.externe ? ligne(trJeux('jeux.cle_api'), m.cle === 'presente' ? trJeux('jeux.cle_presente') : trJeux('jeux.cle_absente'), `esport-jeux-admin-moteur-${m.id}-cle`) : null}
+            {m.raisonnement ? ligne(trJeux('jeux.raisonnement'), m.effort ? trJeux('jeux.raisonnement_effort', { effort: m.effort }) : trJeux('jeux.oui')) : null}
+            {m.images ? ligne(trJeux('jeux.images'), trJeux('jeux.oui')) : null}
+            {ligne(trJeux('jeux.appels_mois_moteur'), m.plafond !== null ? `${m.appelsMois} / ${m.plafond}` : String(m.appelsMois), `esport-jeux-admin-moteur-${m.id}-appels`)}
+            {m.erreursMois ? ligne(trJeux('jeux.erreurs_mois'), String(m.erreursMois), `esport-jeux-admin-moteur-${m.id}-erreurs`) : null}
+            {m.latenceMoyenneMs !== null ? ligne(trJeux('jeux.latence'), `${Math.round(m.latenceMoyenneMs / 100) / 10} s`) : null}
+            {d ? ligne(trJeux('jeux.dernier_appel'), `${dateCourte(d.le)} · ${d.statut === 'ok' ? trJeux('jeux.reussi') : (d.erreur ?? trJeux('jeux.echec'))}${d.dureeMs !== null ? ` · ${Math.round(d.dureeMs / 100) / 10} s` : ''}`, `esport-jeux-admin-moteur-${m.id}-dernier`) : null}
+            <View style={{ alignSelf: 'flex-start' }}>
+              <BoutonHub
+                theme={theme}
+                titre={enCours === `test-${m.id}` ? trJeux('jeux.test_en_cours') : trJeux('jeux.tester_moteur', { moteur: nomMoteur(m.id) })}
+                desactive={!m.pret || Boolean(enCours)}
+                onPress={() => onTester(m.id)}
+                testID={`esport-jeux-admin-moteur-${m.id}-tester`}
+              />
+            </View>
+            {tests[m.id] ? <Text style={texte(theme, 13)} testID={`esport-jeux-admin-moteur-${m.id}-test`}>{tests[m.id]}</Text> : null}
+          </View>
+        );
+      })}
+    </Carte>
+  );
+}
+
+/** Ordre de repli d'une tâche : moteurs dans l'ordre d'essai (monter, retirer, ajouter, rétablir le défaut). */
+function EditeurOrdre({ theme, tache, ordre, moteurs, desactive, onChanger }: {
+  theme: ThemeHub;
+  tache: TacheIa;
+  ordre: MoteurIa[];
+  moteurs: EtatMoteurIa[];
+  desactive: boolean;
+  onChanger: (o: MoteurIa[] | null) => void;
+}) {
+  const modele = (m: MoteurIa) => moteurs.find(x => x.id === m);
+  const absents = (['api', 'api2', 'local'] as const).filter(m => !ordre.includes(m));
+  return (
+    <View style={{ gap: 6 }} testID={`esport-jeux-admin-ordre-${tache}`}>
+      <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{trJeux(`jeux.tache.${tache}`)}</Text>
+      <Text style={attenue(theme, 12)}>{trJeux(`jeux.tache_aide.${tache}`)}</Text>
+      {ordre.map((m, i) => {
+        const x = modele(m);
+        return (
+          <View key={m} style={[styles.ligne, { gap: ESP.s }]}>
+            <Text style={{ ...texte(theme, 13), flex: 1, opacity: x?.pret ? 1 : 0.5 }} testID={`esport-jeux-admin-ordre-${tache}-${i + 1}`}>
+              {`${i + 1}. ${nomMoteur(m)}${x?.modele ? ` (${x.modele})` : ''}${x?.pret ? '' : ` — ${trJeux('jeux.moteur_indisponible')}`}`}
+            </Text>
+            {i > 0 ? <BoutonHub theme={theme} titre="↑" desactive={desactive} onPress={() => onChanger([...ordre.slice(0, i - 1), m, ordre[i - 1], ...ordre.slice(i + 1)])} testID={`esport-jeux-admin-ordre-${tache}-${m}-monter`} /> : null}
+            {ordre.length > 1 ? <BoutonHub theme={theme} titre={trJeux('jeux.retirer')} desactive={desactive} onPress={() => onChanger(ordre.filter(y => y !== m))} testID={`esport-jeux-admin-ordre-${tache}-${m}-retirer`} /> : null}
+          </View>
+        );
+      })}
+      <View style={[styles.ligne, { gap: ESP.s }]}>
+        {absents.map(m => (
+          <BoutonHub key={m} theme={theme} titre={trJeux('jeux.ajouter_moteur', { moteur: nomMoteur(m) })} desactive={desactive} onPress={() => onChanger([...ordre, m])} testID={`esport-jeux-admin-ordre-${tache}-ajouter-${m}`} />
+        ))}
+        <BoutonHub theme={theme} titre={trJeux('jeux.ordre_defaut')} desactive={desactive} onPress={() => onChanger(null)} testID={`esport-jeux-admin-ordre-${tache}-defaut`} />
+      </View>
+    </View>
+  );
+}
+
+const FOURNISSEURS_CONNUS = ['openai', 'mistral', 'gemini', 'deepseek', 'groq', 'nvidia'] as const;
+const RAISONS_CONNUES = ['cle-absente', 'modele-absent', 'url-invalide'] as const;
+
+/** État de l'IA locale installée sur le serveur (son rang dans l'ordre de repli se règle à part). */
+function CarteIaLocale({ theme, etat, enCours, ligne, onTester, test }: {
+  theme: ThemeHub;
+  etat: EtatIa;
+  enCours: string | undefined;
+  ligne: (libelle: string, valeur: string, testID?: string) => React.ReactElement;
   onTester: () => void;
   test: string | undefined;
 }) {
   const l = etat.local;
-  const mode: ModeIa = etat.mode ?? etat.reglages.mode ?? 'api';
-  const possibles = etat.modesPossibles?.length ? etat.modesPossibles : [mode];
-  const options = (['local', 'api', 'local-api'] as const).filter(m => m === mode || possibles.includes(m));
   const marche = !l?.installe ? trJeux('jeux.local_non_installee') : l.demarrage ? trJeux('jeux.local_demarrage') : l.enMarche ? trJeux('jeux.local_en_marche') : trJeux('jeux.local_arretee');
   const vitesse = l?.derniereVitesse ? trJeux('jeux.local_vitesse_valeur', { n: Math.round(l.derniereVitesse.jetonsParSeconde * 10) / 10 }) : '—';
   return (
     <Carte theme={theme} testID="esport-jeux-admin-local">
       <TitreCarte theme={theme} titre={trJeux('jeux.moteur_ia')} sous={trJeux('jeux.moteur_ia_aide')} droite={<Badge theme={theme} texte={marche} ton={l?.installe ? 'ok' : 'alerte'} />} />
-      {options.length > 1 ? (
-        <Segments<ModeIa>
-          theme={theme}
-          libelle={trJeux('jeux.mode_ia')}
-          valeur={mode}
-          options={options.map(m => [m, trJeux(`jeux.mode_ia.${m}`)] as [ModeIa, string])}
-          onChoisir={onMode}
-          testID="esport-jeux-admin-mode"
-        />
-      ) : (
-        ligne(trJeux('jeux.mode_ia'), trJeux(`jeux.mode_ia.${mode}`), 'esport-jeux-admin-mode-seul')
-      )}
       {l?.installe ? (
         <>
           {ligne(trJeux('jeux.modele'), l.nomModele ?? l.modele ?? '—', 'esport-jeux-admin-local-modele')}
@@ -669,6 +752,8 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
   const [quotaVerifs, setQuotaVerifs] = useState('');
   const [test, setTest] = useState<string | undefined>();
   const [testLocal, setTestLocal] = useState<string | undefined>();
+  const [tests, setTests] = useState<Partial<Record<MoteurIa, string>>>({});
+  const [quotaApi2, setQuotaApi2] = useState('');
   const [gestionnaires, setGestionnaires] = useState<Gestionnaire[] | undefined>();
   const [comptes, setComptes] = useState<CompteEsport[] | undefined>();
   const [ajout, setAjout] = useState('');
@@ -677,6 +762,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
     setEtat(e);
     setQuotaAppels(String(e.reglages.quotaAppels));
     setQuotaVerifs(String(e.reglages.quotaVerifications));
+    setQuotaApi2(String(e.reglages.quotaAppelsApi2 ?? ''));
   };
   useEffect(() => {
     void agir('', async () => {
@@ -697,8 +783,28 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
     <View style={{ gap: ESP.m }}>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-jeux-admin" />
       <Grille min={large ? 340 : 280}>
+        {etat.moteurs?.length ? (
+          <CarteMoteursIa theme={theme} etat={etat} enCours={enCours} ligne={ligne} tests={tests}
+            onTester={m =>
+              void agir(`test-${m}`, async () => {
+                const r = await api.testerIa(m);
+                appliquer(r.etat);
+                setTests(t => ({ ...t, [m]: r.ok ? trJeux('jeux.test_ok', { duree: Math.round((r.dureeMs ?? 0) / 100) / 10 }) : trJeux('jeux.test_echec', { message: r.erreur?.message ?? '' }) }));
+              })
+            }
+          />
+        ) : null}
+        {etat.ordres && etat.moteurs?.length ? (
+          <Carte theme={theme} testID="esport-jeux-admin-ordres">
+            <TitreCarte theme={theme} titre={trJeux('jeux.ordres_ia')} sous={trJeux('jeux.ordres_ia_aide')} />
+            {TACHES.map(t => (
+              <EditeurOrdre key={t} theme={theme} tache={t} ordre={etat.ordres?.[t] ?? []} moteurs={etat.moteurs ?? []} desactive={Boolean(enCours) || !etat.fondateur}
+                onChanger={o => void agir(`ordre-${t}`, async () => { appliquer(await api.reglerIa({ ordres: { [t]: o } })); return trJeux('jeux.ordre_enregistre'); })}
+              />
+            ))}
+          </Carte>
+        ) : null}
         <CarteIaLocale theme={theme} etat={etat} enCours={enCours} ligne={ligne}
-          onMode={mode => void agir('mode', async () => { appliquer(await api.reglerIa({ mode })); return trJeux('jeux.mode_enregistre'); })}
           onTester={() =>
             void agir('test-local', async () => {
               const r = await api.testerIa('local');
@@ -710,12 +816,12 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
         />
         <Carte theme={theme} testID="esport-jeux-admin-etat">
           <TitreCarte theme={theme} titre={trJeux('jeux.admin_etat')} droite={<Badge theme={theme} texte={etat.disponible ? trJeux('jeux.ia_active') : trJeux('jeux.ia_inactive')} ton={etat.disponible ? 'ok' : 'alerte'} />} />
-          {ligne(trJeux('jeux.fournisseur'), etat.fournisseur ? trJeux(`jeux.fournisseur.${(['openai', 'mistral', 'gemini', 'deepseek', 'groq'] as const).find(f => f === etat.fournisseur) ?? 'autre'}`) : '—')}
+          {ligne(trJeux('jeux.fournisseur'), etat.fournisseur ? trJeux(`jeux.fournisseur.${FOURNISSEURS_CONNUS.find(f => f === etat.fournisseur) ?? 'autre'}`) : '—')}
           {ligne(trJeux('jeux.modele'), etat.modele ?? '—', 'esport-jeux-admin-modele')}
           {ligne(trJeux('jeux.adresse_api'), etat.hote ?? '—')}
           {ligne(trJeux('jeux.cle_api'), etat.cle === 'presente' ? trJeux('jeux.cle_presente') : trJeux('jeux.cle_absente'), 'esport-jeux-admin-cle')}
           {ligne(trJeux('jeux.recherche'), trJeux(`jeux.recherche.${etat.recherche}`))}
-          {!etat.configure ? <Text style={attenue(theme, 13)} testID="esport-jeux-admin-explication">{trJeux('jeux.admin_explication', { raison: trJeux(`jeux.raison_ia.${(['cle-absente', 'modele-absent', 'url-invalide'] as const).find(r => r === etat.raison) ?? 'cle-absente'}`) })}</Text> : null}
+          {!etat.configure ? <Text style={attenue(theme, 13)} testID="esport-jeux-admin-explication">{trJeux('jeux.admin_explication', { raison: trJeux(`jeux.raison_ia.${RAISONS_CONNUES.find(r => r === etat.raison) ?? 'cle-absente'}`) })}</Text> : null}
           <View style={{ alignSelf: 'flex-start' }}>
             <BoutonHub
               theme={theme}
@@ -736,10 +842,12 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
         <Carte theme={theme} testID="esport-jeux-admin-quota">
           <TitreCarte theme={theme} titre={trJeux('jeux.quota')} sous={trJeux('jeux.quota_aide', { mois: etat.usage.mois })} />
           {ligne(trJeux('jeux.appels_mois'), `${etat.usage.appels} / ${etat.usage.plafondAppels}`, 'esport-jeux-admin-usage-appels')}
+          {etat.moteurs?.find(m => m.id === 'api2')?.configure ? ligne(trJeux('jeux.appels_mois_api2'), `${etat.usage.appelsApi2 ?? 0} / ${etat.usage.plafondAppelsApi2 ?? '—'}`, 'esport-jeux-admin-usage-api2') : null}
           {etat.usage.appelsLocaux ? ligne(trJeux('jeux.appels_locaux_mois'), String(etat.usage.appelsLocaux), 'esport-jeux-admin-usage-locaux') : null}
           {ligne(trJeux('jeux.verifications_mois'), `${etat.usage.verifications} / ${etat.usage.plafondVerifications}`, 'esport-jeux-admin-usage-verifications')}
           <View style={[styles.ligne, { gap: ESP.s, alignItems: 'flex-end' }]}>
             <Champ theme={theme} libelle={trJeux('jeux.plafond_appels')} valeur={quotaAppels} onChanger={v => setQuotaAppels(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-appels" style={{ width: 150 }} />
+            {etat.reglages.quotaAppelsApi2 !== undefined ? <Champ theme={theme} libelle={trJeux('jeux.plafond_appels_api2')} valeur={quotaApi2} onChanger={v => setQuotaApi2(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-api2" style={{ width: 150 }} /> : null}
             <Champ theme={theme} libelle={trJeux('jeux.plafond_verifications')} valeur={quotaVerifs} onChanger={v => setQuotaVerifs(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-verifications" style={{ width: 150 }} />
           </View>
           <Segments<'oui' | 'non'>
@@ -756,7 +864,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
               titre={trJeux('jeux.enregistrer')}
               variante="plein"
               desactive={Boolean(enCours) || quotaAppels === '' || quotaVerifs === ''}
-              onPress={() => void agir('quota', async () => { appliquer(await api.reglerIa({ quotaAppels: Number(quotaAppels), quotaVerifications: Number(quotaVerifs) })); return trJeux('jeux.quota_enregistre'); })}
+              onPress={() => void agir('quota', async () => { appliquer(await api.reglerIa({ quotaAppels: Number(quotaAppels), quotaVerifications: Number(quotaVerifs), ...(quotaApi2 !== '' ? { quotaAppelsApi2: Number(quotaApi2) } : {}) })); return trJeux('jeux.quota_enregistre'); })}
               testID="esport-jeux-admin-quota-enregistrer"
             />
           </View>

@@ -195,11 +195,16 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # Transcription des réunions sur le serveur (facultatif, partie H) :
 # TRANSCRIPTION_MODELE=base
 # TRANSCRIPTION_THREADS=1
-# Assistant IA des profils de jeu (facultatif, partie I) : sans ces lignes, tout se fait à la main.
-# IA_API_URL=https://api.mistral.ai/v1
-# IA_API_CLE=VOTRE_CLE_D_API
-# IA_MODELE=mistral-small-latest
-# IA locale sur le serveur (facultatif, partie J) : à la place ou en secours de la clé d'API.
+# IA de l'Esport (facultatif, partie I, docs/esport/ia-api.md) : sans ces lignes, tout se fait à la main.
+# IA_API_URL=https://integrate.api.nvidia.com/v1
+# IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
+# IA_MODELE=mistralai/mistral-large-4-1t-a52b
+# IA_API2_URL=https://integrate.api.nvidia.com/v1
+# IA_API2_CLE=nvapi-REMPLACER-cle-du-modele-secondaire
+# IA_MODELE2=openai/gpt-oss-20b
+# IA_ORDRE=api,api2,local
+# IA_ORDRE_LEGER=api2,api,local
+# IA locale sur le serveur (facultatif, partie J) : moteur de plus dans l'ordre de repli.
 # IA_FOURNISSEUR=local
 # IA_LOCALE_MODELE=qwen2.5-7b
 # IA_LOCALE_THREADS=8
@@ -621,10 +626,40 @@ La page **Esport › Jeux** (profils de jeu : formats, score, maps, personnages�
 [docs/esport/profils-jeu.md](esport/profils-jeu.md)) marche sans IA. Avec une clé d'API d'un fournisseur d'IA (pas
 Claude : celui que vous choisissez), le bouton **Préparer avec l'IA** prépare un brouillon de profil, et une
 vérification hebdomadaire propose des mises à jour à valider. Tout fournisseur qui offre une API « chat
-completions » compatible OpenAI convient : OpenAI, Mistral, Google Gemini (adresse compatible OpenAI), DeepSeek,
-Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le même travail, plus lentement : partie J.
+completions » compatible OpenAI convient : **NVIDIA** (build.nvidia.com), OpenAI, Mistral, Google Gemini (adresse
+compatible OpenAI), DeepSeek, Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le même travail,
+plus lentement : partie J.
+
+Jusqu'à **trois moteurs** : une API **principale** (`IA_API_*`), une API **secondaire** (`IA_API2_*`, pour les tâches
+légères : traductions, posts CM, post-correction des transcriptions) et l'IA locale, essayés dans un **ordre de
+repli** par tâche. Tout est expliqué dans [docs/esport/ia-api.md](esport/ia-api.md). Les données envoyées à une API
+externe **quittent le serveur**.
 
 ### I1. Ajouter la clé (5 minutes)
+
+**Configuration conseillée : NVIDIA, deux modèles** (une clé par modèle, créée sur build.nvidia.com › le modèle ›
+« Get API Key »). Dans le Terminal cPanel, `nano ~/.appdashboard/esport.env`, puis ajoutez à la fin ces lignes
+(valeurs **factices** : remplacez les deux `nvapi-REMPLACER-…` par vos clés) :
+
+```ini
+# IA de l'Esport (docs/esport/ia-api.md) : jamais dans le dépôt.
+# Moteur principal : NVIDIA, Mistral Large (profils de jeu : brouillons, vérifications)
+IA_API_URL=https://integrate.api.nvidia.com/v1
+IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
+IA_MODELE=mistralai/mistral-large-4-1t-a52b
+# Moteur secondaire : NVIDIA, gpt-oss-20b (traductions, posts CM, post-correction des transcriptions)
+IA_API2_URL=https://integrate.api.nvidia.com/v1
+IA_API2_CLE=nvapi-REMPLACER-cle-du-modele-secondaire
+IA_MODELE2=openai/gpt-oss-20b
+# Ordres de repli (valeurs par défaut ; l'Administration IA peut les changer)
+IA_ORDRE=api,api2,local
+IA_ORDRE_LEGER=api2,api,local
+```
+
+Enregistrez (**Ctrl+O**, **Entrée**, **Ctrl+X**), redémarrez l'app Esport (étape 4 ci-dessous), puis partie I2.
+Réglages fins (délai, effort de raisonnement, flux, images) : [docs/esport/ia-api.md](esport/ia-api.md).
+
+**Un seul fournisseur, un seul modèle** (autre que NVIDIA) :
 
 1. Créez une clé d'API chez le fournisseur choisi (son espace « API keys ») et notez le nom d'un modèle.
 2. Dans le **Terminal** cPanel :
@@ -646,6 +681,7 @@ Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le mêm
 
    | Fournisseur | `IA_API_URL` | Exemple de `IA_MODELE` |
    | --- | --- | --- |
+   | NVIDIA | `https://integrate.api.nvidia.com/v1` | `mistralai/mistral-large-4-1t-a52b`, `openai/gpt-oss-20b` |
    | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
    | Mistral | `https://api.mistral.ai/v1` | `mistral-small-latest` |
    | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
@@ -655,7 +691,7 @@ Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le mêm
    Lignes facultatives :
 
    ```ini
-   # openai, mistral, gemini, deepseek, groq ou autre (sinon déduit de l'adresse) :
+   # nvidia, openai, mistral, gemini, deepseek, groq ou autre (sinon déduit de l'adresse) :
    # IA_FOURNISSEUR=mistral
    # serveur (défaut : le serveur lit lui-même quelques pages web), modele (le modèle sait chercher), aucune :
    # IA_RECHERCHE=serveur
@@ -667,10 +703,12 @@ Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le mêm
 
 ### I2. Vérifier
 
-Dans l'app : **Esport › Jeux › Administration IA** : fournisseur et modèle détectés, « Clé d'API : présente (jamais
-affichée) », puis **Tester la connexion**. Les plafonds mensuels (30 appels et 8 vérifications par défaut) se règlent
-au même endroit, avec le compteur du mois. La clé n'est jamais renvoyée par le serveur, ni écrite dans un journal, un
-export ou la base.
+Dans l'app : **Esport › Jeux › Administration IA › Moteurs de l'IA** : pour l'API principale et la secondaire,
+fournisseur (NVIDIA) et modèle détectés, « Clé d'API : présente (jamais affichée) », puis **Tester** sur chacune (un
+modèle à raisonnement peut mettre 10 à 60 s). **Ordre de repli** : quel moteur pour les profils de jeu, lequel pour les
+tâches légères. Les plafonds mensuels (API principale 30 appels, API secondaire 200, 8 vérifications par défaut) se
+règlent au même endroit, avec le compteur du mois ; au plafond, le moteur suivant prend le relais. La clé n'est
+jamais renvoyée par le serveur, ni écrite dans un journal, un export ou la base.
 
 ---
 
@@ -724,7 +762,8 @@ IA_LOCALE_MODELE=qwen2.5-7b
 IA_LOCALE_THREADS=8
 ```
 
-Gardez `IA_API_URL`, `IA_API_CLE` et `IA_MODELE` si vous avez une clé d'API : elle servira de secours. Enregistrez
+Gardez les lignes `IA_API_*` / `IA_API2_*` si vous avez des clés d'API : elles servent de secours (ordre de repli,
+partie J3). Sans `IA_FOURNISSEUR=local`, l'IA locale reste en dernier recours (`IA_ORDRE=api,api2,local`). Enregistrez
 (**Ctrl+O**, **Entrée**, **Ctrl+X**) puis redémarrez l'app Esport :
 
 ```bash
@@ -733,9 +772,10 @@ mkdir -p ~/application-enzo/esport/tmp && touch ~/application-enzo/esport/tmp/re
 
 ### J3. Choisir et tester
 
-**Esport › Jeux › Administration IA › Moteur de l'IA** : **IA locale**, **Clé API** ou **Locale d'abord, API en
-secours**, puis **Tester l'IA locale** (le premier test charge le modèle : jusqu'à une minute). La carte affiche le
-modèle, « en marche » ou « arrêtée (démarre à la demande) », la dernière vitesse et le dernier temps de réponse.
+**Esport › Jeux › Administration IA › Ordre de repli** : placez l'**IA locale** où vous voulez pour les profils de
+jeu et pour les tâches légères (seule, en tête avec les API en secours, ou en dernier recours), puis **Tester l'IA
+locale** (le premier test charge le modèle : jusqu'à une minute). La carte « Moteur de l'IA » affiche le modèle,
+« en marche » ou « arrêtée (démarre à la demande) », la dernière vitesse et le dernier temps de réponse.
 
 Le moteur ne tourne **que quand une tâche arrive** (écoute sur `127.0.0.1` seulement) et s'arrête après 5 minutes
 sans travail. Les brouillons et vérifications sont calculés par un **processus de fond** (lancé par l'app, relancé
@@ -750,8 +790,8 @@ cat ~/.appdashboard/ia-locale/pret.json       # moteur, modèle, empreintes, mes
 pgrep -af llama-server                        # moteur en marche (rien = arrêté, c'est normal au repos)
 ```
 
-- **« IA locale occupée »** : une autre tâche utilise le moteur (une à la fois) ; réessayez, ou choisissez « Locale
-  d'abord, API en secours ».
+- **« IA locale occupée »** : une autre tâche utilise le moteur (une à la fois) ; réessayez, ou ajoutez une API après
+  l'IA locale dans l'**ordre de repli**.
 - **« L'IA locale n'a pas pu démarrer »** : voir `~/logs/esport-ia-locale.log` ; relancez
   `bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test`.
 - **« Le moteur d'IA locale a été arrêté de force pendant le calcul (SIGKILL) »** (ou « coupé la connexion
@@ -815,9 +855,10 @@ Retirez `IA_FOURNISSEUR=local` et les lignes `IA_LOCALE_*` de `~/.appdashboard/e
 | Installation : « Hugging Face indisponible » | Rien à faire : le script prend l'archive GitHub à la place (plus grosse, environ 200 Mo pour « base »). Si GitHub échoue aussi : réessayez plus tard. |
 | Transcription : « ffmpeg n'a pas pu lire l'enregistrement » | Fichier abîmé ou format exotique : déposez un MP4, M4A, MP3 ou WAV. |
 | Jeux : « Assistant IA non configuré (clé d'API absente) » | Les lignes `IA_API_URL`, `IA_API_CLE`, `IA_MODELE` de `esport.env` (partie I), puis **Restart** de l'app Esport. **Jeux › Administration IA** dit ce qui manque. |
-| Jeux : « Le service d'IA refuse la clé d'API » | Clé fausse ou révoquée chez le fournisseur : recopiez-la dans `IA_API_CLE`, **Restart**. |
+| Jeux : « Le service d'IA refuse la clé d'API » | Clé fausse ou révoquée chez le fournisseur (NVIDIA : une clé par modèle) : recopiez-la dans `IA_API_CLE` (ou `IA_API2_CLE`), **Restart**. |
+| Jeux : « Le service d'IA limite les appels (quota ou débit…) » | Limite de débit du fournisseur (HTTP 429, fréquente sur NVIDIA) sur tous les moteurs de l'ordre de repli : réessayez plus tard, ou ajoutez un moteur (IA locale) à l'ordre. Voir [docs/esport/ia-api.md](esport/ia-api.md). |
 | Jeux : « Modèle ou adresse inconnus du service d'IA » | `IA_MODELE` doit être un modèle de votre fournisseur ; `IA_API_URL` son adresse de base (tableau de la partie I). |
-| Jeux : « IA locale non installée » / « IA locale occupée » / « n'a pas pu démarrer » | Partie J : installer (`installer-ia-locale.sh --test`), lignes `IA_LOCALE_*` de `esport.env`, `~/logs/esport-ia-locale.log`. « Occupée » : une tâche à la fois, réessayer ou choisir « Locale d'abord, API en secours ». |
+| Jeux : « IA locale non installée » / « IA locale occupée » / « n'a pas pu démarrer » | Partie J : installer (`installer-ia-locale.sh --test`), lignes `IA_LOCALE_*` de `esport.env`, `~/logs/esport-ia-locale.log`. « Occupée » : une tâche à la fois, réessayer, ou mettre une API après l'IA locale dans l'ordre de repli (Administration IA). |
 | Jeux : « Plafond mensuel … atteint » | **Jeux › Administration IA** › Plafonds mensuels : montez-les, ou attendez le mois suivant. |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur (dernière entrée de `X-Forwarded-For` posée par le frontal d'o2switch) : un intermédiaire commun (VPN, réseau d'entreprise) peut faire partager un compteur à plusieurs appareils. Patientez quelques minutes. |
 
