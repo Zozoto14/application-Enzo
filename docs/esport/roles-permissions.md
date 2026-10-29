@@ -32,7 +32,7 @@ Une case grisée : vous ne pouvez pas l'accorder.
 
 ## Permissions du club
 
-Elles s'ajoutent aux permissions CM du club (cm.*, cm.drive.*, sponsors.*, membres.trombi.*), qu'un rôle du club peut
+Elles s'ajoutent aux permissions CM du club (cm.*, cm.drive.*, sponsors.*, membres.trombi.*, membres.badges.gerer), qu'un rôle du club peut
 aussi porter (un rôle du club vaut alors comme une affectation CM « club »).
 
 | Permission | Effet (vérifié par le serveur) |
@@ -58,10 +58,12 @@ Qui a ce rôle › chercher « Grimm » › + Grimm**). Par défaut : **toutes l
 
 - toutes les teams avec les droits du Propriétaire (sauf supprimer une team, nommer un Propriétaire) ; créer des teams ;
 - membres : inviter partout, demandes de compte (voir, refuser), Discord ID, langue des comptes, trombinoscope (voir,
-  compléter) ;
+  compléter) et **badges** (`membres.badges.gerer` : catalogue et attributions dans tout le club) ;
 - statistiques ; jeux et assistant IA ;
 - tout le CM : `cm.voir`, `cm.deposer`, `cm.editer`, `cm.valider`, **`cm.gerer`** (équipe CM, tableaux, réglages,
   suppressions définitives), clips, tout le Drive (`cm.drive.gerer` compris), **Sponsors** (voir et gérer).
+
+Le titulaire porte automatiquement le **badge « Second CEO »** du trombinoscope ([trombinoscope.md](trombinoscope.md)).
 
 **Restent au Fondateur** (non délégables, même par la matrice) : son propre compte (Discord ID, langue, rôles : 403
 `compte-fondateur`), **attribuer, retirer, modifier ou rétablir le Second CEO** (403 `role-reserve` pour tout autre),

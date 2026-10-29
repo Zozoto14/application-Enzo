@@ -7,11 +7,12 @@
  *  - ATTRIBUTION (globale au club, ou rattachée à une team : « Capitaine · Team ») : les mêmes pour tout le club ;
  *    un rôle de team qui porte la permission (par défaut le Manager ; le Propriétaire) ou une affectation CM de
  *    team, pour les membres de CETTE team. Personne ne s'attribue (ni ne se retire) un badge, sauf le Fondateur.
- *  - Badges AUTOMATIQUES (colonne `auto`) : « CEO » pour le compte Fondateur, « Responsable CM » /
+ *  - Badges AUTOMATIQUES (colonne `auto`) : « CEO » pour le compte Fondateur, « Second CEO » pour les titulaires du
+ *    rôle du club « Second CEO » (migration 0033, portée club), « Responsable CM » /
  *    « Correspondant CM » pour les affectations aux rôles CM système (pour le club, ou pour une team : badge
  *    rattaché à la team). Calculés à la lecture : ils suivent le rôle. Ni attribués ni retirés à la main ;
  *    `auto_actif` = 0 les éteint (le badge reste au catalogue, attribuable à personne).
- *  - Badges RÉSERVÉS AU FONDATEUR (colonne `reserve`, par défaut « Second CEO ») : seul le Fondateur les
+ *  - Badges RÉSERVÉS AU FONDATEUR (colonne `reserve`, par défaut « Second CEO », automatique depuis la migration 0033) : seul le Fondateur les
  *    attribue, les retire, les modifie, les supprime ou change cette option ; les autres gestionnaires ne les
  *    voient que (ils restent intacts quand un Manager remet la liste des badges d'un membre).
  *
@@ -26,7 +27,7 @@ import { CLE_PROPRIETAIRE } from '../permissions.mjs';
 import { PERMISSION_BADGES } from './permissions.mjs';
 
 export { PERMISSION_BADGES };
-export const AUTOS_BADGES = Object.freeze(['fondateur', 'cm-responsable', 'cm-correspondant']);
+export const AUTOS_BADGES = Object.freeze(['fondateur', 'second-ceo', 'cm-responsable', 'cm-correspondant']);
 export const PORTEE_CLUB = 'club';
 export const MAX_BADGES = Object.freeze({ catalogue: 80, parMembre: 20, lot: 200, nom: 32, icone: 16 });
 
@@ -163,6 +164,11 @@ export function servicesBadges({ base, maintenant = () => Date.now() }) {
     for (const l of await lignesParIds(base, 'SELECT badge_id, compte_id, portee FROM trombi_badges_membres WHERE compte_id', comptes)) sortie.get(l.compte_id)?.push({ badge: l.badge_id, portee: l.portee, auto: false });
     const autos = new Map(cat.filter(b => b.auto && b.autoActif).map(b => [b.auto, b.id]));
     if (autos.has('fondateur') && sortie.has(COMPTE_FONDATEUR)) sortie.get(COMPTE_FONDATEUR).push({ badge: autos.get('fondateur'), portee: PORTEE_CLUB, auto: true });
+    // « Second CEO » (migration 0033) : les titulaires du rôle du club « Second CEO », pour tout le club.
+    if (autos.has('second-ceo')) {
+      const tit = await lignesParIds(base, "SELECT a.compte_id FROM roles_globaux_affectations a JOIN roles_globaux r ON r.id = a.role_id WHERE r.cle_systeme = 'second_ceo' AND a.compte_id", comptes);
+      for (const a of tit) sortie.get(a.compte_id)?.push({ badge: autos.get('second-ceo'), portee: PORTEE_CLUB, auto: true });
+    }
     if (autos.has('cm-responsable') || autos.has('cm-correspondant')) {
       const aff = await lignesParIds(base, "SELECT a.compte_id, a.portee, r.cle_systeme FROM cm_affectations a JOIN cm_roles r ON r.id = a.role_id WHERE r.cle_systeme IN ('responsable', 'correspondant') AND a.compte_id", comptes);
       for (const a of aff) {

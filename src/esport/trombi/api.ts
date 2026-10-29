@@ -91,7 +91,7 @@ export interface ReseauFiche {
   libelle: string;
 }
 /** Badge du catalogue du club (migration 0032). `auto` : badge automatique tiré d'un rôle du club. */
-export type AutoBadge = 'fondateur' | 'cm-responsable' | 'cm-correspondant';
+export type AutoBadge = 'fondateur' | 'second-ceo' | 'cm-responsable' | 'cm-correspondant';
 export interface BadgeCatalogue {
   id: string;
   nom: string;

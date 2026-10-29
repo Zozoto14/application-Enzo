@@ -57,6 +57,11 @@ CREATE VIEW permissions_club AS
   UNION
   SELECT compte_id, permission FROM permissions_globales;
 
+-- Badge « Second CEO » (migration 0032) : devient AUTOMATIQUE, il suit le rôle du club « Second CEO » (portée club) ;
+-- ses attributions manuelles éventuelles sont retirées (le rôle les remplace). Il reste réservé au Fondateur.
+UPDATE trombi_badges SET auto = 'second-ceo' WHERE id = 'badge-second-ceo' AND auto IS NULL;
+DELETE FROM trombi_badges_membres WHERE badge_id IN (SELECT id FROM trombi_badges WHERE auto = 'second-ceo');
+
 -- Rôle système « Second CEO » : presque tout le club, les teams (droits du Propriétaire, sauf supprimer une team)
 -- et le CM ; PAS la page Rôles et permissions (roles.gerer), que le Fondateur peut cocher s'il le veut.
 INSERT INTO roles_globaux (id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le)

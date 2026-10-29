@@ -150,19 +150,20 @@ test('badges automatiques : « CEO » au Fondateur SEUL (jamais attribuable), Re
   assert.deepEqual(await badgesDe(s.fondateur, 'principal'), []);
   await ok('/trombi/badges/badge-ceo', s.fondateur, { methode: 'PATCH', corps: { autoActif: true } });
   assert.equal((await api('/trombi/badges/badge-igl', s.fondateur, { methode: 'PATCH', corps: { autoActif: false } })).corps.code, 'badge-auto');
-  // « Second CEO » : réservé au Fondateur (manuel). Le Responsable CM ne l'attribue, ne le retire, ne le modifie ni
+  await ok('/trombi/badges/badge-ambassadeur', s.fondateur, { methode: 'PATCH', corps: { reserve: true } });
+  // Badge réservé au Fondateur (« Second CEO » est devenu automatique, migration 0033 : on réserve « Ambassadeur »). Le Responsable CM ne l'attribue, ne le retire, ne le modifie ni
   // ne le supprime ; quand il remet la liste de Tom, le badge réservé reste.
   for (const r of [
-    await api('/trombi/fiches/tom12345/badges', s.cm123456, PUT({ badges: ['badge-second-ceo'] })),
-    await api('/trombi/badges/badge-second-ceo/membres', s.cm123456, { methode: 'POST', corps: { comptes: ['tom12345'] } }),
-    await api('/trombi/badges/badge-second-ceo', s.cm123456, { methode: 'PATCH', corps: { couleur: '#000000' } }),
-    await api('/trombi/badges/badge-second-ceo', s.cm123456, { methode: 'DELETE' }),
+    await api('/trombi/fiches/tom12345/badges', s.cm123456, PUT({ badges: ['badge-ambassadeur'] })),
+    await api('/trombi/badges/badge-ambassadeur/membres', s.cm123456, { methode: 'POST', corps: { comptes: ['tom12345'] } }),
+    await api('/trombi/badges/badge-ambassadeur', s.cm123456, { methode: 'PATCH', corps: { couleur: '#000000' } }),
+    await api('/trombi/badges/badge-ambassadeur', s.cm123456, { methode: 'DELETE' }),
     await api('/trombi/badges/badge-igl', s.cm123456, { methode: 'PATCH', corps: { reserve: true } }),
   ]) assert.equal(r.corps.code, 'badge-reserve');
-  await ok('/trombi/fiches/tom12345/badges', s.fondateur, PUT({ badges: ['badge-second-ceo'] }));
+  await ok('/trombi/fiches/tom12345/badges', s.fondateur, PUT({ badges: ['badge-ambassadeur'] }));
   await ok('/trombi/fiches/tom12345/badges', s.cm123456, PUT({ badges: ['badge-igl'] }));
-  assert.deepEqual(await badgesDe(s.cm123456, 'tom12345'), ['Second CEO', 'IGL']);
-  assert.equal((await ok('/trombi/fiches/tom12345', s.cm123456)).attribution.actuelles.some(a => a.id === 'badge-second-ceo'), false);
+  assert.deepEqual(await badgesDe(s.cm123456, 'tom12345'), ['IGL', 'Ambassadeur']);
+  assert.equal((await ok('/trombi/fiches/tom12345', s.cm123456)).attribution.actuelles.some(a => a.id === 'badge-ambassadeur'), false);
   // Le rôle change : Corentin n'est plus Correspondant CM → plus de badge.
   const aff = await b.base.premier("SELECT id FROM cm_affectations WHERE compte_id = 'cor12345'", []);
   await ok(`/cm/affectations/${aff.id}`, s.fondateur, { methode: 'DELETE' });

@@ -106,6 +106,7 @@ Marqués « Automatique » dans le catalogue ; calculés à chaque lecture, ils 
 | Badge | Qui le porte |
 | --- | --- |
 | **CEO** | le compte **Fondateur**, et **lui seul** : ni attribuable à quelqu'un d'autre (ni par la fiche, ni en lot, ni par l'API, même par le Fondateur), ni retirable à la main |
+| **Second CEO** | chaque titulaire du rôle du club « Second CEO » (**Membres › Rôles et permissions › Club**, migration 0033 ; [roles-permissions.md](roles-permissions.md)), pour tout le club ; il reste réservé au Fondateur (nom, couleur, ordre) |
 | **Responsable CM** | chaque affectation au rôle CM système « Responsable CM » (Équipe CM) |
 | **Correspondant CM** | chaque affectation au rôle « Correspondant CM » ; affecté pour une team : « Correspondant CM · Team » |
 
@@ -115,11 +116,10 @@ change (affectation retirée, nouveau Responsable), le badge suit immédiatement
 
 ### Badges réservés au Fondateur
 
-« **Second CEO** » est **réservé au Fondateur** (manuel) : lui seul l'attribue, le retire, le modifie ou le supprime
-(un seul titulaire conseillé, pas obligatoire). Le Fondateur peut marquer d'autres badges « Réservé au Fondateur »
+« **Second CEO** » est **réservé au Fondateur** et, depuis la migration 0033, **automatique** : il suit le rôle du club
+« Second CEO » (ses attributions manuelles d'avant ont été retirées). Le Fondateur peut marquer d'autres badges « Réservé au Fondateur »
 (et le retirer). Les autres gestionnaires voient ces badges sans pouvoir les cocher ; quand ils enregistrent les
-badges d'un membre, ses badges réservés restent. (Si un rôle global « Second CEO » existe un jour côté serveur, ce
-badge pourra devenir automatique comme « CEO ».)
+badges d'un membre, ses badges réservés restent.
 
 ### Attribuer
 
@@ -242,5 +242,5 @@ Codes d'erreur utiles : `reseau-url` (adresse de profil invalide, avec `details.
    palmarès d'avant le club, anciennes structures, postes) et, s'ils le souhaitent, de régler qui voit quoi.
 4. Badges : vérifier le catalogue (**Membres › Trombinoscope › « ⋯ » › Gérer les badges**), puis les attribuer depuis
    la fiche (bouton **Badges**) ou à plusieurs (« ⋯ » › **Badge à plusieurs**). « CEO » apparaît seul sur le compte
-   Fondateur, « Responsable CM » / « Correspondant CM » sur l'Équipe CM ; « Second CEO » s'attribue par le
-   Fondateur.
+   Fondateur, « Responsable CM » / « Correspondant CM » sur l'Équipe CM ; « Second CEO » suit le rôle du club
+   « Second CEO » (Membres › Rôles et permissions).

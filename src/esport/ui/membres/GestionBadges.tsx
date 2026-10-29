@@ -1,7 +1,7 @@
 /**
  * Badges du trombinoscope (migration 0032, docs/esport/trombinoscope.md) : le CATALOGUE du club — créer, renommer,
  * couleur (palette ou libre), icône / emoji, ordre d'affichage, suppression définitive (retiré de tous les membres,
- * avec le nombre annoncé). Les badges automatiques (« CEO », « Responsable CM », « Correspondant CM ») se
+ * avec le nombre annoncé). Les badges automatiques (« CEO », « Second CEO », « Responsable CM », « Correspondant CM ») se
  * renomment et se recolorent, se désactivent, mais ne s'attribuent pas à la main. Les badges réservés au Fondateur
  * (« Second CEO ») ne se modifient que par lui.
  *

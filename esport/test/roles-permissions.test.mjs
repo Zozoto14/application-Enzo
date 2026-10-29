@@ -122,6 +122,24 @@ test('Second CEO : seul le Fondateur le modifie, le rétablit et l’attribue ; 
   assert.equal((await api(`/roles-permissions/globaux/${sc.id}`, A.sessions.fondateur, { methode: 'DELETE' })).statut, 403, 'un rôle système ne se supprime pas');
 });
 
+test('badge « Second CEO » automatique : il suit le rôle du club (portée club), ni attribuable ni retirable à la main', async () => {
+  const { b, A, api, roleGlobal, attribuer } = await preparer();
+  const f = A.sessions.fondateur;
+  const badges = async compte => ((await api('/trombi', f)).corps.fiches.find(x => x.compte === compte)?.badges ?? []).map(x => [x.nom, x.auto, x.teamId]);
+  const badge = await b.base.premier("SELECT auto, reserve FROM trombi_badges WHERE id = 'badge-second-ceo'", []);
+  assert.equal(badge.auto, 'second-ceo');
+  assert.equal(Number(badge.reserve), 1);
+  // Grimm n'est dans aucune team : on le met dans la team pour qu'il ait une carte du trombinoscope.
+  await api(`/teams/${A.teamId}/membres`, f, { methode: 'POST', corps: { compte: 'grimm123', roleId: A.roles.joueur.id } });
+  assert.deepEqual(await badges('grimm123'), []);
+  const sc = await roleGlobal('second_ceo');
+  await attribuer(sc.id, 'grimm123');
+  assert.deepEqual(await badges('grimm123'), [['Second CEO', true, null]]);
+  assert.equal((await api('/trombi/badges/badge-second-ceo/membres', f, { methode: 'POST', corps: { comptes: ['lea12345'] } })).corps.code, 'badge-auto');
+  await api(`/roles-permissions/globaux/${sc.id}/comptes/grimm123`, f, { methode: 'DELETE' });
+  assert.deepEqual(await badges('grimm123'), []);
+});
+
 test('rôle du club personnalisé « Recruteur » (inviter des membres) : ajout et demande de compte dans une team étrangère ; jamais un rôle de gestion', async () => {
   const b = await banc();
   const A = await teamAvecMembres(b, { membres: { lea12345: { pseudo: 'Léa', role: 'joueur' } } });
