@@ -672,6 +672,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ctx = await contexteTeam(acteur, teamId);
     const cible = await membreDeTeam(teamId, membreId);
     const soiMeme = cible.compte_id === acteur.compte;
+    // Le compte du Fondateur ne se touche que par lui-même (rôle du club « Second CEO » compris).
+    if (cible.compte_id === 'principal' && !soiMeme && !acteur.superAdmin) throw echec(403, 'compte-fondateur', 'Seul le Fondateur modifie son propre compte.');
     const roleActuel = await base.premier('SELECT * FROM roles WHERE id = ?', [cible.role_id]);
     const t = maintenant();
     const lot = [];
@@ -734,6 +736,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ctx = await contexteTeam(acteur, teamId);
     const cible = await membreDeTeam(teamId, membreId);
     const soiMeme = cible.compte_id === acteur.compte;
+    // Le compte du Fondateur ne se touche que par lui-même (rôle du club « Second CEO » compris).
+    if (cible.compte_id === 'principal' && !soiMeme && !acteur.superAdmin) throw echec(403, 'compte-fondateur', 'Seul le Fondateur modifie son propre compte.');
     if (!soiMeme) {
       exiger(ctx, 'members.remove');
       const role = await base.premier('SELECT * FROM roles WHERE id = ?', [cible.role_id]);

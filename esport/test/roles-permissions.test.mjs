@@ -84,6 +84,7 @@ test('Second CEO : rôle système du club, permissions par défaut (tout sauf ro
 
   // Ce qui reste au Fondateur.
   assert.equal((await api('/roles-permissions', grimm)).statut, 404, 'la page Rôles et permissions');
+  assert.equal((await api(`/teams/${A.teamId}/membres/${A.membres.principal.id}`, grimm, { methode: 'DELETE' })).corps.code, 'compte-fondateur', 'retirer le Fondateur d’une team');
   assert.equal((await api('/comptes/principal/discord-id', grimm, { methode: 'PUT', corps: { discordId: '223456789012345678' } })).statut, 403, 'le compte du Fondateur');
   assert.equal((await api('/admin/comptes/lea12345', grimm, { methode: 'DELETE' })).statut, 403, 'suppression RGPD');
   assert.equal((await api('/admin/export', grimm)).statut, 403, 'export de la base');
