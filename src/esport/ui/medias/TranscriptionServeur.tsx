@@ -5,21 +5,23 @@
  *    nouvel essai, échec) ; `useSuiviServeur` le rafraîchit toutes les 15 s tant qu'il tourne ;
  *  - `ChoixModeTranscription` : au dépôt, « Serveur (automatique) », « Navigateur (ce PC) » ou « API
  *    externe », selon ce que le serveur propose ;
- *  - `ReglagesTranscriptionTeam` : Paramètres de la team, mode par défaut (`team.manage`).
+ *  - `ChoixQualite` : Rapide / Équilibrée / Maximale (whisper.cpp), avec la durée estimée ;
+ *  - `ReglagesTranscriptionTeam` : Paramètres de la team (`team.manage`) : mode, langue, qualité, relecture par
+ *    l'IA locale, glossaire de la team (pseudos, termes : ajoutés au vocabulaire de Whisper).
  *
  * Le calcul se fait sur le serveur : on peut fermer l'app, le déposant et les rédacteurs sont prévenus
  * quand le PDF est prêt.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
-import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
+import { Text, TextInput, View } from 'react-native';
+import { BoutonHub, Case, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { ClientEsport, ModeTranscription, TravailServeur } from '../../client';
+import type { ClientEsport, ModeTranscription, QualiteProposee, QualiteTranscription, TravailServeur } from '../../client';
 import { apiMedias, type ReglagesTranscription, type Transcription } from '../../medias/api';
 import { traduireServeur } from '../../i18n/erreurs';
 import { tr } from '../../i18n';
-import { Intertitre, Panneau, Retours, useAgir } from '../commun';
+import { Intertitre, Panneau, Retours, styles, useAgir } from '../commun';
 
 /** « 12 min », « 1 h 05 », « moins d'une minute ». */
 export function dureeRestante(secondes: number): string {
@@ -38,6 +40,7 @@ export function libelleTravailServeur(w: TravailServeur): string {
       if (w.progression > 0) return tr('transcription.serveur.reprise', { v: w.pourcentage });
       return w.rang > 0 ? tr('transcription.serveur.en_file', { n: w.rang }) : tr('transcription.serveur.en_file_premiere');
     case 'en_cours':
+      if (w.etape === 'correction') return tr('transcription.serveur.correction', { n: w.correctionFaite ?? 0 });
       if (w.restantS != null && w.restantS < 60) return tr('transcription.serveur.en_cours_presque', { v: w.pourcentage });
       return w.restantS != null
         ? tr('transcription.serveur.en_cours', { v: w.pourcentage, reste: dureeRestante(w.restantS) })
@@ -148,11 +151,54 @@ export function ChoixModeTranscription({ theme, modes, valeur, onChoisir, serveu
   );
 }
 
-/** Paramètres de la team : mode de transcription par défaut. */
+/** Pauses de ménagement du serveur (TRANSCRIPTION_REPOS par défaut) comprises dans les estimations. */
+const REPOS = 0.25;
+
+/** Durée estimée d'une transcription : « 12 min » pour `dureeAudio` secondes (ou par heure de réunion sans durée). */
+export function estimationQualite(q: QualiteProposee | undefined, dureeAudio?: number | null): string | null {
+  if (!q?.facteur) return null;
+  return dureeRestante(q.facteur * (dureeAudio && dureeAudio > 0 ? dureeAudio : 3600) * (1 + REPOS));
+}
+
+export const libelleQualite = (q: QualiteTranscription): string => tr(`transcription.qualite.${q}` as 'transcription.qualite.equilibree');
+
+/** Qualité choisie parmi celles disponibles : la demandée, sinon l'équilibrée, sinon la première. */
+export function qualiteRetenue(qualites: QualiteProposee[] | undefined, voulue: QualiteTranscription | null | undefined): QualiteTranscription | undefined {
+  const dispo = (qualites ?? []).filter(q => q.disponible);
+  return (dispo.find(q => q.cle === voulue) ?? dispo.find(q => q.cle === 'equilibree') ?? dispo[0])?.cle;
+}
+
+/** Choix de la qualité (Rapide, Équilibrée, Maximale) et durée estimée pour cet enregistrement. */
+export function ChoixQualite({ theme, qualites, valeur, onChoisir, dureeAudio, testID }: { theme: ThemeHub; qualites: QualiteProposee[] | undefined; valeur: QualiteTranscription | null | undefined; onChoisir(q: QualiteTranscription): void; dureeAudio?: number | null; testID: string }) {
+  const dispo = (qualites ?? []).filter(q => q.disponible);
+  const cle = qualiteRetenue(qualites, valeur);
+  if (!cle) return null;
+  const q = dispo.find(x => x.cle === cle);
+  const estimation = estimationQualite(q, dureeAudio);
+  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
+  return (
+    <View style={{ gap: 4 }} testID={testID}>
+      {dispo.length > 1 ? <Segments theme={theme} libelle={tr('transcription.qualite.titre')} valeur={cle} options={dispo.map(x => [x.cle, libelleQualite(x.cle)] as const)} onChoisir={onChoisir} testID={`${testID}-segments`} /> : null}
+      <Text style={attenue} testID={`${testID}-explication`}>
+        {tr(`transcription.qualite.explication_${cle}` as 'transcription.qualite.explication_equilibree')}
+        {estimation ? ` ${dureeAudio ? tr('transcription.qualite.estimation', { duree: estimation }) : tr('transcription.qualite.estimation_heure', { duree: estimation })}` : ''}
+      </Text>
+    </View>
+  );
+}
+
+/** Paramètres de la team : mode, langue, qualité, relecture par l'IA locale et glossaire de la transcription. */
 export function ReglagesTranscriptionTeam({ theme, client, teamId }: { theme: ThemeHub; client: ClientEsport; teamId: string }) {
   const { reglages, setReglages, api } = useReglagesTranscription(client, teamId);
   const { erreur, avis, agir } = useAgir();
+  const [glossaire, setGlossaire] = useState<string | undefined>();
   if (!reglages?.modifiable) return null;
+  const changer = (corps: Parameters<typeof api.changerReglagesTranscription>[0]) =>
+    void agir('reglages', async () => {
+      setReglages(await api.changerReglagesTranscription(corps));
+      return tr('transcription.reglages.enregistres');
+    });
+  const qualitesDispo = (reglages.qualites ?? []).filter(q => q.disponible);
   const modes = (['serveur', 'navigateur', 'externe'] as const).filter(m => reglages.disponibles[m]);
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
@@ -172,11 +218,57 @@ export function ReglagesTranscriptionTeam({ theme, client, teamId }: { theme: Th
         testID="esport-parametres-transcription-mode"
       />
       <Text style={attenue}>{tr(`transcription.mode.explication_${reglages.mode}` as 'transcription.mode.explication_serveur')}</Text>
-      {reglages.disponibles.serveur ? (
+      {reglages.disponibles.serveur ? null : <Text style={[attenue, { color: theme.alerte }]}>{tr('transcription.mode.serveur_absent')}</Text>}
+      <Segments
+        theme={theme}
+        libelle={tr('transcription.langue')}
+        valeur={reglages.langue ?? 'fr'}
+        options={[
+          ['fr', tr('transcription.francais')],
+          ['en', tr('transcription.anglais')],
+          ['auto', tr('transcription.langue_auto')],
+        ]}
+        onChoisir={v => changer({ langue: v === 'en' ? 'en' : v === 'auto' ? 'auto' : 'fr' })}
+        testID="esport-parametres-transcription-langue"
+      />
+      {qualitesDispo.length ? (
+        <ChoixQualite theme={theme} qualites={reglages.qualites} valeur={reglages.qualite} onChoisir={q => changer({ qualite: q })} testID="esport-parametres-transcription-qualite" />
+      ) : reglages.disponibles.serveur ? (
         <Text style={attenue}>{tr('transcription.reglages.modele', { modele: reglages.modele })}</Text>
-      ) : (
-        <Text style={[attenue, { color: theme.alerte }]}>{tr('transcription.mode.serveur_absent')}</Text>
-      )}
+      ) : null}
+      {reglages.correctionDisponible ? (
+        <View style={styles.ligne}>
+          <Case theme={theme} coche={reglages.correction !== false} libelle={tr('transcription.reglages.correction')} onChanger={v => changer({ correction: v })} testID="esport-parametres-transcription-correction" />
+          <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{tr('transcription.reglages.correction')}</Text>
+        </View>
+      ) : reglages.disponibles.serveur ? (
+        <Text style={attenue}>{tr('transcription.reglages.correction_absente')}</Text>
+      ) : null}
+      <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{tr('transcription.reglages.glossaire')}</Text>
+      <Text style={attenue}>{tr('transcription.reglages.glossaire_explication')}</Text>
+      <TextInput
+        testID="esport-parametres-transcription-glossaire"
+        accessibilityLabel={tr('transcription.reglages.glossaire')}
+        value={glossaire ?? reglages.glossaire ?? ''}
+        onChangeText={setGlossaire}
+        multiline
+        maxLength={2000}
+        placeholder={tr('transcription.reglages.glossaire_exemple')}
+        placeholderTextColor={theme.attenue}
+        style={{ minHeight: 70, color: theme.texte, borderWidth: 1, borderColor: theme.ligne, borderRadius: 8, padding: 8, backgroundColor: theme.surface, ...police(theme.policeTexte) }}
+      />
+      {glossaire !== undefined && glossaire !== (reglages.glossaire ?? '') ? (
+        <BoutonHub
+          theme={theme}
+          titre={tr('transcription.reglages.glossaire_enregistrer')}
+          variante="plein"
+          onPress={() => {
+            changer({ glossaire });
+            setGlossaire(undefined);
+          }}
+          testID="esport-parametres-transcription-glossaire-enregistrer"
+        />
+      ) : null}
       {reglages.choisi ? (
         <BoutonHub
           theme={theme}

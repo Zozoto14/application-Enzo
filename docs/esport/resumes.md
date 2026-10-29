@@ -77,9 +77,10 @@ Si le serveur n'est pas installé ou échoue, l'app le dit et propose le navigat
 2. **Traitement en arrière-plan** : la tâche cron du serveur (toutes les 5 minutes) lance **un seul** processus de
    transcription à la fois, détaché, en priorité basse (`nice 19`), avec 1 fil de calcul par défaut. Il décode l'audio
    une fois (ffmpeg), puis le transcrit par **morceaux de 30 s au plus**, coupés dans un silence.
-3. **Moteur** : **Whisper** (« base » par défaut, multilingue, français par défaut) calculé par **ONNX Runtime pour
-   Node** (binaires tout faits, aucune compilation), avec les poids d'origine d'OpenAI quantifiés en int8 (export du
-   projet sherpa-onnx). Installation unique par le Fondateur : [o2switch.md](../o2switch.md), partie H.
+3. **Moteur** : **whisper.cpp** avec **Whisper large-v3-turbo** (qualité « Équilibrée » ; « Rapide » et
+   « Maximale » au choix), le **vocabulaire de la team** en prompt, la détection de la parole, puis une **relecture
+   par l'IA locale** (version brute gardée). Repli : l'ancien moteur ONNX. Détails et diagnostic :
+   [transcription.md](transcription.md) ; installation : [o2switch.md](../o2switch.md), partie H.
 4. **Progression visible** dans l'app (rafraîchie toutes les 15 s) : pourcentage et **temps restant estimé**
    (d'après la vitesse mesurée). On peut **fermer l'app** ; « Annuler (transcrire autrement) » retire le travail.
 5. **Reprise** : chaque morceau est enregistré en base. Si le processus est arrêté (limite de l'hébergeur,
@@ -92,9 +93,8 @@ Si le serveur n'est pas installé ou échoue, l'app le dit et propose le navigat
 8. **Visibilité** : exactement celle du dépôt (une réunion d'un type **staff** reste invisible, 404, pour qui ne voit
    pas le staff ; la notification ne part qu'au déposant et aux rédacteurs).
 
-Durée (modèle « base », 1 fil, processeur de serveur x64) : **18 minutes de calcul pour 1 h de réunion** mesurées,
-soit **20 à 45 minutes** en comptant les pauses de ménagement et un serveur partagé. Tableau complet (tiny, base,
-small ; 1 ou 2 fils) : [o2switch.md](../o2switch.md), partie H.
+Durée (qualité Équilibrée, 8 fils) : **20 à 40 minutes pour 1 h de réunion**, plus la relecture par l'IA locale ;
+l'app affiche l'estimation pour chaque qualité. Tableau complet : [o2switch.md](../o2switch.md), partie H.
 
 ### Dans le navigateur
 
@@ -132,7 +132,7 @@ L'audio **ne quitte pas l'appareil** pour la transcription (il est déjà sur le
 
 | Appareil | 1 h de réunion |
 | --- | --- |
-| **Serveur o2switch** (Whisper base, 1 fil, en arrière-plan) | 20 à 45 minutes, sans rien laisser ouvert |
+| **Serveur o2switch** (whisper.cpp large-v3-turbo, en arrière-plan) | 20 à 40 minutes, sans rien laisser ouvert |
 | PC récent avec WebGPU (Chrome, Edge) | 5 à 15 minutes |
 | PC sans WebGPU (processeur, WebAssembly) | 30 à 90 minutes |
 | Gros fichier (plus de 700 Mo) | + 15 minutes de lecture accélérée |

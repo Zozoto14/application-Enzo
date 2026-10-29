@@ -24,7 +24,8 @@ import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { fichierPublic } from './medias/service.mjs';
 import { pdfTranscription } from './medias/pdf.mjs';
 import { LANGUES_TRANSCRIPTION, preResume, transcrireParApi, validerSegments } from './medias/transcription.mjs';
-import { MODES_TRANSCRIPTION, configTranscriptionServeur, servicesFileTranscription } from './medias/fileTranscription.mjs';
+import { MODES_TRANSCRIPTION, QUALITES, configTranscriptionServeur, qualiteEffective, servicesFileTranscription, VITESSE_DEPART } from './medias/fileTranscription.mjs';
+import { construirePromptVocabulaire, lireGlossaire, motsDuVocabulaire, nettoyerSegments, vocabulaireTeam } from './medias/qualiteTranscription.mjs';
 
 export const MODULE_RESUMES = 'meeting_summaries';
 export const STATUTS_REUNION = ['a_resumer', 'en_cours', 'termine'];
@@ -136,6 +137,9 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
         externe: Boolean(transcriptionExterne?.actif),
         // Transcription sur le serveur : moteur installé ? travail en file (progression, temps restant) ?
         serveur: serveurDisponible(),
+        // Qualités proposées (Rapide, Équilibrée, Maximale : disponibles ? durée estimée) et la meilleure possible.
+        qualites: serveurDisponible() ? qualitesProposees() : [],
+        meilleureQualite: serveurDisponible() ? (qualiteEffective(transcriptionServeur, 'maximale')?.qualite ?? null) : null,
         travail: travaux.get(r.id) ?? null,
       },
     };
@@ -270,7 +274,9 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     // Transcription demandée au dépôt : « serveur » (file de travaux), « externe » (API), « navigateur »
     // (l'app la lance elle-même) ; sans précision : « à transcrire » (comportement d'avant).
     const modeDemande = MODES_TRANSCRIPTION.includes(corps?.transcription) ? corps.transcription : null;
-    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
+    const prefs = await preferencesTranscription(teamId);
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : prefs.langue;
+    const qualite = QUALITES.includes(corps?.qualite) ? corps.qualite : prefs.qualite;
     const t = maintenant();
     const id = nouvelId();
     let rattachement = null;
@@ -288,7 +294,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'a_resumer', ?, ?, ?, ?)`,
         params: [id, teamId, acteur.compte, lien, type.id, date, titre, note, rattachement?.fichierId ?? null, statutTranscription, iso(t), iso(t)],
       },
-      ...(surServeur ? file.instructionsEnfiler({ reunionId: id, teamId, langue, demandePar: acteur.compte, t }) : []),
+      ...(surServeur ? file.instructionsEnfiler({ reunionId: id, teamId, langue, qualite, demandePar: acteur.compte, t }) : []),
       ...(parApi
         ? [
             {
@@ -585,6 +591,10 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       langue: x?.langue ?? 'fr',
       moteur: x?.moteur ?? '',
       segments: jsonOu(x?.segments, []).map(([debut, fin, texte]) => ({ debut, fin, texte })),
+      // Texte brut de Whisper quand la version affichée a été relue par l'IA locale (l'app bascule brute / corrigée).
+      segmentsBruts: x?.segments_bruts ? jsonOu(x.segments_bruts, []).map(([debut, fin, texte]) => ({ debut, fin, texte })) : null,
+      correction: x?.correction || null,
+      qualite: x?.qualite || null,
       duree: x?.duree_s ?? null,
       progression: Number(x?.progression_s ?? 0),
       partielle: x ? Number(x.partielle) === 1 : true,
@@ -598,6 +608,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       peutModifier: peutEcrireTranscription(ctx, r),
       externe: Boolean(transcriptionExterne?.actif),
       serveur: serveurDisponible(),
+      // Meilleure qualité possible sur ce serveur (bouton « Retranscrire avec la meilleure qualité »).
+      meilleureQualite: serveurDisponible() ? (qualiteEffective(transcriptionServeur, 'maximale')?.qualite ?? null) : null,
       travail: await file.etatPublic(await file.travailDe(r.id)),
     };
   }
@@ -621,16 +633,20 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const resume = s.partielle ? [] : preResume(s.segments);
     const duree = s.duree ?? (s.segments.length ? s.segments[s.segments.length - 1][1] : null);
     const lot = [];
+    // Version brute, relecture et qualité : données par le serveur (`s.qualiteTexte`) ; une correction à la main
+    // les garde ; une nouvelle transcription faite ailleurs (autre moteur) les efface.
+    const q = s.qualiteTexte ?? (existante && existante.moteur === s.moteur ? { bruts: existante.segments_bruts ?? null, correction: existante.correction ?? '', qualite: existante.qualite ?? '' } : { bruts: null, correction: '', qualite: '' });
+    const bruts = q.bruts == null ? null : typeof q.bruts === 'string' ? q.bruts : JSON.stringify(q.bruts);
     if (existante) {
       lot.push({
-        sql: 'UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, duree_s = ?, progression_s = ?, partielle = ?, pre_resume = ?, erreur = ?, modifie_par = ?, maj_le = ? WHERE id = ?',
-        params: [s.langue, s.moteur, JSON.stringify(s.segments), duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), '', s.compte, iso(t), existante.id],
+        sql: 'UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, segments_bruts = ?, correction = ?, qualite = ?, duree_s = ?, progression_s = ?, partielle = ?, pre_resume = ?, erreur = ?, modifie_par = ?, maj_le = ? WHERE id = ?',
+        params: [s.langue, s.moteur, JSON.stringify(s.segments), bruts, q.correction ?? '', q.qualite ?? '', duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), '', s.compte, iso(t), existante.id],
       });
     } else {
       lot.push({
-        sql: `INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, duree_s, progression_s, partielle, pre_resume, erreur, auteur_id, modifie_par, cree_le, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)`,
-        params: [nouvelId(), r.team_id, r.id, s.langue, s.moteur, JSON.stringify(s.segments), duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), s.compte, s.compte, iso(t), iso(t)],
+        sql: `INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, segments_bruts, correction, qualite, duree_s, progression_s, partielle, pre_resume, erreur, auteur_id, modifie_par, cree_le, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)`,
+        params: [nouvelId(), r.team_id, r.id, s.langue, s.moteur, JSON.stringify(s.segments), bruts, q.correction ?? '', q.qualite ?? '', duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), s.compte, s.compte, iso(t), iso(t)],
       });
     }
     let pdfId = null;
@@ -746,7 +762,11 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
         if (Number(f.taille) > transcriptionExterne.tailleMax) throw new Error('Enregistrement trop gros pour l’API de transcription.');
         const objet = await stockage.lire(f.cle_stockage);
         if (!objet) throw new Error('Enregistrement introuvable.');
-        const { segments, duree } = await transcrireParApi({ octets: objet.octets, nom: f.nom_original, type: f.type_mime, langue: x?.langue ?? 'fr', config: transcriptionExterne, fetch: fetchTranscription });
+        const voc = await vocabulaireDe(r.team_id);
+        const prompt = construirePromptVocabulaire(voc, { langue: x?.langue === 'en' ? 'en' : 'fr' });
+        const api = await transcrireParApi({ octets: objet.octets, nom: f.nom_original, type: f.type_mime, langue: x?.langue ?? 'fr', prompt, config: transcriptionExterne, fetch: fetchTranscription });
+        const { duree } = api;
+        const segments = validerSegments(nettoyerSegments(api.segments));
         const profil = await base.premier('SELECT COALESCE(langue, langue_defaut) AS langue FROM comptes WHERE id = ?', [compte]);
         await sauverTranscription({ team, acteur: { compte } }, r, type, { segments, langue: x?.langue ?? 'fr', moteur: `API (${transcriptionExterne.modele})`, duree, partielle: false, progression: duree ?? 0, compte, langueDoc: profil?.langue });
       } catch (e) {
@@ -769,8 +789,57 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return jsonOu(l?.config, {}) ?? {};
   }
 
+  /**
+   * Préférences de transcription de la team (Paramètres) : langue (fr par défaut, en, ou auto = détection),
+   * qualité (celle du serveur par défaut), relecture par l'IA locale (oui par défaut), glossaire libre.
+   */
+  async function preferencesTranscription(teamId, config = null) {
+    const c = config ?? (await configModule(teamId));
+    return {
+      langue: ['fr', 'en', 'auto'].includes(c.transcriptionLangue) ? c.transcriptionLangue : 'fr',
+      qualite: QUALITES.includes(c.transcriptionQualite) ? c.transcriptionQualite : (transcriptionServeur?.qualite ?? 'equilibree'),
+      correction: c.transcriptionCorrection !== false,
+      glossaire: typeof c.transcriptionGlossaire === 'string' ? c.transcriptionGlossaire : '',
+    };
+  }
+
+  /**
+   * Vocabulaire de la team pour Whisper et la relecture : glossaire des Paramètres, pseudos des membres (et nom
+   * de leur Riot ID), adversaires (scouting) et leurs joueurs, agents / maps / modes du profil de jeu de la team.
+   */
+  async function vocabulaireDe(teamId) {
+    const team = await base.premier('SELECT nom, jeu FROM teams WHERE id = ?', [teamId]);
+    const jeu = team?.jeu ? await base.premier('SELECT cle, nom, base, donnees FROM jeux WHERE cle = ?', [team.jeu]) : null;
+    const d = jsonOu(jeu?.donnees, {}) ?? {};
+    const actifs = l => (Array.isArray(l) ? l.filter(x => x && x.actif !== false) : []);
+    const membres = await base.tous("SELECT c.pseudo, c.riot_id FROM membres m JOIN comptes c ON c.id = m.compte_id WHERE m.team_id = ? AND m.statut = 'actif' ORDER BY c.pseudo LIMIT 60", [teamId]);
+    const adversaires = await base.tous('SELECT nom FROM adversaires WHERE team_id = ? AND supprime_le IS NULL ORDER BY maj_le DESC LIMIT 20', [teamId]);
+    const joueursAdverses = await base.tous('SELECT j.pseudo FROM adversaire_joueurs j JOIN adversaires a ON a.id = j.adversaire_id WHERE j.team_id = ? AND a.supprime_le IS NULL ORDER BY j.maj_le DESC LIMIT 30', [teamId]);
+    const prefs = await preferencesTranscription(teamId);
+    return vocabulaireTeam({
+      glossaire: lireGlossaire(prefs.glossaire),
+      pseudos: [...membres.map(m => m.pseudo), ...membres.map(m => m.riot_id).filter(Boolean)],
+      adversaires: [...adversaires.map(a => a.nom), ...joueursAdverses.map(j => j.pseudo)],
+      personnages: actifs(d.personnages).map(x => x.nom),
+      cartes: actifs(d.cartes).map(x => x.nom),
+      modes: actifs(d.modes).map(x => x.nom),
+      jeu: jeu ? { nom: jeu.nom, base: jeu.base, cle: jeu.cle } : null,
+      equipe: team?.nom ?? '',
+    });
+  }
+
   function modesDisponibles() {
     return { serveur: serveurDisponible(), navigateur: true, externe: Boolean(transcriptionExterne?.actif) };
+  }
+
+  /** Qualités proposées (disponibles ou non), avec le facteur de durée (secondes de calcul par seconde d'audio). */
+  function qualitesProposees() {
+    return QUALITES.map(cle => {
+      const q = transcriptionServeur?.qualites?.[cle] ?? (serveurDisponible() && cle === 'equilibree' && !transcriptionServeur?.qualites ? { disponible: true, moteur: 'onnx', modele: transcriptionServeur?.modele } : { disponible: false, moteur: null, modele: null });
+      const k = q.moteur === 'whispercpp' ? `whispercpp:${q.modele}` : q.modele;
+      const facteur = Number(transcriptionServeur?.vitesses?.[k]) || VITESSE_DEPART[k] || null;
+      return { cle, disponible: Boolean(q.disponible) && serveurDisponible(), moteur: q.moteur ?? null, modele: q.modele ?? null, facteur: facteur ? Math.round(facteur * 100) / 100 : null, mesuree: Boolean(Number(transcriptionServeur?.vitesses?.[k])) };
+    });
   }
 
   async function reglagesTranscription(acteur, teamId) {
@@ -783,6 +852,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const voulu = choisi ?? defaut;
     // Mode effectif : celui voulu s'il marche ; sinon le serveur s'il est installé, sinon le navigateur.
     const effectif = disponibles[voulu] ? voulu : disponibles.serveur ? 'serveur' : 'navigateur';
+    const prefs = await preferencesTranscription(teamId, config);
     return {
       mode: effectif,
       choisi,
@@ -790,22 +860,59 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       disponibles,
       modele: transcriptionServeur?.modele ?? 'base',
       modifiable: ctx.permissions.has('team.manage') || Boolean(acteur.superAdmin),
+      langue: prefs.langue,
+      qualite: qualiteEffective(transcriptionServeur, prefs.qualite)?.qualite ?? prefs.qualite,
+      qualiteChoisie: QUALITES.includes(config.transcriptionQualite) ? config.transcriptionQualite : null,
+      qualites: qualitesProposees(),
+      correction: prefs.correction,
+      correctionDisponible: Boolean(transcriptionServeur?.correctionDisponible),
+      glossaire: prefs.glossaire,
     };
   }
 
-  /** Paramètres de la team (`team.manage`) : mode par défaut de la transcription (null = celui du serveur). */
+  /**
+   * Paramètres de la team (`team.manage`), champs facultatifs : `mode` (null = celui du serveur), `langue`
+   * (fr, en, auto), `qualite` (null = celle du serveur), `correction` (relecture par l'IA locale), `glossaire`
+   * (termes, pseudos, noms propres : une ligne ou une virgule par terme, 2 000 caractères au plus).
+   */
   async function changerReglagesTranscription(acteur, teamId, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exigerModule(ctx);
     if (!ctx.permissions.has('team.manage') && !acteur.superAdmin) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
-    const mode = corps?.mode ?? null;
-    if (mode !== null && !MODES_TRANSCRIPTION.includes(mode)) throw echec(400, 'mode', 'Mode de transcription : serveur, navigateur ou externe.');
-    const config = { ...(await configModule(teamId)), transcriptionMode: mode };
-    if (mode === null) delete config.transcriptionMode;
+    const config = { ...(await configModule(teamId)) };
+    const champs = [];
+    if (corps && 'mode' in corps) {
+      const mode = corps.mode ?? null;
+      if (mode !== null && !MODES_TRANSCRIPTION.includes(mode)) throw echec(400, 'mode', 'Mode de transcription : serveur, navigateur ou externe.');
+      if (mode === null) delete config.transcriptionMode;
+      else config.transcriptionMode = mode;
+      champs.push('transcription_mode');
+    }
+    if (corps && 'langue' in corps) {
+      if (!['fr', 'en', 'auto'].includes(corps.langue)) throw echec(400, 'langue', 'Langue de transcription : fr, en ou auto.');
+      config.transcriptionLangue = corps.langue;
+      champs.push('transcription_langue');
+    }
+    if (corps && 'qualite' in corps) {
+      if (corps.qualite !== null && !QUALITES.includes(corps.qualite)) throw echec(400, 'qualite', 'Qualité de transcription : rapide, equilibree ou maximale.');
+      if (corps.qualite === null) delete config.transcriptionQualite;
+      else config.transcriptionQualite = corps.qualite;
+      champs.push('transcription_qualite');
+    }
+    if (corps && 'correction' in corps) {
+      if (typeof corps.correction !== 'boolean') throw echec(400, 'correction', 'Relecture par l’IA locale : oui ou non.');
+      config.transcriptionCorrection = corps.correction;
+      champs.push('transcription_correction');
+    }
+    if (corps && 'glossaire' in corps) {
+      const g = texteLong(corps.glossaire ?? '', 2000);
+      config.transcriptionGlossaire = g;
+      champs.push('transcription_glossaire');
+    }
     const t = maintenant();
     await base.lot([
       { sql: 'UPDATE team_modules SET config = ?, maj_le = ? WHERE team_id = ? AND module = ?', params: [JSON.stringify(config), iso(t), teamId, MODULE_RESUMES] },
-      evenement('team.updated', { teamId, acteur: acteur.compte, entiteType: 'team', entiteId: teamId, charge: { champs: ['transcription_mode'], mode }, maintenant: t }),
+      evenement('team.updated', { teamId, acteur: acteur.compte, entiteType: 'team', entiteId: teamId, charge: { champs, mode: config.transcriptionMode ?? null }, maintenant: t }),
     ]);
     return reglagesTranscription(acteur, teamId);
   }
@@ -821,10 +928,13 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     if (!f || f.supprime_le) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
     const w = await file.travailDe(r.id);
     if (w && (w.statut === 'attente' || w.statut === 'en_cours')) return transcriptionPublique(ctx, r);
-    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
+    const prefs = await preferencesTranscription(teamId);
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : prefs.langue;
+    if (corps?.qualite !== undefined && corps.qualite !== null && !QUALITES.includes(corps.qualite)) throw echec(400, 'qualite', 'Qualité de transcription : rapide, equilibree ou maximale.');
+    const qualite = corps?.qualite ?? prefs.qualite;
     const t = maintenant();
     await base.lot([
-      ...file.instructionsEnfiler({ reunionId: r.id, teamId, langue, demandePar: acteur.compte, t }),
+      ...file.instructionsEnfiler({ reunionId: r.id, teamId, langue, qualite, demandePar: acteur.compte, t }),
       // Nouvelle transcription complète : la précédente (partielle d'un navigateur, ou ancienne) est remplacée à la fin.
       { sql: "UPDATE transcriptions SET erreur = '', progression_s = 0, segments = CASE WHEN partielle = 1 THEN '[]' ELSE segments END, maj_le = ? WHERE reunion_id = ?", params: [iso(t), r.id] },
       { sql: "UPDATE reunions SET transcription_statut = 'serveur', maj_le = ? WHERE id = ?", params: [iso(t), r.id] },
@@ -879,8 +989,27 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       // Reprise : segments partiels du serveur, jusqu'à la progression enregistrée.
       const progression = Number(w.progression_s ?? 0);
       const reprise = progression > 0 && x && Number(x.partielle) === 1;
-      const segments = reprise ? jsonOu(x.segments, []).filter(s => Number(s[1]) <= progression + 0.05) : [];
-      return { travail: w, reunion: r, fichier: f, segments, progression: reprise ? progression : 0 };
+      const enCorrection = reprise && w.etape === 'correction';
+      if (w.etape === 'correction' && !enCorrection) w.etape = 'transcription';
+      const segments = reprise ? jsonOu(x.segments, []).filter(s => enCorrection || Number(s[1]) <= progression + 0.05) : [];
+      // Contexte : prompt de vocabulaire pour Whisper, glossaire et relecture pour l'IA locale.
+      const prefs = await preferencesTranscription(r.team_id);
+      const voc = await vocabulaireDe(r.team_id);
+      const contexte = {
+        prompt: construirePromptVocabulaire(voc, { langue: w.langue === 'en' ? 'en' : 'fr' }),
+        glossaire: motsDuVocabulaire(voc),
+        correction: Boolean(transcriptionServeur?.correctionDisponible) && prefs.correction,
+      };
+      return {
+        travail: w,
+        reunion: r,
+        fichier: f,
+        segments,
+        segmentsBruts: enCorrection && x.segments_bruts ? jsonOu(x.segments_bruts, []) : null,
+        moteur: reprise ? x.moteur : null,
+        progression: reprise ? progression : 0,
+        contexte,
+      };
     }
     return null;
   }
@@ -896,7 +1025,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const ecrire = x
       ? {
           // Jamais par-dessus une transcription faite ailleurs entre-temps (travail annulé) : condition sur le travail.
-          sql: "UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, duree_s = ?, progression_s = ?, partielle = 1, erreur = '', maj_le = ? WHERE id = ? AND EXISTS (SELECT 1 FROM travaux_transcription WHERE id = ? AND statut = 'en_cours')",
+          sql: "UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, segments_bruts = NULL, correction = '', duree_s = ?, progression_s = ?, partielle = 1, erreur = '', maj_le = ? WHERE id = ? AND EXISTS (SELECT 1 FROM travaux_transcription WHERE id = ? AND statut = 'en_cours')",
           params: [langue, moteur, JSON.stringify(propres), duree, progression, iso(t), x.id, w.id],
         }
       : {
@@ -909,8 +1038,41 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return Boolean(maj?.changements);
   }
 
+  /**
+   * Transcription finie, relecture par l'IA locale à faire : texte brut gardé (`segments_bruts`), étape
+   * « correction » (une interruption reprend la relecture, pas la transcription). Rend false si le travail
+   * n'est plus à nous.
+   */
+  async function commencerCorrectionServeur(w, { segments, langue, moteur, duree }) {
+    if (!(await file.toujoursEnCours(w.id))) return false;
+    const propres = JSON.stringify(validerSegments(segments));
+    const t = iso(maintenant());
+    const [maj] = await base.lot([
+      {
+        sql: "UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, segments_bruts = ?, duree_s = ?, progression_s = ?, partielle = 1, maj_le = ? WHERE reunion_id = ? AND EXISTS (SELECT 1 FROM travaux_transcription WHERE id = ? AND statut = 'en_cours')",
+        params: [langue, moteur, propres, propres, duree, duree, t, w.reunion_id, w.id],
+      },
+      file.instructionEtape(w.id, { etape: 'correction', correctionFaite: 0 }),
+    ]);
+    return Boolean(maj?.changements);
+  }
+
+  /** Avancée de la relecture : segments relus jusqu'à `faits` (le reste encore brut), bail renouvelé. */
+  async function progresserCorrectionServeur(w, { segments, faits }) {
+    if (!(await file.toujoursEnCours(w.id))) return false;
+    const t = iso(maintenant());
+    const [, maj] = await base.lot([
+      {
+        sql: "UPDATE transcriptions SET segments = ?, maj_le = ? WHERE reunion_id = ? AND EXISTS (SELECT 1 FROM travaux_transcription WHERE id = ? AND statut = 'en_cours')",
+        params: [JSON.stringify(validerSegments(segments)), t, w.reunion_id, w.id],
+      },
+      file.instructionEtape(w.id, { etape: 'correction', correctionFaite: faits }),
+    ]);
+    return Boolean(maj?.changements);
+  }
+
   /** Fin : segments enregistrés, PDF généré, statut « prête », notification au déposant et aux rédacteurs. */
-  async function terminerTravailServeur(w, { segments, duree, langue, moteur }) {
+  async function terminerTravailServeur(w, { segments, segmentsBruts = null, correction = '', qualite = null, duree, langue, moteur }) {
     if (!(await file.toujoursEnCours(w.id))) return false;
     const r = await base.premier('SELECT * FROM reunions WHERE id = ?', [w.reunion_id]);
     if (!r || r.supprime_le) return false;
@@ -928,6 +1090,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       compte,
       acteur: null,
       langueDoc: profil?.langue,
+      qualiteTexte: { bruts: segmentsBruts ? validerSegments(segmentsBruts) : null, correction: segmentsBruts ? correction : '', qualite: qualite ?? '' },
       instructions: [file.instructionTerminer(w.id)],
     });
     return true;
@@ -976,6 +1139,9 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     recupererTravauxServeur,
     prochainTravailServeur,
     progresserServeur,
+    commencerCorrectionServeur,
+    progresserCorrectionServeur,
+    vocabulaireDe,
     terminerTravailServeur,
     echecTravailServeur,
     rendreTravailServeur: w => file.rendre(w.id),

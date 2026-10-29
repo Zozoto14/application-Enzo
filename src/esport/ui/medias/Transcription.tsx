@@ -7,7 +7,7 @@
  *  - `BandeauTranscriptions` : les transcriptions en cours dans l'onglet, sur tous les écrans de l'Esport
  *    (le travail continue quand on change d'écran) ;
  *  - `EditeurTranscription` : segments horodatés modifiables (correction des fautes), puis « Enregistrer »
- *    (le serveur régénère le PDF).
+ *    (le serveur régénère le PDF) ; bascule « relue par l'IA » / « brute » quand l'IA locale l'a relue.
  *
  * Whisper et l'extraction audio sont chargés par IMPORT DYNAMIQUE (`../../transcription/lancer`) au
  * premier « Transcrire » : rien dans le paquet principal.
@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore 
 import { Text, TextInput, View } from 'react-native';
 import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { ClientEsport, Depot, StatutTranscription } from '../../client';
+import type { ClientEsport, Depot, QualiteTranscription, StatutTranscription } from '../../client';
 import { apiMedias, type SegmentTranscription, type Transcription } from '../../medias/api';
 import { timecode } from '../../transcription/audio';
 import { capaciteAppareil } from '../../transcription/appareil';
@@ -26,7 +26,7 @@ import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Retours, styles, useAgir } from '../commun';
 import { tr } from '../../i18n';
 import { traduireServeur } from '../../i18n/erreurs';
-import { ProgressionServeur, useSuiviServeur } from './TranscriptionServeur';
+import { ChoixQualite, ProgressionServeur, libelleQualite, qualiteRetenue, useSuiviServeur } from './TranscriptionServeur';
 
 export type LangueTranscription = 'fr' | 'en';
 
@@ -159,7 +159,9 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
   const api = useMemo(() => apiMedias(client, teamId), [client, teamId]);
   const etat = useTravail(depot.id);
   const travail = travaux.de(depot.id);
-  const [langue, setLangue] = useState<LangueTranscription>('fr');
+  // Langue choisie ici ; sans choix, le serveur prend celle de la team (Paramètres), le navigateur le français.
+  const [langue, setLangue] = useState<LangueTranscription | undefined>();
+  const [qualite, setQualite] = useState<QualiteTranscription | undefined>();
   const [editeur, setEditeur] = useState(false);
   const { enCours, erreur, avis, agir } = useAgir();
   const capacite = useMemo(() => capaciteAppareil(), []);
@@ -190,15 +192,17 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
   const peut = Boolean(depot.transcription?.peutTranscrire) && capacite.transcription;
   const lancer = (recommencer = false) =>
     void agir('transcrire', async () => {
-      await demarrerTranscription({ client, teamId, depot, langue, recommencer });
+      await demarrerTranscription({ client, teamId, depot, langue: langue ?? 'fr', recommencer });
     });
   const travailServeur = suivi.travail;
   const surServeur = statut === 'serveur';
   const echecServeur = statut === 'echec' && travailServeur?.statut === 'echec';
   const peutServeur = serveur && Boolean(depot.transcription?.peutTranscrire) && depot.enregistrement && !depot.enregistrement.supprime && !surServeur && statut !== 'externe' && !travail?.enCours;
-  const lancerServeur = () =>
+  const qualites = depot.transcription?.qualites;
+  const qualiteChoisie = qualiteRetenue(qualites, qualite);
+  const lancerServeur = (q: QualiteTranscription | undefined = qualiteChoisie) =>
     void agir('serveur', async () => {
-      const t = await api.demanderTranscriptionServeur(depot.id, langue);
+      const t = await api.demanderTranscriptionServeur(depot.id, langue, q);
       suivi.setTravail(t.travail ?? null);
       setStatutLocal(t.statut);
       onChange?.();
@@ -255,13 +259,18 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
           {tr('transcription.serveur.echec_repli', { v: traduireServeur(travailServeur?.erreur ?? '') })}
         </Text>
       ) : null}
-      {peutServeur ? (
+      {peutServeur && statut !== 'prete' ? (
+        <View style={{ gap: 6 }}>
+          <ChoixQualite theme={theme} qualites={qualites} valeur={qualiteChoisie} onChoisir={setQualite} dureeAudio={depot.enregistrement?.media?.duree} testID={`${idt}-qualite`} />
+          <BoutonHub theme={theme} titre={echecServeur ? tr('transcription.serveur.reessayer') : tr('transcription.serveur.transcrire')} variante="plein" desactive={Boolean(enCours)} onPress={() => lancerServeur()} testID={`${idt}-serveur-lancer`} />
+        </View>
+      ) : null}
+      {peutServeur && statut === 'prete' ? (
         <BoutonHub
           theme={theme}
-          titre={statut === 'prete' ? tr('transcription.serveur.retranscrire') : echecServeur ? tr('transcription.serveur.reessayer') : tr('transcription.serveur.transcrire')}
-          variante={statut === 'prete' ? undefined : 'plein'}
+          titre={depot.transcription?.meilleureQualite ? tr('transcription.serveur.retranscrire_meilleure', { qualite: libelleQualite(depot.transcription.meilleureQualite) }) : tr('transcription.serveur.retranscrire')}
           desactive={Boolean(enCours)}
-          onPress={lancerServeur}
+          onPress={() => lancerServeur(depot.transcription?.meilleureQualite ?? qualiteChoisie)}
           testID={`${idt}-serveur-lancer`}
         />
       ) : null}
@@ -272,7 +281,7 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
             <Segments
               theme={theme}
               libelle={tr('transcription.langue')}
-              valeur={langue}
+              valeur={langue ?? 'fr'}
               options={[
                 ['fr', tr('transcription.francais')],
                 ['en', tr('transcription.anglais')],
@@ -297,7 +306,7 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
           desactive={Boolean(enCours)}
           onPress={() =>
             void agir('externe', async () => {
-              await api.demanderTranscriptionExterne(depot.id, langue);
+              await api.demanderTranscriptionExterne(depot.id, langue ?? 'fr');
               onChange?.();
               return tr('transcription.sur_le_serveur_demandee');
             })
@@ -336,12 +345,15 @@ export function EditeurTranscription({ theme, client, teamId, depotId, onEnregis
   const [t, setT] = useState<Transcription | undefined>();
   const [segments, setSegments] = useState<SegmentTranscription[]>([]);
   const [modifie, setModifie] = useState(false);
+  // Version affichée : relue par l'IA locale (par défaut) ou brute (texte de Whisper tel quel).
+  const [version, setVersion] = useState<'corrigee' | 'brute'>('corrigee');
   const { enCours, erreur, avis, agir } = useAgir();
   useEffect(() => {
     void agir('', async () => {
       const lu = await api.transcription(depotId);
       setT(lu);
       setSegments(lu.segments);
+      setVersion('corrigee');
     });
   }, [agir, api, depotId]);
   if (!t) return <Retours theme={theme} erreur={erreur} prefixe="esport-transcription-editeur" />;
@@ -349,8 +361,32 @@ export function EditeurTranscription({ theme, client, teamId, depotId, onEnregis
   return (
     <View testID="esport-transcription-editeur" style={{ gap: 8 }}>
       <Text style={attenue}>
-        {[t.moteur, t.modifiePar?.pseudo && t.modifiePar.compte !== t.auteur?.compte ? tr('transcription.corrigee_par', { nom: t.modifiePar.pseudo }) : null, tr('transcription.segments', { n: t.segments.length })].filter(Boolean).join(' · ')}
+        {[t.moteur, t.qualite ? libelleQualite(t.qualite) : null, t.modifiePar?.pseudo && t.modifiePar.compte !== t.auteur?.compte ? tr('transcription.corrigee_par', { nom: t.modifiePar.pseudo }) : null, tr('transcription.segments', { n: t.segments.length })].filter(Boolean).join(' · ')}
       </Text>
+      {t.segmentsBruts?.length ? (
+        <View style={{ gap: 4 }}>
+          <Segments
+            theme={theme}
+            libelle={tr('transcription.version.titre')}
+            valeur={version}
+            options={[
+              ['corrigee', tr('transcription.version.corrigee')],
+              ['brute', tr('transcription.version.brute')],
+            ]}
+            onChoisir={v => {
+              const brute = v === 'brute';
+              setVersion(brute ? 'brute' : 'corrigee');
+              setSegments(brute ? (t.segmentsBruts ?? t.segments) : t.segments);
+              // Garder la version brute = l'enregistrer comme texte de la transcription.
+              setModifie(brute);
+            }}
+            testID="esport-transcription-version"
+          />
+          <Text style={attenue} testID="esport-transcription-version-explication">
+            {version === 'brute' ? tr('transcription.version.explication_brute') : tr('transcription.version.explication_corrigee', { v: t.correction ?? '' })}
+          </Text>
+        </View>
+      ) : null}
       {t.preResume.length ? (
         <View testID="esport-transcription-preresume" style={{ gap: 2, padding: 8, borderRadius: 8, backgroundColor: teinteTransparente(theme.accent, 0.08) }}>
           <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{tr('transcription.pre_resume')}</Text>

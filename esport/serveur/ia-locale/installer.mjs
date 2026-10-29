@@ -94,9 +94,9 @@ export function versionGlibc() {
   const m = /^(\d+)\.(\d+)/.exec(String(v ?? ''));
   return m ? [Number(m[1]), Number(m[2])] : null;
 }
-const auMoins = (v, min) => Boolean(v) && (v[0] > min[0] || (v[0] === min[0] && v[1] >= min[1]));
+export const auMoins = (v, min) => Boolean(v) && (v[0] > min[0] || (v[0] === min[0] && v[1] >= min[1]));
 
-function drapeauxProcesseur() {
+export function drapeauxProcesseur() {
   try {
     const l = readFileSync('/proc/cpuinfo', 'utf8').split('\n').find(x => x.startsWith('flags'));
     return new Set((l ?? '').split(':')[1]?.trim().split(/\s+/) ?? []);
@@ -105,10 +105,10 @@ function drapeauxProcesseur() {
   }
 }
 
-const commandeDispo = (cmd, args = ['--version']) => spawnSync(cmd, args, { stdio: 'ignore', timeout: 20_000 }).status === 0;
+export const commandeDispo = (cmd, args = ['--version']) => spawnSync(cmd, args, { stdio: 'ignore', timeout: 20_000 }).status === 0;
 
 /** Espace libre (octets) du système de fichiers qui contiendra `chemin`. */
-function espaceLibre(chemin) {
+export function espaceLibre(chemin) {
   let p = resolve(chemin);
   while (!existsSync(p) && dirname(p) !== p) p = dirname(p);
   try {
@@ -195,7 +195,7 @@ export function verifierBinaire(binaire) {
   return { ok: true, message: sortie.trim().split('\n')[0] };
 }
 
-function executer(cmd, args, options = {}) {
+export function executer(cmd, args, options = {}) {
   const r = spawnSync(cmd, args, { stdio: 'inherit', ...options });
   if (r.status !== 0) arreter(`Commande en échec : ${[cmd, ...args].join(' ').slice(0, 300)} (code ${r.status ?? r.signal ?? r.error?.message}).`);
 }
@@ -227,9 +227,12 @@ export function lirePaquetsOutils(texte = readFileSync(FICHIER_OUTILS, 'utf8')) 
     });
 }
 
-async function moteurCompile(c, { threads, avx2 }) {
-  if (!commandeDispo('git')) arreter('git est introuvable : il sert à récupérer les sources de llama.cpp (o2switch le fournit normalement).');
-  const o = c.outils;
+/**
+ * Compilateur figé SANS root (GCC 14 + cmake, paquets conda-forge vérifiés par SHA-256 puis installés hors ligne
+ * par micromamba) dans le dossier `o` (outils). Partagé avec l'installation de la transcription (whisper.cpp).
+ * Rend `{ bin, envOutils, envCompil }` : dossier des binaires, préfixe de l'environnement, variables de compilation.
+ */
+export async function preparerCompilateur(o) {
   mkdirSync(o, { recursive: true });
   const env = { ...process.env, MAMBA_ROOT_PREFIX: join(o, 'racine'), CONDA_OVERRIDE_GLIBC: '2.28', MAMBA_NO_BANNER: '1' };
   // 1. micromamba
@@ -256,6 +259,17 @@ async function moteurCompile(c, { threads, avx2 }) {
     executer(mm, ['create', '-y', '-q', '--offline', '-p', envOutils, '--file', local], { env });
   }
   ok('compilateur installé (hors ligne, depuis les paquets vérifiés)');
+  // Compilateur appelé directement (sans « micromamba run », dont les drapeaux ajouteraient au binaire un
+  // chemin de bibliothèques vers le dossier des outils, effacé ensuite).
+  const bin = join(envOutils, 'bin');
+  const envCompil = { ...process.env, PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}`, CC: join(bin, 'x86_64-conda-linux-gnu-gcc'), CXX: join(bin, 'x86_64-conda-linux-gnu-g++'), LDFLAGS: '', CFLAGS: '', CXXFLAGS: '', CPPFLAGS: '' };
+  return { bin, envOutils, envCompil };
+}
+
+async function moteurCompile(c, { threads, avx2 }) {
+  if (!commandeDispo('git')) arreter('git est introuvable : il sert à récupérer les sources de llama.cpp (o2switch le fournit normalement).');
+  const o = c.outils;
+  const { bin, envOutils, envCompil } = await preparerCompilateur(o);
   // 3. sources, commit vérifié
   const src = join(o, 'src');
   const commit = () => spawnSync('git', ['-C', src, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout?.trim();
@@ -271,10 +285,6 @@ async function moteurCompile(c, { threads, avx2 }) {
   rmSync(build, { recursive: true, force: true });
   const jeu = avx2 ? 'ON' : 'OFF';
   info(`compilation (${threads} fils, priorité basse) : 10 à 30 minutes…`);
-  // Compilateur appelé directement (sans « micromamba run », dont les drapeaux ajouteraient au binaire un
-  // chemin de bibliothèques vers le dossier des outils, effacé ensuite).
-  const bin = join(envOutils, 'bin');
-  const envCompil = { ...process.env, PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}`, CC: join(bin, 'x86_64-conda-linux-gnu-gcc'), CXX: join(bin, 'x86_64-conda-linux-gnu-g++'), LDFLAGS: '', CFLAGS: '', CXXFLAGS: '', CPPFLAGS: '' };
   executer(
     join(bin, 'cmake'),
     [

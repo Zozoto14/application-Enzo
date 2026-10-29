@@ -30,8 +30,8 @@ import { ACCEPT_REUNION, choisirFichier, choixFichierDisponible, type FichierNav
 import { capaciteAppareil } from '../transcription/appareil';
 import { BarreEnvoi, InfosFichier, useEnvoi } from './medias/EnvoiMedia';
 import { PanneauTranscription, demarrerTranscription, type LangueTranscription } from './medias/Transcription';
-import { ChoixModeTranscription, modeParDefaut, modesProposes, useReglagesTranscription } from './medias/TranscriptionServeur';
-import type { ModeTranscription } from '../client';
+import { ChoixModeTranscription, ChoixQualite, modeParDefaut, modesProposes, qualiteRetenue, useReglagesTranscription } from './medias/TranscriptionServeur';
+import type { ModeTranscription, QualiteTranscription } from '../client';
 import { tr, trn } from '../i18n';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
@@ -133,7 +133,12 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
   const [transcrireChoisi, setTranscrire] = useState<boolean | undefined>();
   // Cochée par défaut sur le serveur (partout) ; dans le navigateur, seulement sur un PC assez puissant.
   const transcrire = transcrireChoisi ?? (modeTranscription === 'serveur' || modeTranscription === 'externe' || (modeTranscription === 'navigateur' && !capacite.iphone && !capacite.faible));
-  const [langue, setLangue] = useState<LangueTranscription>('fr');
+  // Langue : celle choisie ici, sinon celle de la team (Paramètres ; « auto » = détection, sur le serveur).
+  const [langueChoisie, setLangue] = useState<LangueTranscription | 'auto' | undefined>();
+  const langueTeam = reglages?.langue ?? 'fr';
+  const langue = langueChoisie ?? (modeTranscription === 'serveur' ? langueTeam : langueTeam === 'en' ? 'en' : 'fr');
+  const [qualite, setQualite] = useState<QualiteTranscription | undefined>();
+  const qualiteChoisie = qualiteRetenue(reglages?.qualites, qualite ?? reglages?.qualite);
   const envoi = useEnvoi();
   const [lien, setLien] = useState('');
   const [typeId, setTypeId] = useState<string | undefined>();
@@ -203,11 +208,13 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
                   options={[
                     ['fr', tr('transcription.francais')],
                     ['en', tr('transcription.anglais')],
+                    ...(modeTranscription === 'serveur' ? ([['auto', tr('transcription.langue_auto')]] as const) : []),
                   ]}
-                  onChoisir={v => setLangue(v === 'en' ? 'en' : 'fr')}
+                  onChoisir={v => setLangue(v === 'en' ? 'en' : v === 'auto' ? 'auto' : 'fr')}
                   testID="esport-depot-langue"
                 />
               ) : null}
+              {transcrire && modeTranscription === 'serveur' ? <ChoixQualite theme={theme} qualites={reglages?.qualites} valeur={qualiteChoisie} onChoisir={setQualite} testID="esport-depot-qualite" /> : null}
               {modeTranscription === 'navigateur' && (capacite.iphone || capacite.faible) ? <Text style={attenue}>{tr('transcription.appareil_faible')}</Text> : null}
             </View>
           ) : null}
@@ -245,7 +252,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
                 dateReunion: iso,
                 titre: titre.trim(),
                 note: note.trim() || undefined,
-                ...(transcrire && modeTranscription ? { transcription: modeTranscription, langue } : {}),
+                ...(transcrire && modeTranscription ? { transcription: modeTranscription, langue: modeTranscription === 'serveur' ? langue : langue === 'en' ? 'en' : 'fr', ...(modeTranscription === 'serveur' && qualiteChoisie ? { qualite: qualiteChoisie } : {}) } : {}),
               });
               oublier();
               const statutT = depot.transcription?.statut;
@@ -254,7 +261,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
               // Navigateur choisi, ou serveur indisponible : transcription dans ce navigateur, avec le fichier encore
               // ouvert (rien à retélécharger) ; elle continue en arrière-plan.
               else if (transcrire && capacite.transcription) {
-                await demarrerTranscription({ client, teamId, depot, fichier: fichier.fichier as Blob, langue });
+                await demarrerTranscription({ client, teamId, depot, fichier: fichier.fichier as Blob, langue: langue === 'en' ? 'en' : 'fr' });
                 suite = modeTranscription === 'navigateur' ? tr('transcription.depot.depose_et_transcription') : tr('transcription.depot.repli_navigateur');
               } else if (transcrire) suite = tr('transcription.depot.repli_plus_tard');
               setFichier(undefined);

@@ -193,8 +193,8 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # ESPORT_DRIVE_FICHIER_MAX=2G
 # ESPORT_DRIVE_ZIP_MAX=2G
 # Transcription des réunions sur le serveur (facultatif, partie H) :
-# TRANSCRIPTION_MODELE=base
-# TRANSCRIPTION_THREADS=1
+# TRANSCRIPTION_THREADS_WHISPER=8
+# TRANSCRIPTION_RAM_COMPTE=48G
 # IA de l'Esport (facultatif, partie I, docs/esport/ia-api.md) : sans ces lignes, tout se fait à la main.
 # IA_API_URL=https://integrate.api.nvidia.com/v1
 # IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
@@ -525,96 +525,121 @@ Passenger) ne doit pas montrer de rafales de `/attendre` ou `/flux` ; un `429` �
 
 ## Partie H — Transcription des réunions sur le serveur
 
-Depuis la migration `0016`, le **serveur o2switch transcrit lui-même** les réunions déposées (Esport › Résumés) :
-plus besoin qu'un PC reste ouvert, et ça marche aussi pour un dépôt fait depuis un iPhone. Le moteur est
-**Whisper** (le même modèle d'OpenAI que dans le navigateur), calculé sur le processeur du serveur avec **ONNX
-Runtime** (binaires tout faits pour Linux : rien à compiler, aucun droit administrateur). Détails côté app :
-[esport/resumes.md](esport/resumes.md).
+Le **serveur o2switch transcrit lui-même** les réunions déposées (Esport › Résumés) : aucun PC à laisser ouvert, ça
+marche aussi depuis un iPhone. Depuis octobre 2026, le moteur est **whisper.cpp** avec **Whisper large-v3-turbo**
+(bien plus juste que l'ancien « base »), le **vocabulaire de la team** (pseudos, agents, maps, glossaire), la
+détection de la parole, et une **relecture par l'IA locale** si elle est installée (partie J). Pourquoi et comment :
+[esport/transcription.md](esport/transcription.md) ; côté app : [esport/resumes.md](esport/resumes.md).
 
-### H1. Installer (une seule fois, 5 minutes)
+### H1. Installer ou mettre à jour (une fois, 15 à 40 minutes, sans rester devant)
 
-Dans le **Terminal** cPanel :
+Dans le **Terminal** cPanel, **dans cet ordre** (la première ligne active le Node 22 de l'app Esport) :
 
 ```bash
-bash ~/application-enzo/esport/serveur/installer-transcription.sh
+source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
+cd ~/application-enzo
+
+# 1. Voir le plan (rien n'est téléchargé ni compilé) :
+bash esport/serveur/installer-transcription.sh --dry-run
+
+# 2. Installer : ffmpeg, whisper.cpp compilé (GCC 14 figé, sans root), VAD, modèle large-v3-turbo q5_0 :
+bash esport/serveur/installer-transcription.sh
+
+# 3. (Conseillé) les modèles des trois qualités, Rapide et Maximale en plus (≈ 1,6 Go de plus) :
+bash esport/serveur/installer-transcription.sh --tous
+
+# 4. Essai : vitesse (« × temps réel »), mémoire, durée estimée d'une heure de réunion par qualité :
+bash esport/serveur/installer-transcription.sh --test
 ```
 
-Le script vérifie la machine, installe le moteur dans `~/esport-modeles/moteur` (ONNX Runtime et ffmpeg, environ
-300 Mo), télécharge le modèle Whisper « base » (environ 160 Mo) dans `~/esport-modeles/whisper-base`, transcrit un
-court enregistrement d'exemple (une phrase en anglais : « After early nightfall… »), redémarre l'app Esport, puis
-affiche **« Transcription serveur prête »**. L'app propose alors « Serveur (automatique) » au dépôt.
+À la fin : **« Transcription serveur prête »**, et l'app Esport est redémarrée (les qualités Rapide / Équilibrée /
+Maximale apparaissent au dépôt et dans Paramètres › Transcription des réunions).
 
-Rien d'autre à faire : la tâche cron Esport (étape A9, toutes les 5 minutes) lance la transcription quand une réunion
-attend. Le déploiement automatique (`deployer.sh`) ne touche jamais à `~/esport-modeles` : le modèle n'est téléchargé
-qu'une fois. Relancer le script ne retélécharge que ce qui manque (`--forcer` pour tout refaire).
-
-Réglages facultatifs, à ajouter dans `~/.appdashboard/esport.env` (puis relancer le script si vous changez de modèle,
-et redémarrer l'app Esport). Attention : un commentaire `#` va sur **sa propre ligne**, jamais au bout d'une valeur :
+Ensuite, ajoutez ces deux lignes dans `~/.appdashboard/esport.env` (un commentaire `#` va sur **sa propre ligne**),
+puis redémarrez l'app Esport :
 
 ```ini
-# Transcription des réunions sur le serveur (facultatif : ces valeurs sont celles par défaut).
-# Mode par défaut des teams : serveur, navigateur ou externe
-TRANSCRIPTION_MODE=serveur
-# Modèle : tiny (rapide, moins juste), base (conseillé), small (plus juste, lent)
-TRANSCRIPTION_MODELE=base
-# Fils de calcul : 1 (sage) ou 2 (deux fois plus de processeur)
-TRANSCRIPTION_THREADS=1
-TRANSCRIPTION_DOSSIER_MODELES=/home/jayo8828/esport-modeles
-# Garde-fous (rarement utiles) : mémoire au-delà de laquelle on s'arrête proprement ; pause après chaque
-# morceau (0.25 = le processeur se repose 20 % du temps) ; essais avant l'échec ; heures au plus entre le
-# dépôt et la fin ; minutes de travail d'un processus avant de passer la main.
-# TRANSCRIPTION_RAM_MAX=2G
+# Transcription : fils de calcul de whisper.cpp ; mémoire du compte (limite cPanel), pour laisser tourner
+# whisper.cpp et l'IA locale en même temps
+TRANSCRIPTION_THREADS_WHISPER=8
+TRANSCRIPTION_RAM_COMPTE=48G
+```
+
+```bash
+mkdir -p ~/application-enzo/esport/tmp && touch ~/application-enzo/esport/tmp/restart.txt
+```
+
+**Durée et espace disque** :
+
+| Étape | Durée | Disque |
+| --- | --- | --- |
+| Compilateur figé (téléchargé, vérifié, effacé à la fin) | 3 à 8 min | ≈ 1,3 Go le temps de la compilation |
+| Compilation de whisper.cpp | 5 à 15 min | binaire ≈ 5 Mo |
+| ffmpeg + ONNX Runtime (repli) | 1 à 3 min | ≈ 300 Mo (déjà là si installé avant) |
+| Modèle large-v3-turbo q5_0 (défaut) | 1 à 3 min | 547 Mo |
+| `--tous` : small + large-v3 q5_0 en plus | 2 à 5 min | 466 Mo + 1,1 Go |
+| `--test` | 1 à 5 min | — |
+
+Au final : ≈ 0,9 Go (défaut) ou ≈ 2,5 Go (`--tous`) dans `~/esport-modeles`, plus ≈ 115 Mo par heure de réunion en
+cours de transcription (`~/esport-modeles/travail`, effacé à la fin). Le déploiement automatique (`deployer.sh`) ne
+touche jamais à `~/esport-modeles` ; relancer le script ne refait que ce qui manque (`--forcer` pour tout refaire).
+Si la compilation échoue, le script installe l'ancien moteur ONNX en repli et le dit.
+
+Rien d'autre à faire : la tâche cron Esport (étape A9, toutes les 5 minutes) lance la transcription quand une réunion
+attend.
+
+Réglages facultatifs (valeurs par défaut ; détail : [esport/transcription.md](esport/transcription.md)) :
+
+```ini
+# Qualité par défaut des teams : rapide, equilibree, maximale
+TRANSCRIPTION_QUALITE=equilibree
+# Relecture par l'IA locale : auto (si installée) ou non
+TRANSCRIPTION_CORRECTION=auto
+# Jamais whisper.cpp et l'IA locale ensemble : auto (selon TRANSCRIPTION_RAM_COMPTE), oui, non
+TRANSCRIPTION_EXCLUSIF=auto
+# Durée d'un bloc d'audio confié à whisper.cpp (secondes)
+TRANSCRIPTION_BLOC_S=300
+# Garde-fous : pause après chaque bloc (0.25 = le processeur se repose 20 % du temps), essais, délai, durée d'un processus
 # TRANSCRIPTION_REPOS=0.25
 # TRANSCRIPTION_ESSAIS=3
 # TRANSCRIPTION_DELAI_MAX=24
 # TRANSCRIPTION_DUREE_TRAVAILLEUR=120
 ```
 
-Changer de modèle : `bash ~/application-enzo/esport/serveur/installer-transcription.sh --modele small`, puis
-`TRANSCRIPTION_MODELE=small` dans `esport.env` et **Restart** de l'app Esport.
-
 ### H2. Combien de temps ?
 
-Mesuré sur un processeur de serveur x64 (Xeon 2,1 GHz), avec un enregistrement de réunion en français, **sans** les
-pauses de ménagement ; le serveur o2switch peut être 1,5 à 2 fois plus lent selon la charge :
+Valeurs de départ (processeur de serveur x64, 8 fils, pauses comprises) ; `--test` mesure les vraies sur votre
+serveur et l'app les utilise pour ses estimations :
 
-| Modèle | Mémoire | 1 h de réunion, 1 fil | 1 h de réunion, 2 fils | Qualité (français) |
-| --- | --- | --- | --- | --- |
-| tiny | 360 Mo | 9 min | 6 min 30 | Correcte, des mots déformés |
-| **base** (conseillé) | 510 Mo | **18 min** | 12 min | Bonne |
-| small | 970 Mo | 60 min | 44 min | Très bonne |
+| Qualité | Modèle | Mémoire | 1 h de réunion |
+| --- | --- | --- | --- |
+| Rapide | small | ≈ 0,9 Go | 8 à 15 min |
+| **Équilibrée** (défaut) | large-v3-turbo q5_0 | ≈ 1,2 Go | **20 à 40 min** |
+| Maximale | large-v3 q5_0 | ≈ 2 Go | 60 à 120 min |
+| + relecture par l'IA locale | Qwen2.5-7B / Qwen3-4B | 3,5 à 6 Go | + 10 à 40 min |
 
-Avec la pause de 25 % et un serveur partagé, comptez **20 à 45 minutes pour 1 h de réunion** avec « base » sur 1
-fil. Une seule réunion à la fois : les suivantes attendent leur tour (l'app affiche « En file d'attente »).
+Une seule réunion à la fois : les suivantes attendent leur tour (« En file d'attente »).
 
 ### H3. Les limites du mutualisé (et ce qui est prévu)
 
-o2switch annonce des ressources « illimitées », mais en **usage raisonnable** : CloudLinux limite par compte le
-processeur, la mémoire et le nombre de processus (limites « LVE »), et peut ralentir ou arrêter un processus lourd.
-La transcription est faite pour rester discrète :
+o2switch limite par compte le processeur, la mémoire et les processus (CloudLinux « LVE »). La transcription reste
+discrète :
 
-- **une seule transcription à la fois** (verrou), avec la **priorité la plus basse** (`nice 19`) : les pages du site
-  passent avant ;
-- **1 fil de calcul** par défaut, une **pause** après chaque morceau de 30 s ;
-- **mémoire surveillée** (2 Go au plus par défaut) : au-delà, arrêt propre et message « choisissez un modèle plus
-  petit » ;
-- chaque morceau de 30 s est **enregistré** : si l'hébergeur arrête le processus (ou en cas de redémarrage), la tâche
-  cron suivante en relance un qui **reprend au dernier morceau fait** ;
-- après **3 échecs** (ou 24 h), la réunion passe en « Échec de la transcription » : le déposant est prévenu et l'app
-  propose de la transcrire **dans le navigateur** d'un PC ;
-- l'audio est décodé une fois dans `~/esport-modeles/travail` (environ 115 Mo par heure de réunion), effacé à la fin.
+- **une seule transcription à la fois** (verrou), **priorité la plus basse** (`nice 19`) : les pages passent avant ;
+- **blocs de 5 minutes**, chacun **enregistré** : si l'hébergeur arrête le processus, le cron suivant **reprend au
+  bloc suivant** (et la relecture au lot suivant) ;
+- **un seul moteur lourd** si la mémoire ne suffit pas pour whisper.cpp et l'IA locale ensemble (file commune) ;
+- après **3 échecs** (ou 24 h), « Échec de la transcription » : le déposant est prévenu, l'app propose le navigateur.
 
-Pour voir ce que consomme votre compte : cPanel › **Statistiques** (colonne de gauche) › « Utilisation du processeur
-et de la mémoire » (ou **Resource Usage**). Si vous voyez des « fautes » (limites atteintes) pendant les
-transcriptions : gardez `TRANSCRIPTION_THREADS=1`, montez `TRANSCRIPTION_REPOS=1` (le processeur se repose la
-moitié du temps) ou passez au modèle `tiny`.
+Si cPanel › **Resource Usage** montre des « fautes » pendant les transcriptions : baissez
+`TRANSCRIPTION_THREADS_WHISPER` (4), montez `TRANSCRIPTION_REPOS=1`, ou choisissez la qualité Rapide par défaut.
 
 ### H4. Vérifier que ça marche
 
 ```bash
-tail -n 20 ~/logs/esport-transcription.log    # « transcription : 1 terminée(s)… »
+tail -n 20 ~/logs/esport-transcription.log    # « transcription : 1 terminée(s)… relue(s) par l’IA locale »
 tail -n 5 ~/logs/esport-cron.log              # la ligne du cron compte « transcription serveur »
-cat ~/esport-modeles/pret.json                # modèles vérifiés par l'installation
+cat ~/esport-modeles/pret.json                # whisper.cpp, modèles vérifiés, vitesses mesurées
 curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 ```
 

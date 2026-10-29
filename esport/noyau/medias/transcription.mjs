@@ -127,7 +127,9 @@ export function preResume(segments, { n = 5 } = {}) {
  *   TRANSCRIPTION_API_MAX=25M           taille d'envoi acceptée par l'API (25 Mo chez OpenAI)
  *
  * Le fichier de l'enregistrement est envoyé tel quel (pas de conversion sur le serveur) : au-delà de
- * la taille acceptée par l'API, la transcription se fait dans le navigateur.
+ * la taille acceptée par l'API, la transcription se fait dans le navigateur. Le vocabulaire de la team
+ * (pseudos, agents, maps, glossaire) part dans le champ `prompt` (API compatible OpenAI audio/transcriptions),
+ * température 0 ; la réponse passe par les mêmes garde-fous que Whisper sur le serveur (boucles, génériques).
  */
 export function configTranscriptionExterne(env = {}) {
   const actif = String(env.TRANSCRIPTION_API ?? '').trim().toLowerCase() === 'openai' && Boolean(env.TRANSCRIPTION_API_CLE);
@@ -145,7 +147,7 @@ export function configTranscriptionExterne(env = {}) {
  * Envoie un enregistrement à l'API externe ; rend les segments (`[[début, fin, texte]]`). `fetch`
  * injectable (tests). Lève une erreur au message simple en cas d'échec (jamais la clé).
  */
-export async function transcrireParApi({ octets, nom, type, langue, config, fetch: envoyer = globalThis.fetch }) {
+export async function transcrireParApi({ octets, nom, type, langue, prompt = '', config, fetch: envoyer = globalThis.fetch }) {
   if (!config?.actif) throw new Error('Transcription externe désactivée.');
   if (octets.length > config.tailleMax) throw new Error('Enregistrement trop gros pour l’API de transcription.');
   const formulaire = new FormData();
@@ -154,6 +156,9 @@ export async function transcrireParApi({ octets, nom, type, langue, config, fetc
   formulaire.append('response_format', 'verbose_json');
   formulaire.append('timestamp_granularities[]', 'segment');
   if (langue && langue !== 'auto') formulaire.append('language', langue);
+  // Vocabulaire de la team (pseudos, agents, maps…) : même « prompt » que pour Whisper sur le serveur.
+  if (prompt) formulaire.append('prompt', String(prompt).slice(0, 800));
+  formulaire.append('temperature', '0');
   let r;
   try {
     r = await envoyer(config.url, { method: 'POST', headers: { Authorization: `Bearer ${config.cle}` }, body: formulaire });

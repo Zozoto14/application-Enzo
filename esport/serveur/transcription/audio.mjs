@@ -6,9 +6,12 @@
  *    dossier de travail. Avec ffmpeg (paquet npm `ffmpeg-static` : binaire autonome, rien à installer
  *    sur le système) ; sans ffmpeg, seuls les fichiers WAV sont lus (décodeur maison ci-dessous).
  *  - `lirePcm` : lit une tranche de ce fichier (jamais tout en mémoire) ;
- *  - `fenetreSuivante` : découpe en morceaux d'au plus 30 s, coupés dans le moment le plus calme des
- *    dix dernières secondes (on évite de couper un mot) ; la découpe ne dépend que de l'audio, donc une
- *    reprise après interruption retombe sur les mêmes morceaux.
+ *  - PRÉTRAITEMENT (par défaut) : filtre passe-haut à 80 Hz (souffle, ronflement des micros Discord) et
+ *    normalisation dynamique du volume (un joueur qui parle bas est remonté) ; avec ffmpeg (`highpass`,
+ *    `dynaudnorm`), sinon un équivalent simple ici (`pretraiterPcm` : passe-haut + gain global + limiteur) ;
+ *  - `fenetreSuivante` : découpe en morceaux (30 s pour le repli ONNX, quelques minutes pour whisper.cpp),
+ *    coupés dans le moment le plus calme de la fin du morceau (on évite de couper un mot) ; la découpe ne
+ *    dépend que de l'audio, donc une reprise après interruption retombe sur les mêmes morceaux.
  */
 
 import { spawn } from 'node:child_process';
@@ -33,23 +36,31 @@ export function estWav(chemin) {
  * Convertit `source` en PCM brut (s16le, mono, 16 kHz) dans `sortie`. Rend `{ duree }` (secondes).
  * Écrit d'abord `<sortie>.partiel` puis renomme : un fichier `sortie` présent est toujours complet.
  */
-export async function decoderVersPcm({ source, sortie, ffmpeg, threads = 1, signal }) {
+export async function decoderVersPcm({ source, sortie, ffmpeg, threads = 1, signal, pretraitement = true }) {
   const partiel = `${sortie}.partiel`;
   rmSync(partiel, { force: true });
-  if (ffmpeg) await avecFfmpeg({ ffmpeg, source, sortie: partiel, threads, signal });
-  else if (estWav(source)) wavVersPcm(source, partiel);
-  else throw Object.assign(new Error('Format non lisible sans ffmpeg : relancez esport/serveur/installer-transcription.sh (ou déposez un WAV).'), { code: 'format' });
+  if (ffmpeg) await avecFfmpeg({ ffmpeg, source, sortie: partiel, threads, signal, filtres: pretraitement });
+  else if (estWav(source)) {
+    wavVersPcm(source, partiel);
+    if (pretraitement) pretraiterPcm(partiel);
+  } else throw Object.assign(new Error('Format non lisible sans ffmpeg : relancez esport/serveur/installer-transcription.sh (ou déposez un WAV).'), { code: 'format' });
   renameSync(partiel, sortie);
   return { duree: dureePcm(sortie) };
 }
 
+/**
+ * Filtres ffmpeg du prétraitement : passe-haut 80 Hz, puis normalisation DYNAMIQUE du volume (fenêtres de
+ * 250 ms, gain au plus × 15 : voix faibles remontées sans pomper le bruit dans les silences).
+ */
+export const FILTRES_FFMPEG = 'highpass=f=80,dynaudnorm=f=250:g=15:p=0.9:m=15';
+
 export const dureePcm = chemin => statSync(chemin).size / OCTETS_PAR_S;
 
-function avecFfmpeg({ ffmpeg, source, sortie, threads, signal }) {
+function avecFfmpeg({ ffmpeg, source, sortie, threads, signal, filtres = true }) {
   return new Promise((ok, ko) => {
     const p = spawn(
       ffmpeg,
-      ['-nostdin', '-hide_banner', '-loglevel', 'error', '-threads', String(threads), '-i', source, '-vn', '-sn', '-dn', '-ac', '1', '-ar', String(FREQUENCE), '-acodec', 'pcm_s16le', '-f', 's16le', '-y', sortie],
+      ['-nostdin', '-hide_banner', '-loglevel', 'error', '-threads', String(threads), '-i', source, '-vn', '-sn', '-dn', ...(filtres ? ['-af', FILTRES_FFMPEG] : []), '-ac', '1', '-ar', String(FREQUENCE), '-acodec', 'pcm_s16le', '-f', 's16le', '-y', sortie],
       { stdio: ['ignore', 'ignore', 'pipe'], signal },
     );
     let erreurs = '';
@@ -148,6 +159,65 @@ export function wavVersPcm(source, sortie) {
   }
 }
 
+/**
+ * Prétraitement SANS ffmpeg d'un fichier PCM brut (s16le, mono, 16 kHz), sur place, par blocs (mémoire
+ * constante) : passe-haut du premier ordre à 80 Hz, puis gain global qui amène le niveau de la parole (95e
+ * centile de l'énergie par 100 ms) vers -20 dBFS (gain entre × 0,5 et × 20), avec un limiteur doux (pas de
+ * saturation). Rend `{ gain }`.
+ */
+export function pretraiterPcm(chemin, { coupure = 80, cible = 0.1 } = {}) {
+  const taille = statSync(chemin).size;
+  const n = Math.floor(taille / 2);
+  if (!n) return { gain: 1 };
+  const bloc = 1 << 16;
+  const buf = Buffer.alloc(bloc * 2);
+  const rc = 1 / (2 * Math.PI * coupure);
+  const alpha = rc / (rc + 1 / FREQUENCE);
+  const fd = openSync(chemin, 'r+');
+  try {
+    // 1. Passe-haut (écrit sur place) et énergie par tranche de 100 ms.
+    let xPrec = 0;
+    let yPrec = 0;
+    const energies = [];
+    let somme = 0;
+    let compte = 0;
+    for (let lus = 0; lus < n; lus += bloc) {
+      const k = Math.min(bloc, n - lus);
+      readSync(fd, buf, 0, k * 2, lus * 2);
+      for (let i = 0; i < k; i++) {
+        const x = buf.readInt16LE(i * 2) / 32768;
+        const y = alpha * (yPrec + x - xPrec);
+        xPrec = x;
+        yPrec = y;
+        buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(y * 32767))), i * 2);
+        somme += y * y;
+        if (++compte === FREQUENCE / 10) {
+          energies.push(Math.sqrt(somme / compte));
+          somme = 0;
+          compte = 0;
+        }
+      }
+      writeSync(fd, buf, 0, k * 2, lus * 2);
+    }
+    if (compte) energies.push(Math.sqrt(somme / compte));
+    energies.sort((a, b) => a - b);
+    const niveau = energies[Math.min(energies.length - 1, Math.floor(energies.length * 0.95))] || 0;
+    const gain = niveau > 1e-5 ? Math.max(0.5, Math.min(20, cible / niveau)) : 1;
+    if (Math.abs(gain - 1) < 0.05) return { gain: 1 };
+    // 2. Gain et limiteur doux (tanh au-delà de 0,8).
+    const limiter = v => (Math.abs(v) <= 0.8 ? v : Math.sign(v) * (0.8 + 0.2 * Math.tanh((Math.abs(v) - 0.8) / 0.2)));
+    for (let lus = 0; lus < n; lus += bloc) {
+      const k = Math.min(bloc, n - lus);
+      readSync(fd, buf, 0, k * 2, lus * 2);
+      for (let i = 0; i < k; i++) buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(limiter((buf.readInt16LE(i * 2) / 32768) * gain) * 32767))), i * 2);
+      writeSync(fd, buf, 0, k * 2, lus * 2);
+    }
+    return { gain };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // ------------------------------------------------------------------ Lecture et découpe
 
 /** Tranche [debut, fin[ (secondes) du fichier PCM, en Float32Array (-1…1). */
@@ -175,12 +245,13 @@ const RECHERCHE_S = 10;
 const PAS_ENERGIE = 0.1;
 
 /**
- * Prochain morceau à partir de `debut` (secondes) : au plus 30 s ; s'il reste plus de 30 s, la coupe
- * tombe au moment le plus calme (énergie sur 100 ms) entre 20 et 30 s. Rend `{ debut, fin }`.
+ * Prochain morceau à partir de `debut` (secondes) : au plus `max` (30 s par défaut) ; s'il reste plus, la
+ * coupe tombe au moment le plus calme (énergie sur 100 ms) des `recherche` dernières secondes (10 s par
+ * défaut : entre 20 et 30 s). Rend `{ debut, fin }`.
  */
-export function fenetreSuivante(chemin, debut, duree = dureePcm(chemin), { max = MORCEAU_MAX_S } = {}) {
+export function fenetreSuivante(chemin, debut, duree = dureePcm(chemin), { max = MORCEAU_MAX_S, recherche = RECHERCHE_S } = {}) {
   if (duree - debut <= max) return { debut, fin: duree };
-  const zoneDebut = debut + max - RECHERCHE_S;
+  const zoneDebut = debut + max - Math.min(recherche, max - 1);
   const pcm = lirePcm(chemin, zoneDebut, debut + max);
   const pas = Math.round(PAS_ENERGIE * FREQUENCE);
   let meilleure = pcm.length;

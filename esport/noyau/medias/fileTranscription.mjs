@@ -17,14 +17,34 @@ import { iso, nouvelId } from '../outils.mjs';
 import { lireTaille } from './tailles.mjs';
 
 export const MODES_TRANSCRIPTION = ['serveur', 'navigateur', 'externe'];
+/** Modèles du moteur de REPLI (Whisper par ONNX Runtime, sans compilation). */
 export const MODELES_SERVEUR = ['tiny', 'base', 'small'];
+/** Modèles du moteur principal (whisper.cpp, fichiers GGML) : voir esport/serveur/transcription/whispercpp.mjs. */
+export const MODELES_WHISPER_CPP = ['small', 'medium', 'large-v3-turbo-q5_0', 'large-v3-turbo', 'large-v3-q5_0'];
+export const MOTEURS_TRANSCRIPTION = ['auto', 'whispercpp', 'onnx'];
 export const STATUTS_TRAVAIL = ['attente', 'en_cours', 'termine', 'echec', 'annule'];
 
 /**
- * Vitesse de calcul de départ (secondes de calcul par seconde d'audio, 1 thread) pour estimer le
- * temps restant avant la première mesure ; mesurées sur un processeur x64 récent (docs/esport/resumes.md).
+ * Qualités proposées dans l'app (docs/esport/transcription.md) : modèle de whisper.cpp et réglages du décodage.
+ *  - rapide : modèle « small », recherche gloutonne (beam 1) ;
+ *  - equilibree (défaut) : large-v3-turbo quantifié q5_0, beam search 5 ;
+ *  - maximale : large-v3 complet quantifié q5_0, beam search 5, 5 candidats par température de repli.
  */
-export const VITESSE_DEPART = { tiny: 0.15, base: 0.3, small: 1.0 };
+export const QUALITES = ['rapide', 'equilibree', 'maximale'];
+export const QUALITE_DEFAUT = 'equilibree';
+export const MODELES_QUALITE_DEFAUT = { rapide: 'small', equilibree: 'large-v3-turbo-q5_0', maximale: 'large-v3-q5_0' };
+export const DECODAGE_QUALITE = {
+  rapide: { beam: 1, bestOf: 2 },
+  equilibree: { beam: 5, bestOf: 5 },
+  maximale: { beam: 5, bestOf: 5 },
+};
+
+/**
+ * Vitesse de calcul de départ (secondes de calcul par seconde d'audio) pour estimer le temps restant avant la
+ * première mesure. ONNX : 1 fil, processeur x64 récent ; whisper.cpp : 8 fils (TRANSCRIPTION_THREADS_WHISPER).
+ * Remplacées par les mesures de `installer-transcription.sh --test` (pret.json) dès qu'elles existent.
+ */
+export const VITESSE_DEPART = { tiny: 0.15, base: 0.3, small: 1.0, 'whispercpp:small': 0.12, 'whispercpp:medium': 0.35, 'whispercpp:large-v3-turbo-q5_0': 0.25, 'whispercpp:large-v3-turbo': 0.3, 'whispercpp:large-v3-q5_0': 0.8 };
 
 const entier = (v, defaut, min, max) => {
   const n = Number.parseInt(String(v ?? ''), 10);
@@ -34,27 +54,58 @@ const reel = (v, defaut, min, max) => {
   const n = Number.parseFloat(String(v ?? ''));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : defaut;
 };
+const choix = (v, liste, defaut) => {
+  const x = String(v ?? '').trim().toLowerCase();
+  return liste.includes(x) ? x : defaut;
+};
 
 /**
  * Réglages lus dans ~/.appdashboard/esport.env (tous facultatifs) :
  *
  *   TRANSCRIPTION_MODE=serveur            mode par défaut des teams : serveur | navigateur | externe
- *   TRANSCRIPTION_MODELE=base             tiny | base | small
- *   TRANSCRIPTION_THREADS=1               fils de calcul (1 ou 2 sur un hébergement mutualisé ; 4 au plus)
- *   TRANSCRIPTION_DOSSIER_MODELES=…       dossier du moteur et des modèles (hors public_html)
- *   TRANSCRIPTION_RAM_MAX=2G              mémoire au-delà de laquelle le travail s'arrête proprement
+ *   TRANSCRIPTION_MOTEUR=auto             auto (whisper.cpp s'il est installé, sinon ONNX) | whispercpp | onnx
+ *   TRANSCRIPTION_QUALITE=equilibree      qualité par défaut : rapide | equilibree | maximale
+ *   TRANSCRIPTION_MODELE_RAPIDE=small     modèle whisper.cpp de chaque qualité (small, medium,
+ *   TRANSCRIPTION_MODELE_EQUILIBREE=large-v3-turbo-q5_0      large-v3-turbo-q5_0, large-v3-turbo, large-v3-q5_0)
+ *   TRANSCRIPTION_MODELE_MAXIMALE=large-v3-q5_0
+ *   TRANSCRIPTION_THREADS_WHISPER=8       fils de calcul de whisper.cpp (1 à 32)
+ *   TRANSCRIPTION_BLOC_S=300              durée d'un bloc d'audio confié à whisper.cpp (coupé dans un silence)
+ *   TRANSCRIPTION_CHEVAUCHEMENT_S=1.5     marge entre deux blocs (recollés sans doublon)
+ *   TRANSCRIPTION_VAD=oui                 détection de la parole (Silero) : silences et bruits ignorés
+ *   TRANSCRIPTION_CORRECTION=auto         post-correction par l'IA locale : auto (si installée) | oui | non
+ *   TRANSCRIPTION_EXCLUSIF=auto           whisper.cpp et l'IA locale jamais en même temps : auto (si la mémoire
+ *                                         ne permet pas les deux) | oui | non
+ *   TRANSCRIPTION_RAM_COMPTE=48G          mémoire du compte (limite cPanel), pour décider « auto » ci-dessus
+ *   TRANSCRIPTION_MODELE=base             modèle du moteur de REPLI ONNX : tiny | base | small
+ *   TRANSCRIPTION_THREADS=1               fils de calcul du repli ONNX (1 ou 2 ; 4 au plus)
+ *   TRANSCRIPTION_DOSSIER_MODELES=…       dossier des moteurs et des modèles (hors public_html)
+ *   TRANSCRIPTION_RAM_MAX=2G              mémoire du processus Node au-delà de laquelle le travail s'arrête
  *   TRANSCRIPTION_REPOS=0.25              pause après chaque morceau (fraction de son temps de calcul)
  *   TRANSCRIPTION_ESSAIS=3                essais avant l'échec définitif
  *   TRANSCRIPTION_DELAI_MAX=24            heures au plus entre la demande et la fin
  *   TRANSCRIPTION_DUREE_TRAVAILLEUR=120   minutes de travail d'un processus avant de passer la main
  *
- * `disponible` (moteur installé) est complété par le serveur Node (moteur.mjs) ; ailleurs, false.
+ * `disponible` (un moteur installé) et `qualites` (qualités disponibles : moteur et modèle) sont complétés par le
+ * serveur Node (esport/serveur/transcription/moteur.mjs) ; ailleurs, rien n'est disponible.
  */
 export function configTranscriptionServeur(env = {}) {
-  const mode = String(env.TRANSCRIPTION_MODE ?? '').trim().toLowerCase();
   const modele = String(env.TRANSCRIPTION_MODELE ?? '').trim().toLowerCase();
   return {
-    mode: MODES_TRANSCRIPTION.includes(mode) ? mode : 'serveur',
+    mode: choix(env.TRANSCRIPTION_MODE, MODES_TRANSCRIPTION, 'serveur'),
+    moteur: choix(env.TRANSCRIPTION_MOTEUR, MOTEURS_TRANSCRIPTION, 'auto'),
+    qualite: choix(env.TRANSCRIPTION_QUALITE, QUALITES, QUALITE_DEFAUT),
+    modelesQualite: {
+      rapide: choix(env.TRANSCRIPTION_MODELE_RAPIDE, MODELES_WHISPER_CPP, MODELES_QUALITE_DEFAUT.rapide),
+      equilibree: choix(env.TRANSCRIPTION_MODELE_EQUILIBREE, MODELES_WHISPER_CPP, MODELES_QUALITE_DEFAUT.equilibree),
+      maximale: choix(env.TRANSCRIPTION_MODELE_MAXIMALE, MODELES_WHISPER_CPP, MODELES_QUALITE_DEFAUT.maximale),
+    },
+    threadsWhisper: entier(env.TRANSCRIPTION_THREADS_WHISPER, 8, 1, 32),
+    blocS: entier(env.TRANSCRIPTION_BLOC_S, 300, 60, 1800),
+    chevauchementS: reel(env.TRANSCRIPTION_CHEVAUCHEMENT_S, 1.5, 0, 5),
+    vad: !['non', 'no', '0', 'false'].includes(String(env.TRANSCRIPTION_VAD ?? '').trim().toLowerCase()),
+    correction: choix(env.TRANSCRIPTION_CORRECTION, ['auto', 'oui', 'non'], 'auto'),
+    exclusif: choix(env.TRANSCRIPTION_EXCLUSIF, ['auto', 'oui', 'non'], 'auto'),
+    ramCompte: env.TRANSCRIPTION_RAM_COMPTE ? lireTaille(env.TRANSCRIPTION_RAM_COMPTE, null) : null,
     modele: MODELES_SERVEUR.includes(modele) ? modele : 'base',
     threads: entier(env.TRANSCRIPTION_THREADS, 1, 1, 4),
     dossierModeles: String(env.TRANSCRIPTION_DOSSIER_MODELES ?? '').trim(),
@@ -64,8 +115,32 @@ export function configTranscriptionServeur(env = {}) {
     delaiMaxH: reel(env.TRANSCRIPTION_DELAI_MAX, 24, 1, 24 * 14),
     dureeTravailleurMin: entier(env.TRANSCRIPTION_DUREE_TRAVAILLEUR, 120, 5, 24 * 60),
     disponible: false,
+    qualites: null,
+    vitesses: {},
+    correctionDisponible: false,
   };
 }
+
+/**
+ * Qualité effectivement disponible : celle demandée si son moteur est prêt, sinon la plus proche (en
+ * descendant, puis en montant). Rend `{ qualite, moteur, modele }` ou null (aucun moteur). Sans détail des
+ * qualités (`config.qualites` absent : ancien serveur, tests), le repli ONNX avec `config.modele`.
+ */
+export function qualiteEffective(config, demandee = config?.qualite ?? QUALITE_DEFAUT) {
+  if (!config?.disponible) return null;
+  const q = config.qualites;
+  if (!q) return { qualite: QUALITES.includes(demandee) ? demandee : QUALITE_DEFAUT, moteur: 'onnx', modele: config.modele };
+  const i = Math.max(0, QUALITES.indexOf(demandee));
+  const ordre = [i, ...Array.from({ length: QUALITES.length }, (_, k) => i - 1 - k).filter(k => k >= 0), ...Array.from({ length: QUALITES.length }, (_, k) => i + 1 + k).filter(k => k < QUALITES.length)];
+  for (const k of ordre) {
+    const x = q[QUALITES[k]];
+    if (x?.disponible) return { qualite: QUALITES[k], moteur: x.moteur, modele: x.modele };
+  }
+  return null;
+}
+
+/** Clé de vitesse d'un modèle (ONNX : « base » ; whisper.cpp : « whispercpp:large-v3-turbo-q5_0 »). */
+export const cleVitesse = (moteur, modele) => (moteur === 'whispercpp' ? `whispercpp:${modele}` : modele);
 
 /** Bail d'un travail en cours : renouvelé à chaque morceau ; expiré = processus mort (réessai). */
 export const BAIL_MS = 10 * 60_000;
@@ -74,13 +149,16 @@ export const attenteEssai = essais => 5 * 60_000 * 3 ** Math.max(0, essais - 1);
 
 export function servicesFileTranscription({ base, maintenant = () => Date.now(), config = configTranscriptionServeur() }) {
   /** Instructions SQL (à mettre dans un lot) : (re)met la réunion en file. */
-  function instructionsEnfiler({ reunionId, teamId, langue, demandePar, t = maintenant() }) {
+  function instructionsEnfiler({ reunionId, teamId, langue, demandePar, qualite = config.qualite ?? QUALITE_DEFAUT, t = maintenant() }) {
+    // Modèle prévu (affichage, estimation) : celui de la qualité disponible ; le processus de fond rechoisit au moment du calcul.
+    const q = qualiteEffective(config, qualite);
+    const modele = q ? cleVitesse(q.moteur, q.modele) : config.modele;
     return [
       { sql: 'DELETE FROM travaux_transcription WHERE reunion_id = ?', params: [reunionId] },
       {
-        sql: `INSERT INTO travaux_transcription (id, team_id, reunion_id, statut, langue, modele, demande_par, essais, progression_s, progression_prise_s, secondes_calcul, audio_calcule_s, erreur, cree_le, maj_le)
-              VALUES (?, ?, ?, 'attente', ?, ?, ?, 0, 0, 0, 0, 0, '', ?, ?)`,
-        params: [nouvelId(), teamId, reunionId, langue, config.modele, demandePar ?? null, iso(t), iso(t)],
+        sql: `INSERT INTO travaux_transcription (id, team_id, reunion_id, statut, langue, modele, qualite, etape, correction_faite, demande_par, essais, progression_s, progression_prise_s, secondes_calcul, audio_calcule_s, erreur, cree_le, maj_le)
+              VALUES (?, ?, ?, 'attente', ?, ?, ?, 'transcription', 0, ?, 0, 0, 0, 0, 0, '', ?, ?)`,
+        params: [nouvelId(), teamId, reunionId, langue, modele, q?.qualite ?? qualite, demandePar ?? null, iso(t), iso(t)],
       },
     ];
   }
@@ -88,7 +166,13 @@ export function servicesFileTranscription({ base, maintenant = () => Date.now(),
   const travailDe = reunionId => base.premier('SELECT * FROM travaux_transcription WHERE reunion_id = ?', [reunionId]);
 
   /** Vitesse mesurée (secondes de calcul par seconde d'audio), ou celle de départ du modèle. */
-  const vitesse = w => (Number(w.audio_calcule_s) > 20 ? Number(w.secondes_calcul) / Number(w.audio_calcule_s) : (VITESSE_DEPART[w.modele] ?? 0.4) / Math.min(2, config.threads || 1));
+  const vitesse = w => {
+    if (Number(w.audio_calcule_s) > 20) return Number(w.secondes_calcul) / Number(w.audio_calcule_s);
+    const mesuree = Number(config.vitesses?.[w.modele]);
+    if (mesuree > 0) return mesuree;
+    const depart = VITESSE_DEPART[w.modele] ?? 0.4;
+    return String(w.modele).startsWith('whispercpp:') ? depart : depart / Math.min(2, config.threads || 1);
+  };
 
   /** État visible dans l'app (progression, temps restant estimé, rang dans la file). */
   async function etatPublic(w) {
@@ -107,6 +191,10 @@ export function servicesFileTranscription({ base, maintenant = () => Date.now(),
     return {
       statut: w.statut,
       modele: w.modele,
+      qualite: w.qualite ?? null,
+      // « transcription » puis « correction » (relecture par l'IA locale : `correctionFaite` segments relus).
+      etape: w.etape ?? 'transcription',
+      correctionFaite: Number(w.correction_faite ?? 0),
       langue: w.langue,
       progression,
       duree,
@@ -218,6 +306,18 @@ export function servicesFileTranscription({ base, maintenant = () => Date.now(),
     };
   }
 
+  /**
+   * Instruction : étape du travail (« transcription », « correction ») et avancée de la correction (bail
+   * renouvelé). Même condition que la progression : un travail annulé n'est pas ressuscité.
+   */
+  function instructionEtape(id, { etape, correctionFaite = 0, modele = null }) {
+    const t = maintenant();
+    return {
+      sql: "UPDATE travaux_transcription SET etape = ?, correction_faite = ?, modele = COALESCE(?, modele), verrou_jusqua = ?, maj_le = ? WHERE id = ? AND statut = 'en_cours'",
+      params: [etape, correctionFaite, modele, iso(t + BAIL_MS), iso(t), id],
+    };
+  }
+
   /** Prolonge le bail pendant un long calcul (décodage d'une longue vidéo, morceau lent). */
   async function prolonger(id) {
     const t = maintenant();
@@ -281,6 +381,7 @@ export function servicesFileTranscription({ base, maintenant = () => Date.now(),
     recuperer,
     prendre,
     instructionProgression,
+    instructionEtape,
     prolonger,
     toujoursEnCours,
     instructionTerminer,

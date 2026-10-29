@@ -1,17 +1,20 @@
 #!/bin/bash
-# Transcription des réunions SUR LE SERVEUR (o2switch) : installation, à lancer UNE FOIS dans le Terminal
-# cPanel (et après un changement de modèle). Rien à compiler, aucun droit administrateur :
+# Transcription des réunions SUR LE SERVEUR (o2switch) : installation, à lancer dans le Terminal cPanel (une
+# fois, puis après un changement de modèle). Aucun droit administrateur, aucune carte graphique :
 #
-#   bash ~/application-enzo/esport/serveur/installer-transcription.sh
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh            # whisper.cpp + large-v3-turbo q5_0
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --tous     # + modèles Rapide et Maximale (≈ 2,2 Go)
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --test     # essai : vitesse (× temps réel), mémoire
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --dry-run  # montre le plan, ne fait rien
 #
-# Il installe le moteur (ONNX Runtime et ffmpeg, binaires précompilés, dans ~/esport-modeles/moteur),
-# télécharge le modèle Whisper (« base » par défaut, environ 160 Mo), fait un court essai, puis affiche
-# « Transcription serveur prête ». Le déploiement automatique (deployer.sh) ne touche jamais à
-# ~/esport-modeles : le modèle n'est téléchargé qu'une fois.
+# Il installe ffmpeg (lecture des vidéos), compile whisper.cpp (version figée, commit vérifié, compilateur du
+# système ou GCC 14 figé sans root), installe le modèle de détection de la parole (Silero VAD) et les modèles
+# Whisper GGML (SHA-256 et SHA-1 vérifiés), puis affiche « Transcription serveur prête ». Si whisper.cpp ne
+# peut pas être compilé, l'ancien moteur ONNX est installé en repli. Tout va dans ~/esport-modeles (hors du
+# dépôt, hors de public_html) ; deployer.sh n'y touche jamais : rien n'est retéléchargé.
 #
-# Options : --modele tiny|base|small   --threads 1|2   --dossier <chemin>   --forcer (tout refaire)
-# Réglages lus dans ~/.appdashboard/esport.env : TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS,
-# TRANSCRIPTION_DOSSIER_MODELES (voir docs/o2switch.md).
+# Autres options : --modele <nom>, --threads N, --forcer, --route auto|systeme|compilation, --onnx,
+# --revision <commit>, --dossier <chemin>, --sans-redemarrage, --aide. Réglages : docs/esport/transcription.md.
 
 set -uo pipefail
 DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

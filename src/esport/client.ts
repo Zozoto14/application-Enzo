@@ -392,7 +392,7 @@ export interface Depot {
   /** Enregistrement déposé (vidéo ou audio), ou null (lien externe seulement). */
   enregistrement?: FichierMedia | null;
   /** Transcription automatique (distincte du résumé rédigé). */
-  transcription?: { statut: StatutTranscription; pdf: boolean; peutTranscrire: boolean; externe?: boolean; serveur?: boolean; travail?: TravailServeur | null };
+  transcription?: { statut: StatutTranscription; pdf: boolean; peutTranscrire: boolean; externe?: boolean; serveur?: boolean; qualites?: QualiteProposee[]; meilleureQualite?: QualiteTranscription | null; travail?: TravailServeur | null };
 }
 
 /**
@@ -404,10 +404,29 @@ export type StatutTranscription = 'aucune' | 'a_faire' | 'en_cours' | 'externe' 
 /** Où se fait la transcription : sur le serveur (automatique), dans ce navigateur, ou par l'API externe. */
 export type ModeTranscription = 'serveur' | 'navigateur' | 'externe';
 
+/** Qualité de la transcription sur le serveur (whisper.cpp : modèle et décodage). */
+export type QualiteTranscription = 'rapide' | 'equilibree' | 'maximale';
+
+/** Qualité proposée : disponible ou non sur ce serveur, et facteur de durée (secondes de calcul par seconde d'audio). */
+export interface QualiteProposee {
+  cle: QualiteTranscription;
+  disponible: boolean;
+  moteur: 'whispercpp' | 'onnx' | null;
+  modele: string | null;
+  facteur: number | null;
+  mesuree: boolean;
+}
+
 /** Travail de la file de transcription du serveur (migration 0016). */
 export interface TravailServeur {
   statut: 'attente' | 'en_cours' | 'termine' | 'echec' | 'annule';
   modele: string;
+  /** Qualité demandée (migration 0035) : rapide, equilibree, maximale. */
+  qualite?: QualiteTranscription | null;
+  /** « transcription », puis « correction » (relecture par l'IA locale). */
+  etape?: 'transcription' | 'correction';
+  /** Segments déjà relus par l'IA locale (étape « correction »). */
+  correctionFaite?: number;
   langue: string;
   progression: number;
   duree: number | null;
@@ -808,7 +827,7 @@ export interface ClientEsport {
   modifierTypeReunion(id: string, typeId: string, t: Partial<{ nom: string; couleur: string; visibilite: 'team' | 'staff' }>): Promise<TypeReunion>;
   supprimerTypeReunion(id: string, typeId: string): Promise<void>;
   /** Dépôt d'une réunion : lien externe, ou enregistrement déposé (`envoi` terminé), ou les deux. */
-  deposerReunion(id: string, d: { lien?: string; envoi?: string; typeId: string; dateReunion: string; titre: string; note?: string; transcription?: ModeTranscription; langue?: string }): Promise<Depot>;
+  deposerReunion(id: string, d: { lien?: string; envoi?: string; typeId: string; dateReunion: string; titre: string; note?: string; transcription?: ModeTranscription; langue?: string; qualite?: QualiteTranscription }): Promise<Depot>;
   mesDepots(id: string): Promise<Depot[]>;
   resumesTeam(id: string, limite?: number): Promise<Depot[]>;
   depot(id: string, depotId: string): Promise<DetailDepot>;

@@ -13,6 +13,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [deploiement.md](deploiement.md) | Fondateur | Activer le serveur Esport (o2switch), ajouter un joueur |
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
 | [resumes.md](resumes.md) | Tout le monde | Déposer une réunion (fichier ou lien), transcription automatique en PDF, boîte du rédacteur |
+| [transcription.md](transcription.md) | Fondateur, responsables | Qualité de la transcription : whisper.cpp, qualités, vocabulaire de la team, relecture par l'IA |
 | [objectifs-taches.md](objectifs-taches.md) | Tout le monde | Objectifs, tâches, kanban |
 | [suivi-joueurs.md](suivi-joueurs.md) | Staff, Fondateur | Suivi joueurs : notes du staff, partage, RGPD |
 | [bot-discord.md](bot-discord.md) | Fondateur, tout le monde | Bot Discord : activation, commandes, pings des convoqués, /lier |

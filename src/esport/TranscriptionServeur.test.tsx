@@ -7,11 +7,11 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
-import type { ClientEsport, Depot, TravailServeur } from './client';
+import type { ClientEsport, Depot, QualiteProposee, TravailServeur } from './client';
 import type { ReglagesTranscription, Transcription } from './medias/api';
 import { phraseJournal, phraseNotification } from './libelles';
-import { PanneauTranscription } from './ui/medias/Transcription';
-import { ChoixModeTranscription, ReglagesTranscriptionTeam, SUIVI_MS, dureeRestante, libelleTravailServeur, modeParDefaut, modesProposes } from './ui/medias/TranscriptionServeur';
+import { EditeurTranscription, PanneauTranscription } from './ui/medias/Transcription';
+import { ChoixModeTranscription, ChoixQualite, ReglagesTranscriptionTeam, SUIVI_MS, dureeRestante, estimationQualite, libelleTravailServeur, modeParDefaut, modesProposes, qualiteRetenue } from './ui/medias/TranscriptionServeur';
 
 const theme = themeHub('nuit');
 
@@ -164,7 +164,8 @@ describe('écran de progression', () => {
     await act(async () => {
       fireEvent.press(bouton);
     });
-    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', { langue: 'fr' }));
+    // Sans choix de langue ni de qualité ici : celles de la team (Paramètres), décidées par le serveur.
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', {}));
     await waitFor(() => expect(screen.getByTestId('esport-transcription-d1-serveur-etat').props.children).toMatch(/démarre dans les 5 minutes/));
   });
 
@@ -213,5 +214,132 @@ describe('choix du mode', () => {
     await render(<ReglagesTranscriptionTeam theme={theme} client={client(requete)} teamId="t1" />);
     await waitFor(() => expect(requete).toHaveBeenCalled());
     expect(screen.queryByTestId('esport-parametres-transcription')).toBeNull();
+  });
+});
+
+// ------------------------------------------------------------------ Qualité (whisper.cpp), relecture par l'IA locale
+
+const QUALITES: QualiteProposee[] = [
+  { cle: 'rapide', disponible: true, moteur: 'whispercpp', modele: 'small', facteur: 0.1, mesuree: true },
+  { cle: 'equilibree', disponible: true, moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0', facteur: 0.2, mesuree: true },
+  { cle: 'maximale', disponible: false, moteur: 'whispercpp', modele: 'large-v3-q5_0', facteur: 0.8, mesuree: false },
+];
+
+describe('qualité de la transcription', () => {
+  // Le suivi du serveur rafraîchit toutes les 15 s : horloge simulée.
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('qualité retenue (la demandée si disponible, sinon l’équilibrée) et durée estimée (pauses comprises)', () => {
+    expect(qualiteRetenue(QUALITES, 'rapide')).toBe('rapide');
+    expect(qualiteRetenue(QUALITES, 'maximale')).toBe('equilibree');
+    expect(qualiteRetenue([], 'maximale')).toBeUndefined();
+    // 0,2 × 3600 s × 1,25 = 15 min ; sans durée connue : par heure de réunion.
+    expect(estimationQualite(QUALITES[1], 3600)).toBe('15 min');
+    expect(estimationQualite(QUALITES[1], null)).toBe('15 min');
+    expect(estimationQualite({ ...QUALITES[1], facteur: null }, 3600)).toBeNull();
+    expect(libelleTravailServeur(travail({ etape: 'correction', correctionFaite: 32, pourcentage: 100 }))).toBe('Relecture par l’IA (orthographe, ponctuation, noms du jeu) : 32 segments relus');
+  });
+
+  it('choix : seules les qualités disponibles, explication et durée pour cet enregistrement', async () => {
+    const choisir = jest.fn();
+    await render(<ChoixQualite theme={theme} qualites={QUALITES} valeur="equilibree" onChoisir={choisir} dureeAudio={1800} testID="q" />);
+    expect(screen.getByText('Rapide')).toBeTruthy();
+    expect(screen.queryByTestId('q-segments-maximale')).toBeNull();
+    expect(screen.getByTestId('q-explication').props.children.join('')).toMatch(/large-v3-turbo.*Durée estimée : environ 8 min/);
+    await fireEvent.press(screen.getByTestId('q-segments-rapide'));
+    expect(choisir).toHaveBeenCalledWith('rapide');
+  });
+
+  it('dépôt à transcrire : qualité choisie envoyée au serveur', async () => {
+    const requete = jest.fn(async () => transcription({ statut: 'serveur', travail: travail({ statut: 'attente', progression: 0, pourcentage: 0 }) }));
+    await render(<PanneauTranscription theme={theme} client={client(requete)} teamId="t1" depot={depot({ statut: 'a_faire', pdf: false, peutTranscrire: true, serveur: true, qualites: QUALITES, meilleureQualite: 'equilibree' })} />);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-d1-qualite-segments-rapide'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-d1-serveur-lancer'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', { qualite: 'rapide' }));
+  });
+
+  it('transcription prête : « Retranscrire avec la meilleure qualité »', async () => {
+    const requete2 = jest.fn(async () => transcription({ statut: 'serveur', travail: travail({ statut: 'attente', progression: 0, pourcentage: 0 }) }));
+    await render(<PanneauTranscription theme={theme} client={client(requete2)} teamId="t1" depot={depot({ statut: 'prete', pdf: true, peutTranscrire: true, serveur: true, qualites: QUALITES, meilleureQualite: 'equilibree' })} />);
+    expect(screen.queryByTestId('esport-transcription-d1-qualite')).toBeNull();
+    expect(screen.getByText('Retranscrire avec la meilleure qualité (Équilibrée)')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-d1-serveur-lancer'));
+    });
+    await waitFor(() => expect(requete2).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', { qualite: 'equilibree' }));
+  });
+
+  it('éditeur : bascule relue / brute ; garder la brute l’enregistre comme texte de la transcription', async () => {
+    const lue = transcription({
+      statut: 'prete',
+      partielle: false,
+      moteur: 'whisper.cpp large-v3-turbo (q5_0) (serveur)',
+      qualite: 'equilibree',
+      segments: [{ debut: 0, fin: 4, texte: 'On joue Jett sur Ascent.' }],
+      segmentsBruts: [{ debut: 0, fin: 4, texte: 'on joue jet sur assent' }],
+      correction: 'Relue par l’IA (IA locale, Qwen2.5-7B-Instruct (Q4_K_M)) : 1 ligne(s) corrigée(s)',
+    });
+    const requete = jest.fn(async (_chemin: string, methode?: string) => (methode === 'PUT' ? { ...lue, segments: lue.segmentsBruts ?? [], segmentsBruts: lue.segmentsBruts } : lue));
+    await render(<EditeurTranscription theme={theme} client={client(requete)} teamId="t1" depotId="d1" />);
+    await screen.findByTestId('esport-transcription-version-corrigee');
+    expect(screen.getByTestId('esport-transcription-segment-0').props.value).toBe('On joue Jett sur Ascent.');
+    expect(screen.getByTestId('esport-transcription-version-explication').props.children).toMatch(/^Relue par l’IA \(IA locale, Qwen.*La version brute reste disponible/);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-version-brute'));
+    });
+    expect(screen.getByTestId('esport-transcription-segment-0').props.value).toBe('on joue jet sur assent');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-enregistrer'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription', 'PUT', expect.objectContaining({ segments: [{ debut: 0, fin: 4, texte: 'on joue jet sur assent' }] })));
+  });
+
+  it('Paramètres : langue (détection automatique), qualité, relecture par l’IA locale, glossaire', async () => {
+    let reglages: ReglagesTranscription = {
+      mode: 'serveur',
+      choisi: null,
+      defautServeur: 'serveur',
+      disponibles: { serveur: true, navigateur: true, externe: false },
+      modele: 'base',
+      modifiable: true,
+      langue: 'fr',
+      qualite: 'equilibree',
+      qualiteChoisie: null,
+      qualites: QUALITES,
+      correction: true,
+      correctionDisponible: true,
+      glossaire: '',
+    };
+    const requete = jest.fn(async (_chemin: string, methode?: string, corps?: Partial<ReglagesTranscription>) => {
+      if (methode === 'PATCH') reglages = { ...reglages, ...corps };
+      return reglages;
+    });
+    await render(<ReglagesTranscriptionTeam theme={theme} client={client(requete)} teamId="t1" />);
+    await screen.findByTestId('esport-parametres-transcription');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-parametres-transcription-langue-auto'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/reglages-transcription', 'PATCH', { langue: 'auto' }));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-parametres-transcription-qualite-segments-rapide'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/reglages-transcription', 'PATCH', { qualite: 'rapide' }));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-parametres-transcription-correction'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/reglages-transcription', 'PATCH', { correction: false }));
+    expect(screen.queryByTestId('esport-parametres-transcription-glossaire-enregistrer')).toBeNull();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('esport-parametres-transcription-glossaire'), 'Zozoto, B main');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-parametres-transcription-glossaire-enregistrer'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/reglages-transcription', 'PATCH', { glossaire: 'Zozoto, B main' }));
   });
 });
