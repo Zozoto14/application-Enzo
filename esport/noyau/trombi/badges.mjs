@@ -108,7 +108,8 @@ export function servicesBadges({ base, maintenant = () => Date.now() }) {
   async function droits(acteur) {
     if (acteur.superAdmin) return { tout: true, club: true, teams: new Set() };
     const club = await base.premier(
-      "SELECT a.id FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee = 'club' AND rp.permission = ?",
+      // Permissions du club (vue de la migration 0033) : affectation CM « club » ou rôle du club (Second CEO…).
+      'SELECT compte_id FROM permissions_club WHERE compte_id = ? AND permission = ?',
       [acteur.compte, PERMISSION_BADGES],
     );
     const membres = await base.tous(

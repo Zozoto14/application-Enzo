@@ -47,7 +47,7 @@ import { servicesTournois } from './competition/tournois.mjs';
 import { servicesResultats } from './competition/resultats.mjs';
 import { routesCompetition } from './competition/routes.mjs';
 import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
-import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
+import { exigerLecteur, servicesStatistiques } from './usage/statistiques.mjs';
 import { servicesJeux } from './jeux/service.mjs';
 import { routesJeux } from './jeux/routes.mjs';
 import { servicesCm } from './cm/service.mjs';
@@ -61,10 +61,11 @@ import { routesReseaux } from './reseaux/routes.mjs';
 import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 import { servicesTrombi } from './trombi/service.mjs';
 import { routesTrombi } from './trombi/routes.mjs';
+import { routesRoles, servicesRoles } from './roles/service.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -194,6 +195,8 @@ export function creerApi({
   const rsx = servicesReseaux({ base, maintenant, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined, lienApp });
   // Trombinoscope (migration 0030) : page Membres › Trombinoscope (membres.trombi.voir / membres.trombi.editer).
   const trb = servicesTrombi({ base, maintenant });
+  // Page « Rôles et permissions » (migration 0033) : rôles du club (Second CEO…), modèle des teams, journal.
+  const rl = servicesRoles({ base, maintenant, noyau: s });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -306,9 +309,10 @@ export function creerApi({
       await limite('usage', acteur.compte);
       return us.ingerer(acteur, corps);
     }
-    // Page « Statistiques » : le Fondateur SEUL ; tout autre compte (Propriétaire compris) reçoit 404.
+    // Page « Statistiques » : le Fondateur (et un rôle du club qui a statistiques.voir) ; tout autre compte reçoit 404.
+    // Changer les réglages de la collecte reste au Fondateur (statistiques.mjs).
     if (chemin === '/statistiques' || chemin.startsWith('/statistiques/')) {
-      exigerFondateur(acteur);
+      await exigerLecteur(base, acteur);
       const q = url.searchParams;
       const periode = { du: q.get('du') || undefined, au: q.get('au') || undefined };
       if (chemin === '/statistiques' && m === 'GET') return sts.tableau(acteur, { ...periode, team: q.get('team') || undefined, role: q.get('role') || undefined, appareil: q.get('appareil') || undefined, absents: q.get('absents') || undefined });
@@ -398,6 +402,8 @@ export function creerApi({
         return s.creerTeam(acteur, corps);
       }
     }
+    const rolesPermissions = await routesRoles({ rl, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete), limite });
+    if (rolesPermissions !== undefined) return rolesPermissions;
     const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (trombi !== undefined) return trombi;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });

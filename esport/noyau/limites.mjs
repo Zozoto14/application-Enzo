@@ -41,6 +41,8 @@ export const LIMITES = {
   apercu: { max: 60, fenetreS: 3600 },
   // Assistant IA des profils de jeu (brouillon, vérification manuelle, test) : par compte, en plus du plafond mensuel.
   ia: { max: 20, fenetreS: 3600 },
+  // Page Rôles et permissions (migration 0033) : changements de rôles du club et du modèle des teams, par compte.
+  roles: { max: 300, fenetreS: 3600 },
   // Statistiques d'usage : lots de l'app (un toutes les 45 s au plus, plus les envois au départ de la page), par compte.
   usage: { max: 150, fenetreS: 3600 },
   // Section CM : imports Trello (gros fichiers analysés par le serveur), clips proposés et dépôts d'informations, par compte.

@@ -63,7 +63,8 @@ export function DemandesCompte({
 }) {
   const [liste, setListe] = useState<ListeDemandes | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
-  const fondateur = annuaire.superAdmin;
+  // Fondateur, ou rôle du club « Gérer les demandes de compte » (refuser ; valider reste au Fondateur : clés du hub).
+  const fondateur = annuaire.superAdmin || Boolean(annuaire.peutGererDemandes);
   const possibles = useMemo(() => teamsDemande(annuaire), [annuaire]);
   const charger = useCallback(async () => setListe(await client.demandes()), [client]);
   useEffect(() => {
@@ -124,7 +125,7 @@ export function DemandesCompte({
           {traitees.length ? <Text style={attenue}>{tr('demandesCompte.dernieres_traitees', { v: traitees.slice(0, 5).map(d => `${d.pseudo} (${STATUTS[d.statut].toLowerCase()})`).join(', ') })}</Text> : null}
         </Panneau>
       ) : null}
-      {!fondateur && possibles.length > 0 ? <Proposer theme={theme} client={client} annuaire={annuaire} occupe={occupe || Boolean(enCours)} onAction={action} /> : null}
+      {!annuaire.superAdmin && possibles.length > 0 ? <Proposer theme={theme} client={client} annuaire={annuaire} occupe={occupe || Boolean(enCours)} onAction={action} /> : null}
       {!fondateur && liste?.demandes.length ? (
         <Panneau theme={theme} testID="esport-mes-demandes">
           <Intertitre theme={theme}>{tr('demandesCompte.mes_demandes')}</Intertitre>

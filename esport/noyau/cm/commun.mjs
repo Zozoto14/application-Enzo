@@ -62,11 +62,12 @@ export function lirePortee(v) {
 
 export const teamDePortee = portee => (portee === PORTEE_CLUB ? null : portee);
 
-/** Permissions CM de niveau club d'un compte (ses affectations « club »). */
+/** Permissions CM de niveau club d'un compte (ses affectations « club » et ses rôles du club, migration 0033). */
 export async function permissionsClub(base, compte) {
   if (!compte) return new Set();
   const lignes = await base.tous(
-    "SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee = 'club'",
+    // Vue `permissions_club` (migration 0033) : affectations CM « club », rôles du club (Second CEO…), accords directs.
+    'SELECT DISTINCT permission FROM permissions_club WHERE compte_id = ?',
     [compte],
   );
   return new Set(lignes.map(l => l.permission).filter(p => PERMISSIONS_CM.includes(p)));
@@ -165,7 +166,7 @@ export const activite = (carteId, tableauId, acteur, action, meta, t) => ({
 /** Comptes qui ont une permission CM au niveau du club (affectations), et le Fondateur s'il a un profil. */
 export async function comptesClubAvec(base, permission, { fondateur = true } = {}) {
   const lignes = await base.tous(
-    "SELECT DISTINCT a.compte_id FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.portee = 'club' AND rp.permission = ?",
+    'SELECT DISTINCT compte_id FROM permissions_club WHERE permission = ?',
     [permission],
   );
   const s = new Set(lignes.map(l => l.compte_id));

@@ -29,5 +29,7 @@ export const Statistiques = differe<React.ComponentProps<typeof import('./Statis
 // Page « Jeux » (profils de jeu, assistant IA) : chargée seulement quand on l'ouvre.
 // Trombinoscope (page Membres) et « Ma fiche » (Mon profil) : chargés seulement quand on les ouvre.
 export const Trombinoscope = differe<React.ComponentProps<typeof import('./membres/Trombinoscope').Trombinoscope>>(async () => (await import('./membres/Trombinoscope')).Trombinoscope);
+// Page Membres › Rôles et permissions (Fondateur, roles.gerer) : chargée seulement quand on l'ouvre.
+export const RolesPermissions = differe<React.ComponentProps<typeof import('./membres/RolesPermissions').RolesPermissions>>(async () => (await import('./membres/RolesPermissions')).RolesPermissions);
 export const MaFicheTrombi = differe<React.ComponentProps<typeof import('./membres/FicheTrombi').MaFicheTrombi>>(async () => (await import('./membres/FicheTrombi')).MaFicheTrombi);
 export const Jeux = differe<React.ComponentProps<typeof import('./jeux/Jeux').Jeux>>(async () => (await import('./jeux/Jeux')).Jeux);

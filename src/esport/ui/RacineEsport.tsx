@@ -110,7 +110,9 @@ export function Esport(props: PropsRacineApp) {
     };
   }, [clientPret, profilPret]);
   const cm = Boolean(moiCm?.espace);
-  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : vue.v === 'cm' && !cm ? 'esport.teams' : `esport.${vue.v}`;
+  // Statistiques : le Fondateur, ou un rôle du club qui a statistiques.voir (Second CEO…).
+  const stats = etat.e === 'pret' && (etat.moi.superAdmin || Boolean(etat.moi.peutVoirStatistiques));
+  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !stats) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : vue.v === 'cm' && !cm ? 'esport.teams' : `esport.${vue.v}`;
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
@@ -198,7 +200,7 @@ export function Esport(props: PropsRacineApp) {
           onTeams={() => setVue({ v: 'teams' })}
         />
       );
-    } else if (onglet === 'statistiques' && etat.moi.superAdmin) {
+    } else if (onglet === 'statistiques' && stats) {
       page = <Statistiques theme={theme} client={etat.client} large={large} onExporter={exporter} />;
     } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
       // Profils de jeu, assistant IA, mises à jour proposées, Administration de l'IA (Fondateur).
@@ -232,6 +234,7 @@ export function Esport(props: PropsRacineApp) {
           onOuvrirTeam={id => setVue({ v: 'team', id })}
           onOuvrirApp={onOuvrirApp}
           onExporter={contexte.enregistrerFichier ? (nom, contenu, type = 'text/plain') => contexte.enregistrerFichier!(nom, contenu, type) : undefined}
+          rolesPermissions={etat.moi.superAdmin || Boolean(etat.moi.peutGererRoles)}
         />
       );
     } else {
@@ -253,7 +256,7 @@ export function Esport(props: PropsRacineApp) {
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })} pseudo={etat.moi.profil.pseudo} fondateur={stats} gererJeux={Boolean(etat.moi.peutGererJeux)}>
         {page}
       </CadreEsport>
     );

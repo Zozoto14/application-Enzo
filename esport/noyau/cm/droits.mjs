@@ -16,6 +16,7 @@ import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from './commun.mjs';
 import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
+import { permissionsGlobalesDe } from '../roles/globales.mjs';
 
 /** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges). */
 export const ROLES_CM_SYSTEME = Object.freeze({
@@ -50,11 +51,16 @@ function lirePermissionsCm(v) {
 }
 
 export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
-  async function ctxClub(acteur) {
+  /**
+   * Contexte de gestion du club : `cm.gerer`. Les rôles CM et leurs affectations (Équipe CM, page Rôles et
+   * permissions) s'ouvrent aussi à `roles.gerer` (`{ roles: true }`). Anti-escalade : toutes les permissions du club
+   * de l'acteur comptent (CM, Sponsors, trombinoscope : vue permissions_club, migration 0033).
+   */
+  async function ctxClub(acteur, { roles = false } = {}) {
     const ctx = await contexteCm(base, acteur, PORTEE_CLUB);
-    exiger(ctx, 'cm.gerer');
-    // Anti-escalade : les permissions Sponsors de l'acteur (affectation « club ») comptent aussi.
-    return { ...ctx, permissions: new Set([...ctx.permissions, ...(await droitsSponsors(base, acteur))]) };
+    const club = await permissionsGlobalesDe(base, acteur);
+    if (!(ctx.permissions.has('cm.gerer') || (roles && club.has('roles.gerer')))) exiger(ctx, 'cm.gerer');
+    return { ...ctx, permissions: new Set([...ctx.permissions, ...club, ...(await droitsSponsors(base, acteur))]) };
   }
 
   function antiEscalade(ctx, demandees) {
@@ -95,7 +101,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
 
   /** `GET /cm/roles` : rôles CM (permissions, nombre d'affectations). */
   async function roles(acteur) {
-    await ctxClub(acteur);
+    await ctxClub(acteur, { roles: true });
     const lignes = await base.tous('SELECT * FROM cm_roles ORDER BY systeme DESC, position, nom', []);
     const n = new Map((await base.tous('SELECT role_id, COUNT(*) AS n FROM cm_affectations GROUP BY role_id', [])).map(l => [l.role_id, Number(l.n)]));
     const sortie = [];
@@ -104,7 +110,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function creerRole(acteur, corps) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     const nom = texteNettoye(corps?.nom, 40);
     if (nom.length < 2) throw echec(400, 'nom', 'Nom du rôle : 2 caractères au moins.');
     const couleur = corps?.couleur ?? '#8b8b9a';
@@ -125,7 +131,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function modifierRole(acteur, id, corps) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     const r = await roleLigne(id);
     const systeme = Number(r.systeme) === 1;
     if (systeme && (corps?.nom !== undefined || corps?.couleur !== undefined)) throw echec(403, 'role-systeme', 'Le nom et la couleur d’un rôle système ne changent pas.');
@@ -156,7 +162,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function retablirRole(acteur, id) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     const r = await roleLigne(id);
     if (!r.cle_systeme) throw echec(409, 'role-personnalise', 'Seul un rôle système se rétablit.');
     const defaut = ROLES_CM_SYSTEME[r.cle_systeme] ?? [];
@@ -172,7 +178,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function supprimerRole(acteur, id) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     const r = await roleLigne(id);
     if (Number(r.systeme) === 1) throw echec(403, 'role-systeme', 'Un rôle système ne se supprime pas.');
     antiEscalade(ctx, await permissionsDuRole(r.id));
@@ -189,7 +195,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   // ---------------------------------------------------------------- Affectations
 
   async function affectations(acteur) {
-    await ctxClub(acteur);
+    await ctxClub(acteur, { roles: true });
     const lignes = await base.tous('SELECT a.*, r.nom AS role_nom, r.couleur AS role_couleur, r.cle_systeme FROM cm_affectations a JOIN cm_roles r ON r.id = a.role_id ORDER BY a.cree_le', []);
     const noms = await pseudosDe(base, lignes.map(l => l.compte_id));
     const teams = new Map((await lignesParIds(base, 'SELECT id, nom FROM teams WHERE id', lignes.map(l => l.team_id).filter(Boolean))).map(t => [t.id, t.nom]));
@@ -207,9 +213,11 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function affecter(acteur, corps) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     const compte = corps?.compte;
     if (typeof compte !== 'string' || !MOTIF_COMPTE.test(compte)) throw echec(400, 'compte', 'Compte inconnu.');
+    // Le Fondateur a tout, d'office : on ne lui attribue (ni ne lui retire) aucun rôle.
+    if (compte === 'principal') throw echec(403, 'compte-fondateur', 'Le Fondateur a déjà tous les droits.');
     if (!(await base.premier('SELECT id FROM comptes WHERE id = ?', [compte]))) throw echec(400, 'compte', 'Ce compte n’a pas encore de profil Esport.');
     const r = await roleLigne(corps?.roleId);
     const portee = lirePortee(corps?.portee ?? PORTEE_CLUB);
@@ -230,7 +238,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   async function retirerAffectation(acteur, id) {
-    const ctx = await ctxClub(acteur);
+    const ctx = await ctxClub(acteur, { roles: true });
     exigerUuid(id, 'affectation');
     const a = await base.premier('SELECT a.*, r.nom AS role_nom FROM cm_affectations a JOIN cm_roles r ON r.id = a.role_id WHERE a.id = ?', [id]);
     if (!a) throw echec(404, 'affectation-introuvable', 'Affectation introuvable.');
@@ -245,7 +253,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
 
   /** `GET /cm/comptes` : comptes Esport (profil), avec leurs teams actives (choix d'une affectation). */
   async function comptes(acteur) {
-    await ctxClub(acteur);
+    await ctxClub(acteur, { roles: true });
     const lignes = await base.tous('SELECT id, pseudo FROM comptes ORDER BY pseudo_cle LIMIT 2000', []);
     const membres = await base.tous("SELECT m.compte_id, t.id, t.nom FROM membres m JOIN teams t ON t.id = m.team_id WHERE m.statut = 'actif' AND t.supprimee_le IS NULL", []);
     const parCompte = new Map();

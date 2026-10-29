@@ -37,6 +37,16 @@ import { effacementCm, exportCm } from './cm/rgpd.mjs';
 import { effacementSponsors, exportSponsors } from './sponsors/rgpd.mjs';
 import { effacementReseaux, exportReseaux } from './reseaux/rgpd.mjs';
 import { effacementTrombi, exportTrombi } from './trombi/rgpd.mjs';
+import { PERMISSIONS_GLOBALES, aGlobale, permissionsGlobalesDe } from './roles/globales.mjs';
+import { modeleRolesTeam } from './roles/modele.mjs';
+import { effacementRoles, exportRoles } from './roles/rgpd.mjs';
+
+/**
+ * Permission du club « Accès à toutes les teams » (rôle Second CEO, migration 0033) : les droits du Propriétaire
+ * dans toutes les teams, SAUF supprimer une team (et donc nommer un Propriétaire : le rôle a team.delete).
+ */
+export const PERMISSION_ACCES_TOTAL = 'teams.acces_total';
+const SAUF_ACCES_TOTAL = new Set(['team.delete']);
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -97,14 +107,17 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const team = await base.premier('SELECT * FROM teams WHERE id = ? AND supprimee_le IS NULL', [teamId]);
     if (!team) throw echec(404, 'team-introuvable', 'Team introuvable.');
     const membre = await base.premier('SELECT * FROM membres WHERE team_id = ? AND compte_id = ?', [teamId, acteur.compte]);
-    if (!membre && !acteur.superAdmin) throw echec(404, 'team-introuvable', 'Team introuvable.');
-    if (membre && membre.statut !== 'actif' && !acteur.superAdmin) throw echec(403, 'suspendu', 'Votre accès à cette team est suspendu.');
+    // Rôle du club « Accès à toutes les teams » (Second CEO) : entre partout, comme le Fondateur, sans être super admin.
+    const accesTotal = !acteur.superAdmin && (await aGlobale(base, acteur, PERMISSION_ACCES_TOTAL));
+    if (!membre && !acteur.superAdmin && !accesTotal) throw echec(404, 'team-introuvable', 'Team introuvable.');
+    if (membre && membre.statut !== 'actif' && !acteur.superAdmin && !accesTotal) throw echec(403, 'suspendu', 'Votre accès à cette team est suspendu.');
     const role = membre ? await base.premier('SELECT * FROM roles WHERE id = ?', [membre.role_id]) : null;
     const permissionsRole = await permissionsDuRole(role);
     const permissions = permissionsEffectives({ superAdmin: acteur.superAdmin, membre, role, permissionsRole });
+    if (accesTotal) for (const p of TOUTES_PERMISSIONS) if (!SAUF_ACCES_TOTAL.has(p)) permissions.add(p);
     const lignesModules = await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [teamId]);
     const modules = new Set(lignesModules.filter(l => Number(l.active) === 1 && moduleConnu(l.module)).map(l => l.module));
-    return { acteur, team, membre, role, permissions, modules };
+    return { acteur, team, membre, role, permissions, modules, accesTotal };
   }
 
   /** Module activé, puis permission. Module désactivé : 404 ; permission absente : 403. */
@@ -205,6 +218,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   async function moi(acteur) {
     const profil = await profilDe(acteur.compte);
+    const globales = await permissionsGlobalesDe(base, acteur);
     return {
       compte: acteur.compte,
       superAdmin: acteur.superAdmin,
@@ -213,9 +227,13 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       langue: lireLangue(profil?.langue),
       // Langue par défaut définie par l'administrateur (migration 0019) : sert tant que l'utilisateur n'a pas choisi la sienne.
       langueDefaut: profil ? (lireLangue(profil.langue_defaut) ?? 'fr') : ((await langueEnAttente(acteur.compte)) ?? undefined),
-      peutCreerTeam: acteur.superAdmin || creationTeams === 'tous',
+      peutCreerTeam: acteur.superAdmin || creationTeams === 'tous' || globales.has('teams.creer'),
       // Permission globale « Gérer les profils de jeu » (migration 0021) : le Fondateur, et ceux à qui il l'accorde.
       peutGererJeux: await aPermissionJeux(base, acteur),
+      // Permissions du club (migration 0033) : rôles du club, page Rôles et permissions (roles.gerer), statistiques…
+      permissionsGlobales: acteur.superAdmin ? [] : [...globales].sort(),
+      peutGererRoles: acteur.superAdmin || globales.has('roles.gerer'),
+      peutVoirStatistiques: acteur.superAdmin || globales.has('statistiques.voir'),
     };
   }
 
@@ -259,7 +277,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   // -------------------------------------------------------------- Teams
 
   async function listeTeams(acteur) {
-    const lignes = acteur.superAdmin
+    const lignes = acteur.superAdmin || (await aGlobale(base, acteur, PERMISSION_ACCES_TOTAL))
       ? await base.tous(
           `SELECT t.*, m.id AS membre_id, m.statut AS membre_statut, r.nom AS role_nom, r.couleur AS role_couleur
              FROM teams t LEFT JOIN membres m ON m.team_id = t.id AND m.compte_id = ? LEFT JOIN roles r ON r.id = m.role_id
@@ -302,7 +320,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   }
 
   async function creerTeam(acteur, corps) {
-    if (!acteur.superAdmin && creationTeams !== 'tous') throw echec(403, 'creation-reservee', 'La création de teams est réservée au Fondateur.');
+    if (!acteur.superAdmin && creationTeams !== 'tous' && !(await aGlobale(base, acteur, 'teams.creer'))) throw echec(403, 'creation-reservee', 'La création de teams est réservée au Fondateur.');
     await exigerProfil(acteur);
     const nom = texteNettoye(corps?.nom, 60);
     if (nom.length < 2) throw echec(400, 'nom', 'Nom de la team : 2 caractères au moins.');
@@ -325,6 +343,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       lot.push({ sql: 'INSERT INTO team_modules (team_id, module, active, config, maj_le) VALUES (?, ?, ?, ?, ?)', params: [teamId, module, modules.includes(module) ? 1 : 0, '{}', date] });
     }
     let roleProprietaire;
+    // Modèle des rôles des nouvelles teams (page Rôles et permissions, migration 0033) ; sinon le catalogue.
+    const modele = await modeleRolesTeam(base);
     ROLES_SYSTEME.forEach((r, position) => {
       const id = nouvelId();
       if (r.cle === CLE_PROPRIETAIRE) roleProprietaire = id;
@@ -334,7 +354,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       });
       // Le Propriétaire a tout par définition : pas de liste à tenir à jour.
       if (r.cle !== CLE_PROPRIETAIRE) {
-        for (const p of permissionsRoleSysteme(r.cle)) lot.push({ sql: 'INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)', params: [id, p] });
+        for (const p of modele[r.cle] ?? permissionsRoleSysteme(r.cle)) lot.push({ sql: 'INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)', params: [id, p] });
       }
     });
     const membreId = nouvelId();
@@ -349,12 +369,12 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   /** Permissions CM données par les rôles CM du compte (club, ou cette team) quand le module CM est activé. */
   async function permissionsCmDeTeam(ctx) {
-    if (!ctx.modules.has('cm') || !ctx.membre || ctx.membre.statut !== 'actif') return [];
-    const lignes = await base.tous(
-      "SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND (a.portee = 'club' OR a.portee = ?)",
-      [ctx.acteur.compte, ctx.team.id],
-    );
-    return lignes.map(l => l.permission);
+    if (!ctx.modules.has('cm') || !ctx.acteur.compte) return [];
+    // Permissions du club (affectations CM « club », rôles du club : vue de la migration 0033), valables dans toute team au module CM.
+    const club = (await base.tous('SELECT DISTINCT permission FROM permissions_club WHERE compte_id = ?', [ctx.acteur.compte])).map(l => l.permission).filter(p => !PERMISSIONS_GLOBALES.includes(p));
+    if (!ctx.membre || ctx.membre.statut !== 'actif') return club;
+    const lignes = await base.tous('SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee = ?', [ctx.acteur.compte, ctx.team.id]);
+    return [...club, ...lignes.map(l => l.permission)];
   }
 
   async function detailTeam(acteur, teamId) {
@@ -527,7 +547,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   async function verifierModificationRole(ctx, teamId, role, nouvelles) {
     exiger(ctx, 'roles.manage');
     if (role.cle_systeme === CLE_PROPRIETAIRE) throw echec(403, 'role-verrouille', 'Le rôle Propriétaire est verrouillé : il a toujours toutes les permissions.');
-    const libre = ctx.acteur.superAdmin || ctx.role?.cle_systeme === CLE_PROPRIETAIRE;
+    const libre = ctx.acteur.superAdmin || ctx.accesTotal || ctx.role?.cle_systeme === CLE_PROPRIETAIRE;
     if (!libre && (!ctx.role || Number(role.position) <= Number(ctx.role.position))) {
       throw echec(403, 'role-superieur', 'Vous ne pouvez pas modifier un rôle égal ou supérieur au vôtre.');
     }
@@ -899,6 +919,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
       // Section CM (migration 0023) : rôles CM, cartes créées ou assignées, commentaires, clips proposés, fichiers déposés.
       ...(await exportCm(base, compte)),
+      // Rôles du club (migration 0033).
+      ...(await exportRoles(base, compte)),
       // Sponsors (migration 0024) : fiches dont il est responsable, échanges qu'il a notés.
       ...(await exportSponsors(base, compte)),
       // Réseaux (migration 0026) : comptes réseaux et publications ajoutés, relevés saisis.
@@ -989,6 +1011,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementUsage(compte),
       // Profils de jeu (migration 0021) : sa délégation disparaît ; ce qu'il a écrit ou décidé reste, sans auteur.
       { sql: 'DELETE FROM permissions_globales WHERE compte_id = ?', params: [compte] },
+      // Rôles du club (migration 0033) : ses rôles disparaissent ; ce qu'il a attribué reste, sans auteur.
+      ...effacementRoles(compte),
       { sql: 'UPDATE jeux SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
       { sql: 'UPDATE jeux SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
       { sql: 'UPDATE jeu_versions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
@@ -1043,7 +1067,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
    * admin. Base des vues de premier niveau (Dashboard, Membres).
    */
   async function contextesDe(acteur) {
-    const lignes = acteur.superAdmin
+    const lignes = acteur.superAdmin || (await aGlobale(base, acteur, PERMISSION_ACCES_TOTAL))
       ? await base.tous('SELECT id FROM teams WHERE supprimee_le IS NULL ORDER BY nom', [])
       : await base.tous(
           "SELECT t.id FROM membres m JOIN teams t ON t.id = m.team_id WHERE m.compte_id = ? AND m.statut = 'actif' AND t.supprimee_le IS NULL ORDER BY t.nom",

@@ -50,6 +50,12 @@ Elles viennent de deux endroits :
 Le **Fondateur** a tout. Anti-escalade : hors Fondateur, on n'ajoute à un rôle CM, et on n'attribue, que des
 permissions que l'on a soi-même (403 `escalade`) ; le nom et la couleur d'un rôle système sont fixes.
 
+3. **Rôles du club** (migration 0033, **Esport › Membres › Rôles et permissions**, [roles-permissions.md](roles-permissions.md)) :
+   un rôle du club qui porte des permissions CM vaut comme une affectation « club ». Le rôle système « **Second CEO** »
+   (adjoint du Fondateur) a par défaut **tout le CM** (`cm.gerer`, tout le Drive, Sponsors compris). Les rôles CM se
+   modifient aussi depuis cette page (section CM, même matrice), et les routes `/cm/roles` / `/cm/affectations`
+   s'ouvrent à la permission du club `roles.gerer` ; les affectations se font toujours dans **Équipe CM**.
+
 **Périmètre** : le CM du club n'est membre d'aucune team. Il ne voit que la section CM, les membres (pseudos) et
 les **résumés publiables** des matchs, tournois et résultats (`competition/resume.mjs`). Jamais les strats, le
 scouting détaillé (un adversaire n'apparaît que par son nom), les notes du staff, le planning ni un résultat

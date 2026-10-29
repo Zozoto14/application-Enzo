@@ -23,6 +23,11 @@ import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { evenement } from './evenements.mjs';
 import { lirePseudo } from './service.mjs';
 import { echec, iso, nouvelId, texteNettoye } from './outils.mjs';
+import { CLE_PROPRIETAIRE } from './permissions.mjs';
+import { aGlobale } from './roles/globales.mjs';
+
+/** Permissions de team d'un rôle de gestion (voir comptes.mjs : PERMISSIONS_GESTION_TEAM). */
+const GESTION_TEAM = ['team.manage', 'team.delete', 'modules.manage', 'members.assign_role', 'members.remove', 'roles.manage'];
 
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MOTIF_EMAIL = /^[^\s@<>()[\]\\,;:"]{1,64}@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]{2,}$/;
@@ -60,7 +65,7 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
       demandeur: l.demandeur_id,
       demandeurPseudo: pseudos.get(l.demandeur_id) ?? null,
       pseudo: l.pseudo,
-      email: l.statut === 'en_attente' && (acteur.superAdmin || l.demandeur_id === acteur.compte) ? (l.email ?? null) : null,
+      email: l.statut === 'en_attente' && (acteur.gereDemandes || acteur.superAdmin || l.demandeur_id === acteur.compte) ? (l.email ?? null) : null,
       posteJeu: l.poste_jeu ?? null,
       // Discord ID proposé par le demandeur (facultatif) : le Fondateur le vérifie à la validation.
       discordId: l.discord_id ?? null,
@@ -75,11 +80,24 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
 
   /** `POST /comptes/demandes` : { teamId, roleId, pseudo, email, posteJeu?, message? }. */
   async function creer(acteur, corps) {
-    const ctx = await contexteTeam(acteur, corps?.teamId);
-    exiger(ctx, 'members.create');
-    if (ctx.team.archivee_le) throw echec(409, 'team-archivee', 'Cette team est archivée.');
-    const role = await roleDeTeam(ctx.team.id, corps?.roleId);
-    await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas proposer un rôle plus élevé que le vôtre.');
+    // Hors team (ou sans members.create), la permission du club « Inviter des membres » ouvre la demande dans toute team.
+    const ctx = await contexteTeam(acteur, corps?.teamId).catch(e => {
+      if (e?.statut === 404 && e?.code === 'team-introuvable') return null;
+      throw e;
+    });
+    const local = Boolean(ctx?.permissions.has('members.create'));
+    const global = !local && (await aGlobale(base, acteur, 'membres.inviter'));
+    if (!ctx && !global) throw echec(404, 'team-introuvable', 'Team introuvable.');
+    if (!local && !global) exiger(ctx, 'members.create');
+    const team = ctx?.team ?? (await base.premier('SELECT * FROM teams WHERE id = ? AND supprimee_le IS NULL', [corps?.teamId]));
+    if (!team) throw echec(404, 'team-introuvable', 'Team introuvable.');
+    if (team.archivee_le) throw echec(409, 'team-archivee', 'Cette team est archivée.');
+    const role = await roleDeTeam(team.id, corps?.roleId);
+    if (local) await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas proposer un rôle plus élevé que le vôtre.');
+    else {
+      const perms = (await base.tous('SELECT permission FROM role_permissions WHERE role_id = ?', [role.id])).map(l => l.permission);
+      if (role.cle_systeme === CLE_PROPRIETAIRE || perms.some(p => GESTION_TEAM.includes(p))) throw echec(403, 'role-gestion', 'Avec « Inviter des membres », on propose un rôle sans droits de gestion (ni Propriétaire, ni Manager).');
+    }
     const pseudo = lirePseudo(corps?.pseudo);
     const email = lireEmail(corps?.email);
     const discordId = lireDiscordId(corps?.discordId);
@@ -100,10 +118,10 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
       {
         sql: `INSERT INTO demandes_compte (id, team_id, role_id, demandeur_id, pseudo, pseudo_cle, email, poste_jeu, message, statut, cree_le, maj_le, discord_id)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', ?, ?, ?)`,
-        params: [id, ctx.team.id, role.id, acteur.compte, pseudo, cle, email, poste, texteNettoye(corps?.message, 200), iso(t), iso(t), discordId],
+        params: [id, team.id, role.id, acteur.compte, pseudo, cle, email, poste, texteNettoye(corps?.message, 200), iso(t), iso(t), discordId],
       },
       // Jamais l'adresse dans l'événement : il alimente le journal et Discord.
-      evenement('member.account_requested', { teamId: ctx.team.id, acteur: acteur.compte, entiteType: 'demande', entiteId: id, charge: { pseudo, role: role.nom }, maintenant: t }),
+      evenement('member.account_requested', { teamId: team.id, acteur: acteur.compte, entiteType: 'demande', entiteId: id, charge: { pseudo, role: role.nom }, maintenant: t }),
     ]);
     return (await publiques([await demandeDe(id)], acteur))[0];
   }
@@ -113,14 +131,17 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
    * (et les 30 dernières traitées) ; les autres, les leurs.
    */
   async function liste(acteur) {
-    const lignes = acteur.superAdmin
+    // Demandes de compte du club (comptes.demandes.gerer, migration 0033) : comme le Fondateur, sauf la validation.
+    const gere = await aGlobale(base, acteur, 'comptes.demandes.gerer');
+    acteur = { ...acteur, gereDemandes: gere };
+    const lignes = gere
       ? [
           ...(await base.tous("SELECT * FROM demandes_compte WHERE statut = 'en_attente' ORDER BY cree_le", [])),
           ...(await base.tous("SELECT * FROM demandes_compte WHERE statut <> 'en_attente' ORDER BY maj_le DESC LIMIT 30", [])),
         ]
       : await base.tous('SELECT * FROM demandes_compte WHERE demandeur_id = ? ORDER BY cree_le DESC LIMIT 30', [acteur.compte]);
     const demandes = await publiques(lignes, acteur);
-    return { demandes, enAttente: demandes.filter(d => d.statut === 'en_attente').length, fondateur: acteur.superAdmin };
+    return { demandes, enAttente: demandes.filter(d => d.statut === 'en_attente').length, fondateur: acteur.superAdmin, gerer: gere };
   }
 
   /** Demande en attente que le Fondateur peut valider (contrôle de `POST /comptes` avec `demandeId`). */
@@ -142,9 +163,11 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
     ];
   }
 
-  /** `POST /comptes/demandes/:id/refuser` (Fondateur) : { motif? }. */
+  /** `POST /comptes/demandes/:id/refuser` (Fondateur, ou comptes.demandes.gerer) : { motif? }. */
   async function refuser(acteur, id, corps) {
-    const d = await aValider(acteur, id);
+    if (!(await aGlobale(base, acteur, 'comptes.demandes.gerer'))) throw echec(403, 'super-admin', 'Seul le Fondateur refuse une demande de compte.');
+    const d = await demandeDe(id);
+    if (d.statut !== 'en_attente') throw echec(409, 'demande-traitee', 'Cette demande a déjà été traitée.');
     const t = maintenant();
     const motif = texteNettoye(corps?.motif, 200);
     await base.lot([

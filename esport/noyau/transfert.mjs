@@ -176,6 +176,12 @@ export const TABLES = [
   ['discord_mentions', 'team_id, sujet, cible'],
   ['discord_mp_envois', 'ligne_id, discord_user_id'],
   ['discord_injoignables', 'team_id, compte_id'],
+  // Rôles du club et modèle des rôles des nouvelles teams (migration 0033) : le rôle système « Second CEO » posé par
+  // la migration est remplacé par celui de l'export (permissions modifiées depuis).
+  ['roles_globaux', 'id'],
+  ['roles_globaux_permissions', 'role_id, permission'],
+  ['roles_globaux_affectations', 'role_id, compte_id'],
+  ['roles_modele', 'cle_systeme'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -220,6 +226,10 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
     if (table === 'trombi_badges' && lignes.length > 0) {
       await base.executer('DELETE FROM trombi_badges_membres', []);
       await base.executer('DELETE FROM trombi_badges', []);
+    }
+    if (table === 'roles_globaux' && lignes.length > 0) {
+      await base.executer('DELETE FROM roles_globaux_permissions', []);
+      await base.executer('DELETE FROM roles_globaux', []);
     }
     if (table === 'sp_etapes' && lignes.length > 0) await base.executer('DELETE FROM sp_etapes', []);
     if (table === 'jeux' && lignes.length > 0) {

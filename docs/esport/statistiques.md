@@ -7,6 +7,9 @@ et lesquelles le sont le moins, quand, sur quel appareil, quelles fonctionnalit�
   iPad paysage, barre d'onglets en bas sur iPhone). L'entrée n'existe **que pour le Fondateur**.
 - **Contrôle côté serveur** : `GET /statistiques…` répond **404 « Adresse inconnue »** à tout autre compte, Propriétaire
   compris (on ne dit même pas que la route existe). Couper la collecte et la fiche d'un membre : idem.
+- **Délégation** (migration 0033) : le Fondateur peut ouvrir la lecture (tableau, fiche d'un membre) à un rôle du club
+  qui a la permission `statistiques.voir` (le « Second CEO » l'a par défaut ; [roles-permissions.md](roles-permissions.md)).
+  Couper ou reprendre la collecte reste au Fondateur seul.
 
 ## Ce que montre la page
 

@@ -23,6 +23,7 @@
 import { distribuer, evenement } from '../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
+import { aGlobale } from '../roles/globales.mjs';
 import { creerConnecteur } from '../ia/connecteur.mjs';
 import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assistant.mjs';
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
@@ -77,9 +78,8 @@ export async function nomsDesJeux(base) {
 
 /** Le compte a-t-il la permission globale `jeux.gerer` (Fondateur : toujours) ? */
 export async function aPermissionJeux(base, acteur) {
-  if (acteur?.superAdmin) return true;
-  if (!acteur?.compte) return false;
-  return Boolean(await base.premier('SELECT compte_id FROM permissions_globales WHERE compte_id = ? AND permission = ?', [acteur.compte, PERMISSION_JEUX]));
+  // Accord direct (Jeux › Administration IA) ou rôle du club qui la porte (migration 0033) : vue permissions_club.
+  return aGlobale(base, acteur, PERMISSION_JEUX);
 }
 
 /**

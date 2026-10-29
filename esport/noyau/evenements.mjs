@@ -106,6 +106,14 @@ export const TYPES_EVENEMENTS = [
   'game.deleted',
   'game.draft_ready',
   'game.updates_proposed',
+  // Rôles du club et modèle des rôles des nouvelles teams (migration 0033) : événements GLOBAUX (sans team),
+  // journal de la page Rôles et permissions.
+  'roles.global_cree',
+  'roles.global_modifie',
+  'roles.global_supprime',
+  'roles.global_attribue',
+  'roles.global_retire',
+  'roles.modele_modifie',
 ];
 
 const ESSAIS_MAX = 8;
@@ -227,7 +235,7 @@ export async function abonneNotifications(base, ev) {
       return;
     case 'game.updates_proposed': {
       // Différences proposées par l'IA : le Fondateur et les comptes qui gèrent les profils de jeu.
-      const destinataires = new Set(['principal', ...(await base.tous("SELECT compte_id FROM permissions_globales WHERE permission = 'jeux.gerer'", [])).map(l => l.compte_id)]);
+      const destinataires = new Set(['principal', ...(await base.tous("SELECT DISTINCT compte_id FROM permissions_club WHERE permission = 'jeux.gerer'", [])).map(l => l.compte_id)]);
       for (const compte of destinataires) await notifier(base, ev, compte, 'jeu-maj-proposee', { nom: charge.nom ?? null, jeu: ev.entite_id, n: charge.n ?? 0, auto: Boolean(charge.auto) });
       return;
     }

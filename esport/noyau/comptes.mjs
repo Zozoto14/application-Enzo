@@ -32,6 +32,14 @@ import { CLE_PROPRIETAIRE, autorise } from './permissions.mjs';
 import { lirePseudo } from './service.mjs';
 import { echec, iso, nouvelId, texteNettoye } from './outils.mjs';
 import { effacementUsage } from './usage/collecte.mjs';
+import { aGlobale, permissionsGlobalesDe } from './roles/globales.mjs';
+import { effacementRoles } from './roles/rgpd.mjs';
+
+/**
+ * Permissions de team qui font d'un rôle un rôle de GESTION : avec la permission du club « Inviter des membres »
+ * (membres.inviter, hors team), on n'attribue qu'un rôle qui n'en a aucune (ni le Propriétaire).
+ */
+export const PERMISSIONS_GESTION_TEAM = Object.freeze(['team.manage', 'team.delete', 'modules.manage', 'members.assign_role', 'members.remove', 'roles.manage']);
 
 const MOTIF_COMPTE = /^[a-z0-9]{6,16}$/;
 const AFFECTATIONS_MAX = 20;
@@ -208,6 +216,13 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     return ficheCompte(acteur, id);
   }
 
+  /** Rôle attribuable avec la permission du club membres.inviter : ni Propriétaire, ni rôle de gestion. */
+  async function roleInvitable(role) {
+    if (role.cle_systeme === CLE_PROPRIETAIRE) return false;
+    const perms = (await base.tous('SELECT permission FROM role_permissions WHERE role_id = ?', [role.id])).map(l => l.permission);
+    return !perms.some(p => PERMISSIONS_GESTION_TEAM.includes(p));
+  }
+
   /** Teams où l'acteur voit les membres (`members.view`) : périmètre de ce qu'il peut connaître des comptes. */
   async function contextesMembres(acteur) {
     return (await contextesDe(acteur)).filter(ctx => ctx.permissions.has('members.view'));
@@ -231,11 +246,25 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
    *    du Fondateur, le compte existe.
    */
   async function ajouterMembre(acteur, teamId, corps) {
-    const ctx = await contexteTeam(acteur, teamId);
-    const createur = autorise(ctx.permissions, ctx.modules, 'members.create');
-    if (!createur) exiger(ctx, 'members.invite');
-    const role = await roleDeTeam(teamId, corps?.roleId);
-    await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
+    // Hors team, la permission du club « Inviter des membres » (membres.inviter) ouvre l'ajout dans toute team.
+    const ctx = await contexteTeam(acteur, teamId).catch(e => {
+      if (e?.statut === 404 && e?.code === 'team-introuvable') return null;
+      throw e;
+    });
+    const local = Boolean(ctx && (autorise(ctx.permissions, ctx.modules, 'members.create') || autorise(ctx.permissions, ctx.modules, 'members.invite')));
+    const global = !local && (await aGlobale(base, acteur, 'membres.inviter'));
+    if (!ctx && !global) throw echec(404, 'team-introuvable', 'Team introuvable.');
+    if (!local && !global) exiger(ctx, 'members.invite');
+    const createur = global || autorise(ctx.permissions, ctx.modules, 'members.create');
+    let role;
+    if (global) {
+      if (!(await base.premier('SELECT id FROM teams WHERE id = ? AND supprimee_le IS NULL', [teamId]))) throw echec(404, 'team-introuvable', 'Team introuvable.');
+      role = await roleDeTeam(teamId, corps?.roleId);
+      if (!(await roleInvitable(role))) throw echec(403, 'role-gestion', 'Avec « Inviter des membres », on attribue un rôle sans droits de gestion (ni Propriétaire, ni Manager).');
+    } else {
+      role = await roleDeTeam(teamId, corps?.roleId);
+      await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
+    }
     let fiche;
     if (corps?.compte === undefined && typeof corps?.pseudo === 'string' && createur) {
       fiche = await base.premier('SELECT * FROM comptes WHERE pseudo_cle = ?', [texteNettoye(corps.pseudo, 24).toLocaleLowerCase('fr')]);
@@ -273,6 +302,9 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
    * appartenances dans CES teams seulement. Rien d'une autre team ne sort.
    */
   async function annuaire(acteur) {
+    // Permissions du club (migration 0033) : inviter partout, Discord ID, langue, demandes de compte.
+    const globales = await permissionsGlobalesDe(base, acteur);
+    const fondateurOu = p => acteur.superAdmin || globales.has(p);
     // Teams où l'on voit les membres, et celles où l'on peut en proposer (members.create) : rôles et droits.
     const ctxs = (await contextesDe(acteur)).filter(ctx => ctx.permissions.has('members.view') || ctx.permissions.has('members.create'));
     const ids = ctxs.map(c => c.team.id);
@@ -303,6 +335,18 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
         });
       }
     }
+    if (!acteur.superAdmin && globales.has('membres.inviter')) {
+      // Inviter des membres (club) : toutes les autres teams, avec les seuls rôles sans droits de gestion ; sans leurs membres.
+      const autres = await base.tous('SELECT * FROM teams WHERE supprimee_le IS NULL ORDER BY nom', []);
+      for (const t of autres.filter(x => !ids.includes(x.id))) {
+        const sien = [];
+        for (const r of await base.tous('SELECT * FROM roles WHERE team_id = ? ORDER BY position, nom', [t.id])) {
+          const attribuable = await roleInvitable(r);
+          sien.push({ id: r.id, nom: r.nom, couleur: r.couleur, cle: r.cle_systeme ?? null, position: Number(r.position), systeme: Number(r.systeme) === 1, attribuable });
+        }
+        teams.push({ id: t.id, nom: t.nom, slug: t.slug, jeu: t.jeu, archivee: Boolean(t.archivee_le), droits: { ajouter: true, demander: true, roles: false, retirer: false }, roles: sien });
+      }
+    }
     const lignes =
       idsVus.length > 0
         ? await base.tous(
@@ -322,7 +366,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       discordId: l.discord_id ?? null,
       discordLie: Boolean(l.discord_lie),
       // Langue par défaut (réglée par le Fondateur) et choix de l'utilisateur : visibles du Fondateur seul.
-      ...(acteur.superAdmin ? { langueDefaut: lireLangue(l.langue_defaut) ?? 'fr', langueChoisie: lireLangue(l.langue) } : {}),
+      ...(fondateurOu('comptes.langue') ? { langueDefaut: lireLangue(l.langue_defaut) ?? 'fr', langueChoisie: lireLangue(l.langue) } : {}),
       statut: statutCompte(l),
       inviteLe: l.invite_le ?? null,
       activeLe: l.active_le ?? null,
@@ -351,17 +395,20 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     }
     const liste = [...comptes.values()].sort((a, b) => a.pseudo.localeCompare(b.pseudo, 'fr'));
     // Demandes de compte : en attente (Fondateur : toutes ; sinon les siennes).
+    const toutes = fondateurOu('comptes.demandes.gerer');
     const attente = await base.premier(
-      acteur.superAdmin ? "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente'" : "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente' AND demandeur_id = ?",
-      acteur.superAdmin ? [] : [acteur.compte],
+      toutes ? "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente'" : "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente' AND demandeur_id = ?",
+      toutes ? [] : [acteur.compte],
     );
     return {
       superAdmin: acteur.superAdmin,
       peutCreerCompte: acteur.superAdmin,
       // Seul le Fondateur modifie un Discord ID (contrôle serveur : majDiscordId).
-      peutModifierDiscordId: acteur.superAdmin,
+      peutModifierDiscordId: fondateurOu('comptes.discord_id'),
       // Idem pour la langue par défaut d'un compte (migration 0019).
-      peutModifierLangue: acteur.superAdmin,
+      peutModifierLangue: fondateurOu('comptes.langue'),
+      // Demandes de compte : les voir toutes et les refuser (la validation, qui crée le compte du hub, reste au Fondateur).
+      peutGererDemandes: fondateurOu('comptes.demandes.gerer'),
       teams,
       comptes: liste,
       demandesEnAttente: Number(attente?.n ?? 0),
@@ -461,6 +508,9 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       ...effacementReseaux(compte),
       // Trombinoscope (migration 0030) : fiche et photo effacées.
       ...effacementTrombi(compte),
+      // Rôles du club (migration 0033) et délégations directes (jeux.gerer).
+      ...effacementRoles(compte),
+      { sql: 'DELETE FROM permissions_globales WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );
@@ -473,8 +523,10 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
    * retire (`null`) le Discord ID d'un membre. Tout autre rôle, Propriétaire compris : 403.
    */
   async function majDiscordId(acteur, compteId, corps) {
-    if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur modifie le Discord ID d’un membre.');
+    if (!(await aGlobale(base, acteur, 'comptes.discord_id'))) throw echec(403, 'super-admin', 'Seul le Fondateur modifie le Discord ID d’un membre.');
     const id = compteId === 'principal' ? 'principal' : lireCompte(compteId);
+    // Le compte du Fondateur ne se touche que par lui-même.
+    if (id === 'principal' && !acteur.superAdmin) throw echec(403, 'compte-fondateur', 'Seul le Fondateur modifie son propre compte.');
     const fiche = await base.premier('SELECT id FROM comptes WHERE id = ?', [id]);
     if (!fiche) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
     const discordId = corps?.discordId === null ? null : lireDiscordId(corps?.discordId, { obligatoire: true });
@@ -495,8 +547,10 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
    * Tout autre rôle, Propriétaire compris : 403.
    */
   async function majLangueDefaut(acteur, compteId, corps) {
-    if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur règle la langue par défaut d’un compte.');
+    if (!(await aGlobale(base, acteur, 'comptes.langue'))) throw echec(403, 'super-admin', 'Seul le Fondateur règle la langue par défaut d’un compte.');
     const id = compteId === 'principal' ? 'principal' : lireCompte(compteId);
+    // Le compte du Fondateur ne se touche que par lui-même.
+    if (id === 'principal' && !acteur.superAdmin) throw echec(403, 'compte-fondateur', 'Seul le Fondateur modifie son propre compte.');
     const langue = lireLangue(corps?.langue);
     if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
     const fiche = await base.premier('SELECT id FROM comptes WHERE id = ?', [id]);

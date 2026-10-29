@@ -24,7 +24,7 @@ export async function droitsSponsors(base, acteur) {
   if (acteur?.superAdmin) return new Set(PERMISSIONS_SPONSORS);
   if (!acteur?.compte) return new Set();
   const lignes = await base.tous(
-    "SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee = 'club' AND rp.permission IN ('sponsors.voir', 'sponsors.gerer')",
+    "SELECT DISTINCT permission FROM permissions_club WHERE compte_id = ? AND permission IN ('sponsors.voir', 'sponsors.gerer')",
     [acteur.compte],
   );
   const s = new Set(lignes.map(l => l.permission));
@@ -45,7 +45,7 @@ export async function contexteSponsors(base, acteur, { gerer = false } = {}) {
 export async function comptesSponsors(base, permission = 'sponsors.gerer') {
   const voulues = permission === 'sponsors.voir' ? ['sponsors.voir', 'sponsors.gerer'] : ['sponsors.gerer'];
   const lignes = await base.tous(
-    `SELECT DISTINCT a.compte_id FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.portee = 'club' AND rp.permission IN (${voulues.map(() => '?').join(', ')})`,
+    `SELECT DISTINCT compte_id FROM permissions_club WHERE permission IN (${voulues.map(() => '?').join(', ')})`,
     voulues,
   );
   const s = new Set(lignes.map(l => l.compte_id));

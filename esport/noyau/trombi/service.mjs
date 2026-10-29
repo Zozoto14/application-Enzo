@@ -54,7 +54,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
   async function droits(acteur) {
     if (acteur.superAdmin) return { tout: true, clubVoir: true, clubEditer: true, voir: new Set(), editer: new Set(), membre: new Set() };
     const club = new Set(
-      (await base.tous(`SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee = 'club' AND rp.permission IN (?, ?)`, [acteur.compte, ...PERMISSIONS_TROMBI])).map(l => l.permission),
+      (await base.tous(`SELECT DISTINCT permission FROM permissions_club WHERE compte_id = ? AND permission IN (?, ?)`, [acteur.compte, ...PERMISSIONS_TROMBI])).map(l => l.permission),
     );
     const membres = await base.tous(
       `SELECT m.team_id, r.cle_systeme, rp.permission FROM membres m JOIN teams t ON t.id = m.team_id AND t.supprimee_le IS NULL JOIN roles r ON r.id = m.role_id

@@ -16,6 +16,7 @@
  */
 
 import { echec, iso } from '../outils.mjs';
+import { aGlobale } from '../roles/globales.mjs';
 import { lignesParIds } from '../requetes.mjs';
 import { partiesLocales } from '../planning/temps.mjs';
 import {
@@ -72,6 +73,11 @@ const dansJours = (jour, du, au) => jour >= du && jour <= au;
 /** 404 « Adresse inconnue » pour tout autre compte que le Fondateur. */
 export function exigerFondateur(acteur) {
   if (!acteur?.superAdmin) throw echec(404, 'route', 'Adresse inconnue.');
+}
+
+/** Lecture des statistiques : le Fondateur, ou un rôle du club qui a `statistiques.voir` (migration 0033) ; sinon 404. */
+export async function exigerLecteur(base, acteur) {
+  if (!(await aGlobale(base, acteur, 'statistiques.voir'))) throw echec(404, 'route', 'Adresse inconnue.');
 }
 
 export function servicesStatistiques({ base, maintenant = () => Date.now() }) {
@@ -407,7 +413,7 @@ export function servicesStatistiques({ base, maintenant = () => Date.now() }) {
   // ---------------------------------------------------------------- Routes
 
   async function tableau(acteur, params = {}) {
-    exigerFondateur(acteur);
+    await exigerLecteur(base, acteur);
     const periode = lirePeriode(params);
     const team = params.team ? (MOTIF_UUID.test(params.team) ? params.team : null) : undefined;
     if (team === null) throw echec(400, 'team', 'Team inconnue.');
@@ -452,7 +458,7 @@ export function servicesStatistiques({ base, maintenant = () => Date.now() }) {
   }
 
   async function ficheMembre(acteur, compte, params = {}) {
-    exigerFondateur(acteur);
+    await exigerLecteur(base, acteur);
     if (typeof compte !== 'string' || !MOTIF_COMPTE.test(compte)) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
     const c = await base.premier('SELECT id, pseudo, cree_le, invite_le, active_le FROM comptes WHERE id = ?', [compte]);
     const membreDe = await base.tous('SELECT m.team_id, t.nom, r.nom AS role_nom, m.statut FROM membres m JOIN teams t ON t.id = m.team_id JOIN roles r ON r.id = m.role_id WHERE m.compte_id = ?', [compte]);
@@ -500,7 +506,7 @@ export function servicesStatistiques({ base, maintenant = () => Date.now() }) {
   }
 
   async function reglages(acteur) {
-    exigerFondateur(acteur);
+    await exigerLecteur(base, acteur);
     return { collecte: await collecteActive(base), debut: await lireReglage(base, 'debut_collecte'), agregeJusqua: await lireReglage(base, 'agrege_jusqua') };
   }
 

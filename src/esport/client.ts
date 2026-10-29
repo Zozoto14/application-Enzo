@@ -64,6 +64,12 @@ export interface Moi {
   peutCreerTeam: boolean;
   /** Permission globale « Gérer les profils de jeu » (Fondateur, ou délégué par lui). */
   peutGererJeux?: boolean;
+  /** Permissions du club (rôles du club, migration 0033 ; vide pour le Fondateur, qui a tout). */
+  permissionsGlobales?: string[];
+  /** Page Membres › Rôles et permissions (Fondateur, ou permission du club roles.gerer). */
+  peutGererRoles?: boolean;
+  /** Page Statistiques (Fondateur, ou permission du club statistiques.voir). */
+  peutVoirStatistiques?: boolean;
 }
 export interface Team {
   id: string;
@@ -190,6 +196,8 @@ export interface Annuaire {
   peutCreerCompte: boolean;
   /** Seul le Fondateur modifie un Discord ID (contrôle serveur, 403 sinon). */
   peutModifierDiscordId?: boolean;
+  /** Voir toutes les demandes de compte et les refuser (Fondateur, ou comptes.demandes.gerer). */
+  peutGererDemandes?: boolean;
   /** Seul le Fondateur règle la langue par défaut d'un compte (contrôle serveur, 403 sinon). */
   peutModifierLangue?: boolean;
   teams: TeamAnnuaire[];
