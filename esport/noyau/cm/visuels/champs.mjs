@@ -30,7 +30,7 @@ export const FUSEAU_CLUB = 'Europe/Paris';
 export const CHAMPS_TEXTE = Object.freeze([
   'club', 'team', 'jeu', 'titre', 'phrase', 'date', 'date_courte', 'jour', 'heure', 'fuseau', 'date_heure', 'tournoi', 'tour', 'lieu', 'format', 'bo',
   'adversaire', 'adversaires', 'score', 'score_nous', 'score_eux', 'issue', 'place', 'participants', 'points', 'classement', 'mvp', 'mvp_agent',
-  'genre_match', 'cashprize', 'gains', 'organisateur', 'bilan', 'joueur', 'poste', 'semaine', 'victoire', 'elo', 'ancienne_structure',
+  'genre_match', 'cashprize', 'gains', 'organisateur', 'bilan', 'joueur', 'poste', 'semaine', 'victoire', 'elo', 'ancienne_structure', 'badges',
 ]);
 
 const LANGUES = ['fr', 'en'];
@@ -224,7 +224,7 @@ async function donneesMembre(base, teamId, compte) {
   // tous les membres voient de sa fiche ; sans fiche, le rôle dans la team.
   const fiche = await trombiPourVisuel(base, teamId, compte);
   const poste = langue => (fiche?.postes.length ? fiche.postes.join(' / ') : m.cle_systeme ? T(langue, `role.${m.cle_systeme}`) : m.role_nom);
-  const parLangue = langue => ({ champs: { joueur: m.pseudo, poste: poste(langue), elo: fiche?.elo ?? '', ancienne_structure: fiche?.ancienneStructure ?? '' }, listes: {} });
+  const parLangue = langue => ({ champs: { joueur: m.pseudo, poste: poste(langue), elo: fiche?.elo ?? '', ancienne_structure: fiche?.ancienneStructure ?? '', badges: fiche?.badges ?? '' }, listes: {} });
   return { publiable: true, systeme: null, team: { id: team.id, nom: team.nom, fuseau: team.fuseau }, fr: parLangue('fr'), en: parLangue('en'), images: {} };
 }
 

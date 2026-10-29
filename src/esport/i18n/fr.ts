@@ -1424,6 +1424,7 @@ export const fr = {
   'cat.perm.roles.manage': 'Gérer les rôles',
   'cat.perm.membres.trombi.voir': 'Trombinoscope : voir toutes les fiches',
   'cat.perm.membres.trombi.editer': 'Trombinoscope : compléter et corriger les fiches',
+  'cat.perm.membres.badges.gerer': 'Trombinoscope : attribuer les badges',
   'cat.groupe.planning': 'Planning',
   'cat.perm.planning.view': 'Voir',
   'cat.perm.planning.create': 'Créer',

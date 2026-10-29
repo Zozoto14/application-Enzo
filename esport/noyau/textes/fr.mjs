@@ -354,6 +354,7 @@ export const FR = {
   'reseaux.test_salon': 'Message de test : le salon « {salon} » recevra les annonces des posts publiés.',
   'trombi.place_sur': '{place} / {n}',
   'trombi.texte.team': 'Team',
+  'trombi.texte.badges': 'Badges',
   'trombi.texte.elo': 'Elo',
   'trombi.texte.palmares': 'Palmarès',
   'trombi.texte.structures': 'Anciennes structures',

@@ -167,6 +167,9 @@ export const TABLES = [
   // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).
   ['trombi_fiches', 'compte_id'],
   ['trombi_photos', 'compte_id'],
+  // Badges du trombinoscope (migration 0032) : catalogue du club et attributions manuelles.
+  ['trombi_badges', 'id'],
+  ['trombi_badges_membres', 'badge_id, compte_id, portee'],
   // Pings Discord une seule fois et relances par MP (migration 0031) : option de la team, registre des mentions,
   // MP déjà envoyés (idempotence des réessais), joueurs injoignables en MP.
   ['discord_mp_reglages', 'team_id'],
@@ -212,6 +215,11 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
     if (table === 'cm_roles' && lignes.length > 0) {
       await base.executer('DELETE FROM cm_role_permissions', []);
       await base.executer('DELETE FROM cm_roles', []);
+    }
+    // Badges proposés par la migration 0032 : remplacés par le catalogue de l'export (modifié depuis).
+    if (table === 'trombi_badges' && lignes.length > 0) {
+      await base.executer('DELETE FROM trombi_badges_membres', []);
+      await base.executer('DELETE FROM trombi_badges', []);
     }
     if (table === 'sp_etapes' && lignes.length > 0) await base.executer('DELETE FROM sp_etapes', []);
     if (table === 'jeux' && lignes.length > 0) {

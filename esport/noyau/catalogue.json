@@ -41,7 +41,8 @@
         { "cle": "members.remove", "action": "supprimer", "libelle": "Retirer un membre" },
         { "cle": "roles.manage", "action": "special", "libelle": "Gérer les rôles" },
         { "cle": "membres.trombi.voir", "action": "voir", "libelle": "Trombinoscope : voir toutes les fiches" },
-        { "cle": "membres.trombi.editer", "action": "modifier", "libelle": "Trombinoscope : compléter et corriger les fiches" }
+        { "cle": "membres.trombi.editer", "action": "modifier", "libelle": "Trombinoscope : compléter et corriger les fiches" },
+        { "cle": "membres.badges.gerer", "action": "modifier", "libelle": "Trombinoscope : attribuer les badges" }
       ]
     },
     {
@@ -210,7 +211,7 @@
       "description": "Membres, rôles, planning, résumés (rédaction comprise), Discord, journal.",
       "permissions": [
         "team.manage",
-        "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage", "membres.trombi.voir", "membres.trombi.editer",
+        "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage", "membres.trombi.voir", "membres.trombi.editer", "membres.badges.gerer",
         "planning.view", "planning.create", "planning.update", "planning.delete",
         "availability.view_all", "availability.edit_own",
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",

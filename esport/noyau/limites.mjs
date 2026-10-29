@@ -60,6 +60,8 @@ export const LIMITES = {
   // Trombinoscope (migration 0030) : photos envoyées et fiches enregistrées, par compte et par heure.
   trombi_photo: { max: 30, fenetreS: 3600 },
   trombi_fiche: { max: 120, fenetreS: 3600 },
+  // Badges (migration 0032) : créations et attributions, par compte et par heure.
+  trombi_badges: { max: 300, fenetreS: 3600 },
 };
 
 /**

@@ -353,6 +353,7 @@ export const EN = {
   'reseaux.test_salon': 'Test message: the “{salon}” channel will receive announcements of published posts.',
   'trombi.place_sur': '{place} of {n}',
   'trombi.texte.team': 'Team',
+  'trombi.texte.badges': 'Badges',
   'trombi.texte.elo': 'Elo',
   'trombi.texte.palmares': 'Achievements',
   'trombi.texte.structures': 'Former teams',

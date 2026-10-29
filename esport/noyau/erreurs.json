@@ -660,7 +660,21 @@
   "Clé inconnue du profil de jeu de la team.": "Unknown key in the team’s game profile.",
   "Liste illisible.": "Unreadable list.",
   "Élément illisible.": "Unreadable item.",
-  "Image illisible.": "Unreadable image."
+  "Image illisible.": "Unreadable image.",
+  "Donnez un nom au badge.": "Give the badge a name.",
+  "Couleur invalide (#rrggbb).": "Invalid colour (#rrggbb).",
+  "Icône trop longue : un emoji ou un symbole.": "Icon too long: one emoji or symbol.",
+  "Valeur illisible.": "Unreadable value.",
+  "On ne s’attribue pas de badge soi-même.": "You cannot give yourself a badge.",
+  "Badge introuvable.": "Badge not found.",
+  "Un badge porte déjà ce nom.": "A badge already has this name.",
+  "Ce badge n’est pas automatique.": "This badge is not automatic.",
+  "Ordre illisible : donnez tous les badges, une fois chacun.": "Unreadable order: give every badge, once each.",
+  "Badge inconnu.": "Unknown badge.",
+  "Ce badge est automatique : il suit le rôle du club.": "This badge is automatic: it follows the club role.",
+  "Portée illisible.": "Unreadable scope.",
+  "Cette team n’est pas dans votre périmètre, ou le membre n’en fait pas partie.": "This team is outside your scope, or the member is not in it.",
+  "Badge réservé au Fondateur.": "Badge reserved to the Founder."
  },
  "motifs": [
   [
@@ -1002,6 +1016,18 @@
   [
    "^Côté de (\\d+) à (\\d+) px\\.$",
    "Side from $1 to $2 px."
+  ],
+  [
+   "^(\\d+) badges au plus\\.$",
+   "$1 badges at most."
+  ],
+  [
+   "^Liste illisible \\((\\d+) badges au plus\\)\\.$",
+   "Unreadable list ($1 badges at most)."
+  ],
+  [
+   "^(\\d+) badges au plus par membre\\.$",
+   "$1 badges at most per member."
   ]
  ]
 }

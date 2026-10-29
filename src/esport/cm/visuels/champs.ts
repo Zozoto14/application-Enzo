@@ -14,7 +14,7 @@ import type { Calque, CalqueListe, DonneesLangue, DonneesVisuel, Langue, LigneLi
 export const CHAMPS_TEXTE = [
   'team', 'adversaire', 'score', 'score_nous', 'score_eux', 'issue', 'tournoi', 'tour', 'date', 'heure', 'fuseau', 'date_heure', 'date_courte', 'jour',
   'bo', 'format', 'lieu', 'place', 'classement', 'points', 'participants', 'mvp', 'mvp_agent', 'joueur', 'poste', 'semaine', 'bilan', 'cashprize', 'gains',
-  'organisateur', 'genre_match', 'titre', 'phrase', 'jeu', 'club', 'adversaires', 'victoire', 'elo', 'ancienne_structure',
+  'organisateur', 'genre_match', 'titre', 'phrase', 'jeu', 'club', 'adversaires', 'victoire', 'elo', 'ancienne_structure', 'badges',
 ] as const;
 
 /** Champs de chaque ligne d'une liste. */
@@ -112,6 +112,7 @@ export function donneesExemple(systeme: 'serie' | 'classement' = 'serie'): Donne
         poste: t('exemple.poste'),
         elo: '2450',
         ancienne_structure: t('exemple.team'),
+        badges: t('exemple.badges'),
         semaine: t('exemple.semaine'),
         bilan: t('exemple.bilan'),
         cashprize: t('exemple.cashprize'),

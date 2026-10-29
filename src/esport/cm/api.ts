@@ -21,7 +21,9 @@ export type PermissionCm =
   | 'cm.drive.gerer'
   // Trombinoscope de la page Membres (migration 0030).
   | 'membres.trombi.voir'
-  | 'membres.trombi.editer';
+  | 'membres.trombi.editer'
+  // Badges du trombinoscope (migration 0032).
+  | 'membres.badges.gerer';
 /** Le compte a-t-il un droit sur le Drive (dans une liste de permissions CM) ? */
 export const voitDrive = (p: readonly string[]): boolean => p.some(x => x === 'cm.drive.voir' || x === 'cm.drive.envoyer' || x === 'cm.drive.gerer');
 export type Reseau = 'x' | 'instagram' | 'tiktok';

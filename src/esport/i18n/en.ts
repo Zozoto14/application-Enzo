@@ -1290,6 +1290,7 @@ export const en: Record<Cle, string> = {
   'cat.perm.roles.manage': 'Manage roles',
   'cat.perm.membres.trombi.voir': 'Player cards: see all cards',
   'cat.perm.membres.trombi.editer': 'Player cards: complete and correct cards',
+  'cat.perm.membres.badges.gerer': 'Player cards: give badges',
   'cat.groupe.planning': 'Schedule',
   'cat.perm.planning.view': 'View',
   'cat.perm.planning.create': 'Create',

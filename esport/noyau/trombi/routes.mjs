@@ -6,6 +6,11 @@
  *   GET|PATCH           /trombi/fiches/:compte                    (« moi » : sa propre fiche)
  *   PUT|DELETE          /trombi/fiches/:compte/photo              { type, donnees, miniature } (base64)
  *   GET                 /trombi/fiches/:compte/texte              texte d'annonce { fr, en }
+ *   PUT                 /trombi/fiches/:compte/badges             { badges: [{ id, portee? }] } (badges.mjs)
+ *   GET|POST            /trombi/badges                            catalogue des badges ; créer { nom, couleur, icone? }
+ *   PUT                 /trombi/badges/ordre                      { ids } (tout le catalogue, dans l'ordre)
+ *   PATCH|DELETE        /trombi/badges/:id                        { nom?, couleur?, icone?, autoActif? } ; suppression définitive
+ *   POST                /trombi/badges/:id/membres                { comptes, portee?, retirer? } (plusieurs membres d'un coup)
  */
 
 import { echec } from '../outils.mjs';
@@ -24,7 +29,29 @@ const segment = s => {
 export async function routesTrombi({ tb, acteur, chemin, methode: m, lireCorps, limite }) {
   if (chemin !== '/trombi' && !chemin.startsWith('/trombi/')) return undefined;
   if (chemin === '/trombi' && m === 'GET') return tb.liste(acteur);
-  const f = /^\/trombi\/fiches\/([^/]+)(?:\/(photo|texte))?$/.exec(chemin);
+  // Badges (migration 0032).
+  const bd = tb.badges;
+  if (chemin === '/trombi/badges') {
+    if (m === 'GET') return bd.lister(acteur);
+    if (m === 'POST') {
+      const corps = await lireCorps();
+      await limite('trombi_badges', acteur.compte);
+      return bd.creer(acteur, corps);
+    }
+  }
+  if (chemin === '/trombi/badges/ordre' && m === 'PUT') return bd.ordonner(acteur, await lireCorps());
+  const b = /^\/trombi\/badges\/([^/]+)(\/membres)?$/.exec(chemin);
+  if (b) {
+    const id = segment(b[1]);
+    if (b[2] && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('trombi_badges', acteur.compte);
+      return bd.attribuerLot(acteur, id, corps);
+    }
+    if (!b[2] && m === 'PATCH') return bd.modifierBadge(acteur, id, await lireCorps());
+    if (!b[2] && m === 'DELETE') return bd.supprimerBadge(acteur, id);
+  }
+  const f = /^\/trombi\/fiches\/([^/]+)(?:\/(photo|texte|badges))?$/.exec(chemin);
   if (f) {
     const compte = segment(f[1]);
     if (!f[2]) {
@@ -44,6 +71,11 @@ export async function routesTrombi({ tb, acteur, chemin, methode: m, lireCorps, 
       if (m === 'DELETE') return tb.supprimerPhoto(acteur, compte);
     }
     if (f[2] === 'texte' && m === 'GET') return tb.texte(acteur, compte);
+    if (f[2] === 'badges' && m === 'PUT') {
+      const corps = await lireCorps();
+      await limite('trombi_badges', acteur.compte);
+      return tb.attribuerBadges(acteur, compte, corps);
+    }
   }
   throw echec(404, 'route', 'Adresse inconnue.');
 }

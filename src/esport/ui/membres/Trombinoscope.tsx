@@ -3,11 +3,14 @@
  * elo, réseaux — avec recherche et filtres (team, jeu, poste du profil de jeu), puis la FICHE détaillée au clic
  * (FicheTrombi.tsx). Ce que chacun voit est décidé par le serveur (GET /trombi) : le CM et le staff tout leur
  * périmètre, un joueur les membres de ses teams (champs « membres » seulement), chacun sa propre fiche.
+ *
+ * Badges (migration 0032) : puces sous le pseudo (ordre du catalogue, 3 au plus et « +N »), filtre par badge ;
+ * menu « ⋯ » : « Gérer les badges » (catalogue, GestionBadges.tsx) et « Badge à plusieurs » (sélection de cartes).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { apiTrombi, filtrerCartes, postesAffiches, type CarteTrombi, type FiltresTrombi, type Trombinoscope as Donnees } from '../../trombi/api';
@@ -15,16 +18,20 @@ import { trTb, trnTb, type CleTb } from '../../i18n/trombi';
 import { Choix, Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_CONTENU, Pliable, SqueletteCartes, Volet, attenue, couleurTeam, texte, type EtatPresse } from '../design';
 import { FicheTrombi } from './FicheTrombi';
-import { PastilleReseau, PhotoJoueur } from './commun';
+import { GestionBadges } from './GestionBadges';
+import { PastilleReseau, PhotoJoueur, PucesBadges } from './commun';
 
-const FILTRES_VIDES: FiltresTrombi = { recherche: '', team: 'toutes', jeu: 'tous', poste: 'tous' };
+const FILTRES_VIDES: FiltresTrombi = { recherche: '', team: 'toutes', jeu: 'tous', poste: 'tous', badge: 'tous' };
 
 export function Trombinoscope({ theme, client, large, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
   const api = useMemo(() => apiTrombi(client), [client]);
   const [donnees, setDonnees] = useState<Donnees | undefined>();
   const [filtres, setFiltres] = useState<FiltresTrombi>(FILTRES_VIDES);
   const [ouvert, setOuvert] = useState<{ compte: string; edition: boolean } | undefined>();
-  const { erreur, agir } = useAgir();
+  const [gestion, setGestion] = useState(false);
+  const [selection, setSelection] = useState<Set<string> | undefined>();
+  const [badgeLot, setBadgeLot] = useState<string | undefined>();
+  const { erreur, avis, agir, enCours } = useAgir();
 
   const recharger = useCallback(async () => setDonnees(await api.liste()), [api]);
   useEffect(() => {
@@ -38,7 +45,16 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
     for (const j of jeux) for (const r of j.rolesJoueurs) if (!vus.has(r.cle)) vus.set(r.cle, r.nom);
     return [...vus].map(([id, nom]) => ({ id, nom }));
   }, [donnees, filtres.jeu]);
-  const actifs = Number(filtres.team !== 'toutes') + Number(filtres.jeu !== 'tous') + Number(filtres.poste !== 'tous');
+  const actifs = Number(filtres.team !== 'toutes') + Number(filtres.jeu !== 'tous') + Number(filtres.poste !== 'tous') + Number((filtres.badge ?? 'tous') !== 'tous');
+  const droitsBadges = donnees?.droits.badges;
+  // Badges attribuables en lot : manuels, et réservés au Fondateur seulement pour lui.
+  const badgesLot = (donnees?.badges ?? []).filter(b => !b.auto && (!b.reserve || droitsBadges?.fondateur));
+  const lot = (retirer: boolean) =>
+    void agir('lot', async () => {
+      const r = await api.badgeEnLot(badgeLot!, [...(selection ?? [])], { retirer });
+      await recharger();
+      return trnTb('selection.fait', r.modifies);
+    });
   const moi = donnees?.fiches.find(f => f.moi);
   const portee = donnees ? trTb(`portee.${donnees.droits.voir}` as CleTb) : trTb('chargement');
 
@@ -53,9 +69,35 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
         titre={trTb('titre')}
         sous={donnees ? `${trnTb('fiches', donnees.fiches.length)} · ${portee}` : portee}
         action={moi ? <BoutonHub theme={theme} titre={trTb('ma_fiche')} variante="plein" onPress={() => setOuvert({ compte: moi.compte, edition: true })} testID="esport-trombi-ma-fiche" /> : undefined}
+        actions={[
+          droitsBadges?.gerer && { titre: trTb('badges.gerer'), onPress: () => setGestion(true), testID: 'esport-trombi-badges-gerer' },
+          droitsBadges?.attribuer && !selection && { titre: trTb('selection.commencer'), onPress: () => setSelection(new Set()), testID: 'esport-trombi-selection' },
+        ]}
         testID="esport-trombi-entete"
       />
-      <Retours theme={theme} erreur={erreur} prefixe="esport-trombi" />
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-trombi" />
+      {selection ? (
+        <Carte theme={theme} testID="esport-trombi-selection-barre">
+          <View style={{ gap: ESP.s }}>
+            <Text style={{ ...texte(theme, 15), fontWeight: '700' }}>{trnTb('selection.titre', selection.size)}</Text>
+            <Text style={attenue(theme)}>{trTb('selection.aide')}</Text>
+            <Choix theme={theme} libelle={trTb('selection.badge')} valeur={badgeLot} options={badgesLot.map(b => ({ id: b.id, nom: `${b.icone ? `${b.icone} ` : ''}${b.nom}`, couleur: b.couleur }))} onChoisir={setBadgeLot} testID="esport-trombi-selection-badge" />
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
+              <BoutonHub theme={theme} titre={trTb('selection.attribuer')} variante="plein" desactive={!badgeLot || !selection.size || Boolean(enCours)} onPress={() => lot(false)} testID="esport-trombi-selection-attribuer" />
+              <BoutonHub theme={theme} titre={trTb('selection.retirer')} desactive={!badgeLot || !selection.size || Boolean(enCours)} onPress={() => lot(true)} testID="esport-trombi-selection-retirer" />
+              <BoutonHub
+                theme={theme}
+                titre={trTb('selection.terminer')}
+                onPress={() => {
+                  setSelection(undefined);
+                  setBadgeLot(undefined);
+                }}
+                testID="esport-trombi-selection-terminer"
+              />
+            </View>
+          </View>
+        </Carte>
+      ) : null}
       {donnees ? (
         <View style={{ gap: ESP.s }}>
           <Champ theme={theme} libelle={trTb('recherche')} placeholder={trTb('recherche_aide')} valeur={filtres.recherche} onChanger={recherche => setFiltres(f => ({ ...f, recherche }))} maxLength={60} testID="esport-trombi-recherche" />
@@ -80,6 +122,16 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
                 testID="esport-trombi-filtre-jeu"
               />
             ) : null}
+            {donnees.badges.length ? (
+              <Choix
+                theme={theme}
+                libelle={trTb('filtre.badge')}
+                valeur={filtres.badge ?? 'tous'}
+                options={[{ id: 'tous', nom: trTb('filtre.tous') }, ...donnees.badges.filter(b => !b.auto || b.autoActif).map(b => ({ id: b.id, nom: `${b.icone ? `${b.icone} ` : ''}${b.nom}`, couleur: b.couleur }))]}
+                onChoisir={badge => setFiltres(f => ({ ...f, badge }))}
+                testID="esport-trombi-filtre-badge"
+              />
+            ) : null}
             {postes.length ? (
               <Choix theme={theme} libelle={trTb('filtre.poste')} valeur={filtres.poste} options={[{ id: 'tous', nom: trTb('filtre.tous') }, ...postes]} onChoisir={poste => setFiltres(f => ({ ...f, poste }))} testID="esport-trombi-filtre-poste" />
             ) : null}
@@ -100,7 +152,14 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
       {visibles.length ? (
         <Grille min={large ? 200 : 150} gap={large ? ESP.m : ESP.s} testID="esport-trombi-grille">
           {visibles.map(c => (
-            <CarteJoueur key={c.compte} theme={theme} carte={c} large={large} onOuvrir={() => setOuvert({ compte: c.compte, edition: false })} />
+            <CarteJoueur
+              key={c.compte}
+              theme={theme}
+              carte={c}
+              large={large}
+              selection={selection && c.peutBadges ? { coche: selection.has(c.compte), basculer: v => setSelection(s => { const n = new Set(s); if (v) n.add(c.compte); else n.delete(c.compte); return n; }) } : undefined}
+              onOuvrir={() => setOuvert({ compte: c.compte, edition: false })}
+            />
           ))}
         </Grille>
       ) : null}
@@ -118,11 +177,16 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
           />
         </Volet>
       ) : null}
+      {gestion && droitsBadges ? (
+        <Volet theme={theme} visible titre={trTb('badges.gerer')} onFermer={() => setGestion(false)} testID="esport-trombi-badges-volet" largeur={large ? 680 : 560}>
+          <GestionBadges theme={theme} api={api} fondateur={Boolean(droitsBadges.fondateur)} onChange={recharger} />
+        </Volet>
+      ) : null}
     </ScrollView>
   );
 }
 
-function CarteJoueur({ theme, carte: c, large, onOuvrir }: { theme: ThemeHub; carte: CarteTrombi; large: boolean; onOuvrir(): void }) {
+function CarteJoueur({ theme, carte: c, large, selection, onOuvrir }: { theme: ThemeHub; carte: CarteTrombi; large: boolean; selection?: { coche: boolean; basculer(v: boolean): void }; onOuvrir(): void }) {
   const t0 = c.teams[0];
   const couleur = t0 ? couleurTeam(t0.slug) : theme.accent;
   const ligneTeams = c.teams.map(t => `${t.nom} · ${t.jeuNom}`).join(' / ');
@@ -130,20 +194,28 @@ function CarteJoueur({ theme, carte: c, large, onOuvrir }: { theme: ThemeHub; ca
   return (
     <Pressable
       testID={`esport-trombi-carte-${c.compte}`}
-      accessibilityRole="button"
-      accessibilityLabel={trTb('ouvrir_fiche', { pseudo: c.pseudo })}
-      onPress={onOuvrir}
+      accessibilityRole={selection ? 'checkbox' : 'button'}
+      accessibilityState={selection ? { checked: selection.coche } : undefined}
+      accessibilityLabel={selection ? trTb('selection.cocher', { pseudo: c.pseudo }) : trTb('ouvrir_fiche', { pseudo: c.pseudo })}
+      onPress={selection ? () => selection.basculer(!selection.coche) : onOuvrir}
       style={(etat: EtatPresse) => ({
         backgroundColor: theme.surface,
-        borderWidth: 1,
-        borderColor: etat.hovered || etat.focused ? theme.accent : theme.ligne,
+        borderColor: selection?.coche || etat.hovered || etat.focused ? theme.accent : theme.ligne,
+        borderWidth: selection?.coche ? 2 : 1,
         borderRadius: Math.min(theme.rayonGrand, 18),
         padding: large ? ESP.s : ESP.xs,
         gap: ESP.xs,
         opacity: etat.pressed ? 0.85 : 1,
         height: '100%',
       })}>
-      <PhotoJoueur theme={theme} url={c.photo} pseudo={c.pseudo} couleur={couleur} testID={`esport-trombi-carte-${c.compte}-photo`} />
+      <View>
+        <PhotoJoueur theme={theme} url={c.photo} pseudo={c.pseudo} couleur={couleur} testID={`esport-trombi-carte-${c.compte}-photo`} />
+        {selection ? (
+          <View style={{ position: 'absolute', top: ESP.xs, left: ESP.xs, backgroundColor: theme.surface, borderRadius: 6, padding: 2 }}>
+            <Case theme={theme} coche={selection.coche} libelle={trTb('selection.cocher', { pseudo: c.pseudo })} onChanger={selection.basculer} testID={`esport-trombi-carte-${c.compte}-case`} />
+          </View>
+        ) : null}
+      </View>
       <View style={{ gap: 2, paddingHorizontal: ESP.xxs }}>
         <Text style={{ ...texte(theme, large ? 17 : 15), fontWeight: '800' }} numberOfLines={1}>
           {c.pseudo}
@@ -152,6 +224,11 @@ function CarteJoueur({ theme, carte: c, large, onOuvrir }: { theme: ThemeHub; ca
           {ligneTeams || trTb('sans_team')}
         </Text>
       </View>
+      {c.badges.length ? (
+        <View style={{ paddingHorizontal: ESP.xxs }}>
+          <PucesBadges theme={theme} badges={c.badges} max={3} testID={`esport-trombi-carte-${c.compte}-badges`} />
+        </View>
+      ) : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xxs, paddingHorizontal: ESP.xxs }}>
         {postes.slice(0, 3).map(p => (
           <Badge key={p} theme={theme} texte={p} />

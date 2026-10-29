@@ -40,6 +40,7 @@ const fr = {
   // ---- Données d'exemple (aperçu des modèles sans source)
   'exemple.club': 'Mon club',
   'exemple.team': 'Team Alpha',
+  'exemple.badges': 'Capitaine · Streamer',
   'exemple.team2': 'Team Bravo',
   'exemple.adversaire': 'Nova',
   'exemple.adversaires': 'Orion, Vega, Lynx',
@@ -374,6 +375,7 @@ const en: Record<keyof typeof fr, string> = {
 
   'exemple.club': 'My club',
   'exemple.team': 'Team Alpha',
+  'exemple.badges': 'Captain · Streamer',
   'exemple.team2': 'Team Bravo',
   'exemple.adversaire': 'Nova',
   'exemple.adversaires': 'Orion, Vega, Lynx',

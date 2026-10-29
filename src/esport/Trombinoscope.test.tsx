@@ -3,6 +3,8 @@
  * nouvelle entrée dans la navigation (barre du bas du téléphone) ; grille, recherche et filtres ; fiche détaillée
  * (nom réel masqué, palmarès calculé distingué, champs réservés absents pour un joueur) ; édition de sa fiche
  * (réseaux vérifiés avant l'envoi) ; texte d'annonce copié ; règles pures (filtres, adresses des réseaux).
+ * Badges (migration 0032) : puces sur la carte (3 et « +N », ordre du catalogue), filtre par badge, attribution
+ * depuis la fiche, badge à plusieurs membres, catalogue (suppression avec le nombre de membres).
  */
 
 import React from 'react';
@@ -14,7 +16,7 @@ import { oublierSessions, type ClientEsport, type Moi } from './client';
 import { definirLangue } from './i18n';
 import { navEsport } from './ui/CadreEsport';
 import { Esport, fabrique } from './ui/RacineEsport';
-import { filtrerCartes, reseauDeviner, urlPlausible, type CarteTrombi, type FicheTrombi, type Trombinoscope } from './trombi/api';
+import { badgesVisibles, filtrerCartes, reseauDeviner, urlPlausible, type BadgeAffiche, type BadgeCatalogue, type CarteTrombi, type FicheTrombi, type Trombinoscope } from './trombi/api';
 
 const theme = themeHub('nuit');
 const relaisReel = fabrique.relais;
@@ -38,22 +40,35 @@ const carte = (compte: string, pseudo: string, t: typeof teamA, postes: Array<{ 
   elo: null,
   reseaux: [],
   palmares: 0,
+  badges: [],
   peutEditer: false,
+  peutBadges: true,
   moi: false,
   ...extra,
 });
 
+const badge = (id: string, nom: string, position: number, extra: Partial<BadgeCatalogue> = {}): BadgeCatalogue => ({ id, nom, couleur: '#5b8cff', icone: '', position, auto: null, autoActif: true, reserve: false, membres: 1, ...extra });
+const CATALOGUE: BadgeCatalogue[] = [
+  badge('badge-ceo', 'CEO', 0, { auto: 'fondateur', icone: '★', membres: 0 }),
+  badge('badge-capitaine', 'Capitaine', 1, { membres: 2 }),
+  badge('badge-igl', 'IGL', 2),
+  badge('badge-streamer', 'Streamer', 3),
+  badge('badge-rookie', 'Rookie', 4),
+];
+const affiche = (b: BadgeCatalogue, teamNom: string | null = null): BadgeAffiche => ({ id: b.id, nom: b.nom, couleur: b.couleur, icone: b.icone, auto: Boolean(b.auto), teamId: teamNom ? 'team-a' : null, teamNom });
+
 const TROMBI: Trombinoscope = {
-  droits: { voir: 'club', editer: true },
+  droits: { voir: 'club', editer: true, badges: { gerer: true, attribuer: true, fondateur: false } },
+  badges: CATALOGUE,
   teams: [teamA, teamB],
   jeux: [
     { cle: 'valorant', nom: 'Valorant', rolesJoueurs: [{ cle: 'duelliste', nom: 'Duelliste' }, { cle: 'igl', nom: 'IGL' }] },
     { cle: 'autre', nom: 'Autre jeu', rolesJoueurs: [] },
   ],
   fiches: [
-    carte('tom12345', 'Tom', teamA, [{ cle: 'igl', nom: 'IGL' }], { elo: { jeu: 'valorant', jeuNom: 'Valorant', valeur: '2450', rang: 'Immortel 2', pic: '', majLe: '2026-10-01' }, reseaux: [{ reseau: 'x', url: 'https://x.com/Tom_GG', libelle: '' }], palmares: 2 }),
+    carte('tom12345', 'Tom', teamA, [{ cle: 'igl', nom: 'IGL' }], { elo: { jeu: 'valorant', jeuNom: 'Valorant', valeur: '2450', rang: 'Immortel 2', pic: '', majLe: '2026-10-01' }, reseaux: [{ reseau: 'x', url: 'https://x.com/Tom_GG', libelle: '' }], palmares: 2, badges: [affiche(CATALOGUE[1], 'Team Alpha'), affiche(CATALOGUE[2]), affiche(CATALOGUE[3]), affiche(CATALOGUE[4])] }),
     carte('lea12345', 'Léa', teamA, [{ cle: 'duelliste', nom: 'Duelliste' }], { moi: true, peutEditer: true }),
-    carte('zoe12345', 'Zoé', teamB, []),
+    carte('zoe12345', 'Zoé', teamB, [], { badges: [affiche(CATALOGUE[4])] }),
   ],
 };
 
@@ -78,6 +93,10 @@ const ficheTom = (niveau: FicheTrombi['niveau']): FicheTrombi => ({
   },
   structures: [],
   reseaux: [{ reseau: 'x', url: 'https://x.com/Tom_GG', identifiant: 'Tom_GG', libelle: '' }],
+  badges: TROMBI.fiches[0].badges,
+  ...(niveau !== 'membre'
+    ? { attribution: { portees: [{ id: 'club', nom: null }, { id: 'team-a', nom: 'Team Alpha' }], actuelles: [{ id: 'badge-capitaine', portee: 'team-a' }, { id: 'badge-igl', portee: 'club' }], catalogue: CATALOGUE, fondateur: false } }
+    : {}),
 });
 
 const ficheLea: FicheTrombi = {
@@ -109,6 +128,10 @@ function fauxClient(niveau: FicheTrombi['niveau']) {
     if (c === '/trombi/fiches/tom12345') return ficheTom(niveau) as R;
     if (c === '/trombi/fiches/lea12345' && methode === 'PATCH') return { ...ficheLea, version: 2, ...(corps as object) } as R;
     if (c === '/trombi/fiches/lea12345' || c === '/trombi/fiches/moi') return ficheLea as R;
+    if (c === '/trombi/badges' && methode === 'GET') return { droits: TROMBI.droits.badges, badges: CATALOGUE } as R;
+    if (c === '/trombi/badges/badge-capitaine' && methode === 'DELETE') return { badges: CATALOGUE.filter(b => b.id !== 'badge-capitaine'), retires: 2 } as R;
+    if (c === '/trombi/badges/badge-rookie/membres') return { modifies: 2 } as R;
+    if (c === '/trombi/fiches/tom12345/badges') return ficheTom(niveau) as R;
     if (c === '/trombi/fiches/tom12345/texte') return { fr: 'Tom\nTeam : Team Alpha (Valorant) · IGL', en: 'Tom\nTeam: Team Alpha (Valorant) · IGL' } as R;
     return { ok: true } as R;
   };
@@ -151,6 +174,12 @@ describe('règles du trombinoscope', () => {
     expect(filtrerCartes(TROMBI.fiches, { ...f, recherche: 'duel' }).map(c => c.pseudo)).toEqual(['Léa']);
     expect(filtrerCartes(TROMBI.fiches, { ...f, team: 'team-b' }).map(c => c.pseudo)).toEqual(['Zoé']);
     expect(filtrerCartes(TROMBI.fiches, { ...f, jeu: 'valorant', poste: 'igl' }).map(c => c.pseudo)).toEqual(['Tom']);
+    // Badges : filtre et recherche par nom de badge.
+    expect(filtrerCartes(TROMBI.fiches, { ...f, badge: 'badge-rookie' }).map(c => c.pseudo)).toEqual(['Tom', 'Zoé']);
+    expect(filtrerCartes(TROMBI.fiches, { ...f, badge: 'badge-capitaine' }).map(c => c.pseudo)).toEqual(['Tom']);
+    expect(filtrerCartes(TROMBI.fiches, { ...f, recherche: 'streamer' }).map(c => c.pseudo)).toEqual(['Tom']);
+    expect(badgesVisibles([1, 2, 3, 4, 5])).toEqual({ visibles: [1, 2, 3], reste: 2 });
+    expect(badgesVisibles([1])).toEqual({ visibles: [1], reste: 0 });
   });
 
   it('adresses des réseaux : https, domaine du réseau, « autre » hors des réseaux connus', () => {
@@ -250,5 +279,63 @@ describe('page Membres', () => {
       postes: { 'team-a': { postes: ['duelliste', 'igl'], personnages: [] } },
       visibilite: { elos: 'staff', nomReel: 'staff' },
     });
+  });
+
+  it('badges : 3 puces et « +N » sur la carte (ordre du catalogue), filtre par badge', async () => {
+    await monter();
+    const puces = screen.getByTestId('esport-trombi-carte-tom12345-badges');
+    expect(within(puces).getByText('Capitaine · Team Alpha')).toBeTruthy();
+    expect(within(puces).getByText('IGL')).toBeTruthy();
+    expect(within(puces).getByText('Streamer')).toBeTruthy();
+    expect(within(puces).queryByText('Rookie')).toBeNull();
+    expect(screen.getByTestId('esport-trombi-carte-tom12345-badges-plus')).toHaveTextContent('+1');
+    await fireEvent.press(screen.getByTestId('esport-trombi-filtres'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-filtre-badge-badge-rookie'));
+    expect(screen.getByTestId('esport-trombi-carte-zoe12345')).toBeTruthy();
+    expect(screen.queryByTestId('esport-trombi-carte-lea12345')).toBeNull();
+  });
+
+  it('badges : attribution depuis la fiche (badge de team et global), badges automatiques non cochables', async () => {
+    const appels = await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-tom12345'));
+    await screen.findByTestId('esport-trombi-fiche-tom12345');
+    expect(within(screen.getByTestId('esport-trombi-fiche-badges')).getByText('Rookie')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-trombi-fiche-badges-attribuer'));
+    await screen.findByTestId('esport-trombi-badges-membre');
+    expect(screen.queryByTestId('esport-trombi-badges-membre-badge-ceo-club')).toBeNull();
+    expect(screen.getByTestId('esport-trombi-badges-membre-badge-capitaine-team-a').props.accessibilityState?.checked).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-badge-igl-club'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-badge-streamer-club'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-membre-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/fiches/tom12345/badges')).toBe(true));
+    const corps = appels.find(a => a.chemin === '/trombi/fiches/tom12345/badges')!.corps as { badges: Array<{ id: string; portee: string }> };
+    expect(corps.badges).toEqual([{ id: 'badge-capitaine', portee: 'team-a' }, { id: 'badge-streamer', portee: 'club' }]);
+  });
+
+  it('badges : un badge à plusieurs membres ; catalogue (suppression avec le nombre de membres)', async () => {
+    const appels = await monter('staff');
+    await fireEvent.press(screen.getByTestId('esport-menu'));
+    await fireEvent.press(await screen.findByTestId('esport-trombi-selection'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-tom12345'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-carte-zoe12345'));
+    expect(screen.getByText('2 membres sélectionnés')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-trombi-selection-badge-badge-rookie'));
+    expect(screen.queryByTestId('esport-trombi-selection-badge-badge-ceo')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-trombi-selection-attribuer'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/badges/badge-rookie/membres')).toBe(true));
+    expect(appels.find(a => a.chemin === '/trombi/badges/badge-rookie/membres')!.corps).toEqual({ comptes: ['tom12345', 'zoe12345'], retirer: false });
+    expect(await screen.findByText('Badge mis à jour pour 2 membres.')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-trombi-selection-terminer'));
+    // Catalogue.
+    await fireEvent.press(screen.getByTestId('esport-menu'));
+    await fireEvent.press(await screen.findByTestId('esport-trombi-badges-gerer'));
+    await screen.findByTestId('esport-trombi-badges');
+    expect(screen.getByTestId('esport-trombi-badges-badge-ceo-auto')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-badge-capitaine-modifier'));
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-badge-capitaine-supprimer'));
+    expect(screen.getByText('Supprimer définitivement « Capitaine » ? Il sera retiré de 2 membres.')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-trombi-badges-badge-capitaine-supprimer-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/trombi/badges/badge-capitaine' && a.methode === 'DELETE')).toBe(true));
+    expect(await screen.findByText('Badge supprimé : retiré de 2 membres.')).toBeTruthy();
   });
 });

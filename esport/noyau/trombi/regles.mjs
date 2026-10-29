@@ -379,6 +379,8 @@ export function texteFiche(fiche, langue = 'fr') {
   const public_ = c => v[c] === 'membres';
   const sep = langue === 'fr' ? ' : ' : ': ';
   const L = [fiche.pseudo];
+  // Badges (migration 0032) : « Capitaine · Team Alpha, Streamer ».
+  if (fiche.badges?.length) L.push(`${T(langue, 'trombi.texte.badges')}${sep}${fiche.badges.join(', ')}`);
   for (const t of fiche.teams ?? []) {
     const postes = (t.postes ?? []).join(' / ');
     L.push(`${T(langue, 'trombi.texte.team')}${sep}${t.nom}${t.jeuNom ? ` (${t.jeuNom})` : ''}${postes ? ` · ${postes}` : ''}`);

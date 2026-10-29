@@ -17,9 +17,9 @@ import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUui
 import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 
-/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope). */
+/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges). */
 export const ROLES_CM_SYSTEME = Object.freeze({
-  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer', 'cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer', 'membres.trombi.voir', 'membres.trombi.editer'],
+  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer', 'cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer', 'membres.trombi.voir', 'membres.trombi.editer', 'membres.badges.gerer'],
   correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer', 'cm.drive.voir', 'cm.drive.envoyer', 'membres.trombi.voir'],
 });
 

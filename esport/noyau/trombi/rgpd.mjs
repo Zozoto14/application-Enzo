@@ -5,6 +5,8 @@
  *    réseaux, postes, visibilité) et sa photo (image et miniature, en adresse « data: »).
  *  - Suppression du compte : sa fiche et sa PHOTO sont effacées ; il n'est plus l'auteur d'aucune modification
  *    des fiches des autres.
+ *  - Badges (migration 0032) : export des badges attribués au compte (nom, team, date) ; à la suppression, ses
+ *    attributions sont effacées et il n'est plus l'auteur d'aucune attribution ni d'aucun badge du catalogue.
  */
 
 import { jsonOu } from '../outils.mjs';
@@ -27,6 +29,12 @@ export async function exportTrombi(base, compte) {
           modifieeLe: f.maj_le,
         }
       : null,
+    trombinoscopeBadges: (
+      await base.tous(
+        'SELECT b.nom, bm.portee, t.nom AS team_nom, bm.attribue_le FROM trombi_badges_membres bm JOIN trombi_badges b ON b.id = bm.badge_id LEFT JOIN teams t ON t.id = bm.portee WHERE bm.compte_id = ? ORDER BY b.position, b.nom',
+        [compte],
+      )
+    ).map(l => ({ badge: l.nom, team: l.portee === 'club' ? null : (l.team_nom ?? null), attribueLe: l.attribue_le })),
     trombinoscopePhoto: p ? { type: p.type, cote: Number(p.cote), taille: Number(p.taille), image: adresseImage(p.type, p.donnees), miniature: adresseImage(p.type, p.miniature), modifieeLe: p.maj_le } : null,
   };
 }
@@ -38,5 +46,8 @@ export function effacementTrombi(compte) {
     { sql: 'DELETE FROM trombi_fiches WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE trombi_fiches SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     { sql: 'UPDATE trombi_photos SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'DELETE FROM trombi_badges_membres WHERE compte_id = ?', params: [compte] },
+    { sql: 'UPDATE trombi_badges_membres SET attribue_par = NULL WHERE attribue_par = ?', params: [compte] },
+    { sql: 'UPDATE trombi_badges SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
   ];
 }

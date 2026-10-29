@@ -2,6 +2,7 @@
  * Fiche détaillée du trombinoscope : photo grand format, pseudo (nom réel masqué par défaut, selon le droit),
  * teams et jeu pratiqué, postes et personnages (profil de jeu de la team), elo / rang par jeu, palmarès saisi et
  * palmarès CALCULÉ depuis les Tournois / Résultats du club (distingué), anciennes structures, réseaux pro.
+ * Badges (migration 0032) : puces sous le pseudo ; « Badges » (qui attribue) ouvre la liste à cocher (EditeurBadges).
  * Actions : copier le texte d'annonce (FR / EN, prêt pour un post), télécharger la photo, modifier.
  *
  * Mode édition (le joueur pour SA fiche — aussi depuis « Mon profil » —, l'éditeur du staff ou du CM) : photo
@@ -36,7 +37,8 @@ import { trTb, trnTb, type CleTb } from '../../i18n/trombi';
 import { langueCourante } from '../../i18n';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles as communs, useAgir } from '../commun';
 import { Badge, ESP, Squelette, TitreCarte, attenue, couleurTeam, texte, type EtatPresse } from '../design';
-import { PastilleReseau, PhotoJoueur, RESEAUX_AFFICHES } from './commun';
+import { PastilleReseau, PhotoJoueur, PucesBadges, RESEAUX_AFFICHES } from './commun';
+import { EditeurBadges } from './EditeurBadges';
 
 async function copier(t: string): Promise<boolean> {
   const presse = (globalThis as { navigator?: { clipboard?: { writeText(x: string): Promise<void> } } }).navigator?.clipboard;
@@ -80,6 +82,7 @@ export function FicheTrombi({
 }) {
   const [fiche, setFiche] = useState<Fiche | undefined>();
   const [edition, setEdition] = useState(editionInitiale);
+  const [badges, setBadges] = useState(false);
   const { erreur, avis, agir } = useAgir();
   const charger = useCallback(async () => setFiche(await api.fiche(compte)), [api, compte]);
   useEffect(() => {
@@ -111,6 +114,23 @@ export function FicheTrombi({
       erreur={erreur}
       avis={avis}
       onModifier={fiche.peutEditer ? () => setEdition(true) : undefined}
+      onBadges={fiche.attribution ? () => setBadges(b => !b) : undefined}
+      editeurBadges={
+        badges && fiche.attribution ? (
+          <EditeurBadges
+            theme={theme}
+            api={api}
+            fiche={fiche}
+            onFini={f => {
+              setBadges(false);
+              if (f) {
+                setFiche(f);
+                onModifiee?.();
+              }
+            }}
+          />
+        ) : null
+      }
       onCopier={langue =>
         void agir('copie', async () => {
           const t = await api.texte(fiche.compte);
@@ -140,6 +160,8 @@ function VueFiche({
   erreur,
   avis,
   onModifier,
+  onBadges,
+  editeurBadges,
   onCopier,
 }: {
   theme: ThemeHub;
@@ -148,6 +170,8 @@ function VueFiche({
   erreur?: string;
   avis?: string;
   onModifier?(): void;
+  onBadges?(): void;
+  editeurBadges?: React.ReactNode;
   onCopier(langue: 'fr' | 'en'): void;
 }) {
   const [nomVisible, setNomVisible] = useState(false);
@@ -163,6 +187,7 @@ function VueFiche({
           <Text style={{ ...texte(theme, 26), fontWeight: '800' }} accessibilityRole="header" testID="esport-trombi-fiche-pseudo">
             {f.pseudo}
           </Text>
+          <PucesBadges theme={theme} badges={f.badges ?? []} testID="esport-trombi-fiche-badges" />
           {f.nomReel ? (
             nomVisible ? (
               <Text style={attenue(theme, 14)} testID="esport-trombi-fiche-nom-reel">
@@ -192,10 +217,12 @@ function VueFiche({
       </View>
       <View style={communs.ligne}>
         {onModifier ? <BoutonHub theme={theme} titre={trTb('modifier')} variante="plein" onPress={onModifier} testID="esport-trombi-fiche-modifier" /> : null}
+        {onBadges ? <BoutonHub theme={theme} titre={trTb('badges.attribuer')} onPress={onBadges} testID="esport-trombi-fiche-badges-attribuer" /> : null}
         <BoutonHub theme={theme} titre={trTb('copier_fr')} onPress={() => onCopier('fr')} testID="esport-trombi-fiche-copier-fr" />
         <BoutonHub theme={theme} titre={trTb('copier_en')} onPress={() => onCopier('en')} testID="esport-trombi-fiche-copier-en" />
         {f.photo && photoDisponible ? <BoutonHub theme={theme} titre={trTb('telecharger_photo')} onPress={() => telechargerPhoto(f.photo!.url, `${f.pseudo}.${f.photo!.type.split('/')[1] === 'jpeg' ? 'jpg' : f.photo!.type.split('/')[1]}`)} testID="esport-trombi-fiche-photo-telecharger" /> : null}
       </View>
+      {editeurBadges}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-trombi-fiche" />
       {f.elos?.length ? (
         <Section theme={theme} titre={trTb('section.elo')} testID="esport-trombi-fiche-elos">

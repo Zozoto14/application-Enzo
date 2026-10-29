@@ -90,6 +90,44 @@ export interface ReseauFiche {
   identifiant?: string;
   libelle: string;
 }
+/** Badge du catalogue du club (migration 0032). `auto` : badge automatique tiré d'un rôle du club. */
+export type AutoBadge = 'fondateur' | 'cm-responsable' | 'cm-correspondant';
+export interface BadgeCatalogue {
+  id: string;
+  nom: string;
+  couleur: string;
+  icone: string;
+  position: number;
+  auto: AutoBadge | null;
+  autoActif: boolean;
+  /** Réservé au Fondateur : lui seul l'attribue, le retire, le modifie (« Second CEO »). */
+  reserve: boolean;
+  /** Membres qui le portent à la main (GET /trombi/badges). */
+  membres?: number;
+}
+/** Badge affiché sous le pseudo (global au club, ou rattaché à une team : « Capitaine · Team »). */
+export interface BadgeAffiche {
+  id: string;
+  nom: string;
+  couleur: string;
+  icone: string;
+  auto: boolean;
+  teamId: string | null;
+  teamNom: string | null;
+}
+export interface DroitsBadges {
+  gerer: boolean;
+  attribuer: boolean;
+  fondateur?: boolean;
+}
+export interface AttributionBadges {
+  portees: Array<{ id: string; nom: string | null }>;
+  actuelles: Array<{ id: string; portee: string }>;
+  catalogue: BadgeCatalogue[];
+  fondateur: boolean;
+}
+export const PORTEE_CLUB = 'club';
+
 export interface CarteTrombi {
   compte: string;
   pseudo: string;
@@ -98,7 +136,10 @@ export interface CarteTrombi {
   elo: Elo | null;
   reseaux: ReseauFiche[];
   palmares: number;
+  badges: BadgeAffiche[];
   peutEditer: boolean;
+  /** L'acteur peut-il lui attribuer des badges (jamais à soi-même, sauf le Fondateur) ? */
+  peutBadges?: boolean;
   moi: boolean;
 }
 export interface JeuTrombi {
@@ -107,7 +148,8 @@ export interface JeuTrombi {
   rolesJoueurs: ElementCle[];
 }
 export interface Trombinoscope {
-  droits: { voir: 'club' | 'teams' | 'equipe'; editer: boolean };
+  droits: { voir: 'club' | 'teams' | 'equipe'; editer: boolean; badges: DroitsBadges };
+  badges: BadgeCatalogue[];
   teams: Array<{ id: string; nom: string; slug: string; jeu: string; jeuNom: string; logoUrl: string | null }>;
   jeux: JeuTrombi[];
   fiches: CarteTrombi[];
@@ -121,6 +163,8 @@ export interface FicheTrombi {
   version: number;
   majLe: string | null;
   teams: TeamFiche[];
+  badges?: BadgeAffiche[];
+  attribution?: AttributionBadges;
   photo: { url: string; type: string; cote: number; majLe: string } | null;
   champs: Record<ChampVisibilite, boolean>;
   nomReel: string | null;
@@ -158,13 +202,31 @@ export function apiTrombi(client: ClientEsport) {
     // Réponse inattendue (serveur d'une autre version) : liste vide plutôt qu'un écran cassé.
     liste: async (): Promise<Trombinoscope> => {
       const x = await r<Partial<Trombinoscope> | undefined>('/trombi');
-      return { droits: x?.droits ?? { voir: 'equipe', editer: false }, teams: Array.isArray(x?.teams) ? x.teams : [], jeux: Array.isArray(x?.jeux) ? x.jeux : [], fiches: Array.isArray(x?.fiches) ? x.fiches : [] };
+      const droits = x?.droits ?? { voir: 'equipe' as const, editer: false, badges: { gerer: false, attribuer: false } };
+      return {
+        droits: { ...droits, badges: droits.badges ?? { gerer: false, attribuer: false } },
+        badges: Array.isArray(x?.badges) ? x.badges : [],
+        teams: Array.isArray(x?.teams) ? x.teams : [],
+        jeux: Array.isArray(x?.jeux) ? x.jeux : [],
+        fiches: Array.isArray(x?.fiches) ? x.fiches.map(f => ({ ...f, badges: Array.isArray(f.badges) ? f.badges : [] })) : [],
+      };
     },
     fiche: (compte: string) => r<FicheTrombi>(`/trombi/fiches/${e(compte)}`),
     modifier: (compte: string, s: SaisieFiche) => r<FicheTrombi>(`/trombi/fiches/${e(compte)}`, 'PATCH', s),
     photo: (compte: string, p: PhotoEnvoyee) => r<FicheTrombi>(`/trombi/fiches/${e(compte)}/photo`, 'PUT', p),
     supprimerPhoto: (compte: string) => r<FicheTrombi>(`/trombi/fiches/${e(compte)}/photo`, 'DELETE'),
     texte: (compte: string) => r<{ fr: string; en: string }>(`/trombi/fiches/${e(compte)}/texte`),
+    // Badges (migration 0032).
+    attribuerBadges: (compte: string, badges: Array<{ id: string; portee: string }>) => r<FicheTrombi>(`/trombi/fiches/${e(compte)}/badges`, 'PUT', { badges }),
+    catalogueBadges: async (): Promise<{ droits: DroitsBadges; badges: BadgeCatalogue[] }> => {
+      const x = await r<Partial<{ droits: DroitsBadges; badges: BadgeCatalogue[] }> | undefined>('/trombi/badges');
+      return { droits: x?.droits ?? { gerer: false, attribuer: false }, badges: Array.isArray(x?.badges) ? x.badges : [] };
+    },
+    creerBadge: (b: { nom: string; couleur: string; icone?: string; reserve?: boolean }) => r<{ badges: BadgeCatalogue[] }>('/trombi/badges', 'POST', b),
+    modifierBadge: (id: string, b: { nom?: string; couleur?: string; icone?: string; autoActif?: boolean; reserve?: boolean }) => r<{ badges: BadgeCatalogue[] }>(`/trombi/badges/${e(id)}`, 'PATCH', b),
+    supprimerBadge: (id: string) => r<{ badges: BadgeCatalogue[]; retires: number }>(`/trombi/badges/${e(id)}`, 'DELETE'),
+    ordonnerBadges: (ids: string[]) => r<{ badges: BadgeCatalogue[] }>('/trombi/badges/ordre', 'PUT', { ids }),
+    badgeEnLot: (id: string, comptes: string[], o: { portee?: string; retirer?: boolean } = {}) => r<{ modifies: number }>(`/trombi/badges/${e(id)}/membres`, 'POST', { comptes, ...o }),
   };
 }
 export type ApiTrombi = ReturnType<typeof apiTrombi>;
@@ -176,17 +238,20 @@ export interface FiltresTrombi {
   team: string;
   jeu: string;
   poste: string;
+  /** Badge (id du catalogue) ou « tous ». */
+  badge?: string;
 }
 
-/** Filtres du trombinoscope : recherche (pseudo, team, poste, elo), team, jeu pratiqué, poste du profil. */
+/** Filtres du trombinoscope : recherche (pseudo, badge, team, poste, elo), team, jeu pratiqué, poste du profil, badge. */
 export function filtrerCartes(cartes: readonly CarteTrombi[], f: FiltresTrombi): CarteTrombi[] {
   const q = f.recherche.trim().toLocaleLowerCase('fr');
   return cartes.filter(c => {
     const teams = c.teams.filter(t => (f.team === 'toutes' || t.id === f.team) && (f.jeu === 'tous' || t.jeu === f.jeu));
     if ((f.team !== 'toutes' || f.jeu !== 'tous') && teams.length === 0) return false;
     if (f.poste !== 'tous' && !teams.some(t => t.postes.some(p => p.cle === f.poste))) return false;
+    if (f.badge && f.badge !== 'tous' && !(c.badges ?? []).some(b => b.id === f.badge)) return false;
     if (!q) return true;
-    const texte = [c.pseudo, ...c.teams.flatMap(t => [t.nom, t.jeuNom, t.posteLibre ?? '', ...t.postes.map(p => p.nom), ...t.personnages.map(p => p.nom)]), c.elo?.valeur ?? '', c.elo?.rang ?? ''].join(' ');
+    const texte = [c.pseudo, ...(c.badges ?? []).map(b => b.nom), ...c.teams.flatMap(t => [t.nom, t.jeuNom, t.posteLibre ?? '', ...t.postes.map(p => p.nom), ...t.personnages.map(p => p.nom)]), c.elo?.valeur ?? '', c.elo?.rang ?? ''].join(' ');
     return texte.toLocaleLowerCase('fr').includes(q);
   });
 }
@@ -218,4 +283,12 @@ export function urlPlausible(reseau: ReseauTrombi, url: string): boolean {
 /** Réseau deviné d'après l'adresse collée (« autre » si inconnu). */
 export function reseauDeviner(url: string): ReseauTrombi {
   return (Object.keys(DOMAINES) as Array<Exclude<ReseauTrombi, 'autre'>>).find(r => urlPlausible(r, url)) ?? 'autre';
+}
+
+/** Libellé d'un badge affiché (« © Capitaine · Team Alpha »). */
+export const libelleBadge = (b: Pick<BadgeAffiche, 'nom' | 'icone' | 'teamNom'>): string => `${b.icone ? `${b.icone} ` : ''}${b.nom}${b.teamNom ? ` · ${b.teamNom}` : ''}`;
+
+/** Badges visibles d'une carte : les `max` premiers (ordre du catalogue) et le nombre restant (« +N »). */
+export function badgesVisibles<T>(badges: readonly T[], max = 3): { visibles: T[]; reste: number } {
+  return { visibles: badges.slice(0, max), reste: Math.max(0, badges.length - max) };
 }

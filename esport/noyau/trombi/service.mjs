@@ -34,6 +34,7 @@ import {
   texteFiche,
   verifierPhoto,
 } from './regles.mjs';
+import { PORTEE_CLUB, badgesAffiches, libelleBadge, servicesBadges } from './badges.mjs';
 
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 
@@ -41,6 +42,9 @@ const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 const CHAMPS_FICHE = Object.freeze({ nomReel: 'nomReel', presentation: 'presentation', elos: 'elos', palmares: 'palmares', structures: 'structures', reseaux: 'reseaux', postes: null });
 
 export function servicesTrombi({ base, maintenant = () => Date.now() }) {
+  // Badges (migration 0032) : catalogue du club, attributions manuelles et automatiques.
+  const bd = servicesBadges({ base, maintenant });
+
   // ---------------------------------------------------------------- Droits
 
   /**
@@ -155,6 +159,19 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
 
   const avecNomJeu = (elos, jeux) => elos.map(e => ({ ...e, jeuNom: jeux.get(e.jeu)?.nom ?? e.jeu }));
 
+  /** L'acteur peut-il attribuer des badges à ce compte (jamais à lui-même, sauf le Fondateur) ? */
+  function peutAttribuer(acteur, db, compte, teams) {
+    if (compte === acteur.compte && !db.tout) return false;
+    return db.club || teams.some(t => db.teams.has(t));
+  }
+
+  /** Badges affichés d'un compte (teams visibles seulement). */
+  async function badgesDe(compte, teams) {
+    const catalogue = await bd.catalogue();
+    const a = (await bd.attributions([compte], catalogue)).get(compte) ?? [];
+    return { catalogue, attributions: a, affiches: badgesAffiches(a, catalogue, new Map(teams.map(t => [t.team_id, t.team_nom]))) };
+  }
+
   /** `GET /trombi` : cartes visibles, droits, teams et jeux (filtres). */
   async function liste(acteur) {
     const d = await droits(acteur);
@@ -170,6 +187,9 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
     const fiches = new Map((await lignesParIds(base, 'SELECT * FROM trombi_fiches WHERE compte_id', comptes)).map(f => [f.compte_id, ficheDe(f)]));
     const photos = new Map((await lignesParIds(base, 'SELECT compte_id, type, miniature, maj_le FROM trombi_photos WHERE compte_id', comptes)).map(p => [p.compte_id, p]));
     const jeux = await jeuxConnus();
+    const catalogue = await bd.catalogue();
+    const attributions = await bd.attributions(comptes, catalogue);
+    const droitsBadges = await bd.droits(acteur);
     const teams = new Map();
     const cartes = [];
     for (const compte of comptes) {
@@ -192,12 +212,15 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
         elo,
         reseaux: vis.has('reseaux') ? fiche.reseaux.map(r => ({ reseau: r.reseau, url: r.url, libelle: r.libelle ?? '' })) : [],
         palmares: vis.has('palmares') ? fiche.palmares.length : 0,
+        badges: badgesAffiches(attributions.get(compte) ?? [], catalogue, new Map(ts.map(t => [t.id, t.nom]))),
         peutEditer: niveau === 'moi' || niveau === 'editeur',
+        peutBadges: peutAttribuer(acteur, droitsBadges, compte, ls.map(l => l.team_id)),
         moi: compte === acteur.compte,
       });
     }
     return {
-      droits: { voir: d.tout || d.clubVoir ? 'club' : d.voir.size ? 'teams' : 'equipe', editer: d.tout || d.clubEditer || d.editer.size > 0 },
+      droits: { voir: d.tout || d.clubVoir ? 'club' : d.voir.size ? 'teams' : 'equipe', editer: d.tout || d.clubEditer || d.editer.size > 0, badges: bd.resume(droitsBadges) },
+      badges: catalogue,
       teams: [...teams.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
       jeux: [...jeux.values()].filter(j => [...teams.values()].some(t => t.jeu === j.cle)).map(j => ({ cle: j.cle, nom: j.nom, rolesJoueurs: j.rolesJoueurs })),
       fiches: cartes,
@@ -274,6 +297,11 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
     const editeur = moi || ctx.niveau === 'editeur';
     const teams = teamsCarte(ctx.visibles, fiche, jeux);
     // Jeux proposés à la saisie (elo, palmarès, structures) ; profils des teams du joueur (postes, personnages).
+    const b = await badgesDe(ctx.compte, ctx.visibles);
+    const db = await bd.droits(acteur);
+    const peutBadges = peutAttribuer(acteur, db, ctx.compte, ctx.toutes.map(a => a.team_id));
+    // Portées où l'acteur attribue : le club et les teams du membre (toutes pour le club, les siennes sinon).
+    const portees = peutBadges ? [PORTEE_CLUB, ...ctx.toutes.filter(a => db.club || db.teams.has(a.team_id)).map(a => a.team_id)] : [];
     const profils = editeur ? ctx.toutes.map(a => ({ teamId: a.team_id, jeu: a.jeu, rolesJoueurs: jeux.get(a.jeu)?.rolesJoueurs ?? [], personnages: jeux.get(a.jeu)?.personnages ?? [] })) : undefined;
     return {
       compte: ctx.compte,
@@ -284,6 +312,18 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
       version: fiche.version,
       majLe: fiche.majLe,
       teams,
+      badges: b.affiches,
+      ...(peutBadges
+        ? {
+            attribution: {
+              portees: portees.map(p => ({ id: p, nom: p === PORTEE_CLUB ? null : ctx.toutes.find(a => a.team_id === p)?.team_nom ?? p })),
+              // Hors badges réservés au Fondateur (pour les autres) : intacts côté serveur.
+              actuelles: b.attributions.filter(a => !a.auto && portees.includes(a.portee) && (db.tout || !b.catalogue.find(c => c.id === a.badge)?.reserve)).map(a => ({ id: a.badge, portee: a.portee })),
+              catalogue: b.catalogue,
+              fondateur: db.tout,
+            },
+          }
+        : {}),
       photo: photo ? { url: adresseImage(photo.type, photo.donnees), type: photo.type, cote: Number(photo.cote), majLe: photo.maj_le } : null,
       champs: Object.fromEntries(CHAMPS_VISIBILITE.map(c => [c, vis.has(c)])),
       nomReel: vis.has('nomReel') ? fiche.nomReel : null,
@@ -393,6 +433,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
     const jeux = await jeuxConnus();
     const source = {
       pseudo: ctx.pseudo,
+      badges: (await badgesDe(ctx.compte, ctx.visibles)).affiches.map(libelleBadge),
       teams: teamsCarte(ctx.visibles, fiche, jeux).map(t => ({ nom: t.nom, jeuNom: t.jeuNom, postes: t.postes.length ? t.postes.map(p => p.nom) : t.posteLibre ? [t.posteLibre] : [] })),
       elos: avecNomJeu(fiche.elos, jeux),
       palmares: fiche.palmares,
@@ -404,7 +445,15 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
     return { fr: texteFiche(source, 'fr'), en: texteFiche(source, 'en') };
   }
 
-  return { droits, liste, detail, modifier, changerPhoto, supprimerPhoto, texte };
+  /** `PUT /trombi/fiches/:compte/badges` : attribue (dans le périmètre de l'acteur), puis rend la fiche. */
+  async function attribuerBadges(acteur, id, corps) {
+    const compte = id === 'moi' ? acteur.compte : id;
+    const ctx = await contexteFiche(acteur, compte);
+    await bd.attribuer(acteur, ctx.compte, corps);
+    return detailDe(acteur, ctx);
+  }
+
+  return { droits, liste, detail, modifier, changerPhoto, supprimerPhoto, texte, attribuerBadges, badges: bd };
 }
 
 /**
@@ -412,14 +461,20 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
  * elo du jeu de la team, dernière ancienne structure — seulement ce que tous les membres peuvent voir.
  */
 export async function trombiPourVisuel(base, teamId, compte) {
+  const team = await base.premier('SELECT nom, jeu FROM teams WHERE id = ?', [teamId]);
+  // Badges (migration 0032) : ceux du club et ceux de CETTE team.
+  const bd = servicesBadges({ base });
+  const catalogue = await bd.catalogue();
+  const badges = badgesAffiches(((await bd.attributions([compte], catalogue)).get(compte) ?? []).filter(a => a.portee === PORTEE_CLUB || a.portee === teamId), catalogue, new Map(team ? [[teamId, team.nom]] : []))
+    .map(b => b.nom)
+    .join(' · ');
   const l = await base.premier('SELECT postes, elos, structures, visibilite FROM trombi_fiches WHERE compte_id = ?', [compte]);
-  if (!l) return null;
-  const team = await base.premier('SELECT jeu FROM teams WHERE id = ?', [teamId]);
+  if (!l) return badges ? { postes: [], elo: '', ancienneStructure: '', badges } : null;
   const j = team ? await base.premier('SELECT donnees FROM jeux WHERE cle = ?', [team.jeu]) : null;
   const roles = validerDonnees(jsonOu(j?.donnees, {}), { tolerant: true }).donnees.rolesJoueurs;
   const vis = lireVisibiliteStockee(jsonOu(l.visibilite, {}));
   const postes = (jsonOu(l.postes, {})[teamId]?.postes ?? []).map(c => roles.find(r => r.cle === c)?.nom ?? c);
   const elo = vis.elos === 'membres' ? jsonOu(l.elos, []).find(e => e.jeu === team?.jeu) : null;
   const structure = vis.structures === 'membres' ? jsonOu(l.structures, [])[0] : null;
-  return { postes, elo: elo ? [elo.rang, elo.valeur].filter(Boolean).join(' · ') : '', ancienneStructure: structure?.structure ?? '' };
+  return { postes, elo: elo ? [elo.rang, elo.valeur].filter(Boolean).join(' · ') : '', ancienneStructure: structure?.structure ?? '', badges };
 }

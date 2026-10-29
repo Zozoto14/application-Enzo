@@ -9,6 +9,8 @@
 import { jsonOu } from '../outils.mjs';
 
 export const TYPES_TROMBI = ['trombi.fiche_modifiee', 'trombi.photo_modifiee', 'trombi.photo_supprimee'];
+/** Badges (migration 0032) : catalogue et attributions, au journal (sans team), sans notification. */
+export const TYPES_BADGES = ['trombi.badge_cree', 'trombi.badge_modifie', 'trombi.badge_supprime', 'trombi.badge_attribue', 'trombi.badge_retire'];
 
 export async function abonneTrombi(base, ev) {
   if (!TYPES_TROMBI.includes(ev.type)) return;
