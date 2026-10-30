@@ -3,6 +3,28 @@
 Public : le Fondateur (installation) et les responsables de team (réglages). Installation pas à pas :
 [o2switch.md](../o2switch.md), partie H. Dépôt, PDF, boîte du rédacteur : [resumes.md](resumes.md).
 
+## 30 octobre 2026 : vos réunions ne quittent plus le serveur (confidentialité)
+
+Décision du Fondateur : « Non, ce n'est pas OK que ça envoie mes réunions à NVIDIA. » Jusqu'ici, la relecture par l'IA
+passait par l'ordre « léger » (`IA_ORDRE_LEGER` = `api2` : NVIDIA gpt-oss-20b en tête), et l'IA locale étant tuée par
+l'hébergeur, **le texte des réunions partait chez NVIDIA**. Désormais (règle du connecteur, voir
+[ia-api.md](ia-api.md) partie 2 bis) :
+
+- **Relecture IA = IA locale seulement**, quel que soit l'ordre de repli. Sans IA locale utilisable (pas installée, ou
+  « indisponible sur cet hébergement »), **pas de relecture** : la transcription garde le **nettoyage sans IA**
+  (anti-répétitions, génériques inventés, annotations) et l'écran affiche « **Relecture IA désactivée : aucune IA
+  locale disponible ; vos réunions ne quittent pas le serveur** » (Paramètres de la team et transcription prête).
+- **L'API audio externe** (`TRANSCRIPTION_API=openai`) n'est **jamais** utilisée, même configurée, tant que le
+  Fondateur ne l'a pas **explicitement autorisée** (Administration IA › Confidentialité › « Transcription des
+  réunions » › « Autoriser l'envoi à un service externe »). Sans cette autorisation : le mode « externe » n'est pas
+  proposé, `POST …/transcription/externe` répond 503, et les demandes déjà en file « externe » repassent « à
+  transcrire » sans que rien ne soit envoyé.
+- Le Fondateur peut lever la règle pour la relecture seule (« Relecture par l'IA des transcriptions ») : la relecture
+  peut alors utiliser l'API configurée quand l'IA locale manque. Chaque changement est journalisé.
+- Aucune autre fonction n'envoie le contenu des réunions à une API : le pré-résumé est calculé sans IA, le PDF sur le
+  serveur, la transcription dans le navigateur reste dans le navigateur (seuls la bibliothèque et le modèle Whisper
+  sont téléchargés), et le bot Discord n'annonce que le **titre** d'une réunion.
+
 ## 30 octobre 2026 : le calcul revient DANS le processus Node
 
 **Constat sur o2switch (journaux réels)** : l'ancien moteur ONNX (Whisper dans le processus Node) a transcrit sans
@@ -26,7 +48,7 @@ laisse calculer `node`.
   détectée ; **découpage dans les silences** (morceaux ≤ 30 s coupés au moment le plus calme), **zone de parole seule**
   (détection par l'énergie, silence jamais confié à Whisper), **marge reprise** (1,5 s) quand la coupe tombe en
   pleine parole, recollée sans doublon ; filtres anti-hallucination et nettoyage ; écho du prompt écarté ;
-  **relecture par l'IA** via le connecteur (`discuterPour('correction', …)`).
+  **relecture par l'IA locale** via le connecteur (`discuterPour('correction', …)`, tâche confidentielle).
 - **ffmpeg** ne sert que quelques secondes à lire la vidéo (il a toujours fonctionné, y compris avec l'ancien moteur) ;
   s'il était arrêté de force, l'erreur le dit (`ffmpeg a été arrêté (signal SIGKILL…)`) et un nouvel essai a lieu ;
   un WAV se lit sans lui.
@@ -146,7 +168,7 @@ Annotations retirées ([Musique], (rires), ♪), **boucles** coupées (un groupe
 répété 4 fois ou plus), **génériques inventés** retirés (« Sous-titres réalisés par la communauté d'Amara.org »,
 « Merci d'avoir regardé »…), segment identique au précédent retiré.
 
-### 7. Relecture par l'IA (post-correction), active par défaut si une IA est configurée
+### 7. Relecture par l'IA (post-correction), active par défaut si l'IA LOCALE est disponible
 
 - Après la transcription, l'IA relit le texte **par lots de ~16 segments** : orthographe, grammaire, ponctuation,
   majuscules et mots mal reconnus évidents (surtout ceux du **glossaire** : pseudos, agents, maps). Consigne stricte :
@@ -155,14 +177,16 @@ répété 4 fois ou plus), **génériques inventés** retirés (« Sous-titres r
   au plus ~20 % de mots nouveaux (hors corrections d'orthographe et glossaire), au plus ~25 % de mots perdus. Une
   ligne refusée reste brute.
 - Passe par le **connecteur IA** (jamais d'appel direct à un moteur) : répartiteur `creerIaDepuisEnv(…).discuterPour(
-  'correction', …)`, tâche **légère** dont l'ordre de repli se règle dans l'Administration IA (`IA_ORDRE_LEGER` :
-  API secondaire, API principale, IA locale… voir [ia-api.md](ia-api.md)). L'**IA locale** y est branchée avec le même
-  gestionnaire « un seul moteur » (rôle « transcription »). Attention : avec une API, le texte de la réunion part chez
-  le fournisseur ; mettez `local` en tête de `IA_ORDRE_LEGER` pour le garder sur le serveur. Si aucun moteur ne répond,
-  la relecture s'arrête et le reste est gardé brut : la transcription n'échoue jamais pour ça.
+  'correction', …)`, tâche **confidentielle** : **IA locale seulement**, quels que soient `IA_ORDRE_LEGER` et l'ordre
+  de l'Administration IA (voir [ia-api.md](ia-api.md), partie 2 bis). L'**IA locale** y est branchée avec le même
+  gestionnaire « un seul moteur » (rôle « transcription »). Sans IA locale : **pas de relecture**, message « Relecture
+  IA désactivée : aucune IA locale disponible ; vos réunions ne quittent pas le serveur » (le texte n'est jamais
+  envoyé à une API, sauf levée explicite par le Fondateur). Si l'IA locale cesse de répondre en cours de route, la
+  relecture s'arrête et le reste est gardé brut : la transcription n'échoue jamais pour ça.
 - La **version brute** est gardée (`transcriptions.segments_bruts`) : l'éditeur bascule **« Relu par l'IA » / « Brut
   (Whisper) »** ; enregistrer la version brute en fait le texte de la transcription.
-- Désactivable par team (Paramètres) ou pour tout le serveur (`TRANSCRIPTION_CORRECTION=non`).
+- Désactivable par team (Paramètres) ou pour tout le serveur (`TRANSCRIPTION_CORRECTION=non`). Une clé d'API seule
+  ne la rend plus disponible.
 
 ### 8. Un seul moteur lourd à la fois (file commune avec l'IA locale)
 
@@ -188,8 +212,10 @@ donc rien plutôt qu'un étiquetage faux.
 
 ### 11. API externe (compatible OpenAI `audio/transcriptions`)
 
-Toujours disponible (`TRANSCRIPTION_API=openai`…) ; elle reçoit maintenant le même **prompt de vocabulaire**
-(champ `prompt`) et `temperature=0`, et sa réponse passe par les mêmes garde-fous.
+**Désactivée par défaut, même configurée** (`TRANSCRIPTION_API=openai`…) : elle envoie l'audio de la réunion chez le
+fournisseur, donc elle ne sert que si le Fondateur l'a **explicitement autorisée** (Administration IA ›
+Confidentialité › « Transcription des réunions »). Elle reçoit alors le même **prompt de vocabulaire** (champ
+`prompt`) et `temperature=0`, et sa réponse passe par les mêmes garde-fous.
 
 ## Réglages (`~/.appdashboard/esport.env`, tous facultatifs)
 

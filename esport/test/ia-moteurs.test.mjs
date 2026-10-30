@@ -254,13 +254,14 @@ test('répartiteur : ordre par tâche, 429 → moteur suivant, erreur de la dema
   // Tâche lourde : Mistral (principal) ; tâche légère : gpt-oss (secondaire).
   assert.equal((await r.discuterPour('brouillon', [{ role: 'user', content: 'x' }])).moteur, 'api');
   assert.equal((await r.discuterPour('traduction', [{ role: 'user', content: 'x' }])).moteur, 'api2');
-  assert.equal((await r.discuterPour('transcription', [{ role: 'user', content: 'x' }])).moteur, 'api2');
+  // Transcription : tâche CONFIDENTIELLE (réunions), IA locale seulement (test dédié : ia-confidentialite.test.mjs).
+  assert.equal((await r.discuterPour('transcription', [{ role: 'user', content: 'x' }])).moteur, 'local');
   // gpt-oss limité (429) : Mistral prend le relais ; puis les deux : l'IA locale.
   etat.api2 = '429';
   assert.equal((await r.discuterPour('cm', [{ role: 'user', content: 'x' }])).moteur, 'api');
   etat.api = '500';
   assert.equal((await r.discuterPour('cm', [{ role: 'user', content: 'x' }])).moteur, 'local');
-  assert.equal(appelsLocaux.length, 1);
+  assert.equal(appelsLocaux.length, 2);
   // Cible imposée : pas de repli.
   assert.equal((await r.discuterPour('cm', [{ role: 'user', content: 'x' }], { cible: 'api' }).catch(x => x)).code, 'ia-injoignable');
   // Ordre imposé pour un appel.

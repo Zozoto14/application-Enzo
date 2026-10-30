@@ -197,7 +197,7 @@ export interface PropositionJeu {
 export type ModeIa = 'local' | 'api' | 'local-api';
 /** Moteurs de l'IA : API principale, API secondaire, IA locale (docs/esport/ia-api.md). */
 export type MoteurIa = 'api' | 'api2' | 'local';
-/** Tâches qui ont chacune leur ordre de repli : profils de jeu, tâches légères (traductions, posts CM, transcription). */
+/** Tâches qui ont chacune leur ordre de repli : profils de jeu, tâches légères (traductions, posts CM). */
 export type TacheIa = 'profils' | 'leger';
 export type OrdresIa = Record<TacheIa, MoteurIa[]>;
 /** Un moteur dans l'Administration IA : jamais la valeur de la clé, seulement présente ou absente. */
@@ -254,6 +254,12 @@ export interface EtatTranscriptionAdmin {
   file: Record<string, number>;
   bloques: number;
 }
+/** Tâche confidentielle (réunions, suivi, strats) : IA locale seulement, sauf levée par le Fondateur. */
+export type TacheConfidentielle = 'transcription' | 'correction' | 'resumes' | 'suivi' | 'strats';
+export interface ConfidentialiteIa {
+  locales: Array<{ cle: TacheConfidentielle; libelle: string; externeAutorise: boolean; le: string | null }>;
+  externes: Array<{ cle: string; libelle: string }>;
+}
 export interface EtatIa {
   configure: boolean;
   raison: string | null;
@@ -278,6 +284,8 @@ export interface EtatIa {
   /** Ordre de repli de chaque tâche (réglé ici, sinon IA_ORDRE / IA_ORDRE_LEGER). */
   ordres?: OrdresIa;
   ordresDefaut?: OrdresIa;
+  /** Tâches qui restent sur le serveur (IA locale seulement) et celles qui peuvent partir chez le fournisseur. */
+  confidentialite?: ConfidentialiteIa;
   reglages: { quotaAppels: number; quotaAppelsApi2?: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa; ordres?: OrdresIa };
   usage: { mois: string; appels: number; appelsApi2?: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondAppelsApi2?: number; plafondVerifications: number };
   dernierAppel: { le: string; genre: string; statut: string; fournisseur?: string | null; modele: string | null; dureeMs: number | null; erreur: string | null; jeu: string | null } | null;
@@ -331,7 +339,7 @@ export function apiJeux(client: ClientEsport) {
     decider: (cle: string, d: { acceptees: string[]; refusees: string[]; corrections?: Record<string, unknown> }) =>
       client.requete<{ acceptees: number; refusees: number; obsoletes: number; jeu: ProfilJeu }>(`${j(cle)}/propositions/decider`, 'POST', d),
     etatIa: () => client.requete<EtatIa>('/jeux/ia'),
-    reglerIa: (r: Partial<Omit<EtatIa['reglages'], 'ordres'>> & { ordres?: Partial<Record<TacheIa, MoteurIa[] | null>> }) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
+    reglerIa: (r: Partial<Omit<EtatIa['reglages'], 'ordres'>> & { ordres?: Partial<Record<TacheIa, MoteurIa[] | null>>; externes?: Partial<Record<TacheConfidentielle, boolean>> }) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
     /**
      * Test d'un moteur. Le serveur répond au plus après 10 s ; un test plus long (modèle à raisonnement, IA locale qui
      * charge son modèle) continue en tâche de fond et son résultat est demandé toutes les 3 s (6 min au plus).

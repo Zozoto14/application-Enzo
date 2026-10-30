@@ -38,6 +38,7 @@ import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mj
 import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
 import * as connecteurIa from '../noyau/ia/connecteur.mjs';
 import { chargerIaLocale } from './ia-locale/service.mjs';
+import { lireHebergement } from './ia-locale/hebergement.mjs';
 
 /**
  * Réglages de la transcription sur le serveur, avec l'état de l'installation (moteurs et modèles prêts ?
@@ -47,16 +48,28 @@ export function chargerTranscriptionServeur(env = process.env, iaLocale = null) 
   const c = configTranscriptionServeur(env);
   if (!c.dossierModeles) c.dossierModeles = dossierModelesParDefaut();
   const etat = etatInstallation(c);
-  // Relecture possible : IA locale installée, ou une clé d'API configurée (répartiteur IA, tâche « correction »).
+  // Relecture (tâche CONFIDENTIELLE « correction », noyau/ia/confidentialite.mjs) : IA LOCALE seule, installée et pas
+  // déclarée « indisponible sur cet hébergement ». Une clé d'API ne suffit pas : elle ne sert que si le Fondateur a
+  // explicitement autorisé l'envoi de cette tâche à un service externe (réglage en base, lu par resumes.mjs).
   const api = connecteurIa.configIa(env);
-  const iaPrete = Boolean(iaLocale?.installation?.installe) || Boolean(api.actif) || Boolean(api.secondaire?.actif);
+  let localPrete = Boolean(iaLocale?.installation?.installe);
+  if (localPrete && iaLocale?.dossier) {
+    try {
+      localPrete = !lireHebergement(iaLocale.dossier, { max: iaLocale.tuesMax }).indisponible;
+    } catch {
+      // État illisible : l'IA locale est supposée utilisable (le répartiteur refusera proprement sinon).
+    }
+  }
+  const relecture = c.correction !== 'non';
   return {
     ...c,
     disponible: etat.installe,
     raison: etat.raison ?? null,
     qualites: etat.qualites,
     vitesses: etat.vitesses,
-    correctionDisponible: c.correction !== 'non' && iaPrete,
+    correctionDisponible: relecture && localPrete,
+    // Une API est configurée : utilisable pour la relecture SEULEMENT si le Fondateur l'a autorisé (base).
+    correctionApi: relecture && (Boolean(api.actif) || Boolean(api.secondaire?.actif)),
   };
 }
 

@@ -26,7 +26,7 @@ remplacez `nvapi-REMPLACER-…` par vos clés (build.nvidia.com › votre modèl
 IA_API_URL=https://integrate.api.nvidia.com/v1
 IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
 IA_MODELE=mistralai/mistral-large-4-1t-a52b
-# Moteur secondaire : NVIDIA, gpt-oss-20b (traductions, posts CM, post-correction des transcriptions)
+# Moteur secondaire : NVIDIA, gpt-oss-20b (traductions, posts CM ; JAMAIS les réunions, voir partie 2 bis)
 IA_API2_URL=https://integrate.api.nvidia.com/v1
 IA_API2_CLE=nvapi-REMPLACER-cle-du-modele-secondaire
 IA_MODELE2=openai/gpt-oss-20b
@@ -50,7 +50,7 @@ Lignes facultatives (le suffixe `API2` règle le secondaire de la même façon) 
 | `IA_IPV4` | `oui` : connexions aux API en **IPv4 seulement** (hébergeur dont l'IPv6 sortante est cassée ; commun aux deux moteurs). |
 | `IA_API_IMAGES` | `oui` / `non` : le modèle lit-il les images (défaut : profil du modèle ; Mistral Large 4 : oui). |
 | `IA_ORDRE` | Ordre de repli des **profils de jeu** (défaut `api,api2,local`). |
-| `IA_ORDRE_LEGER` | Ordre de repli des **tâches légères** (défaut `api2,api,local`). |
+| `IA_ORDRE_LEGER` | Ordre de repli des **tâches légères** (défaut `api2,api,local`). Sans effet sur les tâches confidentielles (réunions : IA locale seulement, partie 2 bis). |
 | `IA_RECHERCHE` | `serveur` (défaut), `modele`, `aucune` : voir [profils-jeu.md](profils-jeu.md). |
 
 Un moteur sans clé (ou sans modèle) est simplement **ignoré** dans l'ordre de repli.
@@ -63,7 +63,8 @@ Deux catégories de tâches, chacune avec son ordre (réglé dans **Administrati
 | Tâche (`discuterPour`) | Catégorie | Défaut |
 | --- | --- | --- |
 | `brouillon`, `verification`, `sources`, `test`, `profils` | **profils** | API principale (Mistral Large) → secondaire → IA locale |
-| `traduction`, `cm`, `transcription`, `correction`, `leger` (et toute tâche inconnue) | **leger** | API secondaire (gpt-oss-20b) → principale → IA locale |
+| `traduction`, `cm`, `leger` (et toute tâche inconnue non confidentielle) | **leger** | API secondaire (gpt-oss-20b) → principale → IA locale |
+| `transcription`, `correction`, `resumes`, `suivi`, `strats` (et alias : voir 2 bis) | **confidentielle** | **IA locale seulement**, quel que soit l'ordre |
 
 **Quand passe-t-on au moteur suivant ?** Quand le moteur est absent (pas de clé), en panne (5xx, injoignable, délai
 dépassé, réponse illisible), **limité par le fournisseur (HTTP 429)**, à son **plafond mensuel** (Administration IA),
@@ -82,6 +83,42 @@ repris** avec le groupe suivant. Un repli vers l'IA locale est confié au **proc
 
 L'ancien réglage « Moteur de l'IA » (IA locale / Clé API / Locale d'abord) reste accepté par l'API (`mode`) : il fixe
 l'ordre des profils (`local` → `local` ; `api` → `api,api2` ; `local-api` → `local,api,api2`).
+
+## 2 bis. Confidentialité : ce qui ne quitte JAMAIS le serveur
+
+Décision du Fondateur (30 octobre 2026) : « Non, ce n'est pas OK que ça envoie mes réunions à NVIDIA. »
+
+Le **contenu des réunions** (audio, transcription brute, texte relu, résumés, PDF), les **notes du staff / suivi des
+joueurs** et les **strats** ne sont **jamais envoyés à un service externe** par défaut. La règle est dans le
+connecteur lui-même (`esport/noyau/ia/confidentialite.mjs`, appliquée par `creerRepartiteurIa`) :
+
+| Tâche confidentielle | Noms acceptés par `discuterPour` | Moteurs |
+| --- | --- | --- |
+| `transcription` | `transcription`, `audio` (et l'API audio externe, voir [transcription.md](transcription.md)) | IA locale seulement |
+| `correction` | `correction`, `relecture`, `correction-transcription` | IA locale seulement |
+| `resumes` | `resume`, `resumes`, `reunion`, `reunions`, `pre-resume` | IA locale seulement |
+| `suivi` | `suivi`, `suivi-joueurs`, `notes-staff`, `notes` | IA locale seulement |
+| `strats` | `strats`, `strat`, `playbook` | IA locale seulement |
+
+Par prudence, **tout nom de tâche qui contient** « transcri », « reunion », « résum », « meeting », « suivi », « staff »,
+« strat », « playbook », « correction » ou « relecture » est aussi traité comme confidentiel.
+
+- Pour ces tâches, `discuterPour` n'essaie **que l'IA locale**, **indépendamment** de `IA_ORDRE`, `IA_ORDRE_LEGER`, de
+  l'ordre choisi dans l'Administration IA, et même si l'appelant impose `cible: 'api2'` ou `moteurs: ['api']`.
+- Sans IA locale prête (pas installée, ou « indisponible sur cet hébergement » parce que l'hébergeur la tue) : refus
+  `503 ia-confidentielle-sans-local` (« … Rien n'a été envoyé à un service externe. »), **aucun appel réseau**. La
+  relecture des transcriptions est alors simplement **absente** (voir [transcription.md](transcription.md)).
+- **Peuvent partir chez le fournisseur** (aucune donnée de réunion) : **profils de jeu** (brouillons, vérifications,
+  sources), **traductions**, **textes des posts CM**.
+
+**Lever la règle (Fondateur seulement, tâche par tâche)** : Administration IA › carte **« Confidentialité : ce qui
+quitte le serveur »** › interrupteur **« Autoriser l'envoi à un service externe »** (désactivé par défaut, avertissement
+et confirmation). Stocké en base (`ia_reglages`, ligne `externe_<tâche>` = `1`), **journalisé** (événement
+`ia.confidentialite_changed` dans le journal d'activité, plus une ligne au journal du serveur). Toute autre valeur, ou
+une base illisible, vaut **refus**. API : `PUT /jeux/ia/reglages` `{ "externes": { "correction": true } }` (403 pour
+tout autre compte que le Fondateur).
+
+Tests : `esport/test/ia-confidentialite.test.mjs` (échoue si une tâche confidentielle peut atteindre `api` / `api2`).
 
 ## 3. Spécificités NVIDIA et modèles à raisonnement
 
@@ -129,16 +166,18 @@ const r = await ia.discuterPour('leger', [
 lisent les images (`images: true` : Mistral Large 4, ou `IA_API_IMAGES=oui`) les reçoivent ; les autres sont sautés
 (`ia-image-non-geree` si aucun). L'IA locale ne lit pas les images.
 
-## 5. Utiliser l'IA depuis un autre module (traductions, CM, transcription)
+## 5. Utiliser l'IA depuis un autre module (traductions, CM ; réunions : IA locale seulement)
 
 ```js
 // Avec la base (app, cron) : ordre de l'Administration IA, appels comptés et plafonnés par moteur.
 const r = await servicesJeux({ base, ia, ... }).discuterPour('traduction', messages, { json: false, maxJetons: 800 });
 
-// Sans le service (processus de fond de la transcription…) : ordre de l'environnement.
+// Sans le service (processus de fond de la transcription…) : ordre de l'environnement ; `externeAutorise` lit
+// les levées du Fondateur (sans lui : rien n'est autorisé, tâche confidentielle = IA locale seulement).
 import { creerIaDepuisEnv, creerConnecteurLocal } from '../noyau/ia/connecteur.mjs';
-const ia = creerIaDepuisEnv(process.env, { local: connecteurLocal /* facultatif */, journal: (t, code) => log(t) });
-const { texte, moteur } = await ia.discuterPour('transcription', messages, { json: false });
+import { autorisationsDepuisBase } from '../noyau/ia/confidentialite.mjs';
+const ia = creerIaDepuisEnv(process.env, { local: connecteurLocal, externeAutorise: autorisationsDepuisBase(base) });
+const { texte, moteur } = await ia.discuterPour('correction', messages, { json: false }); // moteur === 'local'
 ```
 
 - `discuterPour(tache, messages, options)` → `{ texte, jetons, dureeMs, moteur }`. Options : celles du connecteur
@@ -146,7 +185,9 @@ const { texte, moteur } = await ia.discuterPour('transcription', messages, { jso
   et `cible` (un seul moteur) ou `moteurs` (ordre imposé pour cet appel, ex. `['api2', 'local']`).
 - `json: false` pour un texte libre (traduction, post) ; sinon la réponse est un objet JSON à lire avec
   `extraireJson(texte)` (jamais exécuté, toujours validé).
-- Erreurs : `ErreurEsport` au code stable (`ia-non-configuree`, `ia-locale-absente`, `ia-limite-fournisseur`,
+- **Un module qui traite du contenu de réunion, de suivi ou de strats doit passer un nom de tâche confidentiel**
+  (partie 2 bis) : c'est ce nom qui garde le texte sur le serveur.
+- Erreurs : `ErreurEsport` au code stable (`ia-confidentielle-sans-local`, `ia-non-configuree`, `ia-locale-absente`, `ia-limite-fournisseur`,
   `ia-cle-refusee`, `ia-requete-refusee`, `ia-modele`, `ia-delai`, `ia-injoignable`, `ia-reponse`,
   `ia-reponse-tronquee`, `ia-image-non-geree`, `quota-ia`…), dont le message ne contient jamais la clé.
 - Les API existantes restent : `configIa(env)`, `creerConnecteur(config).discuter(messages, options)`,
@@ -163,12 +204,15 @@ const { texte, moteur } = await ia.discuterPour('transcription', messages, { jso
   interroge `GET /jeux/ia/test/:id` toutes les 3 s ; avant, un modèle à raisonnement ou l'IA locale dépassait le délai
   de 15 s de l'app (« Le serveur Esport ne répond pas ») ;
 - **Ordre de repli** : pour les profils de jeu et pour les tâches légères (monter, retirer, ajouter un moteur,
-  revenir à l'ordre par défaut) ;
+  revenir à l'ordre par défaut) ; il ne s'applique pas aux tâches confidentielles ;
+- **Confidentialité : ce qui quitte le serveur** : la liste des tâches qui **restent sur le serveur** (réunions,
+  transcription, relecture, résumés, suivi, strats : IA locale seulement) et de celles qui **peuvent partir chez le
+  fournisseur** (profils de jeu, traductions, posts CM) ; l'interrupteur du Fondateur (partie 2 bis) ;
 - **Plafonds mensuels** : appels de l'API principale (défaut 30), de l'API secondaire (défaut 200), vérifications
   (défaut 8). Au plafond, le moteur est sauté (le suivant prend le relais). L'IA locale n'a pas de plafond.
 
-Base : `ia_appels.moteur` (migration 0034) ; réglages `ordre_profils`, `ordre_leger`, `quota_appels_api2` dans
-`ia_reglages`.
+Base : `ia_appels.moteur` (migration 0034) ; réglages `ordre_profils`, `ordre_leger`, `quota_appels_api2`,
+`externe_<tâche>` (levée de la confidentialité) dans `ia_reglages`.
 
 ## 7. Tester sans appel réel
 

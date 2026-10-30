@@ -26,9 +26,10 @@
  *
  *   IA_ORDRE         ordre de repli des PROFILS DE JEU (brouillons, vérifications) : défaut « api,api2,local »
  *                    (« local,api,api2 » avec IA_FOURNISSEUR=local)
- *   IA_ORDRE_LEGER   ordre de repli des TÂCHES LÉGÈRES (traductions, posts CM, post-correction des
- *                    transcriptions) : défaut « api2,api,local »
+ *   IA_ORDRE_LEGER   ordre de repli des TÂCHES LÉGÈRES (traductions, posts CM) : défaut « api2,api,local »
  *   (l'Administration IA peut changer ces deux ordres ; son choix l'emporte sur ces lignes)
+ *   TÂCHES CONFIDENTIELLES (réunions, transcriptions, suivi, strats : ./confidentialite.mjs) : IA LOCALE SEULE,
+ *   quels que soient ces ordres ; seul le Fondateur peut lever la règle, tâche par tâche (Administration IA).
  *   IA_FORMAT        facultatif : « openai-chat » (seul format pour l'instant ; voir ADAPTATEURS)
  *   IA_RECHERCHE     facultatif : « serveur » (défaut : le serveur lit lui-même quelques pages web),
  *                    « modele » (le modèle sait naviguer : il cherche lui-même), « aucune »
@@ -45,6 +46,7 @@
  */
 
 import { ErreurEsport, echec } from '../outils.mjs';
+import { TACHES_CONFIDENTIELLES, tacheConfidentielle } from './confidentialite.mjs';
 
 /** Adresses par défaut des fournisseurs connus (si IA_API_URL est vide). */
 export const FOURNISSEURS = {
@@ -124,7 +126,11 @@ export function adresseCompletions(url) {
 // ------------------------------------------------------------------ Moteurs, tâches, ordres de repli
 
 export const MOTEURS_IA = ['api', 'api2', 'local'];
-/** Tâches : « profils » (brouillons, vérifications de profils de jeu) et « leger » (traductions, posts CM, transcription). */
+/**
+ * Tâches : « profils » (brouillons, vérifications de profils de jeu) et « leger » (traductions, posts CM). Les noms
+ * « transcription » et « correction » restent rattachés à « leger » pour l'ordre, mais ce sont des tâches
+ * CONFIDENTIELLES : le répartiteur ne les confie qu'à l'IA locale (./confidentialite.mjs).
+ */
 export const TACHES_IA = ['profils', 'leger'];
 export const ORDRES_IA_DEFAUT = { profils: ['api', 'api2', 'local'], leger: ['api2', 'api', 'local'] };
 const ALIAS_TACHES = {
@@ -660,8 +666,13 @@ export const peutReplier = e => CODES_REPLI.has(e?.code) || (e?.statut ?? 500) >
  * « leger », ou un alias (brouillon, verification, sources, test → profils ; traduction, cm, transcription,
  * correction → leger ; inconnue → leger). Options en plus de celles du connecteur : `cible` (un seul moteur),
  * `moteurs` (ordre imposé pour cet appel).
+ *
+ * CONFIDENTIALITÉ (./confidentialite.mjs) : une tâche CONFIDENTIELLE (transcription, correction, résumés de réunion,
+ * suivi, strats…) ne va QU'À l'IA LOCALE, quels que soient l'ordre de la tâche, `cible` ou `moteurs` ; sans IA locale
+ * prête, refus 503 `ia-confidentielle-sans-local` (rien n'est envoyé). Seule exception : `externeAutorise(tache)`
+ * (async, réglage du Fondateur en base) rend exactement `true` pour cette tâche ; par défaut rien n'est autorisé.
  */
-export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, ordrePour = null, executer = null, journal = null } = {}) {
+export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, ordrePour = null, executer = null, journal = null, externeAutorise = null } = {}) {
   const pret = m => {
     try {
       return Boolean(moteurs[m]?.disponible?.());
@@ -673,9 +684,25 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     const c = tacheIa(tache);
     return lireOrdreIa(ordrePour ? await ordrePour(c) : ordres?.[c], ORDRES_IA_DEFAUT[c]);
   };
+  /** Moteurs permis pour la tâche : tous, ou l'IA locale seule pour une tâche confidentielle non levée. */
+  const localSeul = async tache => {
+    const conf = tacheConfidentielle(tache);
+    if (!conf) return false;
+    try {
+      return !(externeAutorise && (await externeAutorise(conf)) === true);
+    } catch {
+      return true;
+    }
+  };
   async function discuterPour(tache, messages, options = {}) {
     const { cible, moteurs: impose, ...reste } = options;
-    const ordre = cible ? [String(cible)].filter(m => MOTEURS_IA.includes(m)) : impose ? lireOrdreIa(impose, []) : await ordreDe(tache);
+    const voulu = cible ? [String(cible)].filter(m => MOTEURS_IA.includes(m)) : impose ? lireOrdreIa(impose, []) : await ordreDe(tache);
+    const confidentiel = await localSeul(tache);
+    // Tâche confidentielle : l'IA locale seule, même si l'ordre (ou l'appelant) demande une API.
+    const ordre = confidentiel ? ['local'] : voulu;
+    if (confidentiel && !pret('local')) {
+      throw echec(503, 'ia-confidentielle-sans-local', `Tâche confidentielle (${TACHES_CONFIDENTIELLES[tacheConfidentielle(tache)]}) : seule l’IA locale du serveur peut la faire, et elle est indisponible. Rien n’a été envoyé à un service externe.`);
+    }
     const images = contientImages(messages);
     const prets = ordre.filter(pret);
     const candidats = images ? prets.filter(m => moteurs[m].images) : prets;
@@ -689,6 +716,8 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
         : echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
     }
     for (const [i, m] of candidats.entries()) {
+      // Garde-fou : jamais une API pour une tâche confidentielle (même si le code ci-dessus changeait).
+      if (confidentiel && m !== 'local') throw echec(503, 'ia-confidentielle-sans-local', 'Tâche confidentielle : envoi à un service externe refusé.');
       try {
         const r = executer ? await executer(m, tache, messages, reste) : await moteurs[m].discuter(messages, reste);
         return { ...r, moteur: m };
@@ -703,7 +732,7 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     }
     throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
   }
-  return { discuterPour, ordrePour: ordreDe, disponibles: async tache => (await ordreDe(tache)).filter(pret), pret };
+  return { discuterPour, ordrePour: ordreDe, disponibles: async tache => ((await localSeul(tache)) ? ['local'] : await ordreDe(tache)).filter(pret), pret, localSeul };
 }
 
 /**
@@ -713,11 +742,11 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
  * réglé dans l'Administration IA (voir `ordreIaReglee` du service des profils de jeu). Les appels faits ainsi
  * ne sont pas comptés dans les plafonds mensuels de l'Administration IA.
  */
-export function creerIaDepuisEnv(env = process.env, { local = null, fetch, journal = null, ordrePour = null, maintenant } = {}) {
+export function creerIaDepuisEnv(env = process.env, { local = null, fetch, journal = null, ordrePour = null, maintenant, externeAutorise = null } = {}) {
   const c = configIa(env);
   const opts = { ...(fetch ? { fetch } : {}), ...(maintenant ? { maintenant } : {}), ...(journal ? { journal } : {}) };
   const moteurs = { api: creerConnecteur(c, opts), api2: creerConnecteur(c.secondaire, opts), ...(local ? { local } : {}) };
-  return creerRepartiteurIa({ moteurs, ordres: c.ordres, ordrePour, journal });
+  return creerRepartiteurIa({ moteurs, ordres: c.ordres, ordrePour, journal, externeAutorise });
 }
 
 // ------------------------------------------------------------------ IA locale

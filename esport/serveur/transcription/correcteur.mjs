@@ -1,13 +1,18 @@
 /**
  * Correcteur des transcriptions (post-correction), pour le processus de fond de la transcription. Il passe
  * TOUJOURS par le connecteur IA (esport/noyau/ia/connecteur.mjs), jamais par un appel direct au moteur :
- * répartiteur `creerIaDepuisEnv(env, { local }).discuterPour('correction', …)`, tâche « légère » dont l'ordre de
- * repli est réglé dans l'Administration IA (IA_ORDRE_LEGER : API secondaire, API principale, IA locale…).
+ * répartiteur `creerIaDepuisEnv(env, { local, externeAutorise }).discuterPour('correction', …)`.
+ *
+ * CONFIDENTIALITÉ (décision du Fondateur, noyau/ia/confidentialite.mjs) : la relecture est une tâche
+ * CONFIDENTIELLE : le texte des réunions ne va QU'À l'IA LOCALE, quel que soit IA_ORDRE_LEGER ou l'ordre de
+ * l'Administration IA. Sans IA locale utilisable, PAS de relecture (`preparerCorrecteur` rend `correcteur: null`
+ * et le message MESSAGE_RELECTURE_DESACTIVEE) : la transcription garde son nettoyage sans IA (boucles, génériques).
+ * Seule exception : le Fondateur a autorisé l'envoi de cette tâche à un service externe (Administration IA).
  *
  * L'IA LOCALE (llama.cpp du serveur, docs/esport/ia-locale.md) y est branchée avec le même gestionnaire « un seul
  * moteur pour tout le compte » que l'app et le processus de fond de l'IA (verrou etat/serveur.json : file d'attente
  * commune), rôle « transcription » : démarrée au premier lot, arrêtée 1 minute après le dernier ; si elle est tenue
- * par une autre tâche, on attend son tour (10 min au plus). Si aucun moteur ne répond, la relecture s'arrête et le
+ * par une autre tâche, on attend son tour (10 min au plus). Si elle ne répond plus, la relecture s'arrête et le
  * reste de la transcription est gardé brut (rien n'échoue pour autant).
  */
 
@@ -15,6 +20,7 @@ import * as connecteurIa from '../../noyau/ia/connecteur.mjs';
 import { creerGestionnaireIaLocale } from '../ia-locale/gestionnaire.mjs';
 import { MODELES_IA_LOCALE } from '../ia-locale/installation.mjs';
 import { fetchLocal } from '../ia-locale/transport.mjs';
+import { MESSAGE_RELECTURE_DESACTIVEE } from '../../noyau/ia/confidentialite.mjs';
 
 /** Tâche de la post-correction pour le répartiteur IA (alias de la catégorie « légère »). */
 export const TACHE_CORRECTION = 'correction';
@@ -50,11 +56,12 @@ export function connecteurIaLocaleTranscription(reglages, { fetch = fetchLocal, 
 /**
  * Correcteur `{ appeler(messages, options), modele, arreter() }` par le répartiteur IA. `repartiteur` injectable
  * (tests) ; sinon construit depuis l'environnement avec l'IA locale si elle est installée. Rend null si aucun
- * moteur n'est configuré (ni clé d'API, ni IA locale).
+ * moteur n'est configuré (ni clé d'API, ni IA locale). `externeAutorise(tache)` : réglage du Fondateur (par défaut
+ * rien n'est autorisé : le répartiteur n'enverra le texte qu'à l'IA locale).
  */
-export function creerCorrecteur(reglagesIaLocale, { env = process.env, repartiteur = null, local = undefined } = {}) {
+export function creerCorrecteur(reglagesIaLocale, { env = process.env, repartiteur = null, local = undefined, externeAutorise = null } = {}) {
   const l = local === undefined ? connecteurIaLocaleTranscription(reglagesIaLocale) : local;
-  const r = repartiteur ?? (typeof connecteurIa.creerIaDepuisEnv === 'function' ? connecteurIa.creerIaDepuisEnv(env, { local: l }) : null);
+  const r = repartiteur ?? (typeof connecteurIa.creerIaDepuisEnv === 'function' ? connecteurIa.creerIaDepuisEnv(env, { local: l, externeAutorise }) : null);
   if (!r) return l ? { modele: l.nomModele ?? 'IA locale', appeler: (m, o) => l.discuter(m, o), arreter: () => l.arreter?.() } : null;
   let dernier = null;
   return {
@@ -68,4 +75,36 @@ export function creerCorrecteur(reglagesIaLocale, { env = process.env, repartite
     },
     arreter: () => l?.arreter?.(),
   };
+}
+
+/**
+ * Correcteur du processus de fond, en respectant la confidentialité : `{ correcteur, raison }`.
+ *  - IA locale utilisable → correcteur (le texte ne quitte pas le serveur) ;
+ *  - sinon, le Fondateur a autorisé l'envoi de la relecture à un service externe ET une API est configurée →
+ *    correcteur par le répartiteur (les API ne servent que dans ce cas) ;
+ *  - sinon → `correcteur: null`, `raison` : MESSAGE_RELECTURE_DESACTIVEE (pas de relecture, rien n'est envoyé).
+ * `externeAutorise(tache)` : async, réglage du Fondateur (absent = refus).
+ */
+export async function preparerCorrecteur(reglagesIaLocale, { env = process.env, local = undefined, externeAutorise = null, repartiteur = null } = {}) {
+  const l = local === undefined ? connecteurIaLocaleTranscription(reglagesIaLocale) : local;
+  let localPret = false;
+  try {
+    localPret = Boolean(l) && (l.disponible ? Boolean(l.disponible()) : true) && !l.indisponible?.();
+  } catch {
+    localPret = false;
+  }
+  let externe = false;
+  if (!localPret && externeAutorise) {
+    try {
+      externe = (await externeAutorise(TACHE_CORRECTION)) === true;
+    } catch {
+      externe = false;
+    }
+  }
+  if (!localPret && !externe) {
+    await l?.arreter?.()?.catch?.(() => undefined);
+    return { correcteur: null, raison: MESSAGE_RELECTURE_DESACTIVEE };
+  }
+  const correcteur = creerCorrecteur(reglagesIaLocale, { env, local: l, repartiteur, externeAutorise });
+  return correcteur ? { correcteur, raison: null } : { correcteur: null, raison: MESSAGE_RELECTURE_DESACTIVEE };
 }

@@ -62,6 +62,8 @@ export interface ReglagesTranscription {
   /** Relecture par l'IA locale demandée par la team, et possible sur ce serveur. */
   correction?: boolean;
   correctionDisponible?: boolean;
+  /** Relecture désactivée : pourquoi (aucune IA locale ; les réunions ne quittent pas le serveur). */
+  correctionRaison?: string | null;
   /** Glossaire libre de la team (pseudos, termes, noms propres), ajouté au vocabulaire de Whisper. */
   glossaire?: string;
 }

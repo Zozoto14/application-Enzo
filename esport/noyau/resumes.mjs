@@ -25,6 +25,7 @@ import { fichierPublic } from './medias/service.mjs';
 import { pdfTranscription } from './medias/pdf.mjs';
 import { LANGUES_TRANSCRIPTION, preResume, transcrireParApi, validerSegments } from './medias/transcription.mjs';
 import { MODES_TRANSCRIPTION, QUALITES, configTranscriptionServeur, qualiteEffective, servicesFileTranscription, VITESSE_DEPART } from './medias/fileTranscription.mjs';
+import { MESSAGE_RELECTURE_DESACTIVEE, externeAutorise } from './ia/confidentialite.mjs';
 import { construirePromptVocabulaire, lireGlossaire, motsDuVocabulaire, nettoyerSegments, vocabulaireTeam } from './medias/qualiteTranscription.mjs';
 
 export const MODULE_RESUMES = 'meeting_summaries';
@@ -77,6 +78,20 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
   const file = servicesFileTranscription({ base, maintenant, config: transcriptionServeur });
   const serveurDisponible = () => Boolean(transcriptionServeur?.disponible) && Boolean(stockage);
   const peut = (ctx, permission) => autorise(ctx.permissions, ctx.modules, permission);
+  /**
+   * CONFIDENTIALITÉ (noyau/ia/confidentialite.mjs) : l'audio d'une réunion ne part à l'API de transcription externe
+   * que si elle est configurée (TRANSCRIPTION_API…) ET que le Fondateur a autorisé cette tâche dans Administration IA.
+   */
+  const externeActif = async () => Boolean(transcriptionExterne?.actif) && (await externeAutorise(base, 'transcription'));
+  /**
+   * Relecture IA (tâche confidentielle « correction ») : IA locale prête, ou API configurée ET envoi autorisé par le
+   * Fondateur. `{ disponible, raison }` (raison : message affiché quand elle est désactivée faute d'IA locale).
+   */
+  async function relectureIa() {
+    if (transcriptionServeur?.correctionDisponible) return { disponible: true, raison: null };
+    if (transcriptionServeur?.correctionApi && (await externeAutorise(base, 'correction'))) return { disponible: true, raison: null };
+    return { disponible: false, raison: transcriptionServeur?.correction === 'non' ? null : MESSAGE_RELECTURE_DESACTIVEE };
+  }
 
   function exigerModule(ctx) {
     if (!ctx.modules.has(MODULE_RESUMES)) throw echec(404, 'module-desactive', 'Ce module n’est pas activé pour cette team.');
@@ -109,7 +124,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return lignes;
   }
 
-  function reunionPublique(r, type, pseudos, ctx, team, enregistrements = new Map(), travaux = new Map()) {
+  function reunionPublique(r, type, pseudos, ctx, team, enregistrements = new Map(), travaux = new Map(), externe = false) {
     const enr = r.enregistrement_id ? enregistrements.get(r.enregistrement_id) : null;
     return {
       id: r.id,
@@ -133,8 +148,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
         statut: r.transcription_statut ?? 'aucune',
         pdf: Boolean(r.transcription_pdf_id),
         peutTranscrire: Boolean(enr && !enr.supprime_le) && (r.depose_par === ctx.acteur.compte || redacteur(ctx)),
-        // Point d'extension : transcription par une API externe, si le serveur l'a activée.
-        externe: Boolean(transcriptionExterne?.actif),
+        // Point d'extension : transcription par une API externe, si le serveur l'a configurée ET le Fondateur autorisée.
+        externe,
         // Transcription sur le serveur : moteur installé ? travail en file (progression, temps restant) ?
         serveur: serveurDisponible(),
         // Qualités proposées (Rapide, Équilibrée, Maximale : disponibles ? durée estimée) et la meilleure possible.
@@ -151,9 +166,10 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const enregistrements = new Map((await lignesParIds(base, 'SELECT * FROM fichiers WHERE id', lignes.map(l => l.enregistrement_id))).map(f => [f.id, f]));
     const travaux = await file.etatsDe(lignes.filter(l => l.transcription_statut === 'serveur' || l.transcription_statut === 'echec').map(l => l.id));
     const sortie = [];
+    const externe = await externeActif();
     for (const l of lignes) {
       const ctx = ctxParTeam.get(l.team_id);
-      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team, enregistrements, travaux));
+      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team, enregistrements, travaux, externe));
     }
     return sortie;
   }
@@ -285,7 +301,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       rattachement = await medias.preparerRattachement(ctx, envoiId, 'reunion', { entiteType: 'reunion_enregistrement', entiteId: id });
     }
     const surServeur = Boolean(rattachement) && modeDemande === 'serveur' && serveurDisponible();
-    const parApi = Boolean(rattachement) && modeDemande === 'externe' && Boolean(transcriptionExterne?.actif);
+    const parApi = Boolean(rattachement) && modeDemande === 'externe' && (await externeActif());
     const statutTranscription = !rattachement ? 'aucune' : surServeur ? 'serveur' : parApi ? 'externe' : 'a_faire';
     await base.lot([
       ...(rattachement?.instructions ?? []),
@@ -606,7 +622,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       majLe: x?.maj_le ?? null,
       enregistrement: r.enregistrement_id ? fichierPublic(await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id])) : null,
       peutModifier: peutEcrireTranscription(ctx, r),
-      externe: Boolean(transcriptionExterne?.actif),
+      externe: await externeActif(),
       serveur: serveurDisponible(),
       // Meilleure qualité possible sur ce serveur (bouton « Retranscrire avec la meilleure qualité »).
       meilleureQualite: serveurDisponible() ? (qualiteEffective(transcriptionServeur, 'maximale')?.qualite ?? null) : null,
@@ -729,7 +745,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     exigerModule(ctx);
     const { r } = await reunionDeTeam(ctx, reunionId);
     if (!peutEcrireTranscription(ctx, r)) throw echec(403, 'permission', 'Seuls le déposant et les rédacteurs modifient la transcription.');
-    if (!transcriptionExterne?.actif) throw echec(503, 'transcription-externe-desactivee', 'La transcription par le serveur n’est pas activée : transcrivez dans le navigateur.');
+    if (!(await externeActif())) throw echec(503, 'transcription-externe-desactivee', 'La transcription par une API externe n’est pas activée (le Fondateur ne l’a pas autorisée) : transcrivez sur le serveur ou dans le navigateur.');
     if (!r.enregistrement_id) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
     const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
     const t = iso(maintenant());
@@ -748,7 +764,13 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
 
   /** Cron : transcriptions demandées à l'API externe (quelques-unes par passage). Rend le nombre traité. */
   async function traiterTranscriptionsExternes({ limite = 2 } = {}) {
-    if (!transcriptionExterne?.actif || !stockage) return 0;
+    if (!stockage) return 0;
+    if (!(await externeActif())) {
+      // API non configurée, ou autorisation du Fondateur retirée : rien n'est envoyé ; les demandes en attente
+      // reviennent « à transcrire » (sur le serveur ou dans le navigateur).
+      if (transcriptionExterne?.actif) await base.executer("UPDATE reunions SET transcription_statut = 'a_faire', maj_le = ? WHERE transcription_statut = 'externe' AND supprime_le IS NULL", [iso(maintenant())]);
+      return 0;
+    }
     const lignes = await base.tous("SELECT * FROM reunions WHERE transcription_statut = 'externe' AND supprime_le IS NULL ORDER BY maj_le LIMIT ?", [limite]);
     let n = 0;
     for (const r of lignes) {
@@ -828,8 +850,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     });
   }
 
-  function modesDisponibles() {
-    return { serveur: serveurDisponible(), navigateur: true, externe: Boolean(transcriptionExterne?.actif) };
+  async function modesDisponibles() {
+    return { serveur: serveurDisponible(), navigateur: true, externe: await externeActif() };
   }
 
   /** Qualités proposées (disponibles ou non), avec le facteur de durée (secondes de calcul par seconde d'audio). */
@@ -847,7 +869,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     exigerUne(ctx, P.deposer, P.lire, P.rediger, P.tout);
     const config = await configModule(teamId);
     const choisi = MODES_TRANSCRIPTION.includes(config.transcriptionMode) ? config.transcriptionMode : null;
-    const disponibles = modesDisponibles();
+    const disponibles = await modesDisponibles();
     const defaut = transcriptionServeur?.mode ?? 'serveur';
     const voulu = choisi ?? defaut;
     // Mode effectif : celui voulu s'il marche ; sinon le serveur s'il est installé, sinon le navigateur.
@@ -865,7 +887,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       qualiteChoisie: QUALITES.includes(config.transcriptionQualite) ? config.transcriptionQualite : null,
       qualites: qualitesProposees(),
       correction: prefs.correction,
-      correctionDisponible: Boolean(transcriptionServeur?.correctionDisponible),
+      ...(await relectureIa().then(r => ({ correctionDisponible: r.disponible, correctionRaison: r.raison }))),
       glossaire: prefs.glossaire,
     };
   }
@@ -1002,7 +1024,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       const contexte = {
         prompt: construirePromptVocabulaire(voc, { langue: w.langue === 'en' ? 'en' : 'fr' }),
         glossaire: motsDuVocabulaire(voc),
-        correction: Boolean(transcriptionServeur?.correctionDisponible) && prefs.correction,
+        // Relecture VOULUE (team et serveur) ; le processus de fond ne la fait qu'avec l'IA locale (sinon il le note).
+        correction: transcriptionServeur?.correction !== 'non' && prefs.correction,
       };
       return {
         travail: w,
@@ -1094,7 +1117,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       compte,
       acteur: null,
       langueDoc: profil?.langue,
-      qualiteTexte: { bruts: segmentsBruts ? validerSegments(segmentsBruts) : null, correction: segmentsBruts ? correction : '', qualite: qualite ?? '' },
+      qualiteTexte: { bruts: segmentsBruts ? validerSegments(segmentsBruts) : null, correction: segmentsBruts || correction === MESSAGE_RELECTURE_DESACTIVEE ? correction : '', qualite: qualite ?? '' },
       instructions: [file.instructionTerminer(w.id)],
     });
     return true;

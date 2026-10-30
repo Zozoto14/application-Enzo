@@ -104,6 +104,8 @@ export function echoDuPrompt(texte, prompt) {
  *    prompt de vocabulaire) ou le repli ONNX (morceaux de 30 s) ;
  *  - `choisir(qualite)` → `{ qualite, moteur, modele }` ou null (qualité effective, voir `qualiteEffective`) ;
  *  - `correcteur` : `{ appeler(messages, options), modele, arreter?() }` (IA locale) ou null ;
+ *  - `sansRelecture` : message noté sur la transcription quand la relecture est demandée mais impossible sans
+ *    sortir du serveur (aucune IA locale ; tâche confidentielle, voir correcteur.mjs) ;
  *  - `jetonLourd()` → `{ liberer(), noterPid?() }` ou null (file commune avec l'IA locale), ou null si inutile ;
  *  - `ffmpeg` : chemin du binaire (sinon WAV seulement) ; `dossierTravail` ;
  *  - `horloge()` (ms), `dormir(ms)`, `memoire()` (octets), `journal`, `arret()` (true = s'arrêter).
@@ -116,6 +118,7 @@ export async function executerTravaux({
   creerTranscripteur,
   choisir = qualite => qualiteEffective(config, qualite) ?? { qualite, moteur: 'onnx', modele: config.modele },
   correcteur = null,
+  sansRelecture = null,
   jetonLourd = null,
   ffmpeg = null,
   dossierTravail,
@@ -287,16 +290,18 @@ export async function executerTravaux({
           }
         }
         let bruts = null;
-        let correction = '';
+        // Relecture voulue mais aucune IA locale (et envoi externe non autorisé) : rien n'est envoyé, on le dit.
+        let correction = !correcteur && contexte.correction && sansRelecture ? sansRelecture : '';
         if (!interrompu && w.etape === 'correction') {
           // 4. Post-correction par l'IA locale, par lots, chaque lot enregistré (reprise au lot suivant).
           bruts = tache.segmentsBruts?.length ? tache.segmentsBruts : segments;
           const depuis = Number(w.correction_faite ?? 0);
           let rendu = false;
           if (!correcteur) {
-            // IA locale désinstallée entre-temps : la transcription brute est gardée telle quelle.
+            // IA locale désinstallée (ou indisponible) entre-temps : la transcription brute est gardée telle quelle.
             segments = bruts;
             bruts = null;
+            if (sansRelecture) correction = sansRelecture;
           }
           const r2 = correcteur
             ? await corrigerSegments({
@@ -456,13 +461,16 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { servicesMedias } = await import('../../noyau/medias/service.mjs');
   const { servicesResumes } = await import('../../noyau/resumes.mjs');
   const { distribuer } = await import('../../noyau/evenements.mjs');
-  const { creerCorrecteur } = await import('./correcteur.mjs');
+  const { preparerCorrecteur } = await import('./correcteur.mjs');
   const { besoinExclusif, prendreJetonLourd } = await import('../moteurs-lourds.mjs');
   const { MODELES_IA_LOCALE } = await import('../ia-locale/installation.mjs');
   const { MODELES_GGML } = await import('./whispercpp.mjs');
   const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   const ia = config.iaLocale;
-  const correcteur = ts.correctionDisponible ? creerCorrecteur(ia, { env: process.env }) : null;
+  // Relecture : IA locale seule (tâche confidentielle) ; une API seulement si le Fondateur l'a autorisé (base).
+  const { autorisationsDepuisBase } = await import('../../noyau/ia/confidentialite.mjs');
+  const { correcteur, raison: sansRelecture } = ts.correction !== 'non' ? await preparerCorrecteur(ia, { env: process.env, externeAutorise: autorisationsDepuisBase(base) }) : { correcteur: null, raison: null };
+  if (sansRelecture) console.log(`${new Date().toISOString()} transcription : ${sansRelecture}`);
   // File commune avec l'IA locale si la mémoire ne permet pas les deux moteurs (TRANSCRIPTION_EXCLUSIF).
   const memoireWhisperMo = Math.max(...Object.values(ts.qualites ?? {}).filter(q => q.disponible && q.moteur === 'whispercpp').map(q => MODELES_GGML[q.modele]?.memoireMo ?? 2000), 0);
   const exclusif = ia?.installation?.installe && besoinExclusif({ exclusif: ts.exclusif, ramCompte: ts.ramCompte, memoireWhisperMo, memoireIaMo: (MODELES_IA_LOCALE[ia.modele]?.ramGo ?? 6) * 1024 });
@@ -491,6 +499,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
         setTimeout(() => process.exit(3), 2000).unref?.();
       },
       correcteur,
+      sansRelecture,
       jetonLourd: exclusif ? () => prendreJetonLourd({ dossierIa: ia.dossier, attenteMs: 10 * 60_000 }) : null,
       ffmpeg: cheminFfmpeg(ts),
       dossierTravail: c.travail,

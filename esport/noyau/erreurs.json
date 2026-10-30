@@ -706,7 +706,11 @@
   "Au plus 10 membres à la fois.": "At most 10 members at a time.",
   "Ce membre ne fait pas partie de la team.": "This member is not part of the team.",
   "Choisissez un événement à venir.": "Choose an upcoming event.",
-  "Événement introuvable ou occurrence annulée.": "Event not found or occurrence cancelled."
+  "Événement introuvable ou occurrence annulée.": "Event not found or occurrence cancelled.",
+  "Tâche confidentielle : envoi à un service externe refusé.": "Confidential task: sending to an external service refused.",
+  "Tâche inconnue : transcription, correction, resumes, suivi ou strats.": "Unknown task: transcription, correction, resumes, suivi or strats.",
+  "Autoriser l’envoi à un service externe : oui ou non.": "Allow sending to an external service: yes or no.",
+  "La transcription par une API externe n’est pas activée (le Fondateur ne l’a pas autorisée) : transcrivez sur le serveur ou dans le navigateur.": "Transcription by an external API isn’t enabled (the Founder hasn’t allowed it): transcribe on the server or in the browser."
  },
  "motifs": [
   [
@@ -1116,6 +1120,10 @@
   [
    "^Test resté sans résultat après (\\d+) s : le processus de l’app a sans doute été redémarré pendant le test \\(relancez-le ; diagnostic : esport/outils/tester-ia\\.mjs\\)\\.$",
    "Test still without a result after $1 s: the app process was probably restarted during the test (run it again; diagnosis: esport/outils/tester-ia.mjs)."
+  ],
+  [
+   "^Tâche confidentielle \\((.+)\\) : seule l’IA locale du serveur peut la faire, et elle est indisponible\\. Rien n’a été envoyé à un service externe\\.$",
+   "Confidential task ($1): only the server’s local AI may do it, and it is unavailable. Nothing was sent to an external service."
   ]
  ]
 }

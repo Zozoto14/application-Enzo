@@ -340,6 +340,10 @@ test('Administration IA : moteurs (clé présente sans sa valeur, confidentialit
       moteur('local', { fournisseur: 'local', modele: 'Qwen2.5-7B-Instruct (Q4_K_M)', hote: null, cle: null, externe: false }),
     ],
     ordres: { profils: ['api', 'api2', 'local'], leger: ['api2', 'api', 'local'] },
+    confidentialite: {
+      locales: (['transcription', 'correction', 'resumes', 'suivi', 'strats'] as const).map(cle => ({ cle, libelle: cle, externeAutorise: false, le: null })),
+      externes: [{ cle: 'profils', libelle: 'Profils' }, { cle: 'traduction', libelle: 'Traductions' }, { cle: 'cm', libelle: 'Posts CM' }],
+    },
     local: { installe: true, raison: null, modele: 'qwen2.5-7b', nomModele: 'Qwen2.5-7B-Instruct (Q4_K_M)', threads: 8, contexte: 16384, enMarche: false, file: 0, derniereVitesse: { jetonsParSeconde: 6.4, le: null, source: 'requete' }, dernierTempsReponseMs: 41_500 },
   };
   const { client, requete } = clientJeux();
@@ -380,6 +384,15 @@ test('Administration IA : moteurs (clé présente sans sa valeur, confidentialit
   expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { ordres: { profils: ['api', 'api2'] } });
   await fireEvent.press(screen.getByTestId('esport-jeux-admin-ordre-profils-defaut'));
   expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { ordres: { profils: null } });
+  // Confidentialité : réunions sur le serveur seulement ; levée par le Fondateur après confirmation.
+  const conf = screen.getByTestId('esport-jeux-admin-taches-confidentielles');
+  expect(within(conf).getByText('Relecture par l’IA des transcriptions de réunion')).toBeTruthy();
+  expect(within(screen.getByTestId('esport-jeux-admin-tache-correction')).getByText('Sur le serveur seulement')).toBeTruthy();
+  expect(within(conf).getByText('• Textes des posts CM')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-tache-correction-autoriser'));
+  expect(requete).not.toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { externes: { correction: true } });
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-tache-correction-autoriser-confirmer'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { externes: { correction: true } });
   // Plafond du moteur secondaire.
   await fireEvent.changeText(screen.getByTestId('esport-jeux-admin-quota-api2'), '150');
   await fireEvent.press(screen.getByTestId('esport-jeux-admin-quota-enregistrer'));

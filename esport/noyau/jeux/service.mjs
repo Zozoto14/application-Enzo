@@ -13,8 +13,9 @@
  * tournent après la réponse HTTP (ou dans le cron) ; leur résultat attend la validation du Fondateur.
  *
  * Trois moteurs (docs/esport/ia-api.md), essayés dans un ORDRE DE REPLI propre à chaque tâche (« profils » :
- * brouillons et vérifications ; « leger » : traductions, posts CM, transcription), réglé par le Fondateur
- * (Administration IA ; défaut : IA_ORDRE, IA_ORDRE_LEGER) :
+ * brouillons et vérifications ; « leger » : traductions, posts CM), réglé par le Fondateur
+ * (Administration IA ; défaut : IA_ORDRE, IA_ORDRE_LEGER). Tâches CONFIDENTIELLES (réunions, suivi, strats) :
+ * IA locale seulement, sauf levée par le Fondateur tâche par tâche (../ia/confidentialite.mjs) :
  *  - « api » / « api2 » : moteurs d'API principal et secondaire (IA_API_*, IA_API2_*), plafond mensuel d'appels
  *    PAR MOTEUR ; un moteur en panne, limité (429) ou au plafond passe la main au suivant ;
  *  - « local » : IA LOCALE (llama.cpp sur le serveur, `ia.local`), sans plafond mensuel mais une requête à
@@ -30,6 +31,7 @@ import { servicesFileTranscription } from '../medias/fileTranscription.mjs';
 import { aGlobale } from '../roles/globales.mjs';
 import { MOTEURS_IA, TACHES_IA, creerConnecteur, creerRepartiteurIa, lireOrdreIa, ordresIaEnv, peutReplier, tacheIa } from '../ia/connecteur.mjs';
 import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assistant.mjs';
+import { TACHES_CONFIDENTIELLES, TACHES_EXTERNES_OK, autorisationsDepuisBase, cleExterne, lireAutorisationsExternes } from '../ia/confidentialite.mjs';
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
 import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, validerDonnees, validerEntete } from './schema.mjs';
@@ -550,6 +552,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       moteurs,
       ordres: reglages.ordres,
       ordresDefaut: ordresEnv,
+      confidentialite: await etatConfidentialite(),
       local: await etatLocal(),
       transcription: await etatTranscription(),
       lectureWeb: typeof ia.telecharger === 'function',
@@ -604,8 +607,34 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
         if (tache === 'profils') retirer('mode');
       }
     }
+    // Confidentialité : le Fondateur seul lève la règle « IA locale seulement », tâche par tâche (journalisé).
+    const externes = corps?.externes && typeof corps.externes === 'object' ? corps.externes : {};
+    const avant = Object.keys(externes).length ? await lireAutorisationsExternes(base) : {};
+    for (const [tache, valeur] of Object.entries(externes)) {
+      if (!TACHES_CONFIDENTIELLES[tache]) throw echec(400, 'tache-confidentielle', 'Tâche inconnue : transcription, correction, resumes, suivi ou strats.');
+      if (typeof valeur !== 'boolean') throw echec(400, 'tache-confidentielle', 'Autoriser l’envoi à un service externe : oui ou non.');
+      if (valeur) poser(cleExterne(tache), '1');
+      else retirer(cleExterne(tache));
+      if (Boolean(avant[tache]?.autorise) !== valeur) {
+        lot.push(evenement('ia.confidentialite_changed', { acteur: acteur.compte, entiteType: 'ia_tache', entiteId: tache, charge: { tache, externeAutorise: valeur }, maintenant: maintenant() }));
+        try {
+          journal.warn?.(`[ia] confidentialité : envoi de la tâche « ${tache} » à un service externe ${valeur ? 'AUTORISÉ' : 'retiré'} par ${acteur.compte}`);
+        } catch {
+          // Journal indisponible : l'événement reste en base.
+        }
+      }
+    }
     if (lot.length) await base.lot(lot);
     return etatIa(acteur);
+  }
+
+  /** Tâches de l'IA : celles qui restent sur le serveur (confidentielles) et celles qui peuvent partir chez le fournisseur. */
+  async function etatConfidentialite() {
+    const a = await lireAutorisationsExternes(base);
+    return {
+      locales: Object.entries(TACHES_CONFIDENTIELLES).map(([cle, libelle]) => ({ cle, libelle, externeAutorise: a[cle]?.autorise === true, le: a[cle]?.autorise ? a[cle].le : null })),
+      externes: Object.entries(TACHES_EXTERNES_OK).map(([cle, libelle]) => ({ cle, libelle })),
+    };
   }
 
   /**
@@ -658,6 +687,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     ordrePour: async tache => (await reglagesIa()).ordres[tache],
     executer: (m, tache, messages, { jeu, ...options }) => (m === 'local' ? appelLocal(genreAppel(tache), jeu, messages, options) : appelApi(m, genreAppel(tache), jeu, messages, options)),
     journal: texte => journal.warn?.(texte),
+    // Tâches confidentielles (réunions, suivi, strats) : IA locale seule, sauf levée explicite par le Fondateur.
+    externeAutorise: autorisationsDepuisBase(base),
   });
 
   /**

@@ -106,6 +106,8 @@ export const TYPES_EVENEMENTS = [
   'game.deleted',
   'game.draft_ready',
   'game.updates_proposed',
+  // Confidentialité de l'IA : le Fondateur autorise (ou retire) l'envoi d'une tâche confidentielle à un service externe.
+  'ia.confidentialite_changed',
   // Rôles du club et modèle des rôles des nouvelles teams (migration 0033) : événements GLOBAUX (sans team),
   // journal de la page Rôles et permissions.
   'roles.global_cree',

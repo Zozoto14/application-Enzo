@@ -405,6 +405,11 @@ export function EditeurTranscription({ theme, client, teamId, depotId, onEnregis
           </Text>
         </View>
       ) : null}
+      {!t.segmentsBruts?.length && t.correction?.startsWith('Relecture IA désactivée') ? (
+        <Text style={attenue} testID="esport-transcription-relecture-desactivee">
+          {tr('transcription.relecture_desactivee')}
+        </Text>
+      ) : null}
       {t.preResume.length ? (
         <View testID="esport-transcription-preresume" style={{ gap: 2, padding: 8, borderRadius: 8, backgroundColor: teinteTransparente(theme.accent, 0.08) }}>
           <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{tr('transcription.pre_resume')}</Text>

@@ -563,6 +563,18 @@ test('API de transcription externe : désactivée par défaut (503) ; activée, 
   const audio = wavFactice(1);
   const enr = await envoyer(b, A.sessions.lea12345, A.teamId, audio, { section: 'resumes', nom: 'hebdo.wav' });
   const depot = (await b.appel(`/teams/${A.teamId}/resumes`, { methode: 'POST', jeton: A.sessions.lea12345, corps: { titre: 'Hebdo', typeId: TYPE_HEBDO, dateReunion: '2026-10-20', envoi: enr.id } })).corps;
+  // Configurée mais PAS autorisée par le Fondateur (confidentialité) : rien n'est envoyé.
+  const refus = await b.appel(`/teams/${A.teamId}/resumes/${depot.id}/transcription/externe`, { methode: 'POST', jeton: A.sessions.lea12345, corps: { langue: 'fr' } });
+  assert.equal(refus.statut, 503);
+  assert.equal(refus.corps.code, 'transcription-externe-desactivee');
+  const parDepot = (await b.appel(`/teams/${A.teamId}/resumes`, { methode: 'POST', jeton: A.sessions.lea12345, corps: { titre: 'Hebdo 2', typeId: TYPE_HEBDO, dateReunion: '2026-10-21', envoi: (await envoyer(b, A.sessions.lea12345, A.teamId, wavFactice(1), { section: 'resumes', nom: 'b.wav' })).id, transcription: 'externe' } })).corps;
+  assert.equal(parDepot.transcription.statut, 'a_faire');
+  assert.equal(parDepot.transcription.externe, false);
+  await tachesPlanifiees(b.base, { stockage: b.stockage, cleSession: 'x'.repeat(40), transcriptionExterne, fetchTranscription, maintenant: () => b.horloge.t });
+  assert.equal(appels.length, 0, 'aucun audio envoyé sans l’accord du Fondateur');
+  // Le Fondateur l'autorise explicitement (Administration IA).
+  const lever = await b.appel('/jeux/ia/reglages', { methode: 'PUT', jeton: A.sessions.fondateur, corps: { externes: { transcription: true } } });
+  assert.equal(lever.statut, 200, JSON.stringify(lever.corps));
   const demande = await b.appel(`/teams/${A.teamId}/resumes/${depot.id}/transcription/externe`, { methode: 'POST', jeton: A.sessions.lea12345, corps: { langue: 'fr' } });
   assert.equal(demande.statut, 200, JSON.stringify(demande.corps));
   assert.equal(demande.corps.statut, 'externe');

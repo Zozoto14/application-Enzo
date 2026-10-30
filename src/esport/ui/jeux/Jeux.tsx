@@ -21,7 +21,7 @@ import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport, type ClientEsport, type CompteEsport } from '../../client';
 import { dateCourte } from '../../libelles';
-import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type EtatMoteurIa, type MoteurIa, type TacheIa } from '../../jeux/api';
+import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type EtatMoteurIa, type MoteurIa, type TacheIa, type TacheConfidentielle } from '../../jeux/api';
 import { donneesVides, hote, oublierProfilsTeams } from '../../jeux/profil';
 import { trJeux, trnJeux, type CleJeux } from '../../i18n/jeux';
 import { PageEsport } from '../CadreEsport';
@@ -707,6 +707,47 @@ function EditeurOrdre({ theme, tache, ordre, moteurs, desactive, onChanger }: {
   );
 }
 
+/**
+ * Confidentialité : tâches qui restent sur le serveur (réunions, suivi, strats : IA locale seulement) et tâches qui
+ * peuvent partir chez le fournisseur d'API. Le Fondateur seul lève la règle, tâche par tâche, avec confirmation.
+ */
+const TACHES_EXTERNES = ['profils', 'traduction', 'cm'] as const;
+function CarteConfidentialite({ theme, etat, desactive, onChanger }: { theme: ThemeHub; etat: EtatIa; desactive: boolean; onChanger: (t: TacheConfidentielle, v: boolean) => void }) {
+  const c = etat.confidentialite;
+  if (!c) return null;
+  return (
+    <Carte theme={theme} testID="esport-jeux-admin-taches-confidentielles">
+      <TitreCarte theme={theme} titre={trJeux('jeux.confidentialite')} sous={trJeux('jeux.confidentialite_aide')} />
+      <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{trJeux('jeux.confidentialite_locales')}</Text>
+      {c.locales.map(t => (
+        <View key={t.cle} style={{ gap: 4 }} testID={`esport-jeux-admin-tache-${t.cle}`}>
+          <View style={[styles.ligne, { gap: ESP.s, justifyContent: 'space-between' }]}>
+            <Text style={{ ...texte(theme, 13), flex: 1 }}>{trJeux(`jeux.confidentialite_tache.${t.cle}`)}</Text>
+            <Badge theme={theme} texte={t.externeAutorise ? trJeux('jeux.confidentialite_externe_autorisee') : trJeux('jeux.confidentialite_serveur')} ton={t.externeAutorise ? 'alerte' : 'ok'} />
+          </View>
+          {etat.fondateur ? (
+            <View style={{ alignSelf: 'flex-start' }}>
+              {t.externeAutorise ? (
+                <BoutonHub theme={theme} titre={trJeux('jeux.confidentialite_retirer')} desactive={desactive} onPress={() => onChanger(t.cle, false)} testID={`esport-jeux-admin-tache-${t.cle}-retirer`} />
+              ) : (
+                <>
+                  <Text style={[attenue(theme, 12), { color: theme.alerte }]}>{trJeux('jeux.confidentialite_avertissement')}</Text>
+                  <BoutonConfirme theme={theme} titre={trJeux('jeux.confidentialite_autoriser')} confirmation={trJeux('jeux.confidentialite_confirmer')} desactive={desactive} onConfirme={() => onChanger(t.cle, true)} testID={`esport-jeux-admin-tache-${t.cle}-autoriser`} />
+                </>
+              )}
+            </View>
+          ) : null}
+        </View>
+      ))}
+      {!etat.fondateur ? <Text style={attenue(theme, 12)}>{trJeux('jeux.confidentialite_fondateur')}</Text> : null}
+      <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{trJeux('jeux.confidentialite_externes')}</Text>
+      {c.externes.map(t => (
+        <Text key={t.cle} style={attenue(theme, 13)} testID={`esport-jeux-admin-tache-externe-${t.cle}`}>{`• ${TACHES_EXTERNES.find(x => x === t.cle) ? trJeux(`jeux.confidentialite_tache.${t.cle as (typeof TACHES_EXTERNES)[number]}`) : t.libelle}`}</Text>
+      ))}
+    </Carte>
+  );
+}
+
 const FOURNISSEURS_CONNUS = ['openai', 'mistral', 'gemini', 'deepseek', 'groq', 'nvidia'] as const;
 const RAISONS_CONNUES = ['cle-absente', 'modele-absent', 'url-invalide'] as const;
 
@@ -842,6 +883,11 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
               />
             ))}
           </Carte>
+        ) : null}
+        {etat.confidentialite ? (
+          <CarteConfidentialite theme={theme} etat={etat} desactive={Boolean(enCours) || !etat.fondateur}
+            onChanger={(t, v) => void agir(`externe-${t}`, async () => { appliquer(await api.reglerIa({ externes: { [t]: v } })); return trJeux('jeux.confidentialite_enregistree'); })}
+          />
         ) : null}
         <CarteTranscriptionServeur theme={theme} etat={etat} ligne={ligne} />
         <CarteIaLocale theme={theme} etat={etat} enCours={enCours} ligne={ligne}

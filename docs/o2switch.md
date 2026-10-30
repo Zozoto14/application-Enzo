@@ -528,7 +528,9 @@ Passenger) ne doit pas montrer de rafales de `/attendre` ou `/flux` ; un `429` �
 Le **serveur o2switch transcrit lui-même** les réunions déposées (Esport › Résumés) : aucun PC à laisser ouvert, ça
 marche aussi depuis un iPhone. Le calcul se fait **dans le processus Node** de l'Esport (ONNX Runtime), avec
 **Whisper large-v3-turbo** (Équilibrée), **small** (Rapide) ou **large-v3** (Maximale), le **vocabulaire de la team**
-(pseudos, agents, maps, glossaire), la recherche en faisceau et une **relecture par l'IA** (partie I ou J). Pourquoi
+(pseudos, agents, maps, glossaire), la recherche en faisceau et une **relecture par l'IA locale** (partie J
+seulement : vos réunions ne partent jamais chez NVIDIA ni ailleurs, sauf autorisation explicite du Fondateur dans
+Administration IA › Confidentialité ; sans IA locale, pas de relecture, le texte est nettoyé sans IA). Pourquoi
 et comment : [esport/transcription.md](esport/transcription.md) ; côté app : [esport/resumes.md](esport/resumes.md).
 
 > **Pourquoi pas whisper.cpp (ni llama-server) ?** Journaux du 29/10 : l'hébergeur **arrête de force (SIGKILL)** les
@@ -620,7 +622,7 @@ serveur et l'app les utilise pour ses estimations :
 | Rapide | small | ≈ 1,1 Go | 20 à 40 min |
 | **Équilibrée** (défaut) | large-v3-turbo | ≈ 2,6 Go | **45 à 90 min** |
 | Maximale | large-v3 | ≈ 4,5 Go | 2 h 30 à 5 h |
-| + relecture par l'IA | API (partie I) | — | + 2 à 10 min |
+| + relecture par l'IA | IA locale (partie J) ; jamais une API par défaut | — | + 2 à 10 min |
 
 Une seule réunion à la fois : les suivantes attendent leur tour (« En file d'attente »). Plus de fils
 (`TRANSCRIPTION_THREADS=8`) va plus vite si Resource Usage le permet.
@@ -687,9 +689,15 @@ compatible OpenAI), DeepSeek, Groq… Sans clé d'API, une **IA installée sur l
 plus lentement : partie J.
 
 Jusqu'à **trois moteurs** : une API **principale** (`IA_API_*`), une API **secondaire** (`IA_API2_*`, pour les tâches
-légères : traductions, posts CM, post-correction des transcriptions) et l'IA locale, essayés dans un **ordre de
-repli** par tâche. Tout est expliqué dans [docs/esport/ia-api.md](esport/ia-api.md). Les données envoyées à une API
-externe **quittent le serveur**.
+légères : traductions, posts CM) et l'IA locale, essayés dans un **ordre de repli** par tâche. Tout est expliqué dans
+[docs/esport/ia-api.md](esport/ia-api.md). Les données envoyées à une API externe **quittent le serveur**.
+
+> **Confidentialité** : le contenu des **réunions** (audio, transcriptions, relecture, résumés, PDF), les notes du
+> staff et les strats ne partent **jamais** chez le fournisseur d'API, quel que soit `IA_ORDRE_LEGER` : seule l'IA
+> locale (partie J) les traite ; sans elle, ces tâches ne sont pas faites. Ce qui part chez NVIDIA : profils de jeu,
+> traductions, textes des posts CM. Le Fondateur seul peut lever la règle, tâche par tâche (Esport › Jeux ›
+> Administration IA › « Confidentialité : ce qui quitte le serveur », avec avertissement ; journalisé). L'API audio
+> de transcription (`TRANSCRIPTION_API`) n'est utilisée qu'après cette autorisation explicite.
 
 ### I1. Ajouter la clé (5 minutes)
 
@@ -703,11 +711,11 @@ externe **quittent le serveur**.
 IA_API_URL=https://integrate.api.nvidia.com/v1
 IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
 IA_MODELE=mistralai/mistral-large-4-1t-a52b
-# Moteur secondaire : NVIDIA, gpt-oss-20b (traductions, posts CM, post-correction des transcriptions)
+# Moteur secondaire : NVIDIA, gpt-oss-20b (traductions, posts CM ; jamais les réunions)
 IA_API2_URL=https://integrate.api.nvidia.com/v1
 IA_API2_CLE=nvapi-REMPLACER-cle-du-modele-secondaire
 IA_MODELE2=openai/gpt-oss-20b
-# Ordres de repli (valeurs par défaut ; l'Administration IA peut les changer)
+# Ordres de repli (valeurs par défaut ; l'Administration IA peut les changer ; sans effet sur les réunions)
 IA_ORDRE=api,api2,local
 IA_ORDRE_LEGER=api2,api,local
 ```
