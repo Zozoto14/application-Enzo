@@ -32,6 +32,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [trombinoscope.md](trombinoscope.md) | Fondateur, CM, staff, joueurs | Trombinoscope (Membres, premier onglet) : fiches des joueurs (photo, teams et jeu, postes, elo, palmarès saisi et calculé, anciennes structures, réseaux pro), visibilité par champ, texte d'annonce FR / EN, RGPD |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [roles-permissions.md](roles-permissions.md) | Fondateur | Page Membres › Rôles et permissions : rôles du club (Second CEO…), rôles CM, rôles des teams et modèle des nouvelles teams, matrice par catégories, garde-fous, journal |
+| [devblog.md](devblog.md) | Fondateur, tous les membres | Devblog : notes de mise à jour FR / EN, fenêtre « Nouveautés » à l'entrée (une fois par compte), historique (bouton « Nouveautés » du Dashboard), éditeur avec aperçus et IA, publication Discord (anglais + fil français, @here) |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |

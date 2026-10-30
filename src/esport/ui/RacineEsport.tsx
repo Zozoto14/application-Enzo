@@ -33,10 +33,12 @@ import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { EspaceCm, Jeux, Statistiques } from './differe';
+import { EspaceCm, Jeux, PageDevblog, Statistiques } from './differe';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
 import type { OngletCm } from './cm/EspaceCm';
 import { demarrerUsage, noterPage } from '../usage';
+import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
+import { trDv } from '../i18n/devblog';
 
 type Etat =
   | { e: 'chargement' }
@@ -49,10 +51,10 @@ type Onglet = OngletEsport;
  * Écran affiché. `cm` : l'espace CM du club, rangé dans Teams (l'entrée « Teams » reste surlignée) ; une ancienne
  * navigation vers « cm » (entrée de premier niveau d'avant) mène toujours à cet écran, ou à Teams sans droit CM.
  */
-type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'devblog' } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
 
 /** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
-export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v);
+export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v === 'devblog' ? 'dashboard' : v);
 
 /** Fabrique du client (remplaçable par les tests) : voir ../fabrique.ts. */
 export { fabrique };
@@ -110,6 +112,8 @@ export function Esport(props: PropsRacineApp) {
     };
   }, [clientPret, profilPret]);
   const cm = Boolean(moiCm?.espace);
+  // Fenêtre « Nouveautés » : le dernier devblog publié pas encore vu par ce compte (une fois, marque en base).
+  const nouveautes = useNouveautes(clientPret, profilPret);
   // Statistiques : le Fondateur, ou un rôle du club qui a statistiques.voir (Second CEO…).
   const stats = etat.e === 'pret' && (etat.moi.superAdmin || Boolean(etat.moi.peutVoirStatistiques));
   const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !stats) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : vue.v === 'cm' && !cm ? 'esport.teams' : `esport.${vue.v}`;
@@ -187,6 +191,9 @@ export function Esport(props: PropsRacineApp) {
           <BoiteResumes theme={theme} client={etat.client} large={large} />
         </PageEsport>
       );
+    } else if (vue.v === 'devblog') {
+      // Devblog : historique des mises à jour (tous les membres) ; éditeur et publication Discord pour qui les gère.
+      page = <PageDevblog theme={theme} client={etat.client} large={large} avant={<LienRetour theme={theme} titre={trDv('retour')} onPress={() => setVue({ v: 'dashboard' })} testID="esport-devblog-retour" />} />;
     } else if (onglet === 'dashboard') {
       page = (
         <Dashboard
@@ -198,6 +205,7 @@ export function Esport(props: PropsRacineApp) {
           onBoite={() => setVue({ v: 'boite' })}
           onMembres={() => setVue({ v: 'membres', sous: 'tous' })}
           onTeams={() => setVue({ v: 'teams' })}
+          onNouveautes={() => setVue({ v: 'devblog' })}
         />
       );
     } else if (onglet === 'statistiques' && stats) {
@@ -266,6 +274,18 @@ export function Esport(props: PropsRacineApp) {
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-esport">
       <RetourHub theme={theme} onRetour={onRetour} titre="Esport" />
       <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>{contenu}</View>
+      {nouveautes.entree && etat.e === 'pret' && etat.moi.profil ? (
+        <FenetreNouveautes
+          theme={theme}
+          client={etat.client}
+          entree={nouveautes.entree}
+          onFermer={nouveautes.fermer}
+          onVoirTous={() => {
+            nouveautes.fermer();
+            setVue({ v: 'devblog' });
+          }}
+        />
+      ) : null}
     </View>
   );
 }

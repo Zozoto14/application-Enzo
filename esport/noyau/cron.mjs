@@ -22,6 +22,7 @@ import { agregerUsage, purgerUsage } from './usage/collecte.mjs';
 import { rappelsSponsors } from './sponsors/rappels.mjs';
 import { rappelsReseaux } from './reseaux/rappels.mjs';
 import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
+import { traiterDevblogDiscord } from './devblog/discord.mjs';
 import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
 import { purgerCorbeilleDrive, verifierAlerteDrive } from './cm/drive/service.mjs';
 import { purgerCorbeilleStrats } from './strats/service.mjs';
@@ -53,6 +54,7 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
+    ['devblog Discord', () => traiterDevblogDiscord(base, { cle, maintenant: maintenant(), jetonBot, ...(fetch ? { fetch } : {}) })],
     ['rétention du journal', () => purgerJournal(base, { maintenant: maintenant() })],
     // Statistiques d'usage : agrégation des jours terminés (une fois par jour), puis détail brut de plus de 90 jours effacé.
     ['agrégation de l’usage', () => agregerUsage(base, { maintenant: maintenant() })],

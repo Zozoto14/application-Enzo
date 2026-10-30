@@ -62,10 +62,13 @@ import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 import { servicesTrombi } from './trombi/service.mjs';
 import { routesTrombi } from './trombi/routes.mjs';
 import { routesRoles, servicesRoles } from './roles/service.mjs';
+import { servicesDevblog } from './devblog/service.mjs';
+import { routesDevblog } from './devblog/routes.mjs';
+import { traiterDevblogDiscord } from './devblog/discord.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -197,6 +200,9 @@ export function creerApi({
   const trb = servicesTrombi({ base, maintenant });
   // Page « Rôles et permissions » (migration 0033) : rôles du club (Second CEO…), modèle des teams, journal.
   const rl = servicesRoles({ base, maintenant, noyau: s });
+  // Devblog (migration 0036) : notes de mise à jour FR/EN, fenêtre « Nouveautés », publication Discord ; la version
+  // anglaise peut être préparée par l'IA (tâche légère « traduction », texte du devblog seulement).
+  const dv = servicesDevblog({ base, maintenant, discuterPour: jx.discuterPour, cle: secretDiscord });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -404,6 +410,8 @@ export function creerApi({
     }
     const rolesPermissions = await routesRoles({ rl, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete), limite });
     if (rolesPermissions !== undefined) return rolesPermissions;
+    const devblog = await routesDevblog({ dv, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    if (devblog !== undefined) return devblog;
     const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (trombi !== undefined) return trombi;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
@@ -520,6 +528,8 @@ export function creerApi({
         .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot }))
         // Annonces Discord des posts publiés (page Réseaux) : même principe, leur propre file.
         .then(() => traiterAnnoncesReseaux(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot, stockage }))
+        // Devblogs publiés sur Discord (anglais + fil français) : leur propre file.
+        .then(() => traiterDevblogDiscord(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), jetonBot }))
         .catch(e => console.error('[esport] distribution', e));
       if (attendre) attendre(travail);
       else await travail;

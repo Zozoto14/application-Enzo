@@ -32,4 +32,6 @@ export const Trombinoscope = differe<React.ComponentProps<typeof import('./membr
 // Page Membres › Rôles et permissions (Fondateur, roles.gerer) : chargée seulement quand on l'ouvre.
 export const RolesPermissions = differe<React.ComponentProps<typeof import('./membres/RolesPermissions').RolesPermissions>>(async () => (await import('./membres/RolesPermissions')).RolesPermissions);
 export const MaFicheTrombi = differe<React.ComponentProps<typeof import('./membres/FicheTrombi').MaFicheTrombi>>(async () => (await import('./membres/FicheTrombi')).MaFicheTrombi);
+// Devblog (historique, éditeur, publication Discord) : chargé seulement quand on l'ouvre.
+export const PageDevblog = differe<React.ComponentProps<typeof import('./devblog/PageDevblog').PageDevblog>>(async () => (await import('./devblog/PageDevblog')).PageDevblog);
 export const Jeux = differe<React.ComponentProps<typeof import('./jeux/Jeux').Jeux>>(async () => (await import('./jeux/Jeux')).Jeux);

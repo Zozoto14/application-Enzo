@@ -182,6 +182,11 @@ export const TABLES = [
   ['roles_globaux_permissions', 'role_id, permission'],
   ['roles_globaux_affectations', 'role_id, compte_id'],
   ['roles_modele', 'cle_systeme'],
+  // Devblog (migration 0036) : entrées, marques « vu » par compte, publications Discord, réglages.
+  ['devblog_entrees', 'id'],
+  ['devblog_vus', 'compte_id, entree_id'],
+  ['devblog_discord', 'id'],
+  ['devblog_reglages', 'cle'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

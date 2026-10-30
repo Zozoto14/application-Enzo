@@ -40,6 +40,8 @@ import { effacementTrombi, exportTrombi } from './trombi/rgpd.mjs';
 import { PERMISSIONS_GLOBALES, aGlobale, permissionsGlobalesDe } from './roles/globales.mjs';
 import { modeleRolesTeam } from './roles/modele.mjs';
 import { effacementRoles, exportRoles } from './roles/rgpd.mjs';
+import { effacementDevblog, exportDevblog } from './devblog/rgpd.mjs';
+import { PERMISSION_DEVBLOG } from './devblog/regles.mjs';
 
 /**
  * Permission du club « Accès à toutes les teams » (rôle Second CEO, migration 0033) : les droits du Propriétaire
@@ -234,6 +236,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       permissionsGlobales: acteur.superAdmin ? [] : [...globales].sort(),
       peutGererRoles: acteur.superAdmin || globales.has('roles.gerer'),
       peutVoirStatistiques: acteur.superAdmin || globales.has('statistiques.voir'),
+      // Devblog (migration 0036) : gérer les notes de mise à jour et les publier sur Discord.
+      peutGererDevblog: acteur.superAdmin || globales.has(PERMISSION_DEVBLOG),
     };
   }
 
@@ -931,6 +935,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...(await exportReseaux(base, compte)),
       // Trombinoscope (migration 0030) : sa fiche et sa photo.
       ...(await exportTrombi(base, compte)),
+      // Devblog (migration 0036) : les devblogs qu'il a vus.
+      ...(await exportDevblog(base, compte)),
     };
   }
 
@@ -1031,6 +1037,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementReseaux(compte),
       // Trombinoscope (migration 0030) : fiche et photo effacées.
       ...effacementTrombi(compte),
+      // Devblog (migration 0036) : ses marques « vu » effacées.
+      ...effacementDevblog(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

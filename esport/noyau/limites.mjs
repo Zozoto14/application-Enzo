@@ -54,6 +54,9 @@ export const LIMITES = {
   // Réseaux : imports CSV de relevés (aperçu compris) ; messages de test Discord.
   rs_import: { max: 60, fenetreS: 3600 },
   rs_test: { max: 30, fenetreS: 3600 },
+  // Devblog : version anglaise préparée par l'IA ; publications Discord demandées.
+  devblog_ia: { max: 30, fenetreS: 3600 },
+  devblog_discord: { max: 60, fenetreS: 3600 },
   // Visuels : rendus envoyés et images importées dans l'éditeur (chacun lu et vérifié par le serveur).
   cm_visuel: { max: 200, fenetreS: 3600 },
   // Drive (migration 0027) : fichiers rangés (et versions) par heure ; liens de ZIP (lecture lourde du disque).

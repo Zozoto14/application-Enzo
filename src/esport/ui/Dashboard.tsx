@@ -21,6 +21,7 @@ import { PageEsport } from './CadreEsport';
 import { PastilleRole, Retours, useAgir } from './commun';
 import { AvatarTeam, Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte, type EtatPresse } from './design';
 import { tr, trn } from '../i18n';
+import { trDv } from '../i18n/devblog';
 import { nomRole } from '../client';
 import { nomIssue, ordinal } from '../competition/libelles';
 
@@ -55,6 +56,7 @@ export function Dashboard({
   onBoite,
   onMembres,
   onTeams,
+  onNouveautes,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -64,6 +66,8 @@ export function Dashboard({
   onBoite(): void;
   onMembres?(): void;
   onTeams?(): void;
+  /** Devblog (historique des mises à jour) : bouton « Nouveautés » discret, dans l'en-tête. */
+  onNouveautes?(): void;
 }) {
   const [tableau, setTableau] = useState<Tableau | undefined>();
   const { erreur, agir } = useAgir();
@@ -84,7 +88,12 @@ export function Dashboard({
         large={large}
         titre={pseudo ? tr('dashboard.bonjour', { pseudo }) : tr('dashboard.dashboard')}
         sous={tr('dashboard.toutes_vos_teams_en')}
-        action={<BoutonHub theme={theme} titre={tr('dashboard.actualiser')} libelle={tr('dashboard.actualiser_le_dashboard')} onPress={() => void agir('', charger)} testID="esport-dashboard-actualiser" />}
+        action={
+          <>
+            {onNouveautes ? <BoutonHub theme={theme} titre={`✨ ${trDv('bouton_dashboard')}`} libelle={trDv('bouton_dashboard_libelle')} onPress={onNouveautes} testID="esport-dashboard-devblog" /> : null}
+            <BoutonHub theme={theme} titre={tr('dashboard.actualiser')} libelle={tr('dashboard.actualiser_le_dashboard')} onPress={() => void agir('', charger)} testID="esport-dashboard-actualiser" />
+          </>
+        }
       />
       <Retours theme={theme} erreur={erreur} prefixe="esport-dashboard" />
       {!tableau && !erreur ? <SqueletteCartes theme={theme} n={large ? 4 : 2} large={large} /> : null}

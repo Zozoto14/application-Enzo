@@ -331,10 +331,11 @@
     {"cle":"comptes.discord_id"},
     {"cle":"comptes.langue"},
     {"cle":"statistiques.voir"},
-    {"cle":"jeux.gerer"}
+    {"cle":"jeux.gerer"},
+    {"cle":"devblog.gerer"}
   ],
   "rolesGlobauxSysteme": [
-    {"cle":"second_ceo","nom":"Second CEO","couleur":"#c99a1e","description":"Adjoint du Fondateur : presque tous les droits du club, des teams et du CM, sauf la page Rôles et permissions et ce qui reste au Fondateur.","descriptionEn":"The Founder’s deputy: almost every right over the club, the teams and the CM, except the Roles & permissions page and what stays with the Founder.","sauf":["roles.gerer"]}
+    {"cle":"second_ceo","nom":"Second CEO","couleur":"#c99a1e","description":"Adjoint du Fondateur : presque tous les droits du club, des teams et du CM, sauf la page Rôles et permissions et ce qui reste au Fondateur.","descriptionEn":"The Founder’s deputy: almost every right over the club, the teams and the CM, except the Roles & permissions page and what stays with the Founder.","sauf":["roles.gerer","devblog.gerer"]}
   ],
   "descriptions": {
     "team.manage": {"categorie":"teams","fr":"Modifier la team : nom, description, jeu, fuseau, archivage.","en":"Edit the team: name, description, game, time zone, archiving."},
@@ -412,6 +413,7 @@
     "discord.manage": {"categorie":"discord","fr":"Discord : configurer les notifications et le bot pour la team.","en":"Discord: set up notifications and the bot for the team."},
     "comptes.discord_id": {"categorie":"discord","fr":"Discord : poser ou corriger le Discord ID d’un membre (pings du bot).","en":"Discord: set or fix a member’s Discord ID (bot pings)."},
     "jeux.gerer": {"categorie":"jeux_ia","fr":"Jeux : gérer les profils de jeu et l’assistant IA (l’Administration de l’IA reste au Fondateur).","en":"Games: manage game profiles and the AI assistant (AI administration stays with the Founder)."},
+    "devblog.gerer": {"categorie":"administration","fr":"Devblog : rédiger les notes de mise à jour, les publier dans l’app et les annoncer sur Discord.","en":"Devblog: write the release notes, publish them in the app and announce them on Discord."},
     "statistiques.voir": {"categorie":"administration","fr":"Statistiques d’usage : voir la page (activité par membre comprise).","en":"Usage statistics: see the page (per-member activity included).","sensible":true},
     "roles.gerer": {"categorie":"administration","fr":"Rôles et permissions : ouvrir la page et modifier les rôles du club, du CM et le modèle des teams. Seul le Fondateur l’accorde.","en":"Roles & permissions: open the page and edit club and CM roles and the team template. Only the Founder grants it.","sensible":true}
   }

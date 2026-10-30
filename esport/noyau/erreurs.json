@@ -710,7 +710,21 @@
   "Tâche confidentielle : envoi à un service externe refusé.": "Confidential task: sending to an external service refused.",
   "Tâche inconnue : transcription, correction, resumes, suivi ou strats.": "Unknown task: transcription, correction, resumes, suivi or strats.",
   "Autoriser l’envoi à un service externe : oui ou non.": "Allow sending to an external service: yes or no.",
-  "La transcription par une API externe n’est pas activée (le Fondateur ne l’a pas autorisée) : transcrivez sur le serveur ou dans le navigateur.": "Transcription by an external API isn’t enabled (the Founder hasn’t allowed it): transcribe on the server or in the browser."
+  "La transcription par une API externe n’est pas activée (le Fondateur ne l’a pas autorisée) : transcrivez sur le serveur ou dans le navigateur.": "Transcription by an external API isn’t enabled (the Founder hasn’t allowed it): transcribe on the server or in the browser.",
+  "Date : au format AAAA-MM-JJ.": "Date: in YYYY-MM-DD format.",
+  "Version : lettres, chiffres, points et tirets (20 caractères au plus).": "Version: letters, digits, dots and dashes (20 characters at most).",
+  "Réservé au Fondateur (ou à qui il confie la gestion du devblog).": "Reserved for the Founder (or whoever they trust with the devblog).",
+  "Devblog introuvable.": "Devblog not found.",
+  "Statut inconnu (brouillon ou publie).": "Unknown status (brouillon or publie).",
+  "Réponse de l’IA illisible : réessayez.": "Unreadable AI answer: try again.",
+  "Salon du bot : identifiant numérique du salon Discord (clic droit › Copier l’identifiant).": "Bot channel: numeric ID of the Discord channel (right-click › Copy ID).",
+  "Publiez d’abord le devblog dans l’app (il est encore en brouillon).": "Publish the devblog in the app first (it is still a draft).",
+  "Choisissez au moins un salon Discord.": "Choose at least one Discord channel.",
+  "Salon Discord inconnu (supprimé ?) : rechargez la liste.": "Unknown Discord channel (deleted?): reload the list.",
+  "Version française : titre obligatoire.": "French version: title required.",
+  "Version anglaise : titre obligatoire.": "English version: title required.",
+  "Version française : au moins une section avec une puce.": "French version: at least one section with a bullet.",
+  "Version anglaise : au moins une section avec une puce.": "English version: at least one section with a bullet."
  },
  "motifs": [
   [

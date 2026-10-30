@@ -18,3 +18,4 @@ export { EspaceCm } from './cm/EspaceCm';
 export { Trombinoscope } from './membres/Trombinoscope';
 export { RolesPermissions } from './membres/RolesPermissions';
 export { MaFicheTrombi } from './membres/FicheTrombi';
+export { PageDevblog } from './devblog/PageDevblog';
