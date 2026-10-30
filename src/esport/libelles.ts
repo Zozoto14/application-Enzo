@@ -58,7 +58,7 @@ export function tailleLisible(octets: number): string {
   if (octets < 1024 * 1024) return tr('fmt.ko', { n: Math.round(octets / 1024) });
   return tr('fmt.mo', { n: formaterNombre(octets / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
 }
-import { LIBELLES_DISCORD } from './discord/api';
+import { LIBELLES_DISCORD, MOTIFS_TEST_MP } from './discord/api';
 import { formaterDate, formaterNombre, tr, trn } from './i18n';
 import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 import { phraseJournalReview, phraseNotificationReview } from './review/libelles';
@@ -190,6 +190,8 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return tr('jr.discord_delivery_failed', { notification: libelleDiscord(m.cle), essai: nombre(m.essai), sur: nombre(m.sur), motif: texte(m.motif) });
     case 'discord.dm_failed':
       return tr('jr.discord_dm_failed', { membre: nom(noms, m.compte), motif: tr(`discord.mp.motif.${['mp_fermes', 'introuvable'].includes(String(m.motif)) ? String(m.motif) : 'refuse'}` as 'discord.mp.motif.refuse') });
+    case 'discord.test_mp':
+      return tr('jr.discord_test_mp', { qui, membre: nom(noms, m.compte), resultat: m.ok ? tr('discord.testmp.journal_ok') : tr(`discord.testmp.motif.${(MOTIFS_TEST_MP as readonly string[]).includes(String(m.motif)) ? String(m.motif) : 'refuse'}` as 'discord.testmp.motif.refuse') });
     case 'discord.delivery_abandoned':
       return tr('jr.discord_delivery_abandoned', { notification: libelleDiscord(m.cle), motif: texte(m.motif) });
     case 'discord.server_linked':

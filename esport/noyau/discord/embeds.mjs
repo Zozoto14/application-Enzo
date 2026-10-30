@@ -378,6 +378,20 @@ export function boutonsRsvp(evenementId, occurrenceIso, { lien = '', desactive =
   return [{ type: 1, components: boutons }];
 }
 
+/** Boutons d'un MP de test : mêmes libellés que la relance, mais ils répondent « Test reçu » et n'enregistrent rien. */
+export function boutonsTestMp(langue = 'fr') {
+  return [
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 3, label: T(langue, 'bouton.oui'), emoji: { name: '✅' }, custom_id: 'tmp:o' },
+        { type: 2, style: 2, label: T(langue, 'bouton.peut_etre'), emoji: { name: '🤔' }, custom_id: 'tmp:p' },
+        { type: 2, style: 4, label: T(langue, 'bouton.non'), emoji: { name: '❌' }, custom_id: 'tmp:n' },
+      ],
+    },
+  ];
+}
+
 /** Seul bouton lien « Ouvrir dans l'app » (webhooks : pas de boutons interactifs). */
 export function boutonLien(lien, libelle, langue = 'fr') {
   return https(lien) ? [{ type: 1, components: [{ type: 2, style: 5, label: libelle ?? T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien }] }] : [];

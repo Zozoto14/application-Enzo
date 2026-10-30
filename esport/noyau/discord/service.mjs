@@ -16,6 +16,7 @@ import { chiffrerWebhook, dechiffrerWebhook, finDeWebhook, masquerWebhook, valid
 import { API_DISCORD, appelerDiscord, filFrActif, reglageEffectif, relancesMpActives, serveurBot } from './file.mjs';
 import { membresTeam } from './convoques.mjs';
 import { ARCHIVAGE_FIL_MIN, avecParams, motifRefusFil, nomFil, texteMotifFil } from './bilingue.mjs';
+import { servicesTestMp } from './testmp.mjs';
 import { apercuModele, construireCharge, lireRoleMention, validerModele } from './messages.mjs';
 
 export const MODULE_DISCORD = 'discord';
@@ -24,7 +25,7 @@ const INTERVALLE_TEST_MS = 10_000;
 /** Permissions du bot à activer dans le salon pour le fil français (affichées dans Réglages › Discord). */
 export const PERMISSIONS_FIL = Object.freeze(['View Channel', 'Send Messages', 'Embed Links', 'Read Message History', 'Create Public Threads', 'Send Messages in Threads']);
 
-export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), jetonBot }) {
+export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), jetonBot, lienApp = '' }) {
   async function contexte(acteur, teamId) {
     const ctx = await noyau.contexteTeam(acteur, teamId);
     noyau.exiger(ctx, 'discord.manage');
@@ -329,5 +330,7 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     return etatBilingue(teamId);
   }
 
-  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue, majBilingue, majMp };
+  const testMp = servicesTestMp({ base, maintenant, contexte, jetonBot, fetch: fetchDiscord, lienApp });
+
+  return { ...testMp, etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue, majBilingue, majMp };
 }

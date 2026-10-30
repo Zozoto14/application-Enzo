@@ -83,6 +83,49 @@ export interface MpDiscord {
   injoignables: Array<{ compte: string; pseudo: string; motif: MotifInjoignable; depuis: string | null }>;
 }
 
+/** Pourquoi un MP de test n'est pas arrivé (chaque motif a sa cause et son action dans l'écran). */
+export const MOTIFS_TEST_MP = ['non_lie', 'bot_non_configure', 'bot_absent', 'mp_fermes', 'introuvable', 'bot_bloque', 'limite', 'indisponible', 'refuse'] as const;
+export type MotifTestMp = (typeof MOTIFS_TEST_MP)[number];
+
+export interface ResultatMembreTestMp {
+  compte: string;
+  pseudo: string;
+  ok: boolean;
+  motif?: MotifTestMp;
+  attenteS?: number;
+}
+
+export interface QuotaTestMp {
+  max: number;
+  restant: number;
+  attenteS: number;
+}
+
+/** Écran « Tester les MP » : membres testables, événements à venir (simulation) et tests restants. */
+export interface EtatTestMp {
+  botConfigure: boolean;
+  botLie: boolean;
+  quota: QuotaTestMp;
+  moi: string;
+  membres: Array<{ compte: string; pseudo: string; discordId: boolean }>;
+  evenements: Array<{ evenementId: string; occurrence: string; titre: string; type: string; debut: string }>;
+}
+
+export interface ResultatTestMp {
+  resultats: ResultatMembreTestMp[];
+  quota: QuotaTestMp;
+}
+
+export interface SimulationRelance {
+  evenement: { evenementId: string; occurrence: string; titre: string; type: string; debut: string };
+  relancesMp: boolean;
+  botPret: boolean;
+  /** Pourquoi aucune relance ne partirait (réunion du staff, présence inactive, tout le monde a répondu). */
+  rien: 'reunion_staff' | 'presence_inactive' | 'tous_ont_repondu' | null;
+  membres: Array<{ compte: string; pseudo: string; voie: 'mp' | 'salon'; motif: string | null; dejaPinge: boolean; mention: boolean }>;
+  dejaPinges: Array<{ compte: string; pseudo: string }>;
+}
+
 export interface ResultatTestDiscord {
   ok: boolean;
   /** Avec le fil français : fil créé, ou motif du refus. */
@@ -123,6 +166,10 @@ export function apiDiscord(client: ClientEsport, teamId: string) {
     majLangue: (langue: Langue) => client.requete<{ langue: Langue }>(`${base}/langue`, 'PUT', { langue }),
     majBilingue: (filFr: boolean) => client.requete<BilingueDiscord>(`${base}/bilingue`, 'PUT', { filFr }),
     majMp: (relancesMp: boolean) => client.requete<MpDiscord>(`${base}/mp`, 'PUT', { relancesMp }),
+    etatTestMp: () => client.requete<EtatTestMp>(`${base}/testmp`),
+    testerMp: (comptes: string[]) => client.requete<ResultatTestMp>(`${base}/testmp`, 'POST', { comptes }),
+    simulerRelance: (evenementId: string, occurrence: string) => client.requete<SimulationRelance>(`${base}/testmp/simulation`, 'POST', { evenementId, occurrence }),
+    relanceTest: (evenementId: string, occurrence: string, compte: string) => client.requete<ResultatTestMp>(`${base}/testmp/relance`, 'POST', { evenementId, occurrence, compte }),
     majParametre: (cle: string, champs: ChampsParametreDiscord) => client.requete<ParametreDiscord>(`${base}/parametres/${encodeURIComponent(cle)}`, 'PUT', champs),
   };
 }

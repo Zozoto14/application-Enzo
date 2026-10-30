@@ -700,7 +700,13 @@
   "Ordre de repli : 1 à 3 moteurs parmi api, api2 et local, sans doublon.": "Fallback order: 1 to 3 engines among api, api2 and local, without duplicates.",
   "Le service d’IA refuse la clé d’API (vérifiez IA_API2_CLE).": "The AI service rejects the API key (check IA_API2_CLE).",
   "Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE2 et IA_API2_URL).": "Model or address unknown to the AI service (check IA_MODELE2 and IA_API2_URL).",
-  "Réponse du service d’IA interrompue (flux coupé avant la fin).": "Answer from the AI service interrupted (stream cut before the end)."
+  "Réponse du service d’IA interrompue (flux coupé avant la fin).": "Answer from the AI service interrupted (stream cut before the end).",
+  "Trop de tests de MP : 10 au plus toutes les 10 minutes pour une team.": "Too many DM tests: 10 at most every 10 minutes per team.",
+  "Choisissez au moins un membre à tester.": "Choose at least one member to test.",
+  "Au plus 10 membres à la fois.": "At most 10 members at a time.",
+  "Ce membre ne fait pas partie de la team.": "This member is not part of the team.",
+  "Choisissez un événement à venir.": "Choose an upcoming event.",
+  "Événement introuvable ou occurrence annulée.": "Event not found or occurrence cancelled."
  },
  "motifs": [
   [

@@ -130,6 +130,10 @@ const ROUTES_TEAM = [
   ['PUT', '/discord/langue', 'discord'],
   ['PUT', '/discord/bilingue', 'discord'],
   ['PUT', '/discord/mp', 'discord'],
+  ['GET', '/discord/testmp', 'discord'],
+  ['POST', '/discord/testmp', 'discord'],
+  ['POST', '/discord/testmp/simulation', 'discord'],
+  ['POST', '/discord/testmp/relance', 'discord'],
   // Bot Discord : liaison du serveur, pings, qui est lié.
   ['GET', '/discord/bot', 'discord'],
   ['POST', '/discord/bot/code', 'discord'],

@@ -289,6 +289,7 @@ les permissions de fil (étape 5).
 | « Lie ton compte avec /lier » | Étape 8. |
 | Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. Rappel : un joueur n'est mentionné **qu'une fois par événement** (sur l'annonce) ; les rappels ne le re-mentionnent pas. |
 | Un joueur ne reçoit pas les MP du bot | Réglages › Discord › Relances par MP : son nom y figure avec l'action (lier son compte, ouvrir ses MP pour ce serveur, ne pas bloquer le bot). En attendant, il est cité dans le salon. |
+| Vérifier les MP du bot sans attendre une relance | Réglages › Discord › **Tester les MP** : MP de test par membre avec la cause de l'échec et l'action à faire, simulation d'une relance ([discord.md](discord.md#tester-les-mp-du-bot)). |
 | Rien n'arrive dans le salon | Le bot doit voir le salon et pouvoir y écrire (permissions du salon) ; regardez **Réglages › Discord › Derniers envois** et le Journal. |
 | « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | `DISCORD_BOT_TOKEN` manque dans `esport.env` : étape 3. |
 | Alerte « French thread unavailable · Fil français impossible » dans le salon | Donnez au bot **Create Public Threads**, **Send Messages in Threads** et **Read Message History** sur ce salon (étape 5), puis **Envoyer un message de test**. L'alerte ne revient pas avant 24 h dans ce salon. |

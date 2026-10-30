@@ -161,7 +161,7 @@ export function creerApi({
   const secretDiscord = cleDiscord || cleSession;
   const envoiDiscord = fetchDiscord ?? ((...a) => globalThis.fetch(...a));
   // Jeton du bot (DISCORD_BOT_TOKEN, secret) : le fil français des messages et du message de test.
-  const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined });
+  const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined, lienApp });
   const rv = servicesReview({ base, maintenant, socle: s, medias: md });
   const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
   const st = servicesStrats({ base, stockage, cleSession, maintenant, socle: s });

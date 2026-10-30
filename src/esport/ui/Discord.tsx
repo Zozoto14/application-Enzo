@@ -20,6 +20,7 @@ import type { PropsModule } from './modules';
 import { tr, trn } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
 import { ChoixLangue } from './ChoixLangue';
+import { TestMpDiscord } from './TestMpDiscord';
 
 const STATUTS: Record<EnvoiDiscord['statut'], string> = { get attente() {
       return tr('demandesCompte.en_attente');
@@ -380,6 +381,8 @@ export function Discord({ theme, client, detail }: PropsModule) {
           return tr(v ? 'discord.mp.active' : 'discord.mp.coupe');
         })
       } /> : null}
+
+      <TestMpDiscord theme={theme} client={client} teamId={teamId} />
 
       <Panneau theme={theme} testID="esport-discord-webhook">
         <Intertitre theme={theme}>{tr('discord.webhook_du_salon_repli')}</Intertitre>

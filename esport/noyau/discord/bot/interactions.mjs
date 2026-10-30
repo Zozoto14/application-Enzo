@@ -615,6 +615,8 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
           const [evId, occ] = String(i.data?.values?.[0] ?? '').split('|');
           return await carteRsvp(i, evId, occurrenceLongue(occ));
         }
+        // MP de test (Réglages › Discord › Tester les MP) : on répond seulement, rien n'est enregistré.
+        if (/^tmp:[opn]$/.test(id)) return avis(`🧪 ${T(lg(i), 'test.mp.recu_titre')}`, T(lg(i), 'test.mp.recu_description'), COULEUR_OK);
         const r = /^r:([0-9a-f-]{36}):([0-9a-z]{1,12}):([opn])$/.exec(id);
         if (r) return await bouttonRsvp(i, r.slice(1));
         const pg = /^pg:([a-z0-9.-]{1,90}):(\d{1,4})$/.exec(id);
@@ -672,7 +674,8 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       return json(erreur(i, texteErreur(e, lg(i))));
     }
     // Statistiques d'usage (fonction « bot ») : la commande est comptée pour le compte Esport lié, sans retarder la réponse.
-    const usage = noterCommandeBot(base, utilisateur.id, maintenant());
+    const clicTest = i.type === TYPE.COMPOSANT && /^tmp:[opn]$/.test(String(i.data?.custom_id ?? ''));
+    const usage = clicTest ? Promise.resolve(false) : noterCommandeBot(base, utilisateur.id, maintenant());
     if (attendre) attendre(usage);
     else await usage;
     const travail = executer(i);

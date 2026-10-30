@@ -85,6 +85,11 @@ export const EN = {
   'var.le_jour': ', on {date}',
   'test.message': 'Test message: the webhook of {team} works. Esport notifications will show up here.',
   'test.titre': 'Test message',
+  'test.mp.titre': 'DM test',
+  'test.mp.message': '🧪 **Test**: this is a test message from the {team} bot. If you can read it, your reminders will reach you by DM. The buttons below only answer “Test received”: nothing is saved.',
+  'test.mp.relance': '🧪 **Reminder TEST**: this is the reminder as you would receive it. The buttons only answer “Test received”: your answer is not saved.',
+  'test.mp.recu_titre': 'Test received',
+  'test.mp.recu_description': 'The bot can reach you by DM. This was only a test: nothing was saved.',
 
   // ---- Bot: general
   'bot.impossible': '⚠️ Can’t do that',

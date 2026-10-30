@@ -559,7 +559,7 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
  * de la team (ou modèle par défaut dans cette langue), embed de l'occurrence, boutons RSVP (ils marchent en MP).
  * Aucune mention, aucun nom d'expéditeur (API du bot).
  */
-async function chargeMp(base, ligne, c, membre, { team, lienApp, t, langue }) {
+export async function chargeMp(base, ligne, c, membre, { team, lienApp, t, langue }) {
   const def = evenementDiscord(ligne.cle);
   const reglage = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, ligne.cle]), langue);
   const variables = jsonOu(ligne.variables, {});

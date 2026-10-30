@@ -251,6 +251,8 @@ export const TYPES_DISCORD = [
   'discord.webhook_removed',
   'discord.settings_changed',
   'discord.test_sent',
+  // Test des MP du bot (Réglages › Discord › Tester les MP) : un événement par membre testé, aussi compteur anti-abus.
+  'discord.test_mp',
   'discord.delivery_failed',
   'discord.delivery_abandoned',
   // Bot Discord (migration 0011) : liaisons, commandes, début d'événement, relance.

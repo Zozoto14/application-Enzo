@@ -415,6 +415,103 @@ describe('écran Discord', () => {
   });
 });
 
+describe('Tester les MP', () => {
+  const etatTest = (extra: Record<string, unknown> = {}) => ({
+    botConfigure: true,
+    botLie: true,
+    quota: { max: 10, restant: 10, attenteS: 0 },
+    moi: 'max12345',
+    membres: [
+      { compte: 'max12345', pseudo: 'Max', discordId: true },
+      { compte: 'tom12345', pseudo: 'Tom', discordId: true },
+      { compte: 'ana12345', pseudo: 'Ana', discordId: false },
+    ],
+    evenements: [{ evenementId: 'ev1', occurrence: '2026-10-22T18:30:00.000Z', titre: 'Scrim Faucons', type: 'scrim', debut: '2026-10-22T18:30:00.000Z' }],
+    ...extra,
+  });
+
+  it('moi par défaut, résultat par membre avec la cause et l’action, limite affichée', async () => {
+    let quota = { max: 10, restant: 10, attenteS: 0 };
+    const { requete, appels } = fauxServeur((chemin, methode, corps) => {
+      if (chemin.endsWith('/discord/testmp') && methode === 'GET') return etatTest({ quota });
+      if (chemin.endsWith('/discord/testmp') && methode === 'POST') {
+        const comptes = (corps as { comptes: string[] }).comptes;
+        quota = { max: 10, restant: 10 - comptes.length, attenteS: 0 };
+        return {
+          quota,
+          resultats: comptes.map(c => (c === 'max12345' ? { compte: c, pseudo: 'Max', ok: true } : c === 'tom12345' ? { compte: c, pseudo: 'Tom', ok: false, motif: 'mp_fermes' } : { compte: c, pseudo: 'Ana', ok: false, motif: 'non_lie' })),
+        };
+      }
+      return undefined;
+    });
+    await monter(requete, detail(MANAGER), 'telephone');
+    await fireEvent.press(await screen.findByTestId('esport-discord-testmp-ouvrir'));
+    await screen.findByTestId('esport-discord-testmp');
+    expect(screen.getByTestId('esport-discord-testmp-membre-max12345').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('esport-discord-testmp-membre-tom12345').props.accessibilityState.checked).toBe(false);
+    expect(screen.getByTestId('esport-discord-testmp-quota').props.children).toMatch(/Tests restants : 10 sur 10/);
+    await fireEvent.press(screen.getByTestId('esport-discord-testmp-membre-tom12345'));
+    await fireEvent.press(screen.getByTestId('esport-discord-testmp-membre-ana12345'));
+    await fireEvent.press(screen.getByTestId('esport-discord-testmp-envoyer'));
+    await screen.findByTestId('esport-discord-testmp-resultats');
+    expect(appels.find(a => a.chemin.endsWith('/discord/testmp') && a.methode === 'POST')?.corps).toEqual({ comptes: ['max12345', 'tom12345', 'ana12345'] });
+    expect(screen.getByText(/✅ Max : MP de test reçu/)).toBeTruthy();
+    expect(screen.getByText(/❌ Tom : MP fermés ou bot bloqué .*50007/)).toBeTruthy();
+    expect(screen.getByText(/À faire : le membre ouvre ses messages privés/)).toBeTruthy();
+    expect(screen.getByText(/❌ Ana : compte Discord non lié/)).toBeTruthy();
+    expect(screen.getByText(/À faire : le membre lie son compte avec \/lier/)).toBeTruthy();
+    expect(screen.getByTestId('esport-discord-testmp-quota').props.children).toMatch(/Tests restants : 7 sur 10/);
+  });
+
+  it('limite atteinte : envoi désactivé ; bot absent signalé', async () => {
+    const { requete } = fauxServeur(chemin => (chemin.endsWith('/discord/testmp') ? etatTest({ botLie: false, quota: { max: 10, restant: 0, attenteS: 240 } }) : undefined));
+    await monter(requete, detail(MANAGER));
+    await fireEvent.press(await screen.findByTestId('esport-discord-testmp-ouvrir'));
+    await screen.findByTestId('esport-discord-testmp-bot');
+    expect(screen.getByTestId('esport-discord-testmp-quota').props.children).toMatch(/Limite atteinte : réessayez dans 240 s/);
+    expect(screen.getByTestId('esport-discord-testmp-envoyer').props.accessibilityState?.disabled ?? screen.getByTestId('esport-discord-testmp-envoyer').props.disabled).toBeTruthy();
+  });
+
+  it('simulation d’une relance puis relance de test à un seul membre', async () => {
+    const { requete, appels } = fauxServeur((chemin, methode) => {
+      if (chemin.endsWith('/discord/testmp') && methode === 'GET') return etatTest();
+      if (chemin.endsWith('/discord/testmp/simulation')) {
+        return {
+          evenement: etatTest().evenements[0],
+          relancesMp: true,
+          botPret: true,
+          rien: null,
+          membres: [
+            { compte: 'tom12345', pseudo: 'Tom', voie: 'mp', motif: null, dejaPinge: true, mention: false },
+            { compte: 'ana12345', pseudo: 'Ana', voie: 'salon', motif: 'non_lie', dejaPinge: false, mention: false },
+          ],
+          dejaPinges: [{ compte: 'tom12345', pseudo: 'Tom' }],
+        };
+      }
+      if (chemin.endsWith('/discord/testmp/relance')) return { quota: { max: 10, restant: 9, attenteS: 0 }, resultats: [{ compte: 'max12345', pseudo: 'Max', ok: true }] };
+      return undefined;
+    });
+    await monter(requete, detail(MANAGER));
+    await fireEvent.press(await screen.findByTestId('esport-discord-testmp-ouvrir'));
+    await fireEvent.press(await screen.findByTestId('esport-discord-simulation-lancer'));
+    await screen.findByTestId('esport-discord-simulation-resultat');
+    expect(appels.find(a => a.chemin.endsWith('/testmp/simulation'))?.corps).toEqual({ evenementId: 'ev1', occurrence: '2026-10-22T18:30:00.000Z' });
+    expect(screen.getByText(/✉️ Tom : recevrait un MP · déjà pingé/)).toBeTruthy();
+    expect(screen.getByText(/💬 Ana : cité dans le salon, sans mention \(compte Discord non lié/)).toBeTruthy();
+    expect(screen.getByTestId('esport-discord-simulation-deja').props.children).toMatch(/Déjà pingés pour cet événement : Tom/);
+    expect(appels.some(a => a.chemin.endsWith('/testmp/relance'))).toBe(false);
+    await fireEvent.press(screen.getByTestId('esport-discord-simulation-envoyer'));
+    await waitFor(() => expect(appels.find(a => a.chemin.endsWith('/testmp/relance'))?.corps).toEqual({ evenementId: 'ev1', occurrence: '2026-10-22T18:30:00.000Z', compte: 'max12345' }));
+    expect(await screen.findByText(/✅ Max : MP de test reçu/)).toBeTruthy();
+  });
+
+  it('journal : test MP', () => {
+    const e = (meta: Record<string, unknown>) => ({ id: '1', action: 'discord.test_mp', acteur: 'max12345', entiteType: null, entiteId: null, meta, date: '' });
+    expect(phraseJournal(e({ compte: 'max12345', ok: true }), { max12345: 'Max' })).toBe('Max a testé les MP du bot pour Max : MP reçu');
+    expect(phraseJournal(e({ compte: 'max12345', ok: false, motif: 'non_lie' }), { max12345: 'Max' })).toMatch(/non lié/);
+  });
+});
+
 describe('journal', () => {
   const e = (action: string, meta: Record<string, unknown>) => ({ id: '1', action, acteur: 'max12345', entiteType: null, entiteId: null, meta, date: '' });
   const noms = { max12345: 'Max' };

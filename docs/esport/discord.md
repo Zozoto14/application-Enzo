@@ -212,6 +212,44 @@ mentionné une fois par événement).
 bot, et autoriser les messages privés des membres de ce serveur (Discord : **Paramètres du serveur › Confidentialité
 › Messages privés**, ou réglage global **Confidentialité et sécurité**), sans bloquer le bot.
 
+## Tester les MP du bot
+
+**Réglages › Discord › Tester les MP** (permission `discord.manage`, FR/EN, utilisable sur téléphone) permet de
+vérifier les MP sans attendre une vraie relance. Bouton **Ouvrir le test des MP**, puis :
+
+1. **MP de test.** Cochez un ou plusieurs membres (par défaut : vous) et **Envoyer le MP de test**. Chacun reçoit un
+   message privé du bot, **marqué « Test »**, dans **sa** langue (profil, sinon langue par défaut, sinon anglais), avec
+   les boutons Oui / Peut-être / Non d'une relance factice : ils répondent seulement « Test reçu » et n'enregistrent
+   rien (aucune présence). Le résultat s'affiche **par membre** : ✅ MP de test reçu, ou ❌ avec la cause et l'action :
+
+   | Cause | Action affichée |
+   |---|---|
+   | Compte Discord non lié / Discord ID absent | le membre fait `/lier`, ou le Fondateur renseigne son Discord ID |
+   | Bot non configuré (`DISCORD_BOT_TOKEN`) | ajouter le jeton aux secrets du serveur Esport, redéployer |
+   | Bot absent du serveur Discord de la team | inviter le bot, puis `/esport-lier-serveur` |
+   | MP fermés ou bot bloqué (erreur Discord **50007**) | ouvrir les MP pour ce serveur, ne pas bloquer le bot |
+   | Utilisateur introuvable | vérifier le Discord ID / refaire `/lier` |
+   | Jeton du bot refusé (401) | régénérer le jeton dans le portail Discord |
+   | Limite de débit (429) | patienter quelques secondes |
+   | Panne de Discord, autre refus | réessayer plus tard / vérifier que le membre est sur le serveur du bot |
+
+2. **Simuler une relance** (sans rien envoyer). Choisissez un événement des 14 prochains jours : l'écran liste qui
+   recevrait un **MP**, qui serait **cité dans le salon** (et s'il serait mentionné, selon le registre « déjà
+   pingé »), et qui est **déjà pingé** pour cet événement. Cas sans relance : réunion du staff, module Présence
+   désactivé, tout le monde a déjà répondu. **Envoyer la relance de test à ce membre** envoie, à **un seul**
+   membre, la vraie relance (texte et embed de l'événement) précédée de « TEST », avec les boutons de test.
+
+**Aucun effet sur l'état.** Un test n'écrit ni dans le registre « déjà pingé » (`discord_mentions`), ni dans les MP
+retenus (`discord_mp_envois`), ni dans la liste des injoignables, ni dans les présences ou les convocations, et ne
+crée aucune tâche de file. Seul le bus reçoit un événement **`discord.test_mp`** par membre testé (Journal : « Max a
+testé les MP du bot pour Tom : MP fermés… », sans identifiant Discord).
+
+**Limite anti-abus** : 10 MP de test par tranche de 10 minutes et par team (chaque membre testé compte pour un, la
+simulation ne compte pas) ; au-delà, l'API répond 429 avec le délai restant. Routes : `GET|POST
+/teams/:t/discord/testmp`, `POST …/testmp/simulation`, `POST …/testmp/relance` (`esport/noyau/discord/testmp.mjs`,
+test `esport/test/discord-test-mp.test.mjs`, écran `src/esport/ui/TestMpDiscord.tsx`). Les boutons de test (`tmp:o|p|n`)
+sont traités par le bot sans compte lié et ne sont pas comptés dans les statistiques d'usage.
+
 ## Comment ça marche (envoi, réessais)
 
 1. Une action dans l'app (événement créé, tâche assignée…) publie un **événement** dans le bus interne. Le

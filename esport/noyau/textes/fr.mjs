@@ -86,6 +86,11 @@ export const FR = {
   'var.le_jour': ', le {date}',
   'test.message': 'Message de test : le webhook de {team} fonctionne. Les notifications de l’Esport arriveront ici.',
   'test.titre': 'Message de test',
+  'test.mp.titre': 'Test des MP',
+  'test.mp.message': '🧪 **Test** : ceci est un message de test du bot de {team}. Si tu le lis, tes relances arriveront bien en MP. Les boutons ci-dessous répondent seulement « Test reçu » : rien n’est enregistré.',
+  'test.mp.relance': '🧪 **TEST de relance** : voici la relance telle que tu la recevrais. Les boutons ne font que répondre « Test reçu » : ta réponse n’est pas enregistrée.',
+  'test.mp.recu_titre': 'Test reçu',
+  'test.mp.recu_description': 'Le bot sait te joindre en MP. Ce n’était qu’un test : rien n’a été enregistré.',
 
   // ---- Bot : général
   'bot.impossible': '⚠️ Impossible',
