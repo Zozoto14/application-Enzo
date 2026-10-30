@@ -14,8 +14,17 @@
 #      DELAI_ASSETS_JOURS jours (14) après leur dernière présence dans un build, puis sont purgés.
 #
 # Idempotent (rien à faire = rien de fait) et protégé contre deux exécutions simultanées (flock).
-# Journal : ~/logs/esport-deploy.log. Tâche cron cPanel (une ligne) :
+# Journal : ~/logs/esport-deploy.log. Tâche cron cPanel (une ligne, inchangée) :
 #   */5 * * * * /bin/bash /home/jayo8828/application-enzo/esport/serveur/deployer.sh >/dev/null 2>&1
+#
+# GUET (sans option) : le cron passe toutes les 5 minutes, mais le script reste ~4 minutes et vérifie CHAQUE
+# MINUTE, à peu de frais, s'il y a du nouveau : un seul `git ls-remote` (main et deploiement-o2switch) comparé à
+# ce qui est déjà déployé. Rien de nouveau : il ne fait rien (pas de fetch, rien au journal). Du nouveau, le
+# drapeau « Vérifier maintenant » de l'app (~/.appdashboard/deployer-demande, déposé par le serveur Esport) ou
+# plus d'une heure depuis le dernier passage complet : passage complet (étapes 1 à 6 ci-dessous). Une nouvelle
+# version est donc en ligne environ une minute après la fin du workflow GitHub (au lieu de 5 en moyenne).
+# Il note l'heure de chaque vérification dans ~/.appdashboard/derniere-verification (page « Mises à jour »).
+# DEPLOYER_GUET (secondes, 240 ; 0 = une seule vérification) et DEPLOYER_PAS (60) le règlent ; docs/mises-a-jour.md.
 #
 # Options : --forcer (refait tout même sans nouveauté), --sans-git (code déjà à jour : bouton
 # « Deploy HEAD Commit » de cPanel, voir .cpanel.yml), --sans-site, --sans-code.
@@ -48,13 +57,54 @@ chmod 700 "$ETAT" 2>/dev/null || true
 journal() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$JOURNAL"; }
 echec() { journal "ÉCHEC : $*"; echo "ÉCHEC : $*" >&2; exit 1; }
 
-# ---- Verrou : une seule exécution à la fois (le cron peut se chevaucher si npm est lent).
-exec 9>"$ETAT/deployer.verrou"
-if command -v flock >/dev/null 2>&1; then
-  flock -n 9 || exit 0
+# ---- Verrou : une seule exécution à la fois (le cron peut se chevaucher si npm est lent). Un passage lancé
+#      par le guet (DEPLOYER_PASSAGE=1) hérite du verrou de son parent.
+if [ "${DEPLOYER_PASSAGE:-}" != 1 ]; then
+  exec 9>"$ETAT/deployer.verrou"
+  if command -v flock >/dev/null 2>&1; then
+    flock -n 9 || exit 0
+  fi
 fi
 
 cd "$DEPOT" 2>/dev/null || echec "dossier du dépôt introuvable : $DEPOT (Git Version Control › Clone)."
+
+# ---- Guet (voir l'en-tête) : vérification légère chaque minute ; passage complet seulement s'il y a lieu.
+GUET="${DEPLOYER_GUET:-240}"
+PAS="${DEPLOYER_PAS:-60}"
+PASSAGE_COMPLET_S=3600
+maintenant_s() { echo "${DEPLOYER_MAINTENANT:-$(date +%s)}"; }
+passage_utile() {
+  if [ -f "$ETAT/deployer-demande" ]; then
+    rm -f "$ETAT/deployer-demande"
+    journal "vérification demandée depuis l'app (page Mises à jour)"
+    return 0
+  fi
+  local complet distant principal site
+  complet="$(cat "$ETAT/passage-complet" 2>/dev/null || echo 0)"
+  [ $(( $(maintenant_s) - complet )) -lt "$PASSAGE_COMPLET_S" ] 2>/dev/null || return 0
+  # Une seule requête légère vers GitHub (deploy key) ; en cas d'échec, passage complet (il dira pourquoi).
+  distant="$(git ls-remote origin "refs/heads/$BRANCHE" "refs/heads/$BRANCHE_SITE" 2>/dev/null)" || return 0
+  principal="$(printf '%s\n' "$distant" | awk -v r="refs/heads/$BRANCHE" '$2 == r { print $1 }')"
+  site="$(printf '%s\n' "$distant" | awk -v r="refs/heads/$BRANCHE_SITE" '$2 == r { print $1 }')"
+  [ -n "$principal" ] || return 0
+  [ "$principal" = "$(cat "$ETAT/code-deploye" 2>/dev/null)" ] || return 0
+  [ -z "$site" ] || [ "$site" = "$(cat "$ETAT/site-deploye" 2>/dev/null)" ] || return 0
+  return 1
+}
+if [ "${DEPLOYER_PASSAGE:-}" != 1 ] && [ "$#" -eq 0 ]; then
+  DEBUT_GUET="$(date +%s)"
+  while :; do
+    date +%s > "$ETAT/derniere-verification"
+    if passage_utile; then
+      # Passage complet dans un processus à part : il relit le script (peut-être mis à jour à l'instant). En cas
+      # d'échec, on arrête de guetter : le prochain cron réessaiera (pas un ÉCHEC par minute dans le journal).
+      DEPLOYER_PASSAGE=1 /bin/bash "${BASH_SOURCE[0]}" || break
+    fi
+    [ $(( $(date +%s) - DEBUT_GUET + PAS )) -le "$GUET" ] || break
+    sleep "$PAS"
+  done
+  exit 0
+fi
 
 # ---- Node : celui de l'app créée dans « Setup Node.js App » (environnement virtuel de cPanel).
 trouver_node() {
@@ -186,4 +236,6 @@ if [ "$SANS_SITE" = 0 ] && [ -d "$SITE_DIR/assets" ] && [ -f "$ETAT/assets-coura
     journal "site : $PURGES ancien(s) fichier(s) de assets/ purgé(s) (absents des builds depuis plus de $DELAI_ASSETS_JOURS jours)"
   fi
 fi
+# Passage complet réussi : le guet peut se contenter de vérifications légères pendant une heure.
+if [ "$SANS_SITE" = 0 ] && [ "$SANS_CODE" = 0 ]; then echo "$MAINTENANT" > "$ETAT/passage-complet"; fi
 exit 0

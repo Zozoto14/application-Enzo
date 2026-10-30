@@ -318,7 +318,7 @@ test('catalogue : toute permission vérifiée côté serveur est décrite (caté
 test('catalogue : un rôle du club porte les permissions du club et du CM ; le Second CEO a tout sauf roles.gerer', () => {
   assert.deepEqual([...PERMISSIONS_ROLE_GLOBAL].sort(), [...new Set([...PERMISSIONS_GLOBALES, ...PERMISSIONS_ROLES_CM])].sort());
   const sc = permissionsParDefautGlobal('second_ceo');
-  assert.deepEqual(PERMISSIONS_ROLE_GLOBAL.filter(p => !sc.includes(p)).sort(), ['devblog.gerer', 'roles.gerer']);
+  assert.deepEqual(PERMISSIONS_ROLE_GLOBAL.filter(p => !sc.includes(p)).sort(), ['deploiement.voir', 'devblog.gerer', 'roles.gerer']);
   // La migration 0033 pose exactement ces permissions (sinon « Modifié » s'afficherait dès l'installation).
   const sql = readFileSync(fileURLToPath(new URL('../migrations/0033_roles_globaux.sql', import.meta.url)), 'utf8');
   const posees = [...sql.matchAll(/\('role-global-second-ceo', '([a-z_.]+)'\)/g)].map(m => m[1]);

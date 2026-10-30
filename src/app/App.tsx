@@ -174,6 +174,10 @@ import {
   ReglagesAdministration,
 } from '../hub/ReglagesHub';
 import { ReglageA2f } from '../hub/ReglageA2f';
+import { PageMisesAJour, ReglageMajAuto } from '../hub/maj/PageMisesAJour';
+import { useEtatDeploiement } from '../hub/maj/deploiement';
+import { majAutoDisponible } from '../hub/maj/version';
+import { aAccesEsport } from '../esport/acces';
 import type { IdReglage, IdSection } from '../hub/recensement';
 import { CLE_CACHE_AFFICHAGE, lireAffichageMemorise, memoriserAffichage, migrerThemeUnique, stockageLocalAppareil } from '../hub/themeUnique';
 import { GardeErreur } from '../ui/GardeErreur';
@@ -2539,6 +2543,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const tsuzukuVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'tsuzuku');
   // Tâches : SES réglages pour tout compte qui a l'app ; membres, liens, IA, GitHub pour le Fondateur.
   const roleTachesHub = hub && contexteHub.baseProfil ? roleTaches(contexteHub) : undefined;
+  // Mises à jour du site (docs/mises-a-jour.md) : le Fondateur suit la publication ; un compte qui a l'Esport est
+  // sondé une fois (le serveur répond 404 sans la permission du club deploiement.voir, et le sondage s'arrête).
+  const fondateurHub = rangDe(profils?.actuel) === 'fondateur' && !profils?.sessionAdmin;
+  const suiviDeploiement = hub && deverrouille && (fondateurHub || aAccesEsport(profils?.actuel));
+  const sondageDeploiement = useEtatDeploiement(suiviDeploiement);
   const disponiblesParametres: IdReglage[] = [
     'theme',
     'langue',
@@ -2552,6 +2561,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     'juridique',
     'version',
     'mise-a-jour',
+    ...(majAutoDisponible() ? (['maj-auto'] as const) : []),
+    ...(suiviDeploiement && (fondateurHub || sondageDeploiement.etat) ? (['deploiement'] as const) : []),
     ...(hub ? (['tuiles', 'nouveautes'] as const) : []),
     ...(portefeuillePermis ? (['visite', 'cours-intervalle', 'cours-fournisseur', 'symboles', 'historique-cours', 'discretion', 'notifications', 'podcast'] as const) : []),
     ...(portefeuillePermis && pontEnregistrerSous ? (['export-excel'] as const) : []),
@@ -2861,6 +2872,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return <ReglageVersion theme={themeDuHub} />;
       case 'mise-a-jour':
         return <ReglageMiseAJour theme={themeDuHub} maj={maj} />;
+      case 'maj-auto':
+        return <ReglageMajAuto theme={themeDuHub} />;
+      case 'deploiement':
+        return <PageMisesAJour theme={themeDuHub} actif={suiviDeploiement} />;
       default:
         return null;
     }
@@ -3295,6 +3310,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onSupport={ouvrirSupport}
           supportNonLus={supportNonLus}
           synchro={synchroHub}
+          suiviDeploiement={suiviDeploiement}
           demande={demandeHub}
           page={pageHub}
           onPage={setPageHub}

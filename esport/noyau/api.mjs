@@ -65,10 +65,11 @@ import { routesRoles, servicesRoles } from './roles/service.mjs';
 import { servicesDevblog } from './devblog/service.mjs';
 import { routesDevblog } from './devblog/routes.mjs';
 import { traiterDevblogDiscord } from './devblog/discord.mjs';
+import { routesDeploiement } from './deploiement.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -155,6 +156,8 @@ export function creerApi({
   ia = {},
   travauxIa = 'fond',
   devblogSource = null,
+  // Suivi des mises à jour (serveur Node seulement : esport/serveur/deploiement.mjs) ; absent : 404.
+  deploiement,
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -331,6 +334,9 @@ export function creerApi({
       if (fiche && m === 'GET') return sts.ficheMembre(acteur, decodeURIComponent(fiche[1]), periode);
       throw echec(404, 'route', 'Adresse inconnue.');
     }
+    // Mises à jour du dashboard (docs/mises-a-jour.md) : Fondateur, ou permission du club deploiement.voir ; sinon 404.
+    const suiviDeploiement = await routesDeploiement({ deploiement, base, acteur, chemin, methode: m, limite });
+    if (suiviDeploiement !== undefined) return suiviDeploiement;
     // Premier niveau : dashboard agrégé, annuaire des membres, invitation directe (Fondateur).
     if (chemin === '/dashboard' && m === 'GET') return tb.tableau(acteur);
     if (chemin === '/membres' && m === 'GET') return cp.annuaire(acteur);

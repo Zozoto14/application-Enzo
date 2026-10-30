@@ -72,7 +72,9 @@ export type IdReglage =
   | 'support'
   | 'juridique'
   | 'version'
-  | 'mise-a-jour';
+  | 'mise-a-jour'
+  | 'maj-auto'
+  | 'deploiement';
 
 export interface Reglage {
   id: IdReglage;
@@ -393,6 +395,22 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Vérifier les mises à jour, installer et redémarrer, ou actualiser l’app.',
     mots: ['mettre a jour', 'maj', 'actualiser', 'installer', 'redemarrer', 'recharger'],
     ancienEmplacement: ['Hub › Mettre à jour', 'Hub › Paramètres › Application', 'Portefeuille › Paramètres › Mises à jour'],
+  },
+  {
+    id: 'maj-auto',
+    section: 'apropos',
+    titre: 'Mettre à jour automatiquement',
+    description: 'Nouvelle version en ligne : l’app se recharge d’elle-même quand elle est inactive, sans jamais interrompre une saisie.',
+    mots: ['mise a jour', 'automatique', 'recharger', 'nouvelle version', 'bandeau', 'update'],
+    ancienEmplacement: ['(nouveau : auparavant, Ctrl+F5 après chaque mise à jour)'],
+  },
+  {
+    id: 'deploiement',
+    section: 'administration',
+    titre: 'Mises à jour',
+    description: 'Où en est la publication des nouveautés : versions du site et des serveurs, dernier déploiement, GitHub, journal.',
+    mots: ['mises a jour', 'deploiement', 'deployer', 'version', 'github', 'workflow', 'journal', 'verifier', 'serveur', 'site', 'o2switch'],
+    ancienEmplacement: ['(nouveau : auparavant, tail ~/logs/esport-deploy.log dans le terminal)'],
   },
 ];
 

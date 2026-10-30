@@ -30,23 +30,32 @@ function versionApp() {
   return commit ? `${paquet} (${commit})` : paquet;
 }
 
-/** Identifiant unique du build : commit + date. Publié dans version.json (servi sans cache). */
-const ID_BUILD = (() => {
-  let commit = 'sans-git';
-  try {
-    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ici('.'), encoding: 'utf8' }).trim();
-  } catch {
-    // Pas de git : la date suffit.
+/**
+ * Version du build : commit (complet) + date. Publiée dans version.json (servi sans cache) : l'app compare la
+ * sienne à celle du site pour proposer « Nouvelle version disponible » (src/hub/maj/version.ts), et le serveur
+ * Esport la lit dans public_html pour la page « Mises à jour » (docs/mises-a-jour.md).
+ */
+const BUILD = (() => {
+  let commit = process.env.GITHUB_SHA || '';
+  if (!/^[0-9a-f]{40}$/.test(commit)) {
+    try {
+      commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: ici('.'), encoding: 'utf8' }).trim();
+    } catch {
+      commit = '';
+    }
   }
-  return `${commit}-${Date.now().toString(36)}`;
+  const date = new Date();
+  // id : même forme qu'avant (« <commit court>-<date en base 36> ») : les onglets déjà ouverts le comparent tel quel.
+  return { id: `${commit ? commit.slice(0, 7) : 'sans-git'}-${date.getTime().toString(36)}`, commit: commit || null, date: date.toISOString() };
 })();
+const ID_BUILD = BUILD.id;
 
 /** Publie version.json à la racine du build : l'app compare son __BUILD_ID__ à celui du serveur. */
 const publierVersion = () => ({
   name: 'publier-version',
   apply: 'build',
   generateBundle() {
-    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ id: ID_BUILD }) + '\n' });
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify(BUILD) + '\n' });
   },
 });
 
@@ -62,6 +71,8 @@ export default defineConfig({
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
     __VERSION_APP__: JSON.stringify(versionApp()),
     __BUILD_ID__: JSON.stringify(ID_BUILD),
+    __BUILD_COMMIT__: JSON.stringify(BUILD.commit ?? ''),
+    __BUILD_DATE__: JSON.stringify(BUILD.date),
   },
   resolve: {
     alias: [

@@ -22,12 +22,13 @@ import { creerIaLocale } from './ia-locale/service.mjs';
 import { etatAdministration } from './transcription/moteur.mjs';
 import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { sourceGitDepot } from './devblog-source.mjs';
+import { creerServiceDeploiement } from './deploiement.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale, devblogSource } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale, devblogSource, deploiement } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -70,6 +71,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     ...(travauxIa ? { travauxIa } : {}),
     // Devblog automatique : historique git du dépôt déployé (chemins fixes, git sans shell).
     devblogSource: devblogSource ?? sourceGitDepot(),
+    // Suivi des mises à jour (Fondateur) : versions, journal de deployer.sh, état GitHub (docs/mises-a-jour.md).
+    deploiement: deploiement ?? creerServiceDeploiement(),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

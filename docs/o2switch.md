@@ -51,6 +51,10 @@ Dans les commandes, remplacez seulement ce qui est en MAJUSCULES : `MOT_DE_PASSE
   de jeton API cPanel. C'est donc le serveur qui va chercher les nouveautés : toutes les 5 minutes, une tâche cron
   lance `esport/serveur/deployer.sh`, qui récupère le code (clé de déploiement GitHub en **lecture seule**), installe
   les dépendances, met la base à jour, redémarre les deux apps, et recopie le site construit par GitHub.
+  Le script reste ensuite ~4 minutes à **guetter** : chaque minute, un simple `git ls-remote` (très léger) regarde
+  s'il y a du nouveau ; si oui, il déploie tout de suite. Une nouveauté est donc en ligne environ **une minute après
+  la fin du workflow GitHub**, et l'app ouverte se met à jour seule (voir [mises-a-jour.md](mises-a-jour.md) : plus
+  besoin de `tail ~/logs/esport-deploy.log` ni de Ctrl+F5).
 - **Migration vers un autre serveur** (un jour, si besoin) : le nouveau serveur **tire** lui-même les données de
   l'ancien par des routes d'administration protégées par le jeton maître (`relais/serveur/importer.mjs`,
   `esport/serveur/importer.mjs` : voir « Migrer vers un autre serveur »). Pas de fichier d'export à télécharger.
@@ -328,7 +332,9 @@ cPanel › section **Avancé** › **Tâches Cron**.
    cd /home/jayo8828/application-enzo && /home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/serveur/cron.mjs >> /home/jayo8828/logs/esport-cron.log 2>&1
    ```
 
-La première met à jour code, base, apps et site ; la seconde fait le travail planifié de l'Esport (rappels,
+La première met à jour code, base, apps et site (elle vérifie chaque minute pendant ses ~4 minutes de « guet », par
+un `git ls-remote` qui ne coûte presque rien, et ne fait le travail complet que s'il y a du nouveau, si l'app a
+demandé « Vérifier maintenant » ou au moins une fois par heure : [mises-a-jour.md](mises-a-jour.md)) ; la seconde fait le travail planifié de l'Esport (rappels,
 file d'envoi Discord, purge du journal selon la durée de chaque team, ménage, envois de vidéos inachevés depuis plus de
 24 h, transcriptions demandées à une API externe si elle est activée, lancement de la transcription sur le serveur
 quand une réunion attend : partie H) et efface les clés expirées du relais.
@@ -342,7 +348,7 @@ Toutes deux se protègent contre une exécution en double.
 1. GitHub › **Actions** › **Site (o2switch)** › **Run workflow** › `main`. (Ensuite, il tourne tout seul à chaque
    changement de l'app.) Il construit le site et le pose sur la branche `deploiement-o2switch` (fichiers construits
    seulement, jamais de code).
-2. Dans les 5 minutes, la tâche cron le recopie dans `/home/jayo8828/public_html` :
+2. Dans la minute qui suit (5 au plus), la tâche cron le recopie dans `/home/jayo8828/public_html` :
    - la **première fois**, une copie de ce qu'il y avait est gardée dans `/home/jayo8828/sauvegardes/` ;
    - sont **toujours gardés** : `.htaccess` (seul le bloc « AppDashboard » est remplacé), `.well-known/`
      (Let's Encrypt), `cgi-bin/`, `.user.ini`, `php.ini`, `maj/` (mises à jour de l'iPhone). Pour garder d'autres
@@ -362,7 +368,8 @@ pour changer de domaine).
 
 - `curl -s https://esport.appdashboard.fr/sante` répond `"ok":true` (étape A8).
 - `tail ~/logs/esport-cron.log` : « 12/12 tâches faites » toutes les 5 minutes.
-- `tail ~/logs/esport-deploy.log` : rien de rouge.
+- `tail ~/logs/esport-deploy.log` : rien de rouge (ou, plus simple : Paramètres › Administration › **Mises à jour**
+  dans l'app, qui montre les mêmes lignes, les versions en ligne et l'état de GitHub).
 - https://appdashboard.fr s'ouvre ; connexion, tuile Esport, une team, un PDF de résumé s'ouvre.
 - **Discord** (si le bot est utilisé) : [Discord Developer Portal](https://discord.com/developers/applications) ›
   votre app › **General Information** › **Interactions Endpoint URL** =

@@ -8,3 +8,6 @@ declare module '*.wasm?url' {
 
 /** Identifiant du build (aussi publié dans version.json) : sert à repérer une nouvelle version déployée. */
 declare const __BUILD_ID__: string;
+/** Commit complet et date (ISO) du build, aussi dans version.json. */
+declare const __BUILD_COMMIT__: string;
+declare const __BUILD_DATE__: string;

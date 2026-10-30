@@ -45,7 +45,7 @@ describe('page Paramètres', () => {
   });
 
   it('ne montre ni section ni réglage qui ne sont pas disponibles pour ce compte ou cette plateforme', async () => {
-    const amis = TOUS.filter(id => !['admin-panel', 'admin-reglages', 'admin-comptes', 'role-gestionnaire', 'synchro-etat', 'admin-tsuzuku-sources', 'admin-tsuzuku-cles'].includes(id));
+    const amis = TOUS.filter(id => !['admin-panel', 'admin-reglages', 'admin-comptes', 'role-gestionnaire', 'synchro-etat', 'admin-tsuzuku-sources', 'admin-tsuzuku-cles', 'deploiement'].includes(id));
     await render(page({ disponibles: amis }));
     expect(screen.queryByTestId('parametres-section-administration')).toBeNull();
     expect(screen.queryByTestId('parametres-section-synchro')).toBeNull();

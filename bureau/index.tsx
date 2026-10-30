@@ -30,6 +30,7 @@ import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { BandeauNouvelleVersion } from './NouvelleVersion';
 import { installerEcouteursChunks } from '../src/ui/versionPerimee';
+import { noterSessionOuverte, surveillanceSite } from '../src/hub/maj/version';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCachesBureau, stockageCourant, type NomFichier, type Stockage } from './stockage';
 import { definirStockageCaches, cachesSynchro } from '../src/sync/relais/caches';
@@ -582,6 +583,8 @@ function Racine() {
   assurerThemeDocument();
 
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
+  // Mise à jour automatique (src/hub/maj/version.ts) : un compte ouvert attend plus longtemps (il faudra le rouvrir).
+  useEffect(() => noterSessionOuverte(etat.phase === 'prete'), [etat.phase]);
   const fabriqueRef = useRef<unknown>(undefined);
   /** Migration du Fondateur vers la connexion par identifiant : proposée, ouverte depuis les Paramètres, ou codes à noter. */
   const [ecranFondateur, setEcranFondateur] = useState<undefined | { mode: 'proposer' | 'modifier' } | { mode: 'codes'; resultat: ResultatMigration }>(undefined);
@@ -2300,6 +2303,8 @@ const styles = StyleSheet.create({
 
 // Morceaux JS périmés après un déploiement (site et app Electron) : un seul rechargement automatique.
 installerEcouteursChunks();
+// Nouvelle version du site : vérifiée au démarrage, au retour au premier plan et toutes les 3 minutes (fenêtre principale).
+if (!contexteAnnexe) surveillanceSite();
 
 createRoot(document.getElementById('racine')!).render(
   <SafeAreaProvider>{contexteAnnexe ? <RacineAnnexe contexte={contexteAnnexe} /> : <Racine />}</SafeAreaProvider>,

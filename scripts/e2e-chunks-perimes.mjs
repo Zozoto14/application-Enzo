@@ -5,7 +5,7 @@
  *  - la page se recharge automatiquement UNE fois, sans écran « Affichage impossible » ;
  *  - si le morceau manque toujours (ici : jamais redéployé), l'erreur qui revient n'entraîne PAS de boucle :
  *    l'écran « Une nouvelle version est disponible » et son bouton « Recharger » remplacent le message technique ;
- *  - version.json servi sans cache : au retour sur l'onglet, « Nouvelle version — recharger » s'affiche
+ *  - version.json servi sans cache : au retour sur l'onglet, « Nouvelle version disponible — Mettre à jour » s'affiche
  *    quand l'identifiant publié change.
  *
  *   npx vite build
@@ -102,12 +102,22 @@ try {
   }
   verifier((await p2.getByTestId('bandeau-nouvelle-version').count()) === 0, 'pas de bandeau tant que la version est la même');
   writeFileSync(join(dist, 'version.json'), '{"id":"autre-build"}\n');
+  // Retour au premier plan : au plus une vérification toutes les 30 s (src/hub/maj/version.ts) ; la première a eu lieu au démarrage.
+  await pause(31_000);
   await p2.evaluate(() => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
     document.dispatchEvent(new Event('visibilitychange'));
   });
   const bandeau = await p2.getByTestId('bandeau-nouvelle-version').waitFor({ timeout: 10_000 }).then(() => true, () => false);
-  verifier(bandeau, 'bandeau « Nouvelle version — recharger » au retour sur l\'onglet');
+  verifier(bandeau, 'bandeau « Nouvelle version disponible — Mettre à jour » au retour sur l\'onglet');
+  // « Mettre à jour » : rechargement propre (page redemandée au serveur), retour à l'écran d'ouverture.
+  let majFaite = false;
+  p2.on('framenavigated', f => {
+    if (f === p2.mainFrame()) majFaite = true;
+  });
+  await p2.getByTestId('nouvelle-version-recharger').click();
+  await p2.getByTestId('bouton-deverrouiller').waitFor({ timeout: 30_000 }).catch(() => undefined);
+  verifier(majFaite, '« Mettre à jour » recharge la page');
 } finally {
   await navigateur.close();
   serveur.close();

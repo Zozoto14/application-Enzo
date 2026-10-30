@@ -21,6 +21,7 @@ import { accrochePageVide, usePageHub, type HubProps } from './Hub';
 import { ID_ABONNEMENTS } from './abonnements/actionsAbo';
 import { appsDePage } from './pages';
 import { IndicateurSynchro } from './IndicateurSynchro';
+import { PastilleDeploiement } from './maj/PastilleDeploiement';
 import { salutation } from './infos';
 import { LogoHub } from './LogoHub';
 import { BoutonMiseAJour, useMiseAJour } from './ParametresHub';
@@ -55,7 +56,7 @@ export function colonnesMobile(largeur: number, disposition: 'grille' | 'liste')
   return disposition === 'liste' || largeur < 340 ? 1 : 2;
 }
 
-export function HubMobile({ registre, contexte, theme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onParametres, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
+export function HubMobile({ registre, contexte, theme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onParametres, synchro, suiviDeploiement = false, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [edition, setEdition] = useState(false);
   const [annonce, setAnnonce] = useState('');
@@ -110,6 +111,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, onOuvrirOnglet,
           </Text>
         </View>
         {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres?.('general')} /> : null}
+        <PastilleDeploiement theme={theme} actif={suiviDeploiement} onOuvrir={() => onParametres?.('administration')} />
         {modifie ? null : <SelecteurOngletsMobile theme={theme} />}
         {personnalisable && !modifie ? (
           <BoutonIcone theme={theme} titre="✎" libelle="Personnaliser l’accueil" onPress={() => setEdition(true)} testID="hub-personnaliser" />

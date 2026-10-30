@@ -17,6 +17,7 @@ import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, Vi
 import { etatTuile, type EtatTuile } from './permissions';
 import { PAGES_HUB, appsDePage, pageEffective, pagesVisibles } from './pages';
 import { BoutonMiseAJour, useMiseAJour } from './ParametresHub';
+import { PastilleDeploiement } from './maj/PastilleDeploiement';
 import { useBarreApp } from './BarreApp';
 import type { IdSection } from './recensement';
 import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
@@ -76,6 +77,8 @@ export interface HubProps {
   supportNonLus?: number;
   /** État de la synchronisation PC ↔ site ; absent : pas d'indicateur (compte non relié). */
   synchro?: SynchroHub;
+  /** Pastille « Mise à jour en cours… / À jour / non publiée » (Fondateur, ou permission deploiement.voir). */
+  suiviDeploiement?: boolean;
   /**
    * Demande d'ouverture venue d'ailleurs (« Essayer » du devblog) : la
    * page Paramètres ou le mode personnalisation. Le compteur la rend unique.
@@ -137,7 +140,7 @@ export function Hub(props: HubProps) {
   return useMobile() ? <HubMobile {...props} /> : <HubBureau {...props} />;
 }
 
-function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, supportNonLus = 0, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
+function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, supportNonLus = 0, synchro, suiviDeploiement = false, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -210,6 +213,7 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOngle
             </View>
             <View style={styles.actionsEntete}>
               {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres?.('general')} /> : null}
+              <PastilleDeploiement theme={theme} actif={suiviDeploiement} onOuvrir={() => onParametres?.('administration')} />
               {personnalisable ? (
                 <BoutonHub
                   theme={theme}

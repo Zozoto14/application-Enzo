@@ -88,7 +88,8 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   await admin.script(`CREATE SCHEMA ${schema}`);
   writeFileSync(join(home, '.appdashboard', 'esport.env'), `# test\nDATABASE_URL=${URL_PG}\nSCHEMA_BASE=${schema}\nCLE_ESPORT=${'c'.repeat(64)}\n`);
 
-  const env = { PATH: process.env.PATH, HOME: home, NODE_BIN: process.execPath, NPM_BIN: 'true', ...IDENTITE };
+  // DEPLOYER_GUET=0 : une seule vérification (le guet de ~4 minutes est testé à part, plus bas).
+  const env = { PATH: process.env.PATH, HOME: home, NODE_BIN: process.execPath, NPM_BIN: 'true', DEPLOYER_GUET: '0', ...IDENTITE };
   const journalDe = () => readFileSync(join(home, 'logs', 'esport-deploy.log'), 'utf8');
 
   const r1 = await lancer(env);
@@ -116,12 +117,26 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   assert.equal(statSync(join(pub, 'assets')).mode & 0o005, 0o005);
   assert.equal(statSync(join(pub, 'index.html')).mode & 0o004, 0o004);
 
-  // Deuxième passage sans nouveauté : rien n'est refait (journal inchangé, pas de redémarrage).
+  // Deuxième passage sans nouveauté : rien n'est refait (journal inchangé, pas de redémarrage) ; seul un
+  // `git ls-remote` a eu lieu (aucun fetch : la date de FETCH_HEAD ne bouge pas), et l'heure de la vérification est notée.
   const lignes = journalDe().split('\n').length;
   const redemarre = statSync(join(depot, 'esport/tmp/restart.txt')).mtimeMs;
+  const fetchHead = statSync(join(depot, '.git', 'FETCH_HEAD')).mtimeMs;
+  const verif = join(home, '.appdashboard', 'derniere-verification');
+  writeFileSync(verif, '0\n');
   assert.equal((await lancer(env)).code, 0);
   assert.equal(journalDe().split('\n').length, lignes);
   assert.equal(statSync(join(depot, 'esport/tmp/restart.txt')).mtimeMs, redemarre);
+  assert.equal(statSync(join(depot, '.git', 'FETCH_HEAD')).mtimeMs, fetchHead, 'pas de git fetch sans nouveauté');
+  assert.ok(Math.abs(Number(readFileSync(verif, 'utf8')) - Date.now() / 1000) < 120, 'heure de la vérification notée');
+
+  // « Vérifier maintenant » (drapeau déposé par le serveur Esport) : passage complet, drapeau consommé.
+  const drapeau = join(home, '.appdashboard', 'deployer-demande');
+  writeFileSync(drapeau, '2026-10-30T12:00:00.000Z\n');
+  assert.equal((await lancer(env)).code, 0);
+  assert.equal(existsSync(drapeau), false, 'drapeau consommé');
+  assert.match(journalDe(), /vérification demandée depuis l'app/);
+  assert.ok(statSync(join(depot, '.git', 'FETCH_HEAD')).mtimeMs >= fetchHead);
 
   // Nouveau commit sur main + nouveau site : appliqués ; le .htaccess garde un seul bloc.
   writeFileSync(join(source, 'NOUVEAU.txt'), 'v2');
@@ -159,6 +174,19 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   assert.match(journalDe(), /1 ancien\(s\) fichier\(s\) de assets\/ purgé/);
   assert.equal(statSync(pub).mode & 0o777, 0o755);
   assert.equal(readFileSync(join(pub, '.well-known', 'acme-challenge', 'jeton'), 'utf8'), 'letsencrypt');
+
+  // Guet : lancé par le cron, le script vérifie chaque seconde ici (chaque minute en vrai) ; un nouveau site
+  // poussé PENDANT qu'il guette est publié dans la même exécution, sans attendre le cron suivant.
+  writeFileSync(join(site, 'index.html'), '<!doctype html><title>v3</title>');
+  git(site, 'commit', '-q', '-am', 'site 3');
+  const guet = lancer({ ...env, DEPLOYER_GUET: '15', DEPLOYER_PAS: '1' });
+  await new Promise(ok => setTimeout(ok, 1500));
+  assert.doesNotMatch(readFileSync(join(pub, 'index.html'), 'utf8'), /v3/);
+  git(site, 'push', '-q', nu, 'deploiement-o2switch');
+  for (let i = 0; i < 100 && !readFileSync(join(pub, 'index.html'), 'utf8').includes('v3'); i++) await new Promise(ok => setTimeout(ok, 100));
+  const r = await guet;
+  assert.equal(r.code, 0, r.err);
+  assert.match(readFileSync(join(pub, 'index.html'), 'utf8'), /v3/, `publié pendant le guet\n${journalDe().split('\n').slice(-8).join('\n')}`);
   await admin.script(`DROP SCHEMA ${schema} CASCADE`);
   await admin.fermer();
 });
