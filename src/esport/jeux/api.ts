@@ -7,6 +7,7 @@
  */
 
 import { requeteUrl, type ClientEsport } from '../client';
+import { trJeux } from '../i18n/jeux';
 
 export type TypeScore = 'rounds' | 'points' | 'placement' | 'manches';
 export type TypeChamp = 'texte' | 'nombre' | 'booleen' | 'liste';
@@ -238,6 +239,20 @@ export interface EtatIaLocale {
   benchmark?: { jetonsParSeconde: number; le: string | null } | null;
   dernierTempsReponseMs?: number | null;
   dernierAppelLe?: string | null;
+  /** Arrêts de force par l'hébergeur (SIGKILL) : au-delà de `max`, IA locale indisponible et sautée dans les ordres. */
+  hebergement?: { indisponible: boolean; tues: number; max: number; depuis: string | null } | null;
+}
+/** Transcription sur le serveur (Administration IA) : moteur, modèles, état de la file et du processus de fond. */
+export interface EtatTranscriptionAdmin {
+  disponible: boolean;
+  raison: string | null;
+  moteur: string;
+  qualites: Record<string, { disponible: boolean; moteur: string | null; modele: string | null }>;
+  whispercpp: { installe: boolean; desactive: { le: string | null; raison: string } | null };
+  dernierPassage: string | null;
+  lanceur: { le: string; raison: string; n?: number } | null;
+  file: Record<string, number>;
+  bloques: number;
 }
 export interface EtatIa {
   configure: boolean;
@@ -257,6 +272,7 @@ export interface EtatIa {
   /** Modes utilisables avec ce qui est installé / configuré. */
   modesPossibles?: ModeIa[];
   local?: EtatIaLocale;
+  transcription?: EtatTranscriptionAdmin | null;
   /** Les trois moteurs (API principale, secondaire, IA locale) et leurs statistiques du mois. */
   moteurs?: EtatMoteurIa[];
   /** Ordre de repli de chaque tâche (réglé ici, sinon IA_ORDRE / IA_ORDRE_LEGER). */
@@ -283,6 +299,19 @@ export interface SaisieJeu {
   version?: number;
 }
 
+/** Résultat d'un test de moteur (`enCours` : test encore en tâche de fond, interrogé ensuite par son `test.id`). */
+export interface ResultatTestIa {
+  ok: boolean | null;
+  enCours?: boolean;
+  test?: { id: string; debutLe?: string | null; plafondMs?: number | null };
+  reponse?: boolean;
+  dureeMs?: number | null;
+  cible?: MoteurIa;
+  moteur?: MoteurIa;
+  erreur?: { code: string; message: string };
+  etat: EtatIa;
+}
+
 export function apiJeux(client: ClientEsport) {
   const j = (cle: string) => `/jeux/${encodeURIComponent(cle)}`;
   return {
@@ -303,8 +332,21 @@ export function apiJeux(client: ClientEsport) {
       client.requete<{ acceptees: number; refusees: number; obsoletes: number; jeu: ProfilJeu }>(`${j(cle)}/propositions/decider`, 'POST', d),
     etatIa: () => client.requete<EtatIa>('/jeux/ia'),
     reglerIa: (r: Partial<Omit<EtatIa['reglages'], 'ordres'>> & { ordres?: Partial<Record<TacheIa, MoteurIa[] | null>> }) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
-    testerIa: (cible?: MoteurIa) =>
-      client.requete<{ ok: boolean; reponse?: boolean; dureeMs?: number | null; cible?: MoteurIa; moteur?: MoteurIa; erreur?: { code: string; message: string }; etat: EtatIa }>('/jeux/ia/test', 'POST', cible ? { cible } : {}),
+    /**
+     * Test d'un moteur. Le serveur répond au plus après 10 s ; un test plus long (modèle à raisonnement, IA locale qui
+     * charge son modèle) continue en tâche de fond et son résultat est demandé toutes les 3 s (6 min au plus).
+     */
+    testerIa: async (cible?: MoteurIa, { pauseMs = 3000, maxMs = 6 * 60_000 }: { pauseMs?: number; maxMs?: number } = {}): Promise<ResultatTestIa> => {
+      let r = await client.requete<ResultatTestIa>('/jeux/ia/test', 'POST', cible ? { cible } : {});
+      const debut = Date.now();
+      while (r.enCours && r.test?.id && Date.now() - debut < maxMs) {
+        await new Promise<void>(ok => setTimeout(() => ok(), pauseMs));
+        const suite = await client.requete<ResultatTestIa>(`/jeux/ia/test/${encodeURIComponent(r.test.id)}`);
+        r = { ...suite, etat: suite.etat ?? r.etat };
+      }
+      if (r.enCours) return { ...r, ok: false, enCours: false, erreur: { code: 'ia-delai', message: trJeux('jeux.test_trop_long') } };
+      return r;
+    },
     gestionnaires: async () => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires')).gestionnaires,
     reglerGestionnaires: async (d: { ajouter?: string[]; retirer?: string[] }) => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires', 'PUT', d)).gestionnaires,
     lancerBrouillon: (d: { nom: string; urls?: string[]; consignes?: string; jeu?: string }) => client.requete<TravailIa>('/jeux/ia/brouillons', 'POST', d),

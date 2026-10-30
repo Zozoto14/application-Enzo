@@ -1,24 +1,33 @@
 /**
- * Whisper SUR LE SERVEUR (Node 22, processeur seulement), avec ONNX Runtime pour Node
- * (`onnxruntime-node`, binaires précompilés pour Linux x64 : rien à compiler, pas de root).
+ * Whisper SUR LE SERVEUR, DANS LE PROCESSUS NODE (Node 22, processeur seulement), avec ONNX Runtime pour Node
+ * (`onnxruntime-node`, binaires précompilés pour Linux x64 : rien à compiler, pas de root). C'est le moteur PAR
+ * DÉFAUT depuis que l'hébergeur (o2switch) arrête de force les binaires de calcul lancés depuis le dossier personnel
+ * (whisper.cpp, llama-server : SIGKILL) alors qu'il laisse calculer le processus `node` (journaux du 29/10 :
+ * 28 min d'audio transcrites ici sans incident).
  *
- * Modèles : export ONNX de Whisper fait par le projet sherpa-onnx (k2-fsa), quantifié en int8
- * (`<nom>-encoder.int8.onnx`, `<nom>-decoder.int8.onnx`, `<nom>-tokens.txt`), téléchargé une fois par
- * esport/serveur/installer-transcription.sh. Ce sont les poids d'origine d'OpenAI : mêmes résultats
- * que Whisper « tiny », « base » ou « small » ailleurs.
+ * Modèles : exports ONNX de Whisper faits par le projet sherpa-onnx (k2-fsa), quantifiés en int8
+ * (`<nom>-encoder.int8.onnx`, `<nom>-decoder.int8.onnx`, `<nom>-tokens.txt`), poids d'origine d'OpenAI :
+ * « small » (Rapide), « turbo » = large-v3-turbo (Équilibrée), « large-v3 » (Maximale) ; tiny / base / medium
+ * aussi lisibles. Téléchargés une fois par esport/serveur/installer-transcription.sh (SHA-256 vérifiés).
  *
  * Ce fichier fait, sans autre dépendance :
- *  - le log-mel spectrogramme de Whisper (80 bandes, fenêtres de 25 ms tous les 10 ms, 30 s) ;
- *  - le décodage glouton (« greedy ») avec cache clés/valeurs, langue imposée ou détectée,
- *    sans horodatage par mot (un segment = un morceau d'au plus 30 s) ;
- *  - des garde-fous contre les « hallucinations » de Whisper : morceau silencieux ignoré,
- *    probabilité « pas de parole » élevée, boucles de répétition coupées.
+ *  - le log-mel spectrogramme de Whisper (80 bandes, ou 128 pour large-v3 et turbo ; 25 ms tous les 10 ms, 30 s) ;
+ *  - le découpage en jetons (BPE byte-level de Whisper, rangs = identifiants du fichier tokens.txt) pour le
+ *    PROMPT : vocabulaire de la team + texte du morceau précédent (`<|startofprev|>`), comme whisper.cpp
+ *    `--carry-initial-prompt` ;
+ *  - le décodage par RECHERCHE EN FAISCEAU (beam search, cache clés/valeurs par hypothèse), langue imposée ou
+ *    détectée, jetons « non parlés » supprimés (♪, [Musique]…) ;
+ *  - les températures de REPLI d'OpenAI : texte en boucle (taux de compression > 2,4) ou peu sûr (log-prob
+ *    moyenne < -1) → nouvel essai à 0,2, 0,4… par échantillonnage (`bestOf` candidats) ;
+ *  - des garde-fous : morceau silencieux ignoré, « pas de parole » (> 0,6 et décodage peu sûr) → rien, boucles
+ *    de répétition coupées.
  *
- * `ort` (le module onnxruntime-node) est fourni par l'appelant (chargé depuis le dossier des modèles,
- * hors du dépôt : voir moteur.mjs).
+ * `ort` (le module onnxruntime-node) est fourni par l'appelant (chargé depuis le dossier des modèles, hors du
+ * dépôt : voir moteur.mjs) ; un faux `ort` sert aux tests.
  */
 
 import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 
 export const FREQUENCE = 16000;
 export const ECHANTILLONS_30S = 30 * FREQUENCE;
@@ -114,18 +123,18 @@ const nombres = v =>
 
 // ------------------------------------------------------------------ Log-mel spectrogramme
 
-let filtresMel;
+const filtresMel = new Map();
 let tablesDft;
 
-/** Filtres mel « Slaney » de librosa (ceux de Whisper) : 80 × 201. */
-export function filtres() {
-  if (filtresMel) return filtresMel;
+/** Filtres mel « Slaney » de librosa (ceux de Whisper) : `n` × 201 (n = 80, ou 128 pour large-v3 et turbo). */
+export function filtres(n = N_MELS) {
+  if (filtresMel.has(n)) return filtresMel.get(n);
   const versMel = hz => (hz < 1000 ? (3 * hz) / 200 : 15 + Math.log(hz / 1000) / (Math.log(6.4) / 27));
   const versHz = mel => (mel < 15 ? (200 * mel) / 3 : 1000 * Math.exp((Math.log(6.4) / 27) * (mel - 15)));
   const melMax = versMel(FREQUENCE / 2);
-  const points = Array.from({ length: N_MELS + 2 }, (_, i) => versHz((melMax * i) / (N_MELS + 1)));
-  const f = new Float32Array(N_MELS * BINS);
-  for (let m = 0; m < N_MELS; m++) {
+  const points = Array.from({ length: n + 2 }, (_, i) => versHz((melMax * i) / (n + 1)));
+  const f = new Float32Array(n * BINS);
+  for (let m = 0; m < n; m++) {
     const [g, c, d] = [points[m], points[m + 1], points[m + 2]];
     const norme = 2 / (d - g);
     for (let k = 0; k < BINS; k++) {
@@ -134,7 +143,7 @@ export function filtres() {
       f[m * BINS + k] = v * norme;
     }
   }
-  filtresMel = f;
+  filtresMel.set(n, f);
   return f;
 }
 
@@ -209,11 +218,12 @@ function creerFft() {
 
 /**
  * Log-mel spectrogramme de Whisper pour un morceau d'au plus 30 s (mono 16 kHz, valeurs -1…1) :
- * complété par du silence jusqu'à 30 s, rend un Float32Array de 80 × 3000 (forme [1, 80, 3000]).
+ * complété par du silence jusqu'à 30 s, rend un Float32Array de `nMels` × 3000 (forme [1, nMels, 3000]).
  */
-export function logMel(pcm) {
+export function logMel(pcm, nMels = N_MELS) {
+  const N_MELS = nMels;
   const { fenetre } = tables();
-  const f = filtres();
+  const f = filtres(nMels);
   const fft = creerFft();
   const longueur = ECHANTILLONS_30S;
   // Remplissage « reflect » de 200 échantillons de chaque côté (center=True de torch.stft).
@@ -250,6 +260,7 @@ export function logMel(pcm) {
   return mel;
 }
 
+
 // ------------------------------------------------------------------ Jetons
 
 function lireJetons(chemin) {
@@ -262,7 +273,62 @@ function lireJetons(chemin) {
   return jetons;
 }
 
-// ------------------------------------------------------------------ Décodage
+/** Découpe du texte de GPT-2 / Whisper avant le BPE (contractions anglaises, lettres, chiffres, ponctuation, blancs). */
+const MOTIF_BPE = /'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+/gu;
+
+/**
+ * Encodeur texte → jetons de Whisper (BPE « byte-level » de tiktoken) : dans le vocabulaire de Whisper, le RANG
+ * d'une fusion est l'identifiant du jeton (fichier tokens.txt de sherpa-onnx : octets en base64 + identifiant), donc
+ * le découpage exact se refait sans la table des fusions. Seuls les jetons de texte (< `limite`, l'identifiant de
+ * <|endoftext|>) servent. Rend `texte => number[]`.
+ */
+export function creerEncodeur(jetons, limite = jetons.length) {
+  const rangs = new Map();
+  for (let id = 0; id < Math.min(limite, jetons.length); id++) if (jetons[id]?.length) rangs.set(jetons[id].toString('latin1'), id);
+  const cache = new Map();
+  function bpe(morceau) {
+    const entier = rangs.get(morceau);
+    if (entier !== undefined) return [entier];
+    const parts = [...morceau];
+    for (;;) {
+      let meilleur = -1;
+      let rang = Infinity;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const r = rangs.get(parts[i] + parts[i + 1]);
+        if (r !== undefined && r < rang) {
+          rang = r;
+          meilleur = i;
+        }
+      }
+      if (meilleur < 0) break;
+      parts.splice(meilleur, 2, parts[meilleur] + parts[meilleur + 1]);
+    }
+    return parts.map(p => rangs.get(p)).filter(x => x !== undefined);
+  }
+  return texte => {
+    const ids = [];
+    for (const m of String(texte ?? '').matchAll(MOTIF_BPE)) {
+      const octets = Buffer.from(m[0], 'utf8').toString('latin1');
+      let r = cache.get(octets);
+      if (!r) {
+        r = bpe(octets);
+        if (cache.size < 20_000) cache.set(octets, r);
+      }
+      ids.push(...r);
+    }
+    return ids;
+  };
+}
+
+/** Jetons → texte (les jetons spéciaux, ≥ `eot`, sont ignorés). */
+export function texteDesJetons(jetons, ids, eot = Infinity) {
+  return Buffer.concat(ids.filter(i => i < eot && jetons[i]).map(i => jetons[i]))
+    .toString('utf8')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ------------------------------------------------------------------ Garde-fous
 
 /** Énergie moyenne (RMS) d'un morceau : sous ce seuil, c'est du silence (Whisper y invente du texte). */
 export const SEUIL_SILENCE = 0.003;
@@ -298,10 +364,50 @@ export function couperRepetitions(ids, { min = 4 } = {}) {
   return { ids, coupe: false };
 }
 
+/** Seuils d'OpenAI (transcribe.py) : texte en boucle, décodage peu sûr, silence. */
+export const SEUIL_COMPRESSION = 2.4;
+export const SEUIL_LOGPROB = -1;
+export const SEUIL_PAS_DE_PAROLE = 0.6;
+/** Températures de repli : 0 (recherche en faisceau), puis échantillonnage de plus en plus libre. */
+export const TEMPERATURES = [0, 0.2, 0.4, 0.6, 0.8, 1];
+
+/** Taux de compression (zlib) d'un texte : au-delà de 2,4, il tourne en boucle. */
+export function tauxCompression(texte) {
+  const b = Buffer.from(String(texte ?? ''), 'utf8');
+  return b.length ? b.length / deflateSync(b).length : 0;
+}
+
+/** Générateur pseudo-aléatoire reproductible (échantillonnage aux températures de repli). */
+export function alea(graine = 1) {
+  let x = graine >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    return x / 4294967296;
+  };
+}
+
+function logSommeExp(d, base, n) {
+  let max = -Infinity;
+  for (let i = 0; i < n; i++) if (d[base + i] > max) max = d[base + i];
+  let s = 0;
+  for (let i = 0; i < n; i++) s += Math.exp(d[base + i] - max);
+  return max + Math.log(s);
+}
+
+function softmaxEn(d, base, n, i) {
+  return Math.exp(d[base + i] - logSommeExp(d, base, n));
+}
+
+// ------------------------------------------------------------------ Décodage
+
 /**
- * Charge un modèle Whisper (sherpa-onnx, int8). Options : `dossier` (contenant les 3 fichiers),
- * `nom` (tiny, base, small…), `threads` (1 ou 2 conseillé sur un hébergement mutualisé), `ort`.
- * Rend `{ transcrireMorceau(pcm, { langue }), liberer(), infos }`.
+ * Charge un modèle Whisper (sherpa-onnx, int8). Options : `dossier` (contenant les 3 fichiers), `nom` (tiny, base,
+ * small, medium, turbo, large-v3…), `threads` (fils de calcul d'ONNX Runtime), `ort`.
+ * Rend `{ transcrireMorceau(pcm, options), encoder(texte), liberer(), infos }`.
  */
 export async function chargerWhisper({ ort, dossier, nom = 'base', threads = 1 }) {
   const enc = `${dossier}/${nom}-encoder.int8.onnx`;
@@ -317,11 +423,17 @@ export async function chargerWhisper({ ort, dossier, nom = 'base', threads = 1 }
   const transcribe = Number(m.transcribe);
   const pasDHorodatage = Number(m.no_timestamps);
   const pasDeParole = Number(m.no_speech);
+  const sotPrev = Number(m.sot_prev);
+  const blanc = Number.isFinite(Number(m.blank_id)) ? Number(m.blank_id) : 220;
+  const nMels = Number(m.n_mels) || N_MELS;
   const codes = String(m.all_language_codes ?? '').split(',').filter(Boolean);
   const idsLangues = nombres(m.all_language_tokens);
-  if (!couches || !contexte || !etat || !sot || !eot) throw new Error(`Modèle Whisper illisible (${enc}) : métadonnées absentes.`);
+  if (!couches || !contexte || !etat || !sot || !eot) throw new Error(`Modèle Whisper illisible (${nom}) : métadonnées absentes.`);
   const multilingue = String(m.is_multilingual ?? '1') !== '0';
   const jetons = lireJetons(`${dossier}/${nom}-tokens.txt`);
+  const encoderTexte = creerEncodeur(jetons, eot);
+  // Jetons « non parlés » (♪, [, (…) supprimés comme le fait Whisper par défaut (suppress_tokens = -1).
+  const interdits = new Set(nombres(m.non_speech_tokens).filter(i => i < eot));
   const options = {
     executionProviders: ['cpu'],
     intraOpNumThreads: Math.max(1, Number(threads) || 1),
@@ -344,12 +456,12 @@ export async function chargerWhisper({ ort, dossier, nom = 'base', threads = 1 }
   }
 
   async function encoder(pcm) {
-    const sortie = await encodeur.run({ mel: T('float32', logMel(pcm), [1, N_MELS, TRAMES]) });
+    const sortie = await encodeur.run({ mel: T('float32', logMel(pcm, nMels), [1, nMels, TRAMES]) });
     return { k: sortie.n_layer_cross_k, v: sortie.n_layer_cross_v };
   }
 
-  async function etape(jetonsEntree, cacheK, cacheV, croise, decalage) {
-    const r = await decodeur.run({
+  function etape(jetonsEntree, cacheK, cacheV, croise, decalage) {
+    return decodeur.run({
       tokens: T('int64', BigInt64Array.from(jetonsEntree.map(BigInt)), [1, jetonsEntree.length]),
       in_n_layer_self_k_cache: cacheK,
       in_n_layer_self_v_cache: cacheV,
@@ -357,11 +469,9 @@ export async function chargerWhisper({ ort, dossier, nom = 'base', threads = 1 }
       n_layer_cross_v: croise.v,
       offset: T('int64', BigInt64Array.from([BigInt(decalage)]), [1]),
     });
-    return r;
   }
 
   const cacheVide = () => T('float32', new Float32Array(tailleCache), [couches, 1, contexte, etat]);
-  const vocab = () => jetons.length;
 
   /** Détection de la langue (mode « auto ») : un pas de décodage après <|startoftranscript|>. */
   async function detecterLangue(croise) {
@@ -372,85 +482,180 @@ export async function chargerWhisper({ ort, dossier, nom = 'base', threads = 1 }
     return codes[meilleur] ?? 'en';
   }
 
-  /**
-   * Transcrit un morceau (≤ 30 s). Rend `{ texte, langue, pasDeParole, logprob }` ; texte vide si le
-   * morceau est silencieux ou jugé sans parole.
-   */
-  async function transcrireMorceau(pcm, { langue = 'fr' } = {}) {
-    if (pcm.length > ECHANTILLONS_30S) pcm = pcm.subarray(0, ECHANTILLONS_30S);
-    if (rms(pcm) < SEUIL_SILENCE) return { texte: '', langue, pasDeParole: 1, logprob: 0, silence: true };
-    const croise = await encoder(pcm);
-    let code = langue;
-    if (multilingue && (langue === 'auto' || langueVersJeton(langue) === null)) code = await detecterLangue(croise);
-    const invite = multilingue ? [sot, langueVersJeton(code), transcribe, pasDHorodatage] : [sot, pasDHorodatage];
-    let r = await etape(invite, cacheVide(), cacheVide(), croise, 0);
-    const V = r.logits.dims[2];
-    // Probabilité « pas de parole » : prédiction juste après <|startoftranscript|>.
-    const pNoSpeech = Number.isFinite(pasDeParole) && pasDeParole < V ? softmaxEn(r.logits.data, 0, V, pasDeParole) : 0;
-    const produits = [];
-    let somme = 0;
-    const maxJetons = Math.min(224, contexte - invite.length - 1);
-    let position = invite.length;
-    let ligne = invite.length - 1;
-    for (let pas = 0; pas < maxJetons; pas++) {
-      const d = r.logits.data;
-      const base = ligne * V;
-      // Jetons spéciaux interdits (sauf la fin), et pas de blanc en tout premier.
-      let meilleur = -1;
-      let valeur = -Infinity;
-      for (let i = 0; i < V; i++) {
-        if (i > eot) break;
-        if (pas === 0 && (i === eot || i === 220)) continue;
-        const x = d[base + i];
-        if (x > valeur) {
-          valeur = x;
-          meilleur = i;
+  const permis = (i, premier) => i <= eot && !interdits.has(i) && !(premier && (i === eot || i === blanc));
+
+  /** Log-somme-exp des jetons permis et les `k` meilleurs (identifiant, logit) d'une ligne de logits. */
+  function meilleurs(d, base, premier, k) {
+    let max = -Infinity;
+    const top = [];
+    for (let i = 0; i <= eot; i++) {
+      if (!permis(i, premier)) continue;
+      const x = d[base + i];
+      if (x > max) max = x;
+      if (top.length < k || x > top[top.length - 1][1]) {
+        let j = top.length < k ? top.length : top.length - 1;
+        top[j] = [i, x];
+        while (j > 0 && top[j][1] > top[j - 1][1]) {
+          [top[j], top[j - 1]] = [top[j - 1], top[j]];
+          j -= 1;
         }
       }
-      somme += valeur - logSommeExp(d, base, V);
-      if (meilleur === eot || meilleur < 0) break;
-      produits.push(meilleur);
-      // Boucle de répétition : on coupe et on s'arrête.
-      if (produits.length >= 16 && produits.length % 4 === 0) {
-        const c = couperRepetitions(produits);
-        if (c.coupe) {
-          produits.length = 0;
-          produits.push(...c.ids);
+    }
+    let s = 0;
+    for (let i = 0; i <= eot; i++) if (permis(i, premier)) s += Math.exp(d[base + i] - max);
+    return { lse: max + Math.log(s), top };
+  }
+
+  /**
+   * Recherche en faisceau (température 0 ; `beam` = 1 : décodage glouton). Chaque hypothèse garde son propre cache
+   * clés/valeurs (sorties du décodeur, jamais modifiées : une hypothèse fille repart de celles de sa mère). Rend
+   * `{ ids, somme }` (somme des log-probabilités), la meilleure selon la log-prob moyenne (règle d'OpenAI).
+   */
+  async function faisceau(r0, croise, invite, { beam, maxJetons }) {
+    let vivantes = [{ ids: [], somme: 0, sortie: r0, ligne: invite.length - 1 }];
+    const finies = [];
+    let position = invite.length;
+    for (let pas = 0; pas < maxJetons && vivantes.length; pas++) {
+      const candidats = [];
+      for (const h of vivantes) {
+        const V = h.sortie.logits.dims[2];
+        const { lse, top } = meilleurs(h.sortie.logits.data, h.ligne * V, pas === 0, beam + 1);
+        for (const [id, x] of top) candidats.push({ mere: h, id, somme: h.somme + (x - lse) });
+      }
+      candidats.sort((a, b) => b.somme - a.somme);
+      const suivantes = [];
+      for (const c of candidats) {
+        if (c.id === eot) {
+          if (finies.length < beam) finies.push({ ids: c.mere.ids, somme: c.somme });
+        } else suivantes.push(c);
+        if (suivantes.length >= beam) break;
+      }
+      if (finies.length >= beam) break;
+      const nouvelles = [];
+      for (const c of suivantes) {
+        const ids = [...c.mere.ids, c.id];
+        if (ids.length >= 16 && ids.length % 4 === 0) {
+          const coupe = couperRepetitions(ids);
+          if (coupe.coupe) {
+            // Boucle : l'hypothèse s'arrête (sa log-prob reste celle de la boucle : elle sera rarement choisie).
+            finies.push({ ids: coupe.ids, somme: c.somme, boucle: true });
+            continue;
+          }
+        }
+        const sortie = await etape([c.id], c.mere.sortie.out_n_layer_self_k_cache, c.mere.sortie.out_n_layer_self_v_cache, croise, position);
+        nouvelles.push({ ids, somme: c.somme, sortie, ligne: 0 });
+      }
+      vivantes = nouvelles;
+      position += 1;
+    }
+    const choix = finies.length ? finies : vivantes;
+    let meilleure = choix[0] ?? { ids: [], somme: 0 };
+    for (const h of choix) if (h.somme / (h.ids.length + 1) > meilleure.somme / (meilleure.ids.length + 1)) meilleure = h;
+    return { ids: meilleure.ids, somme: meilleure.somme, boucle: Boolean(meilleure.boucle) };
+  }
+
+  /** Échantillonnage à la température `t` (repli) : un candidat. */
+  async function echantillon(r0, croise, invite, { t, maxJetons, hasard }) {
+    let r = r0;
+    let ligne = invite.length - 1;
+    let position = invite.length;
+    const ids = [];
+    let somme = 0;
+    const poids = new Float64Array(eot + 1);
+    for (let pas = 0; pas < maxJetons; pas++) {
+      const d = r.logits.data;
+      const base = ligne * r.logits.dims[2];
+      const { lse, top } = meilleurs(d, base, pas === 0, 1);
+      const max = top[0]?.[1] ?? 0;
+      let total = 0;
+      for (let i = 0; i <= eot; i++) {
+        poids[i] = permis(i, pas === 0) ? Math.exp((d[base + i] - max) / t) : 0;
+        total += poids[i];
+      }
+      let tirage = hasard() * total;
+      let id = eot;
+      for (let i = 0; i <= eot; i++) {
+        tirage -= poids[i];
+        if (tirage <= 0 && poids[i] > 0) {
+          id = i;
           break;
         }
       }
-      r = await etape([meilleur], r.out_n_layer_self_k_cache, r.out_n_layer_self_v_cache, croise, position);
+      somme += d[base + id] - lse;
+      if (id === eot) break;
+      ids.push(id);
+      if (ids.length >= 16 && ids.length % 4 === 0 && couperRepetitions(ids).coupe) return { ids: couperRepetitions(ids).ids, somme, boucle: true };
+      r = await etape([id], r.out_n_layer_self_k_cache, r.out_n_layer_self_v_cache, croise, position);
       position += 1;
       ligne = 0;
     }
-    const logprob = somme / Math.max(1, produits.length + 1);
-    const texte = Buffer.concat(produits.filter(i => i < eot && jetons[i]).map(i => jetons[i]))
-      .toString('utf8')
-      .replace(/\s+/g, ' ')
-      .trim();
-    // Règle d'OpenAI : forte probabilité de silence ET décodage peu sûr = pas de parole.
-    if (pNoSpeech > 0.6 && logprob < -1) return { texte: '', langue: code, pasDeParole: pNoSpeech, logprob };
-    return { texte, langue: code, pasDeParole: pNoSpeech, logprob };
+    return { ids, somme };
+  }
+
+  /** Jetons du prompt (vocabulaire), mis en cache : le même pour tous les morceaux d'une réunion. */
+  let dernierPrompt = null;
+  const jetonsPrompt = texte => {
+    if (dernierPrompt?.texte !== texte) dernierPrompt = { texte, ids: texte ? encoderTexte(` ${String(texte).trim()}`) : [] };
+    return dernierPrompt.ids;
+  };
+
+  /**
+   * Transcrit un morceau (≤ 30 s). Options :
+   *  - `langue` (« fr », « en »…, « auto » : détectée) ;
+   *  - `prompt` : vocabulaire de la team (gardé pour chaque morceau) ; `precedent` : jetons du texte du morceau
+   *    précédent (contexte, comme Whisper) ; ensemble au plus 223 jetons (le vocabulaire est gardé en priorité) ;
+   *  - `beam` (1 = glouton), `bestOf` (candidats échantillonnés aux températures de repli), `temperatures`.
+   * Rend `{ texte, ids, langue, pasDeParole, logprob, compression, temperature }` ; texte vide si le morceau est
+   * silencieux ou jugé sans parole.
+   */
+  async function transcrireMorceau(pcm, { langue = 'fr', prompt = '', precedent = null, beam = 1, bestOf = 1, temperatures = [0], graine = 1 } = {}) {
+    if (pcm.length > ECHANTILLONS_30S) pcm = pcm.subarray(0, ECHANTILLONS_30S);
+    if (rms(pcm) < SEUIL_SILENCE) return { texte: '', ids: [], langue, pasDeParole: 1, logprob: 0, compression: 0, temperature: 0, silence: true };
+    const croise = await encoder(pcm);
+    let code = langue;
+    if (multilingue && (langue === 'auto' || langueVersJeton(langue) === null)) code = await detecterLangue(croise);
+    const voc = jetonsPrompt(prompt).slice(0, 150);
+    const prec = Array.isArray(precedent) && sotPrev ? precedent.filter(i => Number.isInteger(i) && i < eot).slice(-Math.max(0, 223 - voc.length)) : [];
+    const contexteTexte = sotPrev ? [...voc, ...prec] : [];
+    const debutSot = contexteTexte.length ? contexteTexte.length + 1 : 0;
+    const invite = [...(contexteTexte.length ? [sotPrev, ...contexteTexte] : []), ...(multilingue ? [sot, langueVersJeton(code), transcribe, pasDHorodatage] : [sot, pasDHorodatage])];
+    const r0 = await etape(invite, cacheVide(), cacheVide(), croise, 0);
+    const V = r0.logits.dims[2];
+    // Probabilité « pas de parole » : prédiction juste après <|startoftranscript|>.
+    const pNoSpeech = Number.isFinite(pasDeParole) && pasDeParole < V ? softmaxEn(r0.logits.data, debutSot * V, V, pasDeParole) : 0;
+    const maxJetons = Math.max(1, Math.min(224, contexte - invite.length - 1));
+    const hasard = alea(graine);
+    let resultat = null;
+    for (const t of temperatures.length ? temperatures : [0]) {
+      let r;
+      if (t === 0) r = await faisceau(r0, croise, invite, { beam: Math.max(1, beam), maxJetons });
+      else {
+        for (let k = 0; k < Math.max(1, bestOf); k++) {
+          const x = await echantillon(r0, croise, invite, { t, maxJetons, hasard });
+          if (!r || x.somme / (x.ids.length + 1) > r.somme / (r.ids.length + 1)) r = x;
+        }
+      }
+      const coupe = couperRepetitions(r.ids);
+      const texte = texteDesJetons(jetons, coupe.ids, eot);
+      const logprob = r.somme / (r.ids.length + 1);
+      const compression = tauxCompression(texte);
+      const boucle = Boolean(r.boucle || coupe.coupe);
+      resultat = { texte, ids: coupe.ids, langue: code, pasDeParole: pNoSpeech, logprob, compression, temperature: t, boucle };
+      // Règle d'OpenAI : forte probabilité de silence ET décodage peu sûr = pas de parole (pas de repli).
+      if (pNoSpeech > SEUIL_PAS_DE_PAROLE && logprob < SEUIL_LOGPROB) return { ...resultat, texte: '', ids: [], silence: true };
+      // Texte en boucle (coupée, ou taux de compression trop haut) ou peu sûr : température suivante.
+      if (!boucle && !(compression > SEUIL_COMPRESSION) && !(logprob < SEUIL_LOGPROB)) break;
+    }
+    return resultat;
   }
 
   return {
     transcrireMorceau,
+    encoder: encoderTexte,
     async liberer() {
       await encodeur.release?.();
       await decodeur.release?.();
     },
-    infos: { nom, couches, contexte, etat, multilingue, threads: options.intraOpNumThreads, vocab: vocab() },
+    infos: { nom, couches, contexte, etat, multilingue, nMels, threads: options.intraOpNumThreads, vocab: jetons.length },
   };
-}
-
-function logSommeExp(d, base, n) {
-  let max = -Infinity;
-  for (let i = 0; i < n; i++) if (d[base + i] > max) max = d[base + i];
-  let s = 0;
-  for (let i = 0; i < n; i++) s += Math.exp(d[base + i] - max);
-  return max + Math.log(s);
-}
-
-function softmaxEn(d, base, n, i) {
-  return Math.exp(d[base + i] - logSommeExp(d, base, n));
 }

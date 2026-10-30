@@ -91,7 +91,7 @@ l'ordre des profils (`local` → `local` ; `api` → `api,api2` ; `local-api` �
     `temperature 0.5`, `top_p 1`, lit les images ;
   - `openai/gpt-oss-…` : raisonnement, `temperature 1`, `top_p 1`, **pas** de `reasoning_effort` envoyé.
   - Modèle à raisonnement : `max_tokens` d'au moins **4096** (le raisonnement en consomme) et délai de **5 min**
-    (2 min au moins, même pour un test).
+    (2 min au moins ; le test de connexion est plafonné à **90 s**).
 - **`reasoning_content`** (raisonnement renvoyé à côté de `message.content`, ex. gpt-oss) : **ignoré**. Seul
   `content` est la réponse ; le raisonnement n'est jamais lu comme la réponse ni copié dans un journal (seule sa
   taille peut y figurer). Les blocs `<think>…</think>` laissés dans `content` sont retirés.
@@ -148,7 +148,10 @@ const { texte, moteur } = await ia.discuterPour('transcription', messages, { jso
 
 - **Moteurs de l'IA** : pour chacun, fournisseur, modèle, clé **présente ou absente** (jamais sa valeur), modèle à
   raisonnement (effort), lecture d'images, appels et erreurs du mois, plafond, temps de réponse moyen, dernier appel,
-  bouton **Tester** (un tout petit échange avec ce moteur seul), et l'avertissement de confidentialité ;
+  bouton **Tester** (un tout petit échange avec ce moteur seul), et l'avertissement de confidentialité. Le test se fait
+  **en tâche de fond** : la requête répond au plus après 10 s (`{ enCours, test: { id } }` s'il continue) et la page
+  interroge `GET /jeux/ia/test/:id` toutes les 3 s ; avant, un modèle à raisonnement ou l'IA locale dépassait le délai
+  de 15 s de l'app (« Le serveur Esport ne répond pas ») ;
 - **Ordre de repli** : pour les profils de jeu et pour les tâches légères (monter, retirer, ajouter un moteur,
   revenir à l'ordre par défaut) ;
 - **Plafonds mensuels** : appels de l'API principale (défaut 30), de l'API secondaire (défaut 200), vérifications

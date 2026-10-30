@@ -1,5 +1,6 @@
 /**
- * Moteur PRINCIPAL de la transcription sur le serveur : whisper.cpp (ggml-org/whisper.cpp), compilé SANS root
+ * Moteur en OPTION de la transcription sur le serveur (le défaut est ONNX dans le processus Node, whisper.mjs :
+ * l'hébergeur o2switch arrête de force — SIGKILL — les binaires de calcul externes) : whisper.cpp (ggml-org/whisper.cpp), compilé SANS root
  * sur le serveur par installer-transcription.sh (même compilateur figé que l'IA locale), version figée et
  * commit vérifié, avec les modèles GGML d'OpenAI Whisper (large-v3-turbo quantifié par défaut).
  *
@@ -139,6 +140,8 @@ function trouverNice() {
 export function creerTranscripteurWhisperCpp({ binaire, fichierModele, nomModele, vad = null, threads = 8, decodage = { beam: 5, bestOf: 5 }, dossierTravail, nice = 19, spawn = spawnNode, lireMemoire = memoireProcessus, surProcessus = () => undefined }) {
   let enfant = null;
   let memoireMaxMo = 0;
+  // Arrêt demandé par NOUS (signal reçu par le processus de fond) : un SIGKILL sans cela vient de l'extérieur.
+  let arretDemande = false;
   async function transcrireBloc(pcm, { langue = 'fr', prompt = '', decalage = 0, surProcessus: surBloc = null } = {}) {
     const base = join(dossierTravail, `bloc-${process.pid}-${randomBytes(4).toString('hex')}`);
     const wav = `${base}.wav`;
@@ -174,7 +177,11 @@ export function creerTranscripteurWhisperCpp({ binaire, fichierModele, nomModele
       surProcessus(null);
       if (code !== 0 || !existsSync(json)) {
         const derniere = erreurs.trim().split('\n').filter(l => !/^whisper_|^ggml_|^system_info|^main:|^read_audio/.test(l)).pop() ?? erreurs.trim().split('\n').pop() ?? '';
-        throw new Error(`whisper.cpp s’est arrêté (${signal ? `signal ${signal}` : `code ${code}`})${derniere ? ` : ${derniere.replace(/\/home\/[^\s)]+/g, '…').slice(0, 200)}` : ''}.`);
+        throw Object.assign(new Error(`whisper.cpp s’est arrêté (${signal ? `signal ${signal}` : `code ${code}`})${derniere ? ` : ${derniere.replace(/\/home\/[^\s)]+/g, '…').slice(0, 200)}` : ''}.`), {
+          signal: signal ?? null,
+          // Arrêté de force par l'hébergeur (ou un autre programme) : le processus de fond bascule sur ONNX.
+          tueExterne: signal === 'SIGKILL' && !arretDemande,
+        });
       }
       return lireSortieWhisperCli(readFileSync(json, 'utf8'), { decalage });
     } finally {
@@ -188,6 +195,7 @@ export function creerTranscripteurWhisperCpp({ binaire, fichierModele, nomModele
     transcrireBloc,
     /** Arrêt du bloc en cours (signal reçu par le processus de fond). */
     arreter() {
+      arretDemande = true;
       try {
         enfant?.kill('SIGTERM');
       } catch {

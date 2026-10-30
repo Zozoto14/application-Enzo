@@ -62,6 +62,7 @@ export async function prendreJetonLourd({ dossierIa, role = 'transcription', att
   const iso = () => new Date(maintenant()).toISOString();
   const limite = maintenant() + attenteMs;
   let note = false;
+  let sansProgres = 0;
   for (;;) {
     try {
       const fd = openSync(c.verrouServeur, 'wx', 0o600);
@@ -76,7 +77,13 @@ export async function prendreJetonLourd({ dossierIa, role = 'transcription', att
       // Bail expiré : verrou retiré (moteur orphelin arrêté s'il est identifié) ; sinon (moteur encore en
       // marche hors de portée, propriétaire suspendu) on attend comme pour un verrou tenu.
       const n = await nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), journal, role, systeme });
-      if (n.nettoye || n.raison === 'aucun' || n.raison === 'remplace') continue;
+      if (n.nettoye) continue;
+      if (n.raison === 'aucun' || n.raison === 'remplace') {
+        // Jamais de boucle sans fin : le délai d'attente vaut aussi ici, et une courte pause entre deux tentatives.
+        if (++sansProgres > 3 && maintenant() >= limite) return null;
+        await dormir(50);
+        continue;
+      }
     }
     if (!note) {
       note = true;

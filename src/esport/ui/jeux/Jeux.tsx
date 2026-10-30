@@ -720,12 +720,17 @@ function CarteIaLocale({ theme, etat, enCours, ligne, onTester, test }: {
   test: string | undefined;
 }) {
   const l = etat.local;
-  const marche = !l?.installe ? trJeux('jeux.local_non_installee') : l.demarrage ? trJeux('jeux.local_demarrage') : l.enMarche ? trJeux('jeux.local_en_marche') : trJeux('jeux.local_arretee');
+  const indispo = l?.hebergement?.indisponible ? l.hebergement : null;
+  const marche = indispo ? trJeux('jeux.local_indisponible') : !l?.installe ? trJeux('jeux.local_non_installee') : l.demarrage ? trJeux('jeux.local_demarrage') : l.enMarche ? trJeux('jeux.local_en_marche') : trJeux('jeux.local_arretee');
   const vitesse = l?.derniereVitesse ? trJeux('jeux.local_vitesse_valeur', { n: Math.round(l.derniereVitesse.jetonsParSeconde * 10) / 10 }) : '—';
   return (
     <Carte theme={theme} testID="esport-jeux-admin-local">
       <TitreCarte theme={theme} titre={trJeux('jeux.moteur_ia')} sous={trJeux('jeux.moteur_ia_aide')} droite={<Badge theme={theme} texte={marche} ton={l?.installe ? 'ok' : 'alerte'} />} />
-      {l?.installe ? (
+      {indispo ? (
+        <Text style={[attenue(theme, 13), { color: theme.critique }]} testID="esport-jeux-admin-local-indisponible">
+          {trJeux('jeux.local_indisponible_aide', { n: indispo.tues, depuis: indispo.depuis ? new Date(indispo.depuis).toLocaleString() : '—' })}
+        </Text>
+      ) : l?.installe ? (
         <>
           {ligne(trJeux('jeux.modele'), l.nomModele ?? l.modele ?? '—', 'esport-jeux-admin-local-modele')}
           {ligne(trJeux('jeux.local_fils'), l.threads ? String(l.threads) : '—')}
@@ -742,6 +747,40 @@ function CarteIaLocale({ theme, etat, enCours, ligne, onTester, test }: {
       ) : (
         <Text style={attenue(theme, 13)} testID="esport-jeux-admin-local-absente">{trJeux('jeux.local_installer')}</Text>
       )}
+    </Carte>
+  );
+}
+
+/** Transcription sur le serveur : moteur, qualités, whisper.cpp désactivé ?, processus de fond, file. */
+function CarteTranscriptionServeur({ theme, etat, ligne }: { theme: ThemeHub; etat: EtatIa; ligne: (libelle: string, valeur: string, testID?: string) => React.ReactElement }) {
+  const t = etat.transcription;
+  if (!t) return null;
+  const date = (v: string | null | undefined) => (v ? new Date(v).toLocaleString() : '—');
+  const modele = (q: string) => {
+    const x = t.qualites[q];
+    return x?.disponible ? `${x.modele ?? '?'} (${x.moteur === 'whispercpp' ? 'whisper.cpp' : trJeux('jeux.transcription_onnx')})` : trJeux('jeux.transcription_indisponible');
+  };
+  return (
+    <Carte theme={theme} testID="esport-jeux-admin-transcription">
+      <TitreCarte theme={theme} titre={trJeux('jeux.transcription_titre')} sous={trJeux('jeux.transcription_aide')} droite={<Badge theme={theme} texte={t.disponible ? trJeux('jeux.transcription_prete') : trJeux('jeux.transcription_absente')} ton={t.disponible ? 'ok' : 'alerte'} />} />
+      {!t.disponible && t.raison ? <Text style={attenue(theme, 13)}>{t.raison}</Text> : null}
+      {ligne(trJeux('jeux.transcription_rapide'), modele('rapide'))}
+      {ligne(trJeux('jeux.transcription_equilibree'), modele('equilibree'), 'esport-jeux-admin-transcription-equilibree')}
+      {ligne(trJeux('jeux.transcription_maximale'), modele('maximale'))}
+      {ligne('whisper.cpp', t.whispercpp.desactive ? trJeux('jeux.transcription_whispercpp_desactive', { le: date(t.whispercpp.desactive.le) }) : t.whispercpp.installe ? trJeux('jeux.transcription_whispercpp_option') : trJeux('jeux.transcription_whispercpp_absent'), 'esport-jeux-admin-transcription-whispercpp')}
+      {t.whispercpp.desactive ? (
+        <Text style={[attenue(theme, 12), { color: theme.alerte }]} testID="esport-jeux-admin-transcription-whispercpp-raison">
+          {trJeux('jeux.transcription_whispercpp_explication', { raison: t.whispercpp.desactive.raison })}
+        </Text>
+      ) : null}
+      {ligne(trJeux('jeux.transcription_cron'), t.lanceur ? `${t.lanceur.raison} (${date(t.lanceur.le)})` : '—', 'esport-jeux-admin-transcription-cron')}
+      {ligne(trJeux('jeux.transcription_passage'), date(t.dernierPassage))}
+      {ligne(trJeux('jeux.transcription_file'), trJeux('jeux.transcription_file_valeur', { attente: t.file.attente ?? 0, cours: t.file.en_cours ?? 0, echec: t.file.echec ?? 0 }), 'esport-jeux-admin-transcription-file')}
+      {t.bloques ? (
+        <Text style={[attenue(theme, 13), { color: theme.critique }]} testID="esport-jeux-admin-transcription-bloques">
+          {trJeux('jeux.transcription_bloques', { n: t.bloques })}
+        </Text>
+      ) : null}
     </Carte>
   );
 }
@@ -804,6 +843,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
             ))}
           </Carte>
         ) : null}
+        <CarteTranscriptionServeur theme={theme} etat={etat} ligne={ligne} />
         <CarteIaLocale theme={theme} etat={etat} enCours={enCours} ligne={ligne}
           onTester={() =>
             void agir('test-local', async () => {

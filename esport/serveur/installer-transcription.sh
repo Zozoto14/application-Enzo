@@ -2,19 +2,20 @@
 # Transcription des réunions SUR LE SERVEUR (o2switch) : installation, à lancer dans le Terminal cPanel (une
 # fois, puis après un changement de modèle). Aucun droit administrateur, aucune carte graphique :
 #
-#   bash ~/application-enzo/esport/serveur/installer-transcription.sh            # whisper.cpp + large-v3-turbo q5_0
-#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --tous     # + modèles Rapide et Maximale (≈ 2,2 Go)
-#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --test     # essai : vitesse (× temps réel), mémoire
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh            # ONNX Runtime + large-v3-turbo (Équilibrée)
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --tous     # + small (Rapide) et large-v3 (Maximale), ≈ 3,2 Go
+#   bash ~/application-enzo/esport/serveur/installer-transcription.sh --test     # essai DANS Node : × temps réel, mémoire
 #   bash ~/application-enzo/esport/serveur/installer-transcription.sh --dry-run  # montre le plan, ne fait rien
 #
-# Il installe ffmpeg (lecture des vidéos), compile whisper.cpp (version figée, commit vérifié, compilateur du
-# système ou GCC 14 figé sans root), installe le modèle de détection de la parole (Silero VAD) et les modèles
-# Whisper GGML (SHA-256 et SHA-1 vérifiés), puis affiche « Transcription serveur prête ». Si whisper.cpp ne
-# peut pas être compilé, l'ancien moteur ONNX est installé en repli. Tout va dans ~/esport-modeles (hors du
-# dépôt, hors de public_html) ; deployer.sh n'y touche jamais : rien n'est retéléchargé.
+# Le calcul se fait DANS le processus Node (ONNX Runtime) : l'hébergeur arrête de force les binaires de calcul
+# externes (whisper.cpp, llama-server : SIGKILL) mais pas `node`. Il installe ONNX Runtime et ffmpeg (paquets npm,
+# versions figées), puis les modèles Whisper ONNX int8 (exports sherpa-onnx, SHA-256 publiés par Hugging Face
+# vérifiés), et affiche « Transcription serveur prête ». Tout va dans ~/esport-modeles (hors du dépôt, hors de
+# public_html) ; deployer.sh n'y touche jamais : rien n'est retéléchargé.
 #
-# Autres options : --modele <nom>, --threads N, --forcer, --route auto|systeme|compilation, --onnx,
-# --revision <commit>, --dossier <chemin>, --sans-redemarrage, --aide. Réglages : docs/esport/transcription.md.
+# Autres options : --modele <nom>, --threads N, --forcer, --whispercpp (option : whisper.cpp compilé, binaire
+# externe), --route auto|systeme|compilation, --revision <commit>, --dossier <chemin>, --sans-redemarrage, --aide.
+# Réglages : docs/esport/transcription.md.
 
 set -uo pipefail
 DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

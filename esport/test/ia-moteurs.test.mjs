@@ -441,3 +441,41 @@ test('service : discuterPour (tâche légère, comptée par moteur) ; brouillon 
   assert.ok(j.lignes.some(l => /repli sur local/.test(l)));
   await base.fermer?.();
 });
+
+test('Administration IA : test d’un moteur long (raisonnement) EN TÂCHE DE FOND : réponse immédiate, résultat interrogé ensuite ; test expiré', async () => {
+  // Faux NVIDIA lent (400 ms) et attente de la requête réduite à 50 ms : la réponse HTTP n'attend pas le modèle
+  // (en vrai : 10 s, sous le délai de l'app et du frontal ; le modèle à raisonnement peut prendre plus d'une minute).
+  const lent = fauxNvidia(async () => {
+    await new Promise(ok => setTimeout(ok, 400));
+    return '{"ok": true}';
+  });
+  const b = await banc({ ia: { config: configIa(ENV), fetch: lent.fetch, attenteTestMs: 50, telecharger: async () => ({ statut: 404, corps: '' }) } });
+  const f = await b.session('principal', 'Fondateur');
+  const t0 = Date.now();
+  const r = (await b.appel('/jeux/ia/test', { methode: 'POST', jeton: f, corps: { cible: 'api' } })).corps;
+  assert.ok(Date.now() - t0 < 350, 'la requête n’attend pas la fin du test');
+  assert.equal(r.enCours, true);
+  assert.equal(r.cible, 'api');
+  assert.match(r.test.id, /^[0-9a-f-]{36}$/);
+  assert.equal(r.test.plafondMs, 90_000);
+  let e = (await b.appel(`/jeux/ia/test/${r.test.id}`, { jeton: f })).corps;
+  assert.equal(e.enCours, true);
+  for (let i = 0; i < 50 && e.enCours; i++) {
+    await new Promise(ok => setTimeout(ok, 50));
+    e = (await b.appel(`/jeux/ia/test/${r.test.id}`, { jeton: f })).corps;
+  }
+  assert.equal(e.enCours, false);
+  assert.equal(e.ok, true);
+  assert.equal(e.moteur, 'api');
+  assert.equal(e.etat.moteurs[0].appelsMois, 1);
+  sansCle(e, 'résultat du test');
+  // Processus de l'app arrêté pendant un test : au-delà de son plafond, il est déclaré en échec (jamais « en cours » sans fin).
+  const id = '00000000-0000-4000-8000-0000000000aa';
+  await b.base.executer('INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', [`test:${id}`, JSON.stringify({ statut: 'en_cours', cible: 'local', debut: new Date(b.horloge.t - 10 * 60_000).toISOString(), plafondMs: 240_000 }), new Date(b.horloge.t).toISOString()]);
+  e = (await b.appel(`/jeux/ia/test/${id}`, { jeton: f })).corps;
+  assert.deepEqual([e.ok, e.enCours, e.erreur.code, e.cible], [false, false, 'ia-delai', 'local']);
+  assert.equal((await b.appel('/jeux/ia/test/00000000-0000-4000-8000-0000000000bb', { jeton: f })).corps.code, 'test-introuvable');
+  // Réservé au Fondateur.
+  const autre = await b.session('membre12', 'Membre');
+  assert.equal((await b.appel(`/jeux/ia/test/${r.test.id}`, { jeton: autre })).statut, 403);
+});

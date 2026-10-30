@@ -6,15 +6,21 @@
  * Garde-fous pour un hébergement mutualisé (limites CloudLinux LVE de processeur, mémoire, processus) :
  *
  *  - UN seul processus à la fois (verrou fichier, plus un bail par travail en base) ;
- *  - whisper.cpp (moteur principal) : blocs de quelques minutes (TRANSCRIPTION_BLOC_S) coupés dans un
- *    silence, avec une petite marge recollée sans doublon, prompt de vocabulaire de la team, VAD ; fils de
- *    calcul TRANSCRIPTION_THREADS_WHISPER ; le repli ONNX garde ses morceaux de 30 s et 1 à 2 fils ;
- *  - texte nettoyé (boucles de répétition, hallucinations connues), puis RELU par l'IA locale si elle est
- *    installée (post-correction par lots, garde « ne pas inventer », version brute gardée) ;
+ *  - moteur par défaut : Whisper par ONNX Runtime DANS CE PROCESSUS (l'hébergeur arrête de force les binaires de
+ *    calcul externes, pas `node`) : morceaux de 30 s au plus coupés dans un silence, zone de parole seule, prompt
+ *    de vocabulaire de la team + texte du morceau précédent, recherche en faisceau, températures de repli ; fils de
+ *    calcul TRANSCRIPTION_THREADS ;
+ *  - whisper.cpp (option) : blocs de quelques minutes (TRANSCRIPTION_BLOC_S) avec une petite marge recollée sans
+ *    doublon ; s'il est arrêté de force (SIGKILL que nous n'avons pas envoyé), BASCULE sur ONNX pour ce travail
+ *    (même bloc repris, sans essai compté) et whisper.cpp désactivé pour la suite ;
+ *  - texte nettoyé (boucles de répétition, hallucinations connues), puis RELU par l'IA (post-correction par lots,
+ *    garde « ne pas inventer », version brute gardée) ;
  *  - jamais whisper.cpp et l'IA locale en même temps si la mémoire ne le permet pas (moteurs-lourds.mjs) ;
  *  - une PAUSE après chaque morceau (TRANSCRIPTION_REPOS, fraction du temps de calcul : 0,25 = le
  *    processeur se repose 20 % du temps) ;
  *  - plafond de mémoire (TRANSCRIPTION_RAM_MAX) : au-delà, arrêt propre et message clair ;
+ *  - CHIEN DE GARDE : sans aucune avancée pendant TRANSCRIPTION_BLOCAGE_MIN, le processus s'arrête (il ne tient
+ *    plus le verrou ni le bail) et le passage suivant du cron reprend le travail ;
  *  - durée de vie bornée (TRANSCRIPTION_DUREE_TRAVAILLEUR) : le processus passe la main, le cron suivant
  *    en relance un neuf qui reprend au dernier morceau ;
  *  - chaque morceau est enregistré en base : une coupure (processus tué, redémarrage) reprend là.
@@ -26,9 +32,9 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, 
 import { setPriority } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decoderVersPcm, dureePcm, fenetreSuivante, lirePcm } from './audio.mjs';
+import { decoderVersPcm, dureePcm, energieAutour, fenetreSuivante, lirePcm, zoneDeParole } from './audio.mjs';
 import { qualiteEffective } from '../../noyau/medias/fileTranscription.mjs';
-import { nettoyerSegments, recollerSegments } from '../../noyau/medias/qualiteTranscription.mjs';
+import { nettoyerSegments, recollerSegments, texteNormalise } from '../../noyau/medias/qualiteTranscription.mjs';
 import { corrigerSegments } from '../../noyau/medias/correctionTranscription.mjs';
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
@@ -79,8 +85,15 @@ export async function fichierLocal(stockage, cle, destination) {
   return { chemin: destination, temporaire: true };
 }
 
-/** Segments d'un morceau du repli ONNX (texte seul) : même nettoyage que ceux de whisper.cpp. */
-const segmentMorceau = (debut, fin, texte) => nettoyerSegments([[debut, fin, texte]])[0] ?? null;
+/** Énergie au point de coupe au-delà de laquelle la coupe tombe en pleine parole (une marge est alors reprise). */
+const SEUIL_COUPE = 0.02;
+
+/** Whisper recopie parfois le prompt (vocabulaire) sur un passage inaudible : ce texte-là est écarté. */
+export function echoDuPrompt(texte, prompt) {
+  const t = texteNormalise(texte);
+  const p = texteNormalise(prompt ?? '');
+  return t.length >= 12 && p.length > 0 && p.includes(t);
+}
 
 /**
  * Traite la file jusqu'à ce qu'elle soit vide (ou la durée de vie atteinte). Options :
@@ -113,6 +126,9 @@ export async function executerTravaux({
   arret = () => false,
   battement = () => undefined,
   apresTravail = async () => undefined,
+  surMoteurTue = null,
+  surBlocage = () => undefined,
+  battementMs = BATTEMENT_MS,
 }) {
   mkdirSync(dossierTravail, { recursive: true });
   menageTravail(dossierTravail, ((config.delaiMaxH ?? 24) + 48) * 3_600_000);
@@ -121,6 +137,14 @@ export async function executerTravaux({
   const finProcessus = debutProcessus + (config.dureeTravailleurMin ?? 120) * 60_000;
   const tempsEcoule = () => arret() || horloge() >= finProcessus;
   let transcripteur = null;
+  // Dernière AVANCÉE réelle (audio décodé, bloc ou morceau fait, lot relu) : sans avancée pendant `blocageMs`, le
+  // processus est déclaré bloqué (il ne renouvelle plus ni son verrou ni le bail du travail, et `surBlocage` l'arrête) :
+  // un processus figé ne peut plus tenir la file indéfiniment.
+  let activite = horloge();
+  const signe = () => {
+    activite = horloge();
+  };
+  let bloque = false;
   bilan.recuperes = await resumes.recupererTravauxServeur();
   try {
     for (;;) {
@@ -133,10 +157,19 @@ export async function executerTravaux({
       const copie = join(dossierTravail, `${w.reunion_id}.source`);
       let source = null;
       // Pendant tout le travail : bail en base et verrou du processus renouvelés chaque minute.
+      signe();
       const veille = setInterval(() => {
+        if (horloge() - activite > (config.blocageMs ?? 45 * 60_000)) {
+          if (!bloque) {
+            bloque = true;
+            journal.error?.(`[transcription] « ${r.titre} » : aucune avancée depuis ${Math.round((horloge() - activite) / 60_000)} min : processus bloqué, arrêt (le travail sera repris par le passage suivant du cron).`);
+            surBlocage();
+          }
+          return;
+        }
         battement();
         resumes.prolongerTravailServeur?.(w).catch(() => undefined);
-      }, BATTEMENT_MS);
+      }, battementMs);
       veille.unref?.();
       try {
         let segments = [...tache.segments];
@@ -148,35 +181,44 @@ export async function executerTravaux({
           // 1. Audio : décodé une seule fois en PCM 16 kHz prétraité (gardé pour la reprise).
           if (!existsSync(pcm)) {
             source = await fichierLocal(stockage, f.cle_stockage, copie);
-            await decoderVersPcm({ source: source.chemin, sortie: pcm, ffmpeg, threads: Math.min(2, config.threads || 1) });
+            await decoderVersPcm({ source: source.chemin, sortie: pcm, ffmpeg, threads: 1 });
             if (source.temporaire) rmSync(copie, { force: true });
+            signe();
           }
           duree = Math.round(dureePcm(pcm) * 10) / 10;
           if (!(duree > 0.5)) throw Object.assign(new Error('Enregistrement sans piste audio lisible.'), { definitif: true });
           // 2. Moteur de la qualité demandée (ou la plus proche disponible) ; gardé d'un travail au suivant.
-          const choix = choisir(w.qualite ?? config.qualite);
+          let choix = choisir(w.qualite ?? config.qualite);
           if (!choix) throw new Error('Aucun moteur de transcription installé sur le serveur.');
-          const cle = `${choix.moteur}:${choix.modele}:${choix.qualite}`;
-          if (transcripteur && (transcripteur.cle ?? cle) !== cle) {
-            await transcripteur.liberer?.().catch?.(() => undefined);
-            transcripteur = null;
-          }
-          if (!transcripteur) transcripteur = await creerTranscripteur(choix);
-          moteurNom = transcripteur.moteur;
+          const preparer = async () => {
+            const cle = `${choix.moteur}:${choix.modele}:${choix.qualite}`;
+            if (transcripteur && (transcripteur.cle ?? cle) !== cle) {
+              await transcripteur.liberer?.().catch?.(() => undefined);
+              transcripteur = null;
+            }
+            if (!transcripteur) transcripteur = await creerTranscripteur(choix);
+            moteurNom = transcripteur.moteur;
+            signe();
+          };
+          await preparer();
           let position = tache.progression;
           let secondesCalcul = Number(w.secondes_calcul ?? 0);
           let audioCalcule = Number(w.audio_calcule_s ?? 0);
-          const parBlocs = typeof transcripteur.transcrireBloc === 'function';
+          // Contexte de Whisper : jetons du texte du morceau précédent (reprise : le dernier segment enregistré).
+          let precedent = segments.length && transcripteur.encoder ? transcripteur.encoder(` ${segments[segments.length - 1][2]}`) : null;
           // 3. Blocs (whisper.cpp : quelques minutes coupées dans un silence, avec une marge recollée sans doublon)
-          //    ou morceaux de 30 s (repli ONNX) ; chacun enregistré (reprise exacte).
+          //    ou morceaux de 30 s au plus (ONNX dans le processus : coupés dans le silence, zone de parole seule,
+          //    petite marge reprise si la coupe tombe en pleine parole) ; chacun enregistré (reprise exacte).
           while (position < duree - 0.05) {
             if (tempsEcoule()) {
               interrompu = 'rendu';
               break;
             }
-            const fen = parBlocs ? fenetreSuivante(pcm, position, duree, { max: config.blocS ?? 300, recherche: Math.min(60, Math.max(10, (config.blocS ?? 300) / 5)) }) : fenetreSuivante(pcm, position, duree);
+            const parBlocs = typeof transcripteur.transcrireBloc === 'function';
             const t0 = horloge();
+            let fen;
             if (parBlocs) {
+              fen = fenetreSuivante(pcm, position, duree, { max: config.blocS ?? 300, recherche: Math.min(60, Math.max(10, (config.blocS ?? 300) / 5)) });
               const debutLecture = Math.max(0, position - (position > 0 ? (config.chevauchementS ?? 1.5) : 0));
               const jeton = jetonLourd ? await jetonLourd() : null;
               if (jetonLourd && !jeton) {
@@ -187,22 +229,45 @@ export async function executerTravaux({
               let res;
               try {
                 res = await transcripteur.transcrireBloc(lirePcm(pcm, debutLecture, fen.fin), { langue: w.langue, prompt: contexte.prompt ?? '', decalage: debutLecture, surProcessus: jeton?.noterPid });
+              } catch (e) {
+                // whisper.cpp arrêté de force par l'hébergeur : bascule sur ONNX (dans le processus) pour ce travail,
+                // et whisper.cpp désactivé pour la suite (surMoteurTue) ; le même bloc est repris, sans essai compté.
+                if (!e?.tueExterne || choix.moteur !== 'whispercpp' || !surMoteurTue) throw e;
+                const nouveau = await surMoteurTue({ choix, erreur: e, qualite: w.qualite ?? config.qualite });
+                if (!nouveau) throw Object.assign(new Error(`${messageSimple(e)} Aucun autre moteur installé : lancez installer-transcription.sh (moteur ONNX).`), { definitif: false });
+                journal.error?.(`[transcription] « ${r.titre} » : whisper.cpp arrêté de force par l’hébergeur (SIGKILL) ; bascule sur ${nouveau.moteur} ${nouveau.modele} dans le processus Node, whisper.cpp désactivé pour la suite.`);
+                choix = nouveau;
+                await preparer();
+                continue;
               } finally {
                 jeton?.liberer();
               }
               if (!langue && res?.langue) langue = res.langue;
               segments = recollerSegments(segments, nettoyerSegments(res?.segments ?? []), position);
             } else {
-              const res = await transcripteur.transcrireMorceau(lirePcm(pcm, fen.debut, fen.fin), { langue: w.langue });
-              if (!langue && res?.langue) langue = res.langue;
-              const s = segmentMorceau(fen.debut, fen.fin, String(res?.texte ?? '').trim());
-              if (s) segments.push(s);
+              const marge = position > 0 && energieAutour(pcm, position) > SEUIL_COUPE ? Math.min(2, config.chevauchementS ?? 1.5) : 0;
+              fen = fenetreSuivante(pcm, position, duree, { max: 30 - marge });
+              const debutLecture = Math.max(0, position - marge);
+              const brut = lirePcm(pcm, debutLecture, fen.fin);
+              const zone = zoneDeParole(brut);
+              if (zone) {
+                const d = transcripteur.decodage ?? {};
+                const res = await transcripteur.transcrireMorceau(brut.subarray(zone.debut, zone.fin), { langue: w.langue, prompt: contexte.prompt ?? '', precedent, beam: d.beam, bestOf: d.bestOf, temperatures: d.temperatures, graine: Math.round(position * 10) + 1 });
+                if (!langue && res?.langue && res.langue !== 'auto') langue = res.langue;
+                const texte = String(res?.texte ?? '').trim();
+                // Comme Whisper : le texte précédent sert de contexte, sauf s'il vient d'un repli à haute température.
+                precedent = texte && !(res.temperature > 0.5) ? res.ids : null;
+                if (texte && !echoDuPrompt(texte, contexte.prompt)) {
+                  segments = recollerSegments(segments, nettoyerSegments([[debutLecture + zone.debut / 16000, debutLecture + zone.fin / 16000, texte]]), position);
+                }
+              }
             }
             const calcul = Math.max(0, (horloge() - t0) / 1000);
             position = fen.fin;
             secondesCalcul += calcul;
             audioCalcule += fen.fin - fen.debut;
             bilan.morceaux += 1;
+            signe();
             battement();
             const encore = await resumes.progresserServeur(w, { segments, progression: position, duree, langue: langue ?? 'fr', moteur: transcripteur.moteur, secondesCalcul, audioCalcule });
             if (!encore) {
@@ -210,7 +275,7 @@ export async function executerTravaux({
               break;
             }
             if (memoire() > config.ramMax) {
-              throw Object.assign(new Error(`Mémoire insuffisante sur le serveur pour le modèle « ${config.modele} » : choisissez un modèle plus petit (TRANSCRIPTION_MODELE=tiny) ou transcrivez dans le navigateur.`), { definitif: true, memoire: true });
+              throw Object.assign(new Error(`Mémoire insuffisante sur le serveur pour ce modèle (${choix.modele}) : choisissez la qualité « Rapide », augmentez TRANSCRIPTION_RAM_MAX ou transcrivez dans le navigateur.`), { definitif: true, memoire: true });
             }
             // Garde-fou du mutualisé : repos proportionnel au calcul.
             if (config.repos > 0 && calcul > 0) await dormir(calcul * config.repos * 1000);
@@ -242,6 +307,7 @@ export async function executerTravaux({
                 glossaire: contexte.glossaire ?? [],
                 langue: langue ?? w.langue ?? 'fr',
                 surLot: async ({ segments: s, faits }) => {
+                  signe();
                   battement();
                   if (!(await resumes.progresserCorrectionServeur(w, { segments: s, faits }))) {
                     interrompu = 'annule';
@@ -362,7 +428,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { chargerConfigEsport } = await import('../config.mjs');
   const config = chargerConfigEsport();
   const ts = config.transcriptionServeur;
-  const { chemins, cheminFfmpeg, creerTranscripteur, etatInstallation } = await import('./moteur.mjs');
+  const { chemins, cheminFfmpeg, creerTranscripteur, desactiverWhisperCpp, etatInstallation } = await import('./moteur.mjs');
   const c = chemins(ts);
   mkdirSync(c.dossier, { recursive: true });
   const etat = etatInstallation(ts);
@@ -374,6 +440,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.log(`${new Date().toISOString()} transcription : un autre processus travaille déjà.`);
     process.exit(0);
   }
+  const resumeQualites = Object.entries(etat.qualites)
+    .map(([q, x]) => `${q} ${x.disponible ? `${x.moteur}:${x.modele}` : '—'}`)
+    .join(', ');
+  console.log(`${new Date().toISOString()} transcription : processus pid ${process.pid} démarré (${resumeQualites} ; ${ts.threads} fil(s) ONNX).`);
   let arreter = false;
   let transcripteurCourant = null;
   for (const s of ['SIGTERM', 'SIGINT', 'SIGHUP'])
@@ -406,6 +476,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       stockage,
       config: ts,
       creerTranscripteur: async choix => (transcripteurCourant = await creerTranscripteur(ts, choix)),
+      // whisper.cpp arrêté de force : désactivé pour la suite (Administration), qualités recalculées sans lui.
+      surMoteurTue: async ({ erreur, qualite }) => {
+        desactiverWhisperCpp(ts, `arrêté de force (SIGKILL) par l’hébergeur pendant une transcription (${String(erreur?.message ?? '').slice(0, 160)})`);
+        const e2 = etatInstallation(ts);
+        ts.qualites = e2.qualites;
+        ts.disponible = e2.installe;
+        return qualiteEffective(ts, qualite, { exclure: ['whispercpp'] });
+      },
+      surBlocage: () => {
+        // Processus figé : on part (le verrou n'est plus renouvelé ; le travail sera repris par le passage suivant).
+        transcripteurCourant?.arreter?.();
+        rmSync(c.verrou, { force: true });
+        setTimeout(() => process.exit(3), 2000).unref?.();
+      },
       correcteur,
       jetonLourd: exclusif ? () => prendreJetonLourd({ dossierIa: ia.dossier, attenteMs: 10 * 60_000 }) : null,
       ffmpeg: cheminFfmpeg(ts),
@@ -421,6 +505,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   } finally {
     await base.fermer();
     rmSync(c.verrou, { force: true });
-    writeFileSync(join(c.dossier, 'dernier-passage.txt'), new Date().toISOString());
+    writeFileSync(c.dernierPassage, new Date().toISOString());
   }
 }

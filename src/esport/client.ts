@@ -436,7 +436,14 @@ export interface TravailServeur {
   /** Réunions avant celle-ci dans la file. */
   rang: number;
   essais: number;
+  /** Essais permis (TRANSCRIPTION_ESSAIS) et ceux qui restent. */
+  essaisMax?: number;
+  essaisRestants?: number;
+  /** Nouvel essai prévu (après un échec), à cette heure. */
   prochainEssai: string | null;
+  /** En attente depuis plus de 15 min sans essai prévu, ou en cours sans signe de vie : « Relancer maintenant ». */
+  bloque?: boolean;
+  attenteDepuis?: string | null;
   erreur: string | null;
   debutLe: string | null;
   finLe: string | null;

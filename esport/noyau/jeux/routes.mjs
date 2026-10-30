@@ -14,7 +14,9 @@
  *   POST   /jeux/:cle/propositions/decider        { acceptees, refusees, corrections }
  *   GET    /jeux/ia                               état de l'IA (mode, IA locale, fournisseur, modèle, clé présente/absente, quota)
  *   PUT    /jeux/ia/reglages                      mode (local, api, local-api), plafonds mensuels, automatique (Fondateur)
- *   POST   /jeux/ia/test                          test de connexion { cible?: local | api } (Fondateur)
+ *   POST   /jeux/ia/test                          test de connexion { cible?: local | api } (Fondateur) : résultat, ou
+ *                                                  { enCours, test: { id } } s'il dure plus de 10 s (tâche de fond)
+ *   GET    /jeux/ia/test/:id                      résultat d'un test lancé en tâche de fond
  *   GET|PUT /jeux/ia/gestionnaires                délégation de jeux.gerer (Fondateur)
  *   POST   /jeux/ia/brouillons                    « Préparer avec l'IA »
  *   GET    /jeux/ia/travaux                       brouillons et vérifications (?genre=&jeu=)
@@ -46,6 +48,7 @@ export async function routesJeux({ jeux, acteur, chemin, methode: m, url, lireCo
       await limite('ia', acteur.compte);
       return jeux.testerIa(acteur, corps);
     }
+    if (p[1] === 'test' && p.length === 3 && m === 'GET') return jeux.etatTestIa(acteur, p[2]);
     if (p[1] === 'gestionnaires' && p.length === 2) {
       if (m === 'GET') return jeux.gestionnaires(acteur);
       if (m === 'PUT') return jeux.reglerGestionnaires(acteur, await lireCorps());

@@ -236,6 +236,24 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
         <View style={{ gap: 6 }}>
           <ProgressionServeur theme={theme} travail={travailServeur} testID={idt} />
           <Text style={attenue}>{tr('transcription.serveur.fermer_app')}</Text>
+          {depot.transcription?.peutTranscrire && (travailServeur.bloque || (travailServeur.statut === 'attente' && travailServeur.prochainEssai)) ? (
+            <BoutonHub
+              theme={theme}
+              titre={tr('transcription.serveur.relancer')}
+              variante="plein"
+              desactive={Boolean(enCours)}
+              onPress={() =>
+                void agir('relancer', async () => {
+                  const t = await api.demanderTranscriptionServeur(depot.id, langue, undefined, { relancer: true });
+                  suivi.setTravail(t.travail ?? null);
+                  setStatutLocal(t.statut);
+                  onChange?.();
+                  return tr('transcription.serveur.relancee');
+                })
+              }
+              testID={`${idt}-serveur-relancer`}
+            />
+          ) : null}
           {depot.transcription?.peutTranscrire ? (
             <BoutonHub
               theme={theme}

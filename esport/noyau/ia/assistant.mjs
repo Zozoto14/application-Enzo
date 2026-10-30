@@ -272,10 +272,10 @@ A map leaving the competitive pool is a "modification" with "actif": false, not 
  * Test de connexion : un tout petit échange (`cible` : « api », « api2 » ou « local » pour tester un seul moteur).
  * Effort de raisonnement au plus bas (modèle à raisonnement : réponse plus rapide).
  */
-export async function testerConnexion({ appeler, cible }) {
+export async function testerConnexion({ appeler, cible, delaiMax = null }) {
   const r = await appeler('test', [
     { role: 'system', content: 'Answer with ONE JSON object only.' },
     { role: 'user', content: 'Return {"ok": true}.' },
-  ], { maxJetons: 200, delai: 30_000, effort: 'low', schema: SCHEMA_TEST, ...(cible ? { cible } : {}) });
+  ], { maxJetons: 200, delai: 30_000, effort: 'low', schema: SCHEMA_TEST, ...(delaiMax ? { delaiMax } : {}), ...(cible ? { cible } : {}) });
   return { reponse: Boolean(extraireJson(r.texte)?.ok), dureeMs: r.dureeMs ?? null, ...(r.moteur ? { moteur: r.moteur } : {}) };
 }

@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { banc, teamAvecMembres } from './aide.mjs';
@@ -100,10 +100,11 @@ function executer(b, dossier, sim, options = {}) {
 
 test('réglages : TRANSCRIPTION_MODE, MODELE, THREADS bornés, dossier, RAM, repos', () => {
   const d = configTranscriptionServeur({});
-  assert.deepEqual([d.mode, d.modele, d.threads, d.essaisMax, d.delaiMaxH, d.disponible], ['serveur', 'base', 1, 3, 24, false]);
-  const c = configTranscriptionServeur({ TRANSCRIPTION_MODE: 'Navigateur', TRANSCRIPTION_MODELE: 'small', TRANSCRIPTION_THREADS: '9', TRANSCRIPTION_RAM_MAX: '1G', TRANSCRIPTION_REPOS: '0.5', TRANSCRIPTION_DOSSIER_MODELES: '/home/x/esport-modeles' });
-  assert.deepEqual([c.mode, c.modele, c.threads, c.ramMax, c.repos, c.dossierModeles], ['navigateur', 'small', 4, 1024 ** 3, 0.5, '/home/x/esport-modeles']);
-  assert.equal(configTranscriptionServeur({ TRANSCRIPTION_MODELE: 'large', TRANSCRIPTION_MODE: 'n’importe' }).modele, 'base');
+  assert.deepEqual([d.mode, d.modele, d.threads, d.essaisMax, d.delaiMaxH, d.disponible, d.ramMax, d.blocageMs, d.moteur], ['serveur', 'base', 4, 3, 24, false, 8 * 1024 ** 3, 45 * 60_000, 'auto']);
+  assert.deepEqual(d.modelesOnnx, { rapide: 'small', equilibree: 'turbo', maximale: 'large-v3' });
+  const c = configTranscriptionServeur({ TRANSCRIPTION_MODE: 'Navigateur', TRANSCRIPTION_MODELE: 'small', TRANSCRIPTION_THREADS: '99', TRANSCRIPTION_RAM_MAX: '1G', TRANSCRIPTION_REPOS: '0.5', TRANSCRIPTION_DOSSIER_MODELES: '/home/x/esport-modeles', TRANSCRIPTION_ONNX_MAXIMALE: 'medium', TRANSCRIPTION_BLOCAGE_MIN: '1' });
+  assert.deepEqual([c.mode, c.modele, c.threads, c.ramMax, c.repos, c.dossierModeles, c.modelesOnnx.maximale, c.blocageMs], ['navigateur', 'small', 16, 1024 ** 3, 0.5, '/home/x/esport-modeles', 'medium', 10 * 60_000]);
+  assert.equal(configTranscriptionServeur({ TRANSCRIPTION_MODELE: 'enorme', TRANSCRIPTION_MODE: 'n’importe' }).modele, 'base');
   assert.equal(configTranscriptionServeur({ TRANSCRIPTION_MODE: 'x' }).mode, 'serveur');
   assert.deepEqual([attenteEssai(1), attenteEssai(2)], [5 * 60_000, 15 * 60_000]);
 });
@@ -383,7 +384,7 @@ test('garde-fous : format illisible et mémoire dépassée = échec définitif i
     assert.equal(bilan.echecs, 1);
     const w1 = await travail(b, d1.id);
     assert.equal(w1.statut, 'echec');
-    assert.match(w1.erreur, /Mémoire insuffisante.*tiny/);
+    assert.match(w1.erreur, /Mémoire insuffisante.*« Rapide ».*TRANSCRIPTION_RAM_MAX/);
     // Délai maximal : un travail resté en attente trop longtemps échoue.
     const d2 = await deposer(b, A, { secondes: 5, titre: 'Oubliée' });
     b.horloge.t += 25 * 3_600_000;
@@ -483,8 +484,10 @@ test('cron : lance le processus détaché (nice 19) seulement s’il y a du trav
     assert.equal(lances[0].opts.detached, true);
     // Un processus vivant tient le verrou : rien de plus.
     writeFileSync(join(dossier, 'travailleur.verrou'), String(process.pid));
-    assert.equal((await lancerTravailleur({ base: b.base, config, maintenant: () => b.horloge.t, spawn, fichierJournal: journalFichier })).raison, 'déjà en cours');
+    assert.equal((await lancerTravailleur({ base: b.base, config, maintenant: () => b.horloge.t, spawn, fichierJournal: journalFichier })).raison, `déjà en cours (pid ${process.pid})`);
     assert.equal(lances.length, 1);
+    // Dernière décision notée pour l'Administration (et le journal du cron).
+    assert.match(readFileSync(join(dossier, 'lanceur.json'), 'utf8'), /"raison":"déjà en cours \(pid \d+\)","n":1/);
     // Moteur pas installé : rien n'est lancé.
     assert.equal((await lancerTravailleur({ base: b.base, config: { transcriptionServeur: { ...SERVEUR, disponible: false } }, spawn })).lance, false);
     // Branché dans le cron du serveur (rapport).

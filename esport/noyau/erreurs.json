@@ -322,6 +322,8 @@
   "Segment invalide : début en secondes attendu.": "Invalid segment: start in seconds expected.",
   "Aucun enregistrement déposé pour cette réunion.": "No recording uploaded for this meeting.",
   "Seuls le déposant et les rédacteurs modifient la transcription.": "Only the submitter and the writers can edit the transcript.",
+  "IA locale indisponible sur cet hébergement : son moteur est arrêté de force (SIGKILL) par l’hébergeur. Elle est sautée dans l’ordre de repli (voir Administration IA).": "Local AI unavailable on this hosting: its engine is force-killed (SIGKILL) by the hosting provider. It is skipped in the fallback order (see AI Administration).",
+  "Test introuvable (lancez-le à nouveau).": "Test not found (run it again).",
   "La transcription n’est pas encore prête.": "The transcript isn’t ready yet.",
   "La transcription par le serveur n’est pas activée : transcrivez dans le navigateur.": "Server transcription isn’t enabled: transcribe in the browser.",
   "Cette review n’a pas de vidéo déposée.": "This review has no uploaded video.",

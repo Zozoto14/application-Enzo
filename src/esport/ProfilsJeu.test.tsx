@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from './client';
@@ -384,6 +384,67 @@ test('Administration IA : moteurs (clé présente sans sa valeur, confidentialit
   await fireEvent.changeText(screen.getByTestId('esport-jeux-admin-quota-api2'), '150');
   await fireEvent.press(screen.getByTestId('esport-jeux-admin-quota-enregistrer'));
   expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', expect.objectContaining({ quotaAppelsApi2: 150 }));
+});
+
+test('Administration IA : test long en tâche de fond (résultat interrogé ensuite) ; IA locale tuée par l’hébergeur ; état de la transcription', async () => {
+  jest.useFakeTimers();
+  try {
+    const ETAT2: EtatIa = {
+      ...ETAT,
+      local: { installe: false, raison: 'indisponible-hebergement', hebergement: { indisponible: true, tues: 2, max: 2, depuis: '2026-10-29T23:25:00.000Z' } },
+      moteurs: [{ id: 'api', configure: true, raison: null, pret: true, fournisseur: 'nvidia', modele: 'mistralai/mistral-large-4-1t-a52b', hote: 'integrate.api.nvidia.com', cle: 'presente', externe: true, raisonnement: true, effort: 'high', images: false, appelsMois: 0, erreursMois: 0, plafond: 30, latenceMoyenneMs: null, dernierAppel: null }],
+      ordres: { profils: ['api', 'local'], leger: ['api', 'local'] },
+      transcription: {
+        disponible: true,
+        raison: null,
+        moteur: 'auto',
+        qualites: { rapide: { disponible: false, moteur: 'onnx', modele: null }, equilibree: { disponible: true, moteur: 'onnx', modele: 'turbo' }, maximale: { disponible: true, moteur: 'onnx', modele: 'large-v3' } },
+        whispercpp: { installe: false, desactive: { le: '2026-10-29T23:25:00.000Z', raison: 'arrêté de force (SIGKILL) par l’hébergeur' } },
+        dernierPassage: '2026-10-30T07:00:00.000Z',
+        lanceur: { le: '2026-10-30T07:05:00.000Z', raison: 'déjà en cours (pid 4242)', n: 1 },
+        file: { attente: 1, en_cours: 1, termine: 3, echec: 0, annule: 0 },
+        bloques: 1,
+      },
+    };
+    const { client, requete } = clientJeux();
+    const base = requete.getMockImplementation()!;
+    let interrogations = 0;
+    requete.mockImplementation(async (chemin: string, methode = 'GET', corps?: unknown) => {
+      if (chemin === '/jeux/ia') return ETAT2;
+      if (chemin === '/jeux/ia/test') return { ok: null, enCours: true, test: { id: 't-1' }, etat: ETAT2 };
+      if (chemin === '/jeux/ia/test/t-1') {
+        interrogations += 1;
+        return interrogations < 2 ? { ok: null, enCours: true, test: { id: 't-1' } } : { ok: true, enCours: false, reponse: true, dureeMs: 75_000, moteur: 'api', etat: ETAT2 };
+      }
+      return base(chemin, methode, corps);
+    });
+    await monterJeux(client);
+    await fireEvent.press(await screen.findByTestId('esport-jeux-onglet-admin'));
+    // IA locale arrêtée de force par l'hébergeur : expliquée, sautée, comment réessayer.
+    const local = await screen.findByTestId('esport-jeux-admin-local');
+    expect(within(local).getByText('indisponible sur cet hébergement')).toBeTruthy();
+    expect(screen.getByTestId('esport-jeux-admin-local-indisponible').props.children).toMatch(/arrêté de force \(SIGKILL\) 2 fois .* sautée dans les ordres de repli .* rm ~\/\.appdashboard\/ia-locale\/etat\/hebergement\.json/);
+    // Transcription : modèles ONNX, whisper.cpp désactivé (raison), décision du cron, file et travaux bloqués.
+    const tr = screen.getByTestId('esport-jeux-admin-transcription');
+    expect(within(tr).getByText('turbo (ONNX, dans Node)')).toBeTruthy();
+    expect(screen.getByTestId('esport-jeux-admin-transcription-whispercpp-raison').props.children).toMatch(/arrêté de force par l’hébergeur \(arrêté de force \(SIGKILL\) par l’hébergeur\)/);
+    expect(within(tr).getByText(/^déjà en cours \(pid 4242\)/)).toBeTruthy();
+    expect(within(tr).getByText('1 en attente, 1 en cours, 0 en échec')).toBeTruthy();
+    expect(screen.getByTestId('esport-jeux-admin-transcription-bloques').props.children).toMatch(/1 transcription\(s\) semblent bloquées/);
+    // Test d'un moteur long : la requête rend tout de suite, le résultat est demandé ensuite (aucun « ne répond pas »).
+    await fireEvent.press(screen.getByTestId('esport-jeux-admin-moteur-api-tester'));
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        jest.advanceTimersByTime(3000);
+      });
+    }
+    expect(await screen.findByTestId('esport-jeux-admin-moteur-api-test')).toBeTruthy();
+    expect(requete).toHaveBeenCalledWith('/jeux/ia/test/t-1');
+    expect(interrogations).toBe(2);
+    expect(screen.getByTestId('esport-jeux-admin-moteur-api-test').props.children).toMatch(/75/);
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test('anglais : la page Jeux suit la langue', async () => {

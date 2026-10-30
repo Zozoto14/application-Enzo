@@ -411,7 +411,9 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
   };
   const secondes = () => Math.round((maintenant() - debut) / 1000);
   const flux = Boolean(options.flux ?? config.flux);
-  const duree = options.delai !== undefined && options.delai !== null ? Math.max(options.delai, config.delaiMinMs ?? 0) : (config.delaiMs ?? delai);
+  const duree0 = options.delai !== undefined && options.delai !== null ? Math.max(options.delai, config.delaiMinMs ?? 0) : (config.delaiMs ?? delai);
+  // Plafond imposé par l'appelant (test de connexion de l'Administration IA) : même pour un modèle à raisonnement.
+  const duree = options.delaiMax > 0 ? Math.min(duree0, options.delaiMax) : duree0;
   const essais429 = Number.isInteger(options.essais429) ? Math.max(0, options.essais429) : 1;
   let attentes = 0;
   for (let tour = 0; tour < 6; tour++) {
@@ -535,7 +537,7 @@ export function creerConnecteur(config, { fetch: fetchIa = (...a) => globalThis.
 // ------------------------------------------------------------------ Répartiteur (ordre de repli par tâche)
 
 /** Erreurs après lesquelles on essaie le moteur suivant : moteur en panne ou saturé, plafond, image non lue… */
-const CODES_REPLI = new Set(['ia-limite-fournisseur', 'quota-ia', 'ia-image-non-geree', 'ia-non-configuree', 'ia-locale-absente']);
+const CODES_REPLI = new Set(['ia-limite-fournisseur', 'quota-ia', 'ia-image-non-geree', 'ia-non-configuree', 'ia-locale-absente', 'ia-locale-indisponible']);
 export const peutReplier = e => CODES_REPLI.has(e?.code) || (e?.statut ?? 500) >= 500;
 
 /**
@@ -572,6 +574,9 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     const candidats = images ? prets.filter(m => moteurs[m].images) : prets;
     if (!candidats.length) {
       if (images && prets.length) throw imageNonGeree();
+      if (ordre.includes('local') && moteurs.local && !pret('local') && moteurs.local.indisponible?.()) {
+        throw echec(503, 'ia-locale-indisponible', 'IA locale indisponible sur cet hébergement : son moteur est arrêté de force (SIGKILL) par l’hébergeur. Elle est sautée dans l’ordre de repli (voir Administration IA).');
+      }
       throw ordre[0] === 'local'
         ? echec(503, 'ia-locale-absente', 'IA locale non installée (lancer esport/serveur/installer-ia-locale.sh).')
         : echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
@@ -629,6 +634,8 @@ const entier = (v, defaut, min, max) => {
  *   IA_LOCALE_FILE_MAX         requêtes en attente au plus (défaut 4)
  *   IA_LOCALE_NICE             priorité du moteur (défaut 19, la plus basse)
  *   IA_LOCALE_DUREE_TRAVAILLEUR_MIN  durée de travail d'un processus de fond avant de passer la main (défaut 60)
+ *   IA_LOCALE_TUES_MAX         arrêts de force (SIGKILL de l'hébergeur) de suite avant de déclarer l'IA locale
+ *                              « indisponible sur cet hébergement » et de la sauter dans les ordres de repli (défaut 2)
  *
  * Pas de quota mensuel ici (rien n'est payé) : la durée et la concurrence sont bornées à la place.
  */
@@ -646,6 +653,7 @@ export function configIaLocale(env = process.env) {
     fileMax: entier(env.IA_LOCALE_FILE_MAX, 4, 1, 20),
     nice: entier(env.IA_LOCALE_NICE, 19, 0, 19),
     dureeTravailleurMs: entier(env.IA_LOCALE_DUREE_TRAVAILLEUR_MIN, 60, 5, 600) * 60_000,
+    tuesMax: entier(env.IA_LOCALE_TUES_MAX, 2, 1, 50),
   };
 }
 
@@ -845,7 +853,9 @@ export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax
     moteur: 'local',
     modele,
     images: false,
-    disponible: () => Boolean(gestionnaire),
+    // Moteur arrêté de force par l'hébergeur trop souvent : sauté dans l'ordre de repli (sans quitter la configuration).
+    disponible: () => Boolean(gestionnaire) && !gestionnaire.indisponible?.(),
+    indisponible: () => Boolean(gestionnaire?.indisponible?.()),
     async discuter(messages, options = {}) {
       if (!gestionnaire) throw echec(503, 'ia-locale-absente', 'IA locale non installée (lancer esport/serveur/installer-ia-locale.sh).');
       if (contientImages(messages)) throw imageNonGeree();

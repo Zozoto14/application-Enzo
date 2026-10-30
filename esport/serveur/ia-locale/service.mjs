@@ -16,6 +16,7 @@ import { configIaLocale, creerConnecteurLocal } from '../../noyau/ia/connecteur.
 import { creerGestionnaireIaLocale } from './gestionnaire.mjs';
 import { MODELES_IA_LOCALE, dossierIaLocaleParDefaut, etatInstallationIaLocale } from './installation.mjs';
 import { lancerTravailleurIaLocale } from './lanceur.mjs';
+import { lireHebergement } from './hebergement.mjs';
 import { fetchLocal } from './transport.mjs';
 
 /** Réglages + état de l'installation (rapide : quelques lectures de fichiers, aucun lancement). */
@@ -47,6 +48,7 @@ export function creerIaLocale(reglages, { role = 'app', gestionnaire, lancer = l
       delaiMs: reglages.delaiMs,
       fileMax: reglages.fileMax,
       nice: reglages.nice,
+      tuesMax: reglages.tuesMax,
       // Processus de fond : il attend que l'app libère le moteur (test de connexion récent).
       attenteVerrouMs: role === 'travailleur' ? reglages.inactiviteMs + 2 * 60_000 : 10_000,
       log: journal,
@@ -57,12 +59,19 @@ export function creerIaLocale(reglages, { role = 'app', gestionnaire, lancer = l
   const connecteur = g ? creerConnecteurLocal(g, { modele: reglages.modele, jetonsMax: reglages.jetonsMax, delai: reglages.delaiMs, fetch: fetch ?? fetchLocal }) : null;
   // Le cron ne démarre pas de moteur mais doit savoir que l'IA locale est installée (pour lancer le processus de fond).
   const pret = Boolean(inst.installe && (connecteur || role === 'cron'));
+  // Arrêtée de force par l'hébergeur trop souvent (hebergement.mjs) : installée, mais sautée partout.
+  const hebergement = () => (g ? g.etat?.().hebergement : null) ?? lireHebergement(reglages.dossier, { max: reglages.tuesMax });
+  const indisponible = () => Boolean(inst.installe && hebergement()?.indisponible);
   return {
     role,
     gestionnaire: g,
-    connecteur: connecteur ?? (role === 'cron' && inst.installe ? { local: true, disponible: () => true, discuter: async () => { throw new Error('IA locale : pas de moteur dans le cron'); } } : null),
-    disponible: () => pret,
-    raison: inst.installe ? null : (inst.raison ?? 'non-installee'),
+    connecteur: connecteur ?? (role === 'cron' && inst.installe ? { local: true, disponible: () => !indisponible(), indisponible, discuter: async () => { throw new Error('IA locale : pas de moteur dans le cron'); } } : null),
+    disponible: () => pret && !indisponible(),
+    indisponible,
+    hebergement,
+    get raison() {
+      return !inst.installe ? (inst.raison ?? 'non-installee') : indisponible() ? 'indisponible-hebergement' : null;
+    },
     info: {
       modele: reglages.modele,
       nomModele: def?.nom ?? reglages.modele,
@@ -73,7 +82,7 @@ export function creerIaLocale(reglages, { role = 'app', gestionnaire, lancer = l
       benchmark: inst.benchmark ?? null,
     },
     etat: () => (g ? g.etat() : {}),
-    lancerTravailleur: () => (role === 'travailleur' ? { lance: false, raison: 'déjà dans le processus de fond' } : lancer({ reglages, role })),
+    lancerTravailleur: () => (role === 'travailleur' ? { lance: false, raison: 'déjà dans le processus de fond' } : indisponible() ? { lance: false, raison: 'indisponible sur cet hébergement' } : lancer({ reglages, role })),
     arreter: () => g?.arreter() ?? false,
   };
 }

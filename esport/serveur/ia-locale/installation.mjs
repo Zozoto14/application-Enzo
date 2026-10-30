@@ -101,6 +101,8 @@ export function cheminsIaLocale(dossier = dossierIaLocaleParDefaut()) {
     cle: join(etat, 'cle'),
     mesures: join(etat, 'mesures.json'),
     incident: join(etat, 'incident.json'),
+    // Arrêts de force par l'hébergeur (hebergement.mjs) : au-delà de IA_LOCALE_TUES_MAX, IA locale sautée.
+    hebergement: join(etat, 'hebergement.json'),
     verrouTravailleur: join(etat, 'travailleur.verrou'),
   };
 }

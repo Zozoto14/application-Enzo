@@ -35,11 +35,19 @@ export function dureeRestante(secondes: number): string {
 /** Phrase d'état d'un travail du serveur. */
 export function libelleTravailServeur(w: TravailServeur): string {
   switch (w.statut) {
-    case 'attente':
-      if (w.prochainEssai) return tr('transcription.serveur.nouvel_essai', { heure: new Date(w.prochainEssai).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    case 'attente': {
+      const heure = (v: string) => new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Après un échec : la raison, l'heure du nouvel essai et les essais restants (jamais « démarre dans 5 minutes » à tort).
+      if (w.prochainEssai) {
+        const raison = w.erreur ? traduireServeur(w.erreur) : '';
+        return tr(raison ? 'transcription.serveur.nouvel_essai_raison' : 'transcription.serveur.nouvel_essai', { heure: heure(w.prochainEssai), raison, n: w.essaisRestants ?? 1 });
+      }
+      if (w.bloque) return tr('transcription.serveur.bloque', { heure: w.attenteDepuis ? heure(w.attenteDepuis) : '—', raison: w.erreur ? ` (${traduireServeur(w.erreur)})` : '' });
       if (w.progression > 0) return tr('transcription.serveur.reprise', { v: w.pourcentage });
       return w.rang > 0 ? tr('transcription.serveur.en_file', { n: w.rang }) : tr('transcription.serveur.en_file_premiere');
+    }
     case 'en_cours':
+      if (w.bloque) return tr('transcription.serveur.bloque_en_cours', { v: w.pourcentage });
       if (w.etape === 'correction') return tr('transcription.serveur.correction', { n: w.correctionFaite ?? 0 });
       if (w.restantS != null && w.restantS < 60) return tr('transcription.serveur.en_cours_presque', { v: w.pourcentage });
       return w.restantS != null

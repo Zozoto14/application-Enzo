@@ -18,6 +18,7 @@ import { chargerConfigEsport, problemesConfig } from './config.mjs';
 import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
 import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
+import { etatAdministration } from './transcription/moteur.mjs';
 import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 
 /**
@@ -62,7 +63,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     apercuLiens: { telecharger: telechargeurNode() },
     // Assistant IA des profils de jeu (IA_API_URL, IA_API_CLE, IA_MODELE) : pages web lues avec la même protection.
     // IA locale (llama.cpp, 127.0.0.1 seulement) : à la place ou en secours de la clé d'API (Administration IA).
-    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}) },
+    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}), transcription: () => etatAdministration(config.transcriptionServeur) },
     ...(travauxIa ? { travauxIa } : {}),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };

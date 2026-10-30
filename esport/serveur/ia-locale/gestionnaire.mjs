@@ -34,6 +34,7 @@ import net from 'node:net';
 import { dirname } from 'node:path';
 import { echec } from '../../noyau/outils.mjs';
 import { cheminsIaLocale, journalIaLocaleParDefaut, lireJson } from './installation.mjs';
+import { TUES_MAX_DEFAUT, lireHebergement, messageIndisponible, noterTueExterne, reinitialiserHebergement } from './hebergement.mjs';
 import { arreterProcessus, descriptionProcessus, envoyerSignal, espacePid, identiteProcessus, ligneDeCommande, memoireProcessus, moteursVisibles, mortCertaine, noterIaLocale, processusDuCompte, processusVivant, sonderMoteur } from './processus.mjs';
 
 export { ligneDeCommande, memoireProcessus, noterIaLocale, processusVivant };
@@ -279,8 +280,20 @@ export function creerGestionnaireIaLocale({
   sonder = sonderMoteur,
   listerProcessus = processusDuCompte,
   graceMs = GRACE_ARRET_MS,
+  tuesMax = TUES_MAX_DEFAUT,
 } = {}) {
   const c = cheminsIaLocale(dossier);
+  // Indisponible sur cet hébergement (moteur tué de force `tuesMax` fois de suite, voir hebergement.mjs) : relu
+  // au plus toutes les 5 s (fichier partagé avec les autres processus).
+  let hebergement = null;
+  let hebergementLu = -Infinity;
+  const etatHebergement = () => {
+    if (maintenant() - hebergementLu > 5000) {
+      hebergement = lireHebergement(c.dossier, { max: tuesMax });
+      hebergementLu = maintenant();
+    }
+    return hebergement;
+  };
   const jeton = randomBytes(8).toString('hex');
   const file = [];
   let actif = false;
@@ -519,6 +532,14 @@ export function creerGestionnaireIaLocale({
           const quoi = signal ? `signal ${signal}${signal === 'SIGKILL' ? ' : arrêté de force par un autre processus ou par l’hébergeur' : ''} ; ${nos}` : `code ${code}`;
           const memTexte = mem ? ` ; mémoire relevée juste avant : ${enGo(mem.rssMo)}${mem.picMo ? ` (pic ${enGo(mem.picMo)})` : ''}` : '';
           const texte = `moteur pid ${lui.pid} arrêté de façon imprévue ${phase} (${quoi})${memTexte}.`;
+          if (signal === 'SIGKILL' && !s0.signaux.length) {
+            // Tué de l'extérieur : compté ; au-delà de `tuesMax`, l'IA locale est sautée (hebergement.mjs).
+            const h = noterTueExterne(c.dossier, { phase, pid: lui.pid, le: iso(maintenant()), max: tuesMax });
+            hebergement = h;
+            hebergementLu = maintenant();
+            if (h.bascule) noterErreur('ia-locale-indisponible', `${messageIndisponible(h)} Pour réessayer : supprimer etat/hebergement.json.`);
+            else noter(`arrêt de force n° ${h.tues} (au bout de ${h.max}, l’IA locale sera marquée indisponible sur cet hébergement).`);
+          }
           // Au chargement, l'échec du démarrage est noté plus bas (code d'erreur du démarrage).
           if (s0.pret && !(code === 0 && !signal)) noterErreur('ia-locale-arret', texte);
           else noter(texte);
@@ -712,6 +733,8 @@ export function creerGestionnaireIaLocale({
      * fois. `delai` : temps total accordé (attente comprise).
      */
     executer(fn, { delai = delaiMs } = {}) {
+      const h = etatHebergement();
+      if (h?.indisponible) return Promise.reject(echec(503, 'ia-locale-indisponible', 'IA locale indisponible sur cet hébergement : son moteur est arrêté de force (SIGKILL) par l’hébergeur. Elle est sautée dans l’ordre de repli (voir Administration IA).'));
       if (file.length >= fileMax) return Promise.reject(echec(503, 'ia-locale-occupee', 'L’IA locale est occupée par une autre tâche : réessayez dans quelques minutes.'));
       return new Promise((ok, ko) => {
         file.push({ fn, ok, ko, limite: maintenant() + delai });
@@ -733,16 +756,20 @@ export function creerGestionnaireIaLocale({
         dernierDemarrageMs,
         derniereErreur: erreurRecente(),
         mesure: lireJson(c.mesures),
+        hebergement: etatHebergement(),
       };
     },
+    /** IA locale sautée : moteur arrêté de force par l'hébergeur `tuesMax` fois de suite (hebergement.mjs). */
+    indisponible: () => Boolean(etatHebergement()?.indisponible),
     attendreSortie: attendreSortieDe,
     /** Ligne de diagnostic dans le journal (sans changer la « dernière erreur »). */
     noter,
     /** Dernière vitesse mesurée (jetons générés par seconde), partagée entre processus (etat/mesures.json). */
     noterMesure({ jetonsParSeconde, dureeMs }) {
       if (!Number.isFinite(jetonsParSeconde) && !Number.isFinite(dureeMs)) return;
-      // Une requête vient de réussir : l'erreur notée avant n'a plus cours.
+      // Une requête vient de réussir : l'erreur notée avant n'a plus cours, le compteur d'arrêts de force repart à zéro.
       effacerErreur();
+      if (!etatHebergement()?.indisponible && reinitialiserHebergement(c.dossier)) hebergementLu = -Infinity;
       try {
         preparerDossier();
         ecrireAtomique(c.mesures, JSON.stringify({ jetonsParSeconde: Number.isFinite(jetonsParSeconde) ? Math.round(jetonsParSeconde * 10) / 10 : null, dureeMs: Number.isFinite(dureeMs) ? dureeMs : null, le: iso(maintenant()) }));

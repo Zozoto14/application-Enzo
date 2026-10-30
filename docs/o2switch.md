@@ -192,9 +192,9 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # ESPORT_DRIVE_QUOTA=20G
 # ESPORT_DRIVE_FICHIER_MAX=2G
 # ESPORT_DRIVE_ZIP_MAX=2G
-# Transcription des réunions sur le serveur (facultatif, partie H) :
-# TRANSCRIPTION_THREADS_WHISPER=8
-# TRANSCRIPTION_RAM_COMPTE=48G
+# Transcription des réunions sur le serveur (facultatif, partie H) : calcul dans Node (ONNX).
+# TRANSCRIPTION_THREADS=4
+# TRANSCRIPTION_RAM_MAX=8G
 # IA de l'Esport (facultatif, partie I, docs/esport/ia-api.md) : sans ces lignes, tout se fait à la main.
 # IA_API_URL=https://integrate.api.nvidia.com/v1
 # IA_API_CLE=nvapi-REMPLACER-cle-du-modele-principal
@@ -526,12 +526,19 @@ Passenger) ne doit pas montrer de rafales de `/attendre` ou `/flux` ; un `429` �
 ## Partie H — Transcription des réunions sur le serveur
 
 Le **serveur o2switch transcrit lui-même** les réunions déposées (Esport › Résumés) : aucun PC à laisser ouvert, ça
-marche aussi depuis un iPhone. Depuis octobre 2026, le moteur est **whisper.cpp** avec **Whisper large-v3-turbo**
-(bien plus juste que l'ancien « base »), le **vocabulaire de la team** (pseudos, agents, maps, glossaire), la
-détection de la parole, et une **relecture par l'IA locale** si elle est installée (partie J). Pourquoi et comment :
-[esport/transcription.md](esport/transcription.md) ; côté app : [esport/resumes.md](esport/resumes.md).
+marche aussi depuis un iPhone. Le calcul se fait **dans le processus Node** de l'Esport (ONNX Runtime), avec
+**Whisper large-v3-turbo** (Équilibrée), **small** (Rapide) ou **large-v3** (Maximale), le **vocabulaire de la team**
+(pseudos, agents, maps, glossaire), la recherche en faisceau et une **relecture par l'IA** (partie I ou J). Pourquoi
+et comment : [esport/transcription.md](esport/transcription.md) ; côté app : [esport/resumes.md](esport/resumes.md).
 
-### H1. Installer ou mettre à jour (une fois, 15 à 40 minutes, sans rester devant)
+> **Pourquoi pas whisper.cpp (ni llama-server) ?** Journaux du 29/10 : l'hébergeur **arrête de force (SIGKILL)** les
+> binaires de calcul lancés depuis le dossier personnel (`whisper.cpp s'est arrêté (signal SIGKILL)`, IA locale tuée
+> au chargement), sans aucune « faute » mémoire ni processeur dans Resource Usage, alors que l'ancien moteur ONNX,
+> **dans Node**, a transcrit 28 minutes d'audio sans incident. whisper.cpp reste installable en option
+> (`--whispercpp`) : s'il est tué, le travail **bascule tout seul sur ONNX** et whisper.cpp est désactivé (visible dans
+> Esport › Jeux › Administration IA › Transcription sur le serveur).
+
+### H1. Installer ou mettre à jour (une fois, 10 à 30 minutes, sans rester devant)
 
 Dans le **Terminal** cPanel, **dans cet ordre** (la première ligne active le Node 22 de l'app Esport) :
 
@@ -539,30 +546,29 @@ Dans le **Terminal** cPanel, **dans cet ordre** (la première ligne active le No
 source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
 cd ~/application-enzo
 
-# 1. Voir le plan (rien n'est téléchargé ni compilé) :
-bash esport/serveur/installer-transcription.sh --dry-run
+# 1. Voir le plan (rien n'est téléchargé) : fichiers, tailles, SHA-256 publiés par Hugging Face :
+bash esport/serveur/installer-transcription.sh --dry-run --tous
 
-# 2. Installer : ffmpeg, whisper.cpp compilé (GCC 14 figé, sans root), VAD, modèle large-v3-turbo q5_0 :
-bash esport/serveur/installer-transcription.sh
-
-# 3. (Conseillé) les modèles des trois qualités, Rapide et Maximale en plus (≈ 1,6 Go de plus) :
+# 2. Installer les trois qualités : ONNX Runtime + ffmpeg (npm, versions figées), modèles Whisper ONNX int8
+#    small, large-v3-turbo et large-v3 (≈ 3,2 Go, chaque fichier vérifié par son SHA-256) :
 bash esport/serveur/installer-transcription.sh --tous
 
-# 4. Essai : vitesse (« × temps réel »), mémoire, durée estimée d'une heure de réunion par qualité :
+# 3. Essai DANS Node, comme le fera le processus de fond : vitesse (« × temps réel »), mémoire du processus,
+#    durée estimée d'une heure de réunion par qualité (mesures gardées pour les estimations de l'app) :
 bash esport/serveur/installer-transcription.sh --test
 ```
 
-À la fin : **« Transcription serveur prête »**, et l'app Esport est redémarrée (les qualités Rapide / Équilibrée /
-Maximale apparaissent au dépôt et dans Paramètres › Transcription des réunions).
+Sans `--tous`, seul le modèle de la qualité Équilibrée (large-v3-turbo, ≈ 1 Go) est installé. À la fin :
+**« Transcription serveur prête »**, et l'app Esport est redémarrée (les qualités Rapide / Équilibrée / Maximale
+apparaissent au dépôt et dans Paramètres › Transcription des réunions).
 
-Ensuite, ajoutez ces deux lignes dans `~/.appdashboard/esport.env` (un commentaire `#` va sur **sa propre ligne**),
-puis redémarrez l'app Esport :
+Ensuite, ajoutez ces lignes dans `~/.appdashboard/esport.env` (un commentaire `#` va sur **sa propre ligne**), puis
+redémarrez l'app Esport :
 
 ```ini
-# Transcription : fils de calcul de whisper.cpp ; mémoire du compte (limite cPanel), pour laisser tourner
-# whisper.cpp et l'IA locale en même temps
-TRANSCRIPTION_THREADS_WHISPER=8
-TRANSCRIPTION_RAM_COMPTE=48G
+# Transcription : fils de calcul d'ONNX Runtime (dans Node) ; mémoire du processus permise (modèle compris)
+TRANSCRIPTION_THREADS=4
+TRANSCRIPTION_RAM_MAX=8G
 ```
 
 ```bash
@@ -573,17 +579,15 @@ mkdir -p ~/application-enzo/esport/tmp && touch ~/application-enzo/esport/tmp/re
 
 | Étape | Durée | Disque |
 | --- | --- | --- |
-| Compilateur figé (téléchargé, vérifié, effacé à la fin) | 3 à 8 min | ≈ 1,3 Go le temps de la compilation |
-| Compilation de whisper.cpp | 5 à 15 min | binaire ≈ 5 Mo |
-| ffmpeg + ONNX Runtime (repli) | 1 à 3 min | ≈ 300 Mo (déjà là si installé avant) |
-| Modèle large-v3-turbo q5_0 (défaut) | 1 à 3 min | 547 Mo |
-| `--tous` : small + large-v3 q5_0 en plus | 2 à 5 min | 466 Mo + 1,1 Go |
-| `--test` | 1 à 5 min | — |
+| ONNX Runtime + ffmpeg (npm) | 1 à 3 min | ≈ 300 Mo (déjà là si installé avant) |
+| Modèle large-v3-turbo int8 (défaut) | 2 à 5 min | ≈ 1 Go |
+| `--tous` : small + large-v3 int8 en plus | 3 à 8 min | ≈ 0,4 Go + 1,8 Go |
+| `--test` | 2 à 10 min | — |
 
-Au final : ≈ 0,9 Go (défaut) ou ≈ 2,5 Go (`--tous`) dans `~/esport-modeles`, plus ≈ 115 Mo par heure de réunion en
+Au final : ≈ 1,3 Go (défaut) ou ≈ 3,5 Go (`--tous`) dans `~/esport-modeles`, plus ≈ 115 Mo par heure de réunion en
 cours de transcription (`~/esport-modeles/travail`, effacé à la fin). Le déploiement automatique (`deployer.sh`) ne
 touche jamais à `~/esport-modeles` ; relancer le script ne refait que ce qui manque (`--forcer` pour tout refaire).
-Si la compilation échoue, le script installe l'ancien moteur ONNX en repli et le dit.
+Les anciens fichiers de whisper.cpp (`whispercpp/`, `ggml/`) peuvent rester : ils ne servent plus par défaut.
 
 Rien d'autre à faire : la tâche cron Esport (étape A9, toutes les 5 minutes) lance la transcription quand une réunion
 attend.
@@ -593,13 +597,13 @@ Réglages facultatifs (valeurs par défaut ; détail : [esport/transcription.md]
 ```ini
 # Qualité par défaut des teams : rapide, equilibree, maximale
 TRANSCRIPTION_QUALITE=equilibree
-# Relecture par l'IA locale : auto (si installée) ou non
+# Moteur : auto (ONNX dans Node), onnx, whispercpp (option, bascule sur ONNX s'il est tué)
+TRANSCRIPTION_MOTEUR=auto
+# Relecture par l'IA : auto (si une IA est configurée) ou non
 TRANSCRIPTION_CORRECTION=auto
-# Jamais whisper.cpp et l'IA locale ensemble : auto (selon TRANSCRIPTION_RAM_COMPTE), oui, non
-TRANSCRIPTION_EXCLUSIF=auto
-# Durée d'un bloc d'audio confié à whisper.cpp (secondes)
-TRANSCRIPTION_BLOC_S=300
-# Garde-fous : pause après chaque bloc (0.25 = le processeur se repose 20 % du temps), essais, délai, durée d'un processus
+# Processus figé (aucune avancée pendant N minutes) : il s'arrête, le passage suivant du cron reprend
+TRANSCRIPTION_BLOCAGE_MIN=45
+# Garde-fous : pause après chaque morceau (0.25 = le processeur se repose 20 % du temps), essais, délai, durée d'un processus
 # TRANSCRIPTION_REPOS=0.25
 # TRANSCRIPTION_ESSAIS=3
 # TRANSCRIPTION_DELAI_MAX=24
@@ -608,39 +612,66 @@ TRANSCRIPTION_BLOC_S=300
 
 ### H2. Combien de temps ?
 
-Valeurs de départ (processeur de serveur x64, 8 fils, pauses comprises) ; `--test` mesure les vraies sur votre
+Valeurs de départ (processeur de serveur x64, 4 fils, pauses comprises) ; `--test` mesure les vraies sur votre
 serveur et l'app les utilise pour ses estimations :
 
-| Qualité | Modèle | Mémoire | 1 h de réunion |
+| Qualité | Modèle (ONNX int8) | Mémoire du processus | 1 h de réunion |
 | --- | --- | --- | --- |
-| Rapide | small | ≈ 0,9 Go | 8 à 15 min |
-| **Équilibrée** (défaut) | large-v3-turbo q5_0 | ≈ 1,2 Go | **20 à 40 min** |
-| Maximale | large-v3 q5_0 | ≈ 2 Go | 60 à 120 min |
-| + relecture par l'IA locale | Qwen2.5-7B / Qwen3-4B | 3,5 à 6 Go | + 10 à 40 min |
+| Rapide | small | ≈ 1,1 Go | 20 à 40 min |
+| **Équilibrée** (défaut) | large-v3-turbo | ≈ 2,6 Go | **45 à 90 min** |
+| Maximale | large-v3 | ≈ 4,5 Go | 2 h 30 à 5 h |
+| + relecture par l'IA | API (partie I) | — | + 2 à 10 min |
 
-Une seule réunion à la fois : les suivantes attendent leur tour (« En file d'attente »).
+Une seule réunion à la fois : les suivantes attendent leur tour (« En file d'attente »). Plus de fils
+(`TRANSCRIPTION_THREADS=8`) va plus vite si Resource Usage le permet.
 
 ### H3. Les limites du mutualisé (et ce qui est prévu)
 
-o2switch limite par compte le processeur, la mémoire et les processus (CloudLinux « LVE »). La transcription reste
-discrète :
+o2switch limite par compte le processeur, la mémoire et les processus (CloudLinux « LVE ») et arrête de force les
+binaires de calcul externes. La transcription reste discrète :
 
+- **tout le calcul dans Node** (ONNX Runtime) ; ffmpeg ne sert que quelques secondes à lire la vidéo ;
 - **une seule transcription à la fois** (verrou), **priorité la plus basse** (`nice 19`) : les pages passent avant ;
-- **blocs de 5 minutes**, chacun **enregistré** : si l'hébergeur arrête le processus, le cron suivant **reprend au
-  bloc suivant** (et la relecture au lot suivant) ;
-- **un seul moteur lourd** si la mémoire ne suffit pas pour whisper.cpp et l'IA locale ensemble (file commune) ;
-- après **3 échecs** (ou 24 h), « Échec de la transcription » : le déposant est prévenu, l'app propose le navigateur.
+- **morceaux de 30 s**, chacun **enregistré** : si l'hébergeur arrête le processus, le cron suivant **reprend au
+  morceau suivant** (et la relecture au lot suivant) ;
+- **chien de garde** : un processus sans aucune avancée pendant 45 min s'arrête de lui-même ; un verrou sans battement
+  depuis 30 min est retiré par le cron : rien ne bloque la file indéfiniment ;
+- après un échec, l'app affiche **la raison, l'heure du nouvel essai et les essais restants** ; après **3 échecs** (ou
+  24 h), « Échec de la transcription » : le déposant est prévenu, l'app propose le navigateur ;
+- une transcription « en attente » depuis plus de 15 min est signalée **bloquée**, avec **« Relancer maintenant »**.
 
-Si cPanel › **Resource Usage** montre des « fautes » pendant les transcriptions : baissez
-`TRANSCRIPTION_THREADS_WHISPER` (4), montez `TRANSCRIPTION_REPOS=1`, ou choisissez la qualité Rapide par défaut.
+Si cPanel › **Resource Usage** montre des « fautes » pendant les transcriptions : baissez `TRANSCRIPTION_THREADS` (2),
+montez `TRANSCRIPTION_REPOS=1`, ou choisissez la qualité Rapide par défaut.
 
 ### H4. Vérifier que ça marche
 
 ```bash
-tail -n 20 ~/logs/esport-transcription.log    # « transcription : 1 terminée(s)… relue(s) par l’IA locale »
-tail -n 5 ~/logs/esport-cron.log              # la ligne du cron compte « transcription serveur »
-cat ~/esport-modeles/pret.json                # whisper.cpp, modèles vérifiés, vitesses mesurées
+tail -n 20 ~/logs/esport-transcription.log    # « processus pid … démarré (rapide onnx:small, equilibree onnx:turbo…) »
+tail -n 5 ~/logs/esport-cron.log              # « … tâches faites ; transcription : lancé, 1 à faire » (ou « déjà en cours (pid …) »)
+cat ~/esport-modeles/lanceur.json             # dernière décision du cron
+cat ~/esport-modeles/pret.json                # modèles ONNX vérifiés (SHA-256), vitesses mesurées
 curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
+```
+
+Dans l'app : Esport › Jeux › **Administration IA** › carte « Transcription sur le serveur » (modèles, whisper.cpp
+désactivé ou non, dernière décision du cron, file, transcriptions bloquées).
+
+### H5. Une transcription reste « En file d'attente »
+
+1. Dans la réunion, touchez **« Relancer maintenant »** (affiché dès qu'elle est bloquée ou qu'un nouvel essai est
+   prévu) : le travail repasse en tête, essais remis à zéro ; le cron le prend dans les 5 minutes.
+2. Si rien ne bouge, dans le Terminal cPanel :
+
+```bash
+source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
+cd ~/application-enzo
+tail -n 5 ~/logs/esport-cron.log ; cat ~/esport-modeles/lanceur.json ; echo
+tail -n 30 ~/logs/esport-transcription.log
+# Verrou d'un processus disparu ou figé : le retirer (le cron le fait seul après 30 min sans battement)
+cat ~/esport-modeles/travailleur.verrou 2>/dev/null && ps -o pid,etime,cmd -p "$(cat ~/esport-modeles/travailleur.verrou)"
+rm -f ~/esport-modeles/travailleur.verrou
+# Lancer le processus de fond à la main pour voir l'erreur tout de suite
+nice -n 19 node esport/serveur/transcription/travailleur.mjs
 ```
 
 ---
@@ -824,6 +855,14 @@ pgrep -af llama-server                        # moteur en marche (rien = arrêt�
   nos programmes est journalisé : `grep -E "signal SIG|imprévue" ~/logs/esport-ia-locale.log | tail -n 40` ; puis
   `installer-ia-locale.sh --petit --diagnostic` (moteur lancé seul) dit « tué par nous » ou « tué par l'extérieur » et
   prépare un message pour le support : voir docs/esport/ia-locale.md, « Tué par nous ou tué par l'extérieur ? ».
+- **« IA locale indisponible sur cet hébergement »** (Administration IA) : son moteur a été arrêté de force par
+  l'hébergeur 2 fois de suite (`IA_LOCALE_TUES_MAX`). Elle reste configurée mais elle est **sautée** dans les ordres
+  de repli : les API répondent à sa place, plus aucune attente. Pour la réessayer (après un changement chez
+  l'hébergeur) : `rm ~/.appdashboard/ia-locale/etat/hebergement.json` (ou relancer `installer-ia-locale.sh`). Piste
+  pour plus tard (pas faite) : `node-llama-cpp`, qui calculerait dans le processus Node comme la transcription.
+- **« Le serveur Esport ne répond pas »** en testant un moteur (Administration IA) : corrigé le 30/10 ; le test d'un
+  modèle à raisonnement ou de l'IA locale continue en tâche de fond (la page interroge son résultat, 90 s au plus pour
+  une API, 4 min pour l'IA locale) au lieu de dépasser le délai de 15 s de l'app.
 - **Site plus lent pendant un calcul** ou fautes dans cPanel › **Resource Usage** : `IA_LOCALE_THREADS=4` dans
   `esport.env` (puis restart), ou le modèle `--petit`.
 
@@ -872,10 +911,11 @@ Retirez `IA_FOURNISSEUR=local` et les lignes `IA_LOCALE_*` de `~/.appdashboard/e
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
 | « Clés du serveur NON reprises » | L'ancien serveur n'expose pas ses clés : recopiez `CLE_ESPORT` et `CLE_DISCORD` de son `esport.env` dans le nouveau, puis redémarrez l'app Esport. |
 | Envoi d'une vidéo bloqué dès le premier morceau (413, « Requête refusée ») | Pare-feu de l'hébergeur : `ESPORT_TAILLE_MORCEAU=2M` dans `esport.env`, redémarrez l'app ; sinon cPanel › **ModSecurity** › désactivé pour `esport.appdashboard.fr`. Détails : [docs/esport/videos.md](esport/videos.md). |
-| Transcription : l'app ne propose pas « Serveur (automatique) » | L'installation n'est pas faite ou pas vérifiée : relancez `bash ~/application-enzo/esport/serveur/installer-transcription.sh` (il doit finir par « Transcription serveur prête »), puis **Restart** de l'app Esport. Le modèle de `TRANSCRIPTION_MODELE` doit être celui installé (`cat ~/esport-modeles/pret.json`). |
-| Transcription : « En file d'attente » depuis plus de 10 minutes | La tâche cron Esport (étape A9) tourne-t-elle ? `tail ~/logs/esport-cron.log` puis `tail -n 30 ~/logs/esport-transcription.log`. Lancer à la main pour voir l'erreur : `cd ~/application-enzo && /home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/serveur/transcription/travailleur.mjs`. |
-| Transcription : « Interrompue trop souvent (limite de l'hébergeur ou redémarrage) » | Le processus est arrêté avant d'avancer (mémoire ou processeur du compte) : cPanel › Statistiques, puis `TRANSCRIPTION_MODELE=tiny` (relancer l'installation avec `--modele tiny`) ou `TRANSCRIPTION_REPOS=1`. Dans l'app : « Réessayer sur le serveur », ou « Transcrire » dans le navigateur d'un PC. |
-| Transcription : « Mémoire insuffisante… » | Modèle trop gros pour le compte : `--modele tiny` (ou `base` si vous aviez `small`), ou montez `TRANSCRIPTION_RAM_MAX` si cPanel › Statistiques montre de la marge. |
+| Transcription : l'app ne propose pas « Serveur (automatique) » | L'installation n'est pas faite ou pas vérifiée : relancez `bash ~/application-enzo/esport/serveur/installer-transcription.sh` (il doit finir par « Transcription serveur prête »), puis **Restart** de l'app Esport (`cat ~/esport-modeles/pret.json` : rubrique `onnx`). |
+| Transcription : « En file d'attente » depuis plus de 10 minutes | Dans la réunion : **« Relancer maintenant »**. Puis voir partie H5 : `tail -n 5 ~/logs/esport-cron.log` (la ligne dit « transcription : lancé / déjà en cours (pid …) / rien à faire »), `tail -n 30 ~/logs/esport-transcription.log`, et lancer à la main : `cd ~/application-enzo && nice -n 19 node esport/serveur/transcription/travailleur.mjs` (après le `source …/activate`). |
+| Transcription : « whisper.cpp s'est arrêté (signal SIGKILL) » | L'hébergeur tue ce binaire : depuis le 30/10 le moteur par défaut est ONNX **dans Node**. Installez-le : `bash esport/serveur/installer-transcription.sh --tous` puis `--test` ; un travail encore sur whisper.cpp bascule tout seul sur ONNX. |
+| Transcription : « Interrompue trop souvent (limite de l'hébergeur ou redémarrage) » | Le processus est arrêté avant d'avancer (mémoire ou processeur du compte) : cPanel › Statistiques, puis `TRANSCRIPTION_THREADS=2`, qualité Rapide, ou `TRANSCRIPTION_REPOS=1`. Dans l'app : « Réessayer sur le serveur », ou « Transcrire » dans le navigateur d'un PC. |
+| Transcription : « Mémoire insuffisante… » | Modèle trop gros pour `TRANSCRIPTION_RAM_MAX` : montez-le (`--test` affiche la mémoire réelle de chaque modèle), ou choisissez la qualité Rapide. |
 | Installation : « glibc trop ancienne » ou erreur au chargement d'ONNX Runtime | Le serveur est trop ancien pour les binaires tout faits : gardez la transcription dans le navigateur (`TRANSCRIPTION_MODE=navigateur`) et signalez-le au support o2switch (ils migrent les comptes vers des serveurs récents). |
 | Installation : « Hugging Face indisponible » | Rien à faire : le script prend l'archive GitHub à la place (plus grosse, environ 200 Mo pour « base »). Si GitHub échoue aussi : réessayez plus tard. |
 | Transcription : « ffmpeg n'a pas pu lire l'enregistrement » | Fichier abîmé ou format exotique : déposez un MP4, M4A, MP3 ou WAV. |

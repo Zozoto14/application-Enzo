@@ -7,7 +7,7 @@
  */
 
 import { spawn as spawnNode } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,10 +40,27 @@ function arreterBloque(verrou) {
 export async function lancerTravailleur({ base, config, maintenant = () => Date.now(), spawn = spawnNode, fichierJournal = join(homedir(), 'logs', 'esport-transcription.log') }) {
   const ts = config?.transcriptionServeur;
   if (!ts?.disponible) return { lance: false, raison: ts?.raison ?? 'non installée' };
-  const n = await servicesFileTranscription({ base, maintenant, config: ts }).nombreAFaire();
-  if (!n) return { lance: false, raison: 'rien à faire', n: 0 };
   const c = chemins(ts);
-  if (verrouActif(c.verrou)) return { lance: false, raison: 'déjà en cours', n };
+  // Dernière décision notée (Administration : « le cron est-il passé ? qu'a-t-il décidé ? »).
+  const noter = r => {
+    try {
+      writeFileSync(c.lanceur, JSON.stringify({ le: new Date(maintenant()).toISOString(), raison: r.raison, ...(Number.isFinite(r.n) ? { n: r.n } : {}) }));
+    } catch {
+      // Dossier absent : sans conséquence.
+    }
+    return r;
+  };
+  const n = await servicesFileTranscription({ base, maintenant, config: ts }).nombreAFaire();
+  if (!n) return noter({ lance: false, raison: 'rien à faire', n: 0 });
+  if (verrouActif(c.verrou)) {
+    let pid = null;
+    try {
+      pid = Number(readFileSync(c.verrou, 'utf8').trim()) || null;
+    } catch {
+      pid = null;
+    }
+    return noter({ lance: false, raison: `déjà en cours${pid ? ` (pid ${pid})` : ''}`, n });
+  }
   if (existsSync(c.verrou)) arreterBloque(c.verrou);
   mkdirSync(dirname(fichierJournal), { recursive: true });
   const fd = openSync(fichierJournal, 'a');
@@ -55,5 +72,5 @@ export async function lancerTravailleur({ base, config, maintenant = () => Date.
   } finally {
     closeSync(fd);
   }
-  return { lance: true, raison: 'lancé', n };
+  return noter({ lance: true, raison: 'lancé', n });
 }

@@ -26,6 +26,7 @@
 import { distribuer, evenement } from '../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
+import { servicesFileTranscription } from '../medias/fileTranscription.mjs';
 import { aGlobale } from '../roles/globales.mjs';
 import { MOTEURS_IA, TACHES_IA, creerConnecteur, creerRepartiteurIa, lireOrdreIa, ordresIaEnv, peutReplier, tacheIa } from '../ia/connecteur.mjs';
 import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assistant.mjs';
@@ -40,6 +41,9 @@ export const REGLAGES_IA_DEFAUT = { quotaAppels: 30, quotaAppelsApi2: 200, quota
 export const MODES_IA = ['local', 'api', 'local-api'];
 const ORDRE_MODE = { local: ['local'], api: ['api', 'api2'], 'local-api': ['local', 'api', 'api2'] };
 const DELAI_TEST_LOCAL_MS = 4 * 60_000;
+/** Durée maximale du test d'un moteur d'API (même un modèle à raisonnement), et attente de la réponse HTTP. */
+const PLAFOND_TEST_API_MS = 90_000;
+const ATTENTE_TEST_MS = 10_000;
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 const DUREE_EN_COURS_MAX_MS = 15 * 60_000;
@@ -91,7 +95,7 @@ export async function aPermissionJeux(base, acteur) {
  * { connecteur (creerConnecteurLocal), disponible(), raison, info: { modele, nomModele, moteur, threads,
  * contexte, delaiMs, benchmark }, etat() (en marche, dernière vitesse…), lancerTravailleur() }.
  */
-export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console }) {
+export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
   const config = ia.config ?? null;
   // Moteurs d'API : principal (IA_API_*) et secondaire (IA_API2_*, porté par la config du principal).
   const configs = { api: config, api2: ia.config2 ?? config?.secondaire ?? null };
@@ -441,6 +445,22 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     return { mois: depuis.slice(0, 7), appels: await compter('api'), appelsApi2: await compter('api2'), appelsLocaux: await compter('local'), verifications: Number(verifs?.n ?? 0) };
   }
 
+  /**
+   * Transcription sur le serveur (Administration IA) : moteur (ONNX dans le processus, whisper.cpp désactivé ?),
+   * qualités, dernier passage du processus de fond, dernière décision du cron, travaux par statut et bloqués.
+   * `ia.transcription()` est fourni par le serveur Node (esport/serveur/transcription/moteur.mjs) ; ailleurs : null.
+   */
+  async function etatTranscription() {
+    if (typeof ia.transcription !== 'function') return null;
+    try {
+      const e = await ia.transcription();
+      const f = await servicesFileTranscription({ base, maintenant }).resumeFile();
+      return { ...e, ...f };
+    } catch {
+      return null;
+    }
+  }
+
   /** État de l'IA locale pour l'Administration IA (installation, moteur en marche, mesures). */
   async function etatLocal() {
     if (!local) return { installe: false, raison: 'non-installee' };
@@ -454,9 +474,17 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const info = local.info ?? {};
     const mesure = marche.mesure && Number.isFinite(marche.mesure.jetonsParSeconde) ? { jetonsParSeconde: marche.mesure.jetonsParSeconde, le: marche.mesure.le ?? null, source: 'requete' } : null;
     const banc = info.benchmark && Number.isFinite(info.benchmark.jetonsParSeconde) ? { jetonsParSeconde: info.benchmark.jetonsParSeconde, le: info.benchmark.le ?? null, source: 'test' } : null;
+    let hebergement = null;
+    try {
+      hebergement = local.hebergement?.() ?? null;
+    } catch {
+      hebergement = null;
+    }
     return {
       installe: localPret(),
       raison: localPret() ? null : (local.raison ?? 'non-installee'),
+      // Moteur arrêté de force par l'hébergeur (SIGKILL) : nombre d'arrêts, indisponible (sauté dans les ordres) depuis quand.
+      hebergement: hebergement ? { indisponible: Boolean(hebergement.indisponible), tues: Number(hebergement.tues ?? 0), max: Number(hebergement.max ?? 0), depuis: hebergement.depuis ?? null } : null,
       modele: info.modele ?? null,
       nomModele: info.nomModele ?? null,
       moteur: info.moteur ?? null,
@@ -523,6 +551,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       ordres: reglages.ordres,
       ordresDefaut: ordresEnv,
       local: await etatLocal(),
+      transcription: await etatTranscription(),
       lectureWeb: typeof ia.telecharger === 'function',
       fondateur: Boolean(acteur.superAdmin),
       reglages,
@@ -642,16 +671,70 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   /** Consignes compactes (petit modèle) quand l'IA locale est le premier moteur disponible des profils de jeu. */
   const compactPour = d => d.moteurs[0] === 'local';
 
+  /**
+   * Test de connexion d'un moteur (Administration IA), EN TÂCHE DE FOND : un modèle à raisonnement (NVIDIA) ou l'IA
+   * locale (chargement du modèle) peut mettre plus d'une minute, bien au-delà du délai d'une requête de l'app (15 s)
+   * et de celui du frontal de l'hébergeur : la page affichait alors « Le serveur Esport ne répond pas ». Le test est
+   * lancé, la réponse attend au plus `ATTENTE_TEST_MS` (10 s) ; s'il n'est pas fini, elle rend `{ enCours: true,
+   * test: { id } }` et l'app interroge `GET /jeux/ia/test/:id` (résultat gardé en base : n'importe quel processus de
+   * l'app répond). Durée du test plafonnée (`PLAFOND_TEST_API_MS`, IA locale `DELAI_TEST_LOCAL_MS`).
+   */
   async function testerIa(acteur, corps = {}) {
     exigerFondateur(acteur);
     const cible = MOTEURS_IA.includes(corps?.cible) ? corps.cible : undefined;
-    try {
-      const r = await testerConnexion({ appeler: appeleur(null), cible });
-      return { ok: true, reponse: r.reponse, dureeMs: r.dureeMs, ...(cible ? { cible } : {}), ...(r.moteur ? { moteur: r.moteur } : {}), etat: await etatIa(acteur) };
-    } catch (e) {
-      if (e?.statut === 403 || e?.code === 'quota-ia' || e?.code === 'ia-non-configuree' || e?.code === 'ia-locale-absente') throw e;
-      return { ok: false, erreur: erreurPublique(e), ...(cible ? { cible } : {}), etat: await etatIa(acteur) };
+    const id = nouvelId();
+    const debut = maintenant();
+    const plafondMs = cible === 'local' ? DELAI_TEST_LOCAL_MS : cible ? PLAFOND_TEST_API_MS : Math.max(PLAFOND_TEST_API_MS, localPret() ? DELAI_TEST_LOCAL_MS : 0);
+    const cle = `test:${id}`;
+    const ecrire = async etatTest => {
+      try {
+        await base.executer('INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES (?, ?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le', [cle, JSON.stringify(etatTest), iso(maintenant())]);
+      } catch {
+        // Base indisponible : le résultat reste dans la réponse (si elle attend), sinon le test sera déclaré expiré.
+      }
+    };
+    // Ménage : tests de plus d'un jour.
+    await base.executer("DELETE FROM ia_reglages WHERE cle LIKE 'test:%' AND maj_le < ?", [iso(debut - 86_400_000)]).catch(() => undefined);
+    await ecrire({ statut: 'en_cours', cible: cible ?? null, debut: iso(debut), plafondMs });
+    const calcul = testerConnexion({ appeler: appeleur(null), cible, delaiMax: PLAFOND_TEST_API_MS })
+      .then(
+        r => ({ statut: 'ok', ok: true, reponse: r.reponse, dureeMs: r.dureeMs, moteur: r.moteur ?? null }),
+        e => {
+          const refus = e?.statut === 403 || ['quota-ia', 'ia-non-configuree', 'ia-locale-absente', 'ia-locale-indisponible'].includes(e?.code);
+          return { statut: refus ? 'refuse' : 'echec', ok: false, erreur: erreurPublique(e), statutHttp: e?.statut ?? null, cause: e };
+        },
+      )
+      .then(async r => {
+        const { cause, ...publie } = r;
+        await ecrire({ ...publie, cible: cible ?? null, debut: iso(debut), fin: iso(maintenant()), plafondMs });
+        return r;
+      });
+    const fini = await Promise.race([calcul, new Promise(ok => setTimeout(() => ok(null), attenteTestMs).unref?.())]);
+    if (!fini) return { ok: null, enCours: true, test: { id, debutLe: iso(debut), plafondMs }, ...(cible ? { cible } : {}), etat: await etatIa(acteur) };
+    if (fini.statut === 'refuse') throw fini.cause;
+    return fini.ok
+      ? { ok: true, reponse: fini.reponse, dureeMs: fini.dureeMs, ...(cible ? { cible } : {}), ...(fini.moteur ? { moteur: fini.moteur } : {}), etat: await etatIa(acteur) }
+      : { ok: false, erreur: fini.erreur, ...(cible ? { cible } : {}), etat: await etatIa(acteur) };
+  }
+
+  /** Résultat d'un test lancé en tâche de fond (voir `testerIa`) ; un test resté « en cours » au-delà de son plafond a échoué. */
+  async function etatTestIa(acteur, id) {
+    exigerFondateur(acteur);
+    if (typeof id !== 'string' || !MOTIF_UUID.test(id)) throw echec(404, 'test-introuvable', 'Test introuvable (lancez-le à nouveau).');
+    const l = await base.premier('SELECT valeur FROM ia_reglages WHERE cle = ?', [`test:${id}`]);
+    const t = jsonOu(l?.valeur, null);
+    if (!t) throw echec(404, 'test-introuvable', 'Test introuvable (lancez-le à nouveau).');
+    const debut = Date.parse(t.debut ?? '');
+    const cible = t.cible ? { cible: t.cible } : {};
+    if (t.statut === 'en_cours') {
+      // Processus de l'app arrêté pendant le test (redémarrage Passenger), ou moteur muet : plafond + 30 s de marge.
+      if (Number.isFinite(debut) && maintenant() - debut > Number(t.plafondMs ?? PLAFOND_TEST_API_MS) + 30_000) {
+        return { ok: false, enCours: false, test: { id }, erreur: { code: 'ia-delai', message: 'Le service d’IA met trop de temps à répondre.' }, ...cible, etat: await etatIa(acteur) };
+      }
+      return { ok: null, enCours: true, test: { id, debutLe: t.debut ?? null, plafondMs: t.plafondMs ?? null }, ...cible };
     }
+    if (t.ok) return { ok: true, enCours: false, test: { id }, reponse: Boolean(t.reponse), dureeMs: t.dureeMs ?? null, ...cible, ...(t.moteur ? { moteur: t.moteur } : {}), etat: await etatIa(acteur) };
+    return { ok: false, enCours: false, test: { id }, erreur: t.erreur ?? { code: 'interne', message: 'Erreur interne.' }, ...cible, etat: await etatIa(acteur) };
   }
 
   /** `discuterPour(tache, messages, options)` du service (voir `repartiteur`). */
@@ -1160,6 +1243,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     etatIa,
     reglerIa,
     testerIa,
+    etatTestIa,
     discuterPour,
     lancerBrouillon,
     lancerVerification,

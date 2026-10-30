@@ -27,9 +27,9 @@ import { servicesMedias } from '../noyau/medias/service.mjs';
 import { servicesResumes } from '../noyau/resumes.mjs';
 import { ecrireWav, fenetreSuivante, pretraiterPcm, wavVersPcm } from '../serveur/transcription/audio.mjs';
 import { executerTravaux } from '../serveur/transcription/travailleur.mjs';
-import { chemins, etatInstallation, qualitesDisponibles } from '../serveur/transcription/moteur.mjs';
+import { chemins, desactiverWhisperCpp, etatAdministration, etatInstallation, fichiersOnnx, qualitesDisponibles, reactiverWhisperCpp } from '../serveur/transcription/moteur.mjs';
 import { argumentsWhisperCli, creerTranscripteurWhisperCpp, lireSortieWhisperCli, MODELES_GGML, VAD_SILERO, WHISPER_CPP } from '../serveur/transcription/whispercpp.mjs';
-import { compilateurSystemeSuffit, lireOptions, modelesAInstaller } from '../serveur/transcription/installer.mjs';
+import { compilateurSystemeSuffit, lireOptions, modelesAInstaller, modelesGgmlAInstaller } from '../serveur/transcription/installer.mjs';
 import { creerCorrecteur, TACHE_CORRECTION } from '../serveur/transcription/correcteur.mjs';
 import { besoinExclusif, prendreJetonLourd } from '../serveur/moteurs-lourds.mjs';
 import { verrouActif as verrouIaActif } from '../serveur/ia-locale/gestionnaire.mjs';
@@ -232,10 +232,10 @@ test('post-correction par lots (faux moteur) : corrections gardées, inventions 
 
 // ------------------------------------------------------------------ Moteurs, qualités, repli
 
-function installationFactice(d, { binaire = true, modeles = ['large-v3-turbo-q5_0'], onnx = false } = {}) {
-  const config = { ...configTranscriptionServeur({}), dossierModeles: d };
+function installationFactice(d, { binaire = true, modeles = ['large-v3-turbo-q5_0'], onnx = false, onnxModeles = [], moteur = 'auto' } = {}) {
+  const config = { ...configTranscriptionServeur({ TRANSCRIPTION_MOTEUR: moteur }), dossierModeles: d };
   const c = chemins(config);
-  const pret = { version: 1 };
+  const pret = { version: 2 };
   if (binaire) {
     mkdirSync(c.whispercpp, { recursive: true });
     writeFileSync(c.binaireWhisper, '#!/bin/sh\n');
@@ -249,56 +249,88 @@ function installationFactice(d, { binaire = true, modeles = ['large-v3-turbo-q5_
       pret.whispercpp.modeles[m] = { taille: 10 };
     }
   }
-  if (onnx) {
+  if (onnx || onnxModeles.length) {
     mkdirSync(join(c.moteur, 'node_modules', 'onnxruntime-node'), { recursive: true });
     writeFileSync(join(c.moteur, 'node_modules', 'onnxruntime-node', 'package.json'), '{}');
+  }
+  if (onnx) {
+    // Ancienne installation : le seul modèle « base », liste simple de noms.
     mkdirSync(c.modele, { recursive: true });
     for (const f of c.fichiersModele) writeFileSync(f, 'x');
     pret.modeles = ['base'];
+  }
+  if (onnxModeles.length) {
+    pret.onnx = { modeles: {}, vitesses: { turbo: 0.55 } };
+    for (const m of onnxModeles) {
+      mkdirSync(c.onnx(m), { recursive: true });
+      pret.onnx.modeles[m] = { revision: 'a'.repeat(40), fichiers: fichiersOnnx(m).map(f => ({ nom: f, taille: 5 })) };
+      for (const f of fichiersOnnx(m)) writeFileSync(join(c.onnx(m), f), 'xxxxx');
+    }
   }
   writeFileSync(c.pret, JSON.stringify(pret));
   return config;
 }
 
-test('choix du moteur : whisper.cpp par qualité, repli ONNX sans whisper.cpp, qualité la plus proche, rien d’installé', () => {
+const sansAlt = q => ({ disponible: q.disponible, moteur: q.moteur, modele: q.modele });
+
+test('choix du moteur : ONNX dans Node par défaut, whisper.cpp en option, qualité la plus proche, ancienne installation, rien d’installé', () => {
   const d = mkdtempSync(join(tmpdir(), 'esport-moteurs-'));
   try {
-    // whisper.cpp avec le seul modèle « équilibrée » : les autres qualités retombent dessus.
-    let config = installationFactice(d);
+    // Défaut : modèles ONNX des trois qualités (small, turbo, large-v3), même si whisper.cpp est aussi là.
+    let config = installationFactice(d, { modeles: ['small', 'large-v3-turbo-q5_0'], onnxModeles: ['small', 'turbo', 'large-v3'] });
     let e = etatInstallation(config);
     assert.equal(e.installe, true);
-    assert.deepEqual(e.qualites.equilibree, { disponible: true, moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' });
-    assert.equal(e.qualites.maximale.disponible, false);
-    assert.equal(e.vitesses['whispercpp:large-v3-turbo-q5_0'], 0.21);
+    assert.deepEqual(QUALITES.map(q => `${e.qualites[q].moteur}:${e.qualites[q].modele}`), ['onnx:small', 'onnx:turbo', 'onnx:large-v3']);
+    assert.deepEqual(e.qualites.equilibree.alternatives, [{ disponible: true, moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' }]);
+    assert.equal(e.vitesses.turbo, 0.55);
+    // TRANSCRIPTION_MOTEUR=whispercpp : whisper.cpp d'abord, ONNX en remplaçant (bascule) ; exclu → ONNX.
+    const cw = { ...config, moteur: 'whispercpp' };
+    const ew = etatInstallation(cw);
+    assert.deepEqual(sansAlt(ew.qualites.equilibree), { disponible: true, moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' });
+    const cfgw = { ...cw, disponible: true, qualites: ew.qualites };
+    assert.deepEqual(qualiteEffective(cfgw, 'equilibree', { exclure: ['whispercpp'] }), { qualite: 'equilibree', moteur: 'onnx', modele: 'turbo' });
+    assert.deepEqual(qualiteEffective(cfgw, 'maximale'), { qualite: 'maximale', moteur: 'onnx', modele: 'large-v3' }, 'pas de large-v3 GGML : ONNX');
+    // Désactivé après un arrêt de force : whisper.cpp n'est plus proposé, l'Administration le dit.
+    desactiverWhisperCpp(config, 'arrêté de force (SIGKILL)');
+    const ed = etatInstallation(cw);
+    assert.equal(ed.whispercpp.installe, false);
+    assert.match(ed.whispercpp.raison, /désactivé : arrêté de force/);
+    assert.deepEqual(sansAlt(ed.qualites.equilibree), { disponible: true, moteur: 'onnx', modele: 'turbo' });
+    assert.deepEqual(etatAdministration(cw).whispercpp.desactive.raison, 'arrêté de force (SIGKILL)');
+    reactiverWhisperCpp(config);
+    assert.equal(etatInstallation(cw).whispercpp.installe, true);
+    // Seul le modèle « équilibrée » ONNX : les autres qualités retombent dessus.
+    rmSync(d, { recursive: true, force: true });
+    config = installationFactice(d, { binaire: false, onnxModeles: ['turbo'] });
+    e = etatInstallation(config);
     const cfg = { ...config, disponible: true, qualites: e.qualites };
-    assert.deepEqual(qualiteEffective(cfg, 'maximale'), { qualite: 'equilibree', moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' });
-    assert.deepEqual(qualiteEffective(cfg, 'rapide'), { qualite: 'equilibree', moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' });
-    // Modèle effacé du disque (taille différente) : plus disponible.
-    writeFileSync(join(chemins(config).ggml, MODELES_GGML['large-v3-turbo-q5_0'].fichier), Buffer.alloc(3));
+    assert.deepEqual(qualiteEffective(cfg, 'maximale'), { qualite: 'equilibree', moteur: 'onnx', modele: 'turbo' });
+    assert.deepEqual(qualiteEffective(cfg, 'rapide'), { qualite: 'equilibree', moteur: 'onnx', modele: 'turbo' });
+    // Fichier tronqué (taille différente de pret.json) : plus disponible.
+    writeFileSync(join(chemins(config).onnx('turbo'), 'turbo-decoder.int8.onnx'), 'x');
     e = etatInstallation(config);
     assert.equal(e.installe, false);
-    assert.match(e.raison, /aucun modèle GGML/);
+    assert.match(e.raison, /aucun modèle ONNX/);
+    // Ancienne installation (repli « base » d'avant) : la qualité équilibrée l'utilise.
     rmSync(d, { recursive: true, force: true });
-    // Pas de whisper.cpp, repli ONNX : seule la qualité « équilibrée », moteur ONNX.
     config = installationFactice(d, { binaire: false, onnx: true });
     e = etatInstallation(config);
-    assert.equal(e.installe, true);
-    assert.deepEqual(e.qualites.equilibree, { disponible: true, moteur: 'onnx', modele: 'base' });
+    assert.deepEqual(sansAlt(e.qualites.equilibree), { disponible: true, moteur: 'onnx', modele: 'base' });
     assert.equal(e.qualites.rapide.disponible, false);
-    assert.deepEqual(qualiteEffective({ ...config, disponible: true, qualites: e.qualites }, 'maximale'), { qualite: 'equilibree', moteur: 'onnx', modele: 'base' });
-    // Les deux installés : whisper.cpp prioritaire ; TRANSCRIPTION_MOTEUR=onnx force le repli.
+    // whisper.cpp seul (ancienne installation de 2d72c31) : toujours utilisable.
     rmSync(d, { recursive: true, force: true });
-    config = installationFactice(d, { modeles: ['small', 'large-v3-turbo-q5_0', 'large-v3-q5_0'], onnx: true });
+    config = installationFactice(d);
+    e = etatInstallation(config);
+    assert.deepEqual(sansAlt(e.qualites.equilibree), { disponible: true, moteur: 'whispercpp', modele: 'large-v3-turbo-q5_0' });
+    assert.equal(etatInstallation({ ...config, moteur: 'onnx' }).installe, false, 'TRANSCRIPTION_MOTEUR=onnx : jamais whisper.cpp');
     const q = qualitesDisponibles(config, etatInstallation(config));
-    assert.deepEqual(QUALITES.map(k => `${q[k].moteur}:${q[k].modele}`), ['whispercpp:small', 'whispercpp:large-v3-turbo-q5_0', 'whispercpp:large-v3-q5_0']);
-    assert.equal(etatInstallation({ ...config, moteur: 'onnx' }).qualites.equilibree.moteur, 'onnx');
-    assert.equal(etatInstallation({ ...config, moteur: 'onnx' }).qualites.maximale.disponible, false);
+    assert.equal(q.maximale.disponible, false);
     // Rien d'installé.
     rmSync(d, { recursive: true, force: true });
     mkdirSync(d);
     e = etatInstallation({ ...configTranscriptionServeur({}), dossierModeles: d });
     assert.equal(e.installe, false);
-    assert.match(e.raison, /whisper\.cpp non installé/);
+    assert.match(e.raison, /moteur ONNX absent/);
     assert.equal(qualiteEffective({ disponible: false }, 'rapide'), null);
   } finally {
     rmSync(d, { recursive: true, force: true });
@@ -309,10 +341,16 @@ test('réglages : qualité, modèles par qualité, VAD, relecture, file exclusiv
   const c = configTranscriptionServeur({ TRANSCRIPTION_QUALITE: 'Maximale', TRANSCRIPTION_MODELE_RAPIDE: 'medium', TRANSCRIPTION_MODELE_MAXIMALE: 'inconnu', TRANSCRIPTION_THREADS_WHISPER: '64', TRANSCRIPTION_BLOC_S: '10', TRANSCRIPTION_VAD: 'non', TRANSCRIPTION_CORRECTION: 'non', TRANSCRIPTION_RAM_COMPTE: '48G', TRANSCRIPTION_MOTEUR: 'onnx' });
   assert.deepEqual([c.qualite, c.modelesQualite.rapide, c.modelesQualite.maximale, c.threadsWhisper, c.blocS, c.vad, c.correction, c.ramCompte, c.moteur], ['maximale', 'medium', 'large-v3-q5_0', 32, 60, false, 'non', 48 * 1024 ** 3, 'onnx']);
   const d = configTranscriptionServeur({});
-  assert.deepEqual([d.qualite, d.modelesQualite.equilibree, d.vad, d.correction, d.exclusif, d.moteur], ['equilibree', 'large-v3-turbo-q5_0', true, 'auto', 'auto', 'auto']);
-  assert.deepEqual(modelesAInstaller(d, lireOptions([])), ['large-v3-turbo-q5_0']);
-  assert.deepEqual(modelesAInstaller(d, lireOptions(['--tous', '--modele', 'medium'])), ['small', 'large-v3-turbo-q5_0', 'large-v3-q5_0', 'medium']);
-  assert.equal(lireOptions(['--modele', 'base']).onnx, true, 'ancienne option : repli ONNX');
+  assert.deepEqual([d.qualite, d.modelesQualite.equilibree, d.modelesOnnx.equilibree, d.vad, d.correction, d.exclusif, d.moteur], ['equilibree', 'large-v3-turbo-q5_0', 'turbo', true, 'auto', 'auto', 'auto']);
+  // Installateur : modèles ONNX par défaut (Équilibrée), --tous pour les trois ; whisper.cpp seulement sur demande.
+  assert.deepEqual(modelesAInstaller(d, lireOptions([])), ['turbo']);
+  assert.deepEqual(modelesAInstaller(d, lireOptions(['--tous', '--modele', 'medium'])), ['small', 'turbo', 'large-v3', 'medium']);
+  assert.deepEqual(modelesGgmlAInstaller(d, lireOptions([])), []);
+  const o = lireOptions(['--modele', 'large-v3-q5_0']);
+  assert.equal(o.whispercpp, true, 'un modèle GGML implique --whispercpp');
+  assert.deepEqual(modelesGgmlAInstaller(d, o), ['large-v3-turbo-q5_0', 'large-v3-q5_0']);
+  assert.deepEqual(modelesGgmlAInstaller(d, lireOptions(['--whispercpp', '--tous'])), ['small', 'large-v3-turbo-q5_0', 'large-v3-q5_0']);
+  assert.equal(lireOptions(['--onnx']).onnx, true, 'ancienne option acceptée');
   assert.throws(() => lireOptions(['--modele', 'enorme']), /Modèle inconnu/);
   assert.throws(() => lireOptions(['--route', 'magie']), /--route/);
   assert.equal(compilateurSystemeSuffit({ gxx: [8, 5], cmake: [3, 20] }), false, 'CloudLinux 8 (GCC 8) : GCC 14 figé');

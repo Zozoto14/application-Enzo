@@ -126,7 +126,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
     const rapport = await executerCron(base, config);
     const echecs = rapport.filter(r => !r.ok);
-    console.log(`${new Date().toISOString()} cron Esport : ${rapport.length - echecs.length}/${rapport.length} tâches faites${echecs.length ? ` ; ÉCHECS : ${echecs.map(e => `${e.tache} (${e.erreur})`).join(' ; ')}` : ''}`);
+    // La décision de la transcription est toujours écrite (« lancé », « déjà en cours (pid …) », « rien à faire »…) :
+    // une réunion qui reste « en file d'attente » se comprend à la lecture de ce journal.
+    const tr = rapport.find(r => r.tache === 'transcription serveur');
+    const trTexte = tr ? ` ; transcription : ${tr.ok ? `${tr.etat ?? '?'}${tr.n ? `, ${tr.n} à faire` : ''}` : `échec (${tr.erreur})`}` : config.transcriptionServeur?.raison ? ` ; transcription : ${config.transcriptionServeur.raison}` : '';
+    console.log(`${new Date().toISOString()} cron Esport : ${rapport.length - echecs.length}/${rapport.length} tâches faites${trTexte}${echecs.length ? ` ; ÉCHECS : ${echecs.map(e => `${e.tache} (${e.erreur})`).join(' ; ')}` : ''}`);
     if (echecs.length) process.exitCode = 1;
   } finally {
     await base.fermer();

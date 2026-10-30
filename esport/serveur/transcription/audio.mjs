@@ -68,8 +68,10 @@ function avecFfmpeg({ ffmpeg, source, sortie, threads, signal, filtres = true })
       if (erreurs.length < 2000) erreurs += d;
     });
     p.on('error', ko);
-    p.on('close', code => {
+    p.on('close', (code, signal) => {
       if (code === 0) ok();
+      // Arrêté de force (hébergeur) : ce n'est pas le fichier qui est en cause, un nouvel essai aura lieu.
+      else if (signal) ko(Object.assign(new Error(`ffmpeg a été arrêté (signal ${signal}${signal === 'SIGKILL' ? ' : arrêt de force par l’hébergeur ou un autre programme' : ''}) pendant la lecture de l’enregistrement.`), { signal, tueExterne: signal === 'SIGKILL' }));
       else ko(Object.assign(new Error(`ffmpeg n’a pas pu lire l’enregistrement (${erreurs.trim().split('\n').pop() || `code ${code}`}).`), { code: 'format' }));
     });
   });
@@ -292,4 +294,49 @@ export function ecrireWav(chemin, pcm, frequence = FREQUENCE) {
   } finally {
     closeSync(fd);
   }
+}
+
+// ------------------------------------------------------------------ Détection de la parole (énergie)
+
+/**
+ * Zone de parole d'un morceau (détection simple par l'énergie, sans modèle) : trames de 30 ms, seuil adapté au bruit
+ * de fond du morceau (3 × le 10e centile, borné par le quart du 90e centile et par `seuilMin`). Rend `{ debut, fin }`
+ * en ÉCHANTILLONS (avec `marge` secondes de chaque côté), ou null s'il y a moins de `minParoleS` de parole : le
+ * morceau n'est alors pas confié à Whisper (qui invente du texte dans le silence).
+ */
+export function zoneDeParole(pcm, { frequence = FREQUENCE, trameS = 0.03, marge = 0.2, minParoleS = 0.25, seuilMin = 0.003 } = {}) {
+  const n = Math.max(1, Math.round(trameS * frequence));
+  const nb = Math.floor(pcm.length / n);
+  if (!nb) return null;
+  const e = new Float64Array(nb);
+  for (let k = 0; k < nb; k++) {
+    let s = 0;
+    for (let i = k * n; i < (k + 1) * n; i++) s += pcm[i] * pcm[i];
+    e[k] = Math.sqrt(s / n);
+  }
+  const tri = Float64Array.from(e).sort();
+  const bruit = tri[Math.floor(nb * 0.1)];
+  const fort = tri[Math.min(nb - 1, Math.floor(nb * 0.9))];
+  const seuil = Math.max(seuilMin, Math.min(bruit * 3, fort * 0.25));
+  let premier = -1;
+  let dernier = -1;
+  let compte = 0;
+  for (let k = 0; k < nb; k++) {
+    if (e[k] > seuil) {
+      if (premier < 0) premier = k;
+      dernier = k;
+      compte += 1;
+    }
+  }
+  if (premier < 0 || compte * trameS < minParoleS) return null;
+  const m = Math.round(marge * frequence);
+  return { debut: Math.max(0, premier * n - m), fin: Math.min(pcm.length, (dernier + 1) * n + m) };
+}
+
+/** Énergie (RMS) autour de l'instant `t` (secondes) du fichier PCM : la coupe entre deux morceaux tombe-t-elle dans un silence ? */
+export function energieAutour(chemin, t, demi = 0.15) {
+  const x = lirePcm(chemin, Math.max(0, t - demi), t + demi);
+  let s = 0;
+  for (let i = 0; i < x.length; i++) s += x[i] * x[i];
+  return x.length ? Math.sqrt(s / x.length) : 0;
 }

@@ -709,6 +709,8 @@ export async function principal(argv = process.argv.slice(2)) {
   pret.version = 1;
   pret.modeles = { ...(pret.modeles ?? {}), [modele]: { depot: def.depot, revision: plan.revision, fichiers: plan.fichiers.map(({ nom, taille, sha256 }) => ({ nom, taille, sha256 })), le: new Date().toISOString() } };
   writeFileSync(c.pret, `${JSON.stringify(pret, null, 2)}\n`, { mode: 0o600 });
+  // Réinstallation : le compteur d'arrêts de force par l'hébergeur repart de zéro (l'IA locale sera réessayée).
+  rmSync(c.hebergement, { force: true });
   ok('installation enregistrée (pret.json)');
 
   if (o.test) {

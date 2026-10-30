@@ -927,7 +927,11 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const f = r.enregistrement_id ? await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id]) : null;
     if (!f || f.supprime_le) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
     const w = await file.travailDe(r.id);
-    if (w && (w.statut === 'attente' || w.statut === 'en_cours')) return transcriptionPublique(ctx, r);
+    if (w && (w.statut === 'attente' || w.statut === 'en_cours')) {
+      // « Relancer » : un travail qui attend (essai prévu plus tard, ou rien ne démarre) repart en tête de file.
+      if (corps?.relancer === true) await file.relancer(r.id);
+      return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
+    }
     const prefs = await preferencesTranscription(teamId);
     const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : prefs.langue;
     if (corps?.qualite !== undefined && corps.qualite !== null && !QUALITES.includes(corps.qualite)) throw echec(400, 'qualite', 'Qualité de transcription : rapide, equilibree ou maximale.');

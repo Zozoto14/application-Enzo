@@ -106,7 +106,8 @@ export function apiMedias(client: ClientEsport, teamId: string) {
     lienTranscription: (depotId: string, telecharger = false) => client.requete<{ url: string; expire: string }>(`${r(depotId)}/transcription/lien`, 'POST', { telecharger }),
     lienEnregistrement: (depotId: string) => client.requete<{ url: string; expire: string }>(`${r(depotId)}/enregistrement/lien`, 'POST', {}),
     demanderTranscriptionExterne: (depotId: string, langue: string) => client.requete<Transcription>(`${r(depotId)}/transcription/externe`, 'POST', { langue }),
-    demanderTranscriptionServeur: (depotId: string, langue?: string, qualite?: QualiteTranscription) => client.requete<Transcription>(`${r(depotId)}/transcription/serveur`, 'POST', { ...(langue ? { langue } : {}), ...(qualite ? { qualite } : {}) }),
+    demanderTranscriptionServeur: (depotId: string, langue?: string, qualite?: QualiteTranscription, options: { relancer?: boolean } = {}) =>
+      client.requete<Transcription>(`${r(depotId)}/transcription/serveur`, 'POST', { ...(langue ? { langue } : {}), ...(qualite ? { qualite } : {}), ...(options.relancer ? { relancer: true } : {}) }),
     annulerTranscriptionServeur: (depotId: string) => client.requete<Transcription>(`${r(depotId)}/transcription/serveur`, 'DELETE'),
     reglagesTranscription: () => client.requete<ReglagesTranscription>(`${t}/resumes/reglages-transcription`),
     changerModeTranscription: (mode: ModeTranscription | null) => client.requete<ReglagesTranscription>(`${t}/resumes/reglages-transcription`, 'PATCH', { mode }),

@@ -1,7 +1,54 @@
-# Transcription des réunions : qualité (whisper.cpp, vocabulaire de la team, relecture par l'IA)
+# Transcription des réunions : qualité (Whisper ONNX dans Node, vocabulaire de la team, relecture par l'IA)
 
 Public : le Fondateur (installation) et les responsables de team (réglages). Installation pas à pas :
 [o2switch.md](../o2switch.md), partie H. Dépôt, PDF, boîte du rédacteur : [resumes.md](resumes.md).
+
+## 30 octobre 2026 : le calcul revient DANS le processus Node
+
+**Constat sur o2switch (journaux réels)** : l'ancien moteur ONNX (Whisper dans le processus Node) a transcrit sans
+incident « Entretien Part. 1 » (6 min) et « Part. 2 » (28 min, 82 morceaux) ; whisper.cpp (binaire externe) est
+**tué à chaque fois** (`whisper.cpp s'est arrêté (signal SIGKILL) : read_audio_data…`, « 0 bloc(s) d'audio »), comme
+llama-server (IA locale), sans aucune « faute » mémoire ou processeur dans Resource Usage. Conclusion : l'hébergeur
+arrête de force les binaires de calcul lancés depuis le dossier personnel (surveillance anti-minage probable), mais
+laisse calculer `node`.
+
+**Ce qui change** :
+
+- **Moteur par défaut : Whisper par ONNX Runtime dans le processus Node** (`esport/serveur/transcription/whisper.mjs`,
+  `onnxruntime-node` figé), avec des modèles **bien plus grands** que « base » (exports int8 de sherpa-onnx, poids
+  d'origine d'OpenAI) : **small** (Rapide), **large-v3-turbo** (Équilibrée), **large-v3** (Maximale). Les fichiers de
+  128 bandes mel (large-v3, turbo) sont gérés.
+- Toutes les améliorations de la version whisper.cpp sont refaites dans ce décodeur : **prompt de vocabulaire** de la
+  team (découpage BPE exact de Whisper, `<|startofprev|>`) **+ texte du morceau précédent** (contexte, comme Whisper),
+  **recherche en faisceau** (beam 5, une file de cache clés/valeurs par hypothèse), **températures de repli** (0 → 1 ;
+  texte en boucle, taux de compression > 2,4 ou log-prob moyenne < -1 → nouvel essai par échantillonnage, `bestOf`
+  candidats), **jetons non parlés supprimés**, règle « pas de parole » (0,6), boucles coupées ; langue imposée ou
+  détectée ; **découpage dans les silences** (morceaux ≤ 30 s coupés au moment le plus calme), **zone de parole seule**
+  (détection par l'énergie, silence jamais confié à Whisper), **marge reprise** (1,5 s) quand la coupe tombe en
+  pleine parole, recollée sans doublon ; filtres anti-hallucination et nettoyage ; écho du prompt écarté ;
+  **relecture par l'IA** via le connecteur (`discuterPour('correction', …)`).
+- **ffmpeg** ne sert que quelques secondes à lire la vidéo (il a toujours fonctionné, y compris avec l'ancien moteur) ;
+  s'il était arrêté de force, l'erreur le dit (`ffmpeg a été arrêté (signal SIGKILL…)`) et un nouvel essai a lieu ;
+  un WAV se lit sans lui.
+- **whisper.cpp reste en option** (`installer-transcription.sh --whispercpp`, `TRANSCRIPTION_MOTEUR=whispercpp`). S'il
+  est **arrêté de force** (SIGKILL que nos programmes n'ont pas envoyé), le processus de fond **bascule tout seul sur
+  ONNX pour ce travail** (même bloc repris, aucun essai compté) et **désactive whisper.cpp** pour la suite
+  (`~/esport-modeles/whispercpp-desactive.json`, affiché dans Administration IA › Transcription sur le serveur ;
+  supprimer ce fichier pour le réessayer).
+- **File d'attente** (« En file d'attente : démarre dans les 5 minutes » sans fin) : après un échec, l'app affiche la
+  **raison**, l'**heure du nouvel essai** et les **essais restants** ; un travail en attente depuis plus de 15 min
+  (ou « en cours » sans battement) est signalé **bloqué** avec **« Relancer maintenant »** (essais remis à zéro, en tête
+  de file) ; le cron écrit sa décision dans son journal (« transcription : lancé / déjà en cours (pid …) / rien à
+  faire ») et dans `~/esport-modeles/lanceur.json` ; le processus de fond note son démarrage ; un **chien de garde**
+  arrête un processus sans aucune avancée pendant 45 min (`TRANSCRIPTION_BLOCAGE_MIN`) au lieu de garder le verrou
+  et le bail indéfiniment ; l'attente du verrou commun avec l'IA locale est toujours bornée.
+
+  Cause du blocage observé : le verrou du processus de fond était renouvelé chaque minute par un minuteur tant que le
+  processus vivait, **même s'il n'avançait plus** (attente sans fin d'un moteur, d'une connexion…) ; le cron répondait
+  alors « déjà en cours » sans rien écrire, et l'app affichait « démarre dans les 5 minutes » (elle ne montrait pas
+  non plus l'heure d'un nouvel essai déjà passée, ni la raison de l'échec précédent).
+
+Installation et commandes : [o2switch.md](../o2switch.md), parties H1 à H5.
 
 ## Pourquoi c'était mauvais (diagnostic d'octobre 2026)
 
@@ -23,7 +70,7 @@ des morceaux dans le moment le plus calme, coupure des boucles de répétition d
 
 ## Ce qui change
 
-### 1. Moteur : whisper.cpp + large-v3-turbo
+### 1. Moteur : whisper.cpp + large-v3-turbo (29 octobre ; option depuis le 30 octobre, voir plus haut)
 
 - **whisper.cpp v1.9.5** (ggml-org/whisper.cpp, commit `d1be6fde11ac`), **compilé sur le serveur sans root** par
   `installer-transcription.sh` : avec le compilateur du système s'il est assez récent, sinon avec le **même GCC 14
@@ -44,7 +91,17 @@ et apporte beam search, seuils anti-hallucination, prompt et VAD sans rien écri
 
 ### 2. Trois qualités (choisies au dépôt, par défaut pour la team, ou « Retranscrire avec la meilleure qualité »)
 
-| Qualité | Modèle (réglable) | Décodage | 1 h de réunion (estimation, 8 fils, pauses comprises) |
+Moteur par défaut (ONNX dans Node, 4 fils ; `--test` mesure les vraies valeurs) :
+
+| Qualité | Modèle ONNX int8 (réglable) | Décodage | Mémoire | 1 h de réunion (estimation, pauses comprises) |
+| --- | --- | --- | --- | --- |
+| Rapide | `small` (≈ 0,4 Go) | glouton, repli à 0,4 et 0,8 | ≈ 1,1 Go | 20 à 40 min |
+| **Équilibrée** (défaut) | `turbo` = large-v3-turbo (≈ 1 Go) | beam 5, 5 candidats en repli | ≈ 2,6 Go | 45 à 90 min |
+| Maximale | `large-v3` (≈ 1,8 Go) | beam 5, 5 candidats en repli | ≈ 4,5 Go | 2 h 30 à 5 h |
+
+Avec whisper.cpp (option, 8 fils) :
+
+| Qualité | Modèle GGML (réglable) | Décodage | 1 h de réunion |
 | --- | --- | --- | --- |
 | Rapide | `small` (466 Mo) | glouton + repli de température | 8 à 15 min |
 | **Équilibrée** (défaut) | `large-v3-turbo-q5_0` (547 Mo) | beam 5, 5 candidats en repli | 20 à 40 min |
@@ -138,9 +195,13 @@ Toujours disponible (`TRANSCRIPTION_API=openai`…) ; elle reçoit maintenant le
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
-| `TRANSCRIPTION_MOTEUR` | `auto` | `auto` (whisper.cpp sinon ONNX), `whispercpp`, `onnx` |
+| `TRANSCRIPTION_MOTEUR` | `auto` | `auto` (ONNX dans Node ; whisper.cpp seulement pour une qualité sans modèle ONNX), `onnx`, `whispercpp` (d'abord, bascule sur ONNX s'il est tué) |
 | `TRANSCRIPTION_QUALITE` | `equilibree` | qualité par défaut des teams |
-| `TRANSCRIPTION_MODELE_RAPIDE` / `_EQUILIBREE` / `_MAXIMALE` | `small` / `large-v3-turbo-q5_0` / `large-v3-q5_0` | modèle de chaque qualité (`small`, `medium`, `large-v3-turbo-q5_0`, `large-v3-turbo`, `large-v3-q5_0`) |
+| `TRANSCRIPTION_ONNX_RAPIDE` / `_EQUILIBREE` / `_MAXIMALE` | `small` / `turbo` / `large-v3` | modèle ONNX de chaque qualité (`tiny`, `base`, `small`, `medium`, `turbo`, `large-v3`) |
+| `TRANSCRIPTION_THREADS` | `4` | fils de calcul d'ONNX Runtime (1 à 16) |
+| `TRANSCRIPTION_RAM_MAX` | `8G` | mémoire du processus Node (modèle compris) au-delà de laquelle le travail s'arrête |
+| `TRANSCRIPTION_BLOCAGE_MIN` | `45` | minutes sans avancée avant que le processus de fond se déclare bloqué et s'arrête |
+| `TRANSCRIPTION_MODELE_RAPIDE` / `_EQUILIBREE` / `_MAXIMALE` | `small` / `large-v3-turbo-q5_0` / `large-v3-q5_0` | modèle whisper.cpp de chaque qualité (option) |
 | `TRANSCRIPTION_THREADS_WHISPER` | `8` | fils de calcul de whisper.cpp |
 | `TRANSCRIPTION_BLOC_S` | `300` | durée d'un bloc (60 à 1800 s) |
 | `TRANSCRIPTION_CHEVAUCHEMENT_S` | `1.5` | marge entre deux blocs |
@@ -148,9 +209,15 @@ Toujours disponible (`TRANSCRIPTION_API=openai`…) ; elle reçoit maintenant le
 | `TRANSCRIPTION_CORRECTION` | `auto` | relecture par l'IA (`auto` = si disponible, `non`) |
 | `TRANSCRIPTION_EXCLUSIF` | `auto` | jamais whisper.cpp et l'IA locale ensemble : `auto`, `oui`, `non` |
 | `TRANSCRIPTION_RAM_COMPTE` | (inconnue) | mémoire du compte, ex. `48G` |
-| `TRANSCRIPTION_MODELE`, `TRANSCRIPTION_THREADS` | `base`, `1` | repli ONNX |
+| `TRANSCRIPTION_MODELE` | `base` | ancien réglage : modèle ONNX unique d'une installation d'avant (qualité Équilibrée) |
 
 ## Tests
+`esport/test/transcription-onnx.test.mjs` (aucun modèle, aucun téléchargement) : décodeur ONNX avec un **faux ONNX
+Runtime** (BPE, prompt et texte précédent, 128 bandes mel, faisceau contre glouton, jeton non parlé, « pas de
+parole », températures de repli sur une boucle), zone de parole, **bascule sur ONNX quand whisper.cpp est tué**
+(SIGKILL), reconnaissance d'un SIGKILL extérieur, **file** (échec affiché, bloquée, « Relancer »), **verrou orphelin**,
+**chien de garde**, plan d'installation (fichiers et SHA-256 publiés par Hugging Face, faux réseau).
+
 
 `esport/test/transcription-qualite.test.mjs` (SQLite et PostgreSQL, aucun téléchargement) : prompt de vocabulaire,
 garde-fous, blocs et recollage sans doublon, prétraitement, relecture avec un faux moteur et garde « ne pas inventer »,

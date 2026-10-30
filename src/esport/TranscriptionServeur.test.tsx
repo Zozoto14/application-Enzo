@@ -94,6 +94,14 @@ describe('libellés de la transcription sur le serveur', () => {
     expect(libelleTravailServeur(travail({ statut: 'echec', erreur: 'Moteur en panne.' }))).toBe('Échec sur le serveur : Moteur en panne.');
   });
 
+  it('état honnête : raison de l’échec, heure du nouvel essai, essais restants ; file bloquée signalée', () => {
+    expect(libelleTravailServeur(travail({ statut: 'attente', progression: 0, pourcentage: 0, prochainEssai: '2026-10-20T10:30:00.000Z', erreur: 'whisper.cpp s’est arrêté (signal SIGKILL).', essaisRestants: 2 }))).toMatch(
+      /^Échec sur le serveur \(whisper\.cpp s’est arrêté \(signal SIGKILL\)\.\) : nouvel essai vers .+ \(2 essai\(s\) restant\(s\)\)$/,
+    );
+    expect(libelleTravailServeur(travail({ statut: 'attente', progression: 0, pourcentage: 0, bloque: true, attenteDepuis: '2026-10-20T10:00:00.000Z' }))).toMatch(/^En attente depuis .+ : le serveur ne l’a pas encore démarrée\. Touchez « Relancer maintenant »/);
+    expect(libelleTravailServeur(travail({ statut: 'en_cours', bloque: true }))).toMatch(/^Interrompue à 41 % \(le processus du serveur ne donne plus signe de vie\)/);
+  });
+
   it('journal et notifications : fait par le serveur, échec', () => {
     const e = (action: string, acteur: string | null) => ({ id: '1', action, acteur, entiteType: null, entiteId: null, meta: { titre: 'Hebdo' }, date: '' });
     expect(phraseJournal(e('meeting.transcription_ready', null), {})).toBe('Le serveur a terminé la transcription de « Hebdo »');
@@ -167,6 +175,18 @@ describe('écran de progression', () => {
     // Sans choix de langue ni de qualité ici : celles de la team (Paramètres), décidées par le serveur.
     await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', {}));
     await waitFor(() => expect(screen.getByTestId('esport-transcription-d1-serveur-etat').props.children).toMatch(/démarre dans les 5 minutes/));
+  });
+
+  it('transcription bloquée en file : « Relancer maintenant » la remet en tête (relancer: true)', async () => {
+    const requete = jest.fn(async () => transcription({ statut: 'serveur', travail: travail({ statut: 'attente', progression: 0, pourcentage: 0, rang: 0 }) }));
+    await render(<PanneauTranscription theme={theme} client={client(requete)} teamId="t1" depot={depot({ statut: 'serveur', pdf: false, peutTranscrire: true, serveur: true, travail: travail({ statut: 'attente', progression: 0, pourcentage: 0, bloque: true, attenteDepuis: '2026-10-20T10:00:00.000Z' }) })} />);
+    expect(screen.getByTestId('esport-transcription-d1-serveur-etat').props.children).toMatch(/^En attente depuis/);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-transcription-d1-serveur-relancer'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/resumes/d1/transcription/serveur', 'POST', { relancer: true }));
+    await waitFor(() => expect(screen.getByTestId('esport-transcription-d1-serveur-etat').props.children).toMatch(/démarre dans les 5 minutes/));
+    expect(screen.queryByTestId('esport-transcription-d1-serveur-relancer')).toBeNull();
   });
 
   it('serveur pas installé : pas de bouton serveur', async () => {

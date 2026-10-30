@@ -18,7 +18,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { banc } from './aide.mjs';
 import { baseMigree } from './base.mjs';
-import { ADAPTATEURS, causeEchec, configIa, configIaLocale, creerConnecteurLocal } from '../noyau/ia/connecteur.mjs';
+import { ADAPTATEURS, causeEchec, configIa, configIaLocale, creerConnecteurLocal, creerRepartiteurIa } from '../noyau/ia/connecteur.mjs';
+import { lireHebergement, noterTueExterne } from '../serveur/ia-locale/hebergement.mjs';
 import { recupererPage, verifierAdresseHttps } from '../noyau/ia/recherche.mjs';
 import { lireAdresses } from '../noyau/ia/assistant.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
@@ -1057,5 +1058,60 @@ test('installateur : options, liste figée des paquets (SHA-256), recommandation
     await assert.rejects(telechargerVerifie('https://exemple.fr/a', autre, { sha256: undefined, fetch }), /SHA-256/);
   } finally {
     rmSync(racine, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------------------------------ Arrêts de force par l'hébergeur
+
+test('hébergeur : moteur local tué (SIGKILL externe) 2 fois → « indisponible sur cet hébergement », sauté dans l’ordre de repli, sans quitter la config', async () => {
+  const inst = installationFactice();
+  const journal = join(inst.racine, 'moteur.log');
+  try {
+    const fond = gestionnaire(inst, { inactiviteMs: 5000, role: 'travailleur', tuesMax: 2 });
+    const connecteur = creerConnecteurLocal(fond, { fetch: fetchLocal });
+    for (let n = 1; n <= 2; n++) {
+      const requete = connecteur.discuter([{ role: 'user', content: 'LENT:5000' }]);
+      while (!fond.etat().enMarche) await attendre(20);
+      await attendre(150);
+      process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
+      await assert.rejects(requete, e => e.code === 'ia-locale-tuee');
+      await attendre(100);
+      assert.equal(lireHebergement(inst.c.dossier).tues, n);
+    }
+    const h = fond.etat().hebergement;
+    assert.deepEqual([h.indisponible, h.tues, h.max], [true, 2, 2]);
+    assert.match(readFileSync(journal, 'utf8'), /IA locale indisponible sur cet hébergement : son moteur a été arrêté de force \(SIGKILL\) 2 fois/);
+    // Plus aucun moteur lancé : la requête est refusée tout de suite, le connecteur se déclare indisponible.
+    await assert.rejects(fond.executer(async () => true), e => e.code === 'ia-locale-indisponible' && e.statut === 503);
+    assert.equal(connecteur.disponible(), false);
+    // Le répartiteur la saute (ordre « local, api ») : l'API répond ; seule dans l'ordre : message clair.
+    const api = { disponible: () => true, discuter: async () => ({ texte: '{"ok": true}' }) };
+    const r = creerRepartiteurIa({ moteurs: { local: connecteur, api }, ordres: { profils: ['local', 'api'], leger: ['local'] } });
+    assert.equal((await r.discuterPour('profils', [{ role: 'user', content: 'x' }])).moteur, 'api');
+    await assert.rejects(r.discuterPour('leger', [{ role: 'user', content: 'x' }]), e => e.code === 'ia-locale-indisponible');
+    // Service de l'app : installée, mais pas disponible, raison et état pour l'Administration IA.
+    const reglages = { ...configIaLocale({}), dossier: inst.c.dossier, installation: { installe: true, binaire: inst.binaire, fichierModele: inst.fichierModele } };
+    const local = creerIaLocale(reglages, { role: 'cron' });
+    assert.equal(local.disponible(), false);
+    assert.equal(local.raison, 'indisponible-hebergement');
+    assert.equal((await local.lancerTravailleur()).raison, 'indisponible sur cet hébergement');
+    // Pour réessayer (changement chez l'hébergeur) : le fichier effacé, tout repart.
+    rmSync(inst.c.hebergement);
+    assert.equal(creerIaLocale(reglages, { role: 'cron' }).disponible(), true);
+  } finally {
+    inst.nettoyer();
+  }
+});
+
+test('hébergeur : une requête réussie remet le compteur d’arrêts de force à zéro', () => {
+  const inst = installationFactice();
+  try {
+    assert.equal(noterTueExterne(inst.c.dossier, { phase: 'pendant le chargement', max: 3 }).indisponible, false);
+    const g = gestionnaire(inst, { tuesMax: 3 });
+    g.noterMesure({ jetonsParSeconde: 12, dureeMs: 1000 });
+    assert.equal(lireHebergement(inst.c.dossier).tues, 0);
+    assert.equal(existsSync(inst.c.hebergement), false);
+  } finally {
+    inst.nettoyer();
   }
 });

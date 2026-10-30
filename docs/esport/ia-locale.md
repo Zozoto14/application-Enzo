@@ -179,6 +179,7 @@ textes bornés, images et sources https publiques), et rien n'est enregistré sa
 | `IA_LOCALE_FILE_MAX` | `4` | Requêtes en attente au plus |
 | `IA_LOCALE_NICE` | `19` | Priorité du moteur (19 = la plus basse) |
 | `IA_LOCALE_DUREE_TRAVAILLEUR_MIN` | `60` | Vie d'un processus de fond avant de passer la main |
+| `IA_LOCALE_TUES_MAX` | `2` | Arrêts de force (SIGKILL de l'hébergeur) de suite avant « indisponible sur cet hébergement » (sautée) |
 
 ## Vitesse et ressources (ordres de grandeur)
 
@@ -247,6 +248,20 @@ compilé n'a que `llama-server`, la variante `socket` couvre alors le cas « san
 ou **LE MOTEUR TIENT**, et affiche un **message prêt à envoyer au support o2switch** (heures UTC, phase, fils, mémoire,
 processeur ; ni clé, ni port, ni domaine). En attendant la réponse : retirez l'IA locale de l'ordre de repli dans
 l'Administration IA.
+
+### « Indisponible sur cet hébergement » (arrêts de force répétés)
+
+Sur o2switch (29/10), llama-server est arrêté de force (SIGKILL que nos programmes n'ont pas envoyé) au chargement ou
+quelques secondes après le début du calcul, sans « faute » dans Resource Usage. Chaque arrêt de ce genre est compté
+dans `~/.appdashboard/ia-locale/etat/hebergement.json` (partagé par l'app, le processus de fond et la transcription).
+Au bout de **2 arrêts de suite** (`IA_LOCALE_TUES_MAX`), l'IA locale est marquée **« indisponible sur cet
+hébergement »** : elle reste dans la configuration et dans les ordres de repli, mais elle est **sautée** (le moteur
+suivant répond tout de suite, plus d'attente de 10 minutes), son processus de fond n'est plus lancé, et
+l'Administration IA l'explique. Une requête réussie remet le compteur à zéro. Pour la réessayer :
+`rm ~/.appdashboard/ia-locale/etat/hebergement.json` (relancer `installer-ia-locale.sh` l'efface aussi).
+
+Piste documentée pour plus tard (pas implémentée) : **node-llama-cpp**, qui calculerait dans le processus Node,
+comme la transcription (le calcul dans `node` n'est pas arrêté par l'hébergeur).
 
 ### Un seul moteur pour tout le compte
 
