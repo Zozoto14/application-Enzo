@@ -7,6 +7,9 @@ module.exports = {
   transform: { ...preset.transform, '^.+\\.mjs$': 'babel-jest' },
   // Mode d'affichage « large » par défaut dans les tests (voir jest.setup.js).
   setupFiles: ['./jest.setup.js'],
+  // Plafonds de délais (voir jest.setup.after.js) : 5 s par test était trop court sous charge (CI, tests lourds).
+  setupFilesAfterEnv: ['./jest.setup.after.js'],
+  testTimeout: 30000,
   // Les modules .mjs du relais (relais/relais.mjs) sont transformés comme le reste : les tests de la
   // synchronisation parlent au VRAI relais, en mémoire (src/sync/relais/__fixtures__/relaisV9.ts).
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mjs', 'json', 'node'],
