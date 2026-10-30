@@ -729,7 +729,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     if (t.statut === 'en_cours') {
       // Processus de l'app arrêté pendant le test (redémarrage Passenger), ou moteur muet : plafond + 30 s de marge.
       if (Number.isFinite(debut) && maintenant() - debut > Number(t.plafondMs ?? PLAFOND_TEST_API_MS) + 30_000) {
-        return { ok: false, enCours: false, test: { id }, erreur: { code: 'ia-delai', message: 'Le service d’IA met trop de temps à répondre.' }, ...cible, etat: await etatIa(acteur) };
+        const s = Math.round((maintenant() - debut) / 1000);
+        return { ok: false, enCours: false, test: { id }, erreur: { code: 'ia-test-sans-resultat', message: `Test resté sans résultat après ${s} s : le processus de l’app a sans doute été redémarré pendant le test (relancez-le ; diagnostic : esport/outils/tester-ia.mjs).` }, ...cible, etat: await etatIa(acteur) };
       }
       return { ok: null, enCours: true, test: { id, debutLe: t.debut ?? null, plafondMs: t.plafondMs ?? null }, ...cible };
     }

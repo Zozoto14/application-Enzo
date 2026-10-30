@@ -12,6 +12,7 @@ import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
 import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
+import { fetchIaDepuisEnv } from '../adaptateurs/fetchIaNode.mjs';
 import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
@@ -63,7 +64,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     apercuLiens: { telecharger: telechargeurNode() },
     // Assistant IA des profils de jeu (IA_API_URL, IA_API_CLE, IA_MODELE) : pages web lues avec la même protection.
     // IA locale (llama.cpp, 127.0.0.1 seulement) : à la place ou en secours de la clé d'API (Administration IA).
-    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}), transcription: () => etatAdministration(config.transcriptionServeur) },
+    // Transport des API d'IA : node:https avec étapes mesurées (DNS, connexion, TLS, premier octet), IA_IPV4=oui possible.
+    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, fetch: fetchIa ?? fetchIaDepuisEnv(), ...(local ? { local } : {}), transcription: () => etatAdministration(config.transcriptionServeur) },
     ...(travauxIa ? { travauxIa } : {}),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };

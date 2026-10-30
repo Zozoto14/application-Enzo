@@ -26,6 +26,7 @@ import { creerIaLocale } from './ia-locale/service.mjs';
 import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { lancerTravailleurIaLocale } from './ia-locale/lanceur.mjs';
 import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
+import { fetchIaDepuisEnv } from '../adaptateurs/fetchIaNode.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 
@@ -67,7 +68,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
       base,
       ...(maintenant ? { maintenant } : {}),
       socle: {},
-      ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}) },
+      ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, fetch: fetchIa ?? fetchIaDepuisEnv(), ...(local ? { local } : {}) },
       travauxIa: 'synchrone',
     });
     const r = await jeux.tacheCron();

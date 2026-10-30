@@ -270,12 +270,18 @@ A map leaving the competitive pool is a "modification" with "actif": false, not 
 
 /**
  * Test de connexion : un tout petit échange (`cible` : « api », « api2 » ou « local » pour tester un seul moteur).
- * Effort de raisonnement au plus bas (modèle à raisonnement : réponse plus rapide).
+ * Effort de raisonnement au plus bas (modèle à raisonnement : réponse plus rapide). Délai du PREMIER OCTET de
+ * `PREMIER_OCTET_TEST_MS` (30 s : au-delà, l'erreur dit à quelle étape la requête est restée bloquée), total plafonné
+ * par `delaiMax` ; `diagnostic` : les étapes (DNS, connexion, TLS, premier octet, fin) sont journalisées.
  */
+export const PREMIER_OCTET_TEST_MS = 30_000;
+/** Messages du test de connexion (repris tels quels par esport/outils/tester-ia.mjs). */
+export const MESSAGES_TEST = Object.freeze([
+  Object.freeze({ role: 'system', content: 'Answer with ONE JSON object only.' }),
+  Object.freeze({ role: 'user', content: 'Return {"ok": true}.' }),
+]);
+
 export async function testerConnexion({ appeler, cible, delaiMax = null }) {
-  const r = await appeler('test', [
-    { role: 'system', content: 'Answer with ONE JSON object only.' },
-    { role: 'user', content: 'Return {"ok": true}.' },
-  ], { maxJetons: 200, delai: 30_000, effort: 'low', schema: SCHEMA_TEST, ...(delaiMax ? { delaiMax } : {}), ...(cible ? { cible } : {}) });
+  const r = await appeler('test', MESSAGES_TEST, { maxJetons: 200, delai: 30_000, premierOctet: PREMIER_OCTET_TEST_MS, diagnostic: true, effort: 'low', schema: SCHEMA_TEST, ...(delaiMax ? { delaiMax } : {}), ...(cible ? { cible } : {}) });
   return { reponse: Boolean(extraireJson(r.texte)?.ok), dureeMs: r.dureeMs ?? null, ...(r.moteur ? { moteur: r.moteur } : {}) };
 }

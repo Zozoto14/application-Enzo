@@ -142,7 +142,9 @@ test('connecteur : requête « chat completions » (clé dans l’en-tête seule
       }),
     delai: 20,
   });
-  assert.equal((await lent.discuter([]).catch(x => x)).code, 'ia-delai');
+  const eLent = await lent.discuter([]).catch(x => x);
+  assert.equal(eLent.code, 'ia-delai-premier-octet', 'aucune réponse avant le délai : étape nommée');
+  assert.equal(eLent.statut, 504);
   // Réponse démesurée : coupée.
   const enorme = creerConnecteur(configIa(ENV), { fetch: async () => new Response('x'.repeat(600 * 1024)) });
   assert.equal((await enorme.discuter([]).catch(x => x)).code, 'ia-reponse');

@@ -699,7 +699,8 @@
   "Le service d’IA refuse la requête : modèle ou paramètres non acceptés.": "The AI service rejects the request: model or parameters not accepted.",
   "Ordre de repli : 1 à 3 moteurs parmi api, api2 et local, sans doublon.": "Fallback order: 1 to 3 engines among api, api2 and local, without duplicates.",
   "Le service d’IA refuse la clé d’API (vérifiez IA_API2_CLE).": "The AI service rejects the API key (check IA_API2_CLE).",
-  "Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE2 et IA_API2_URL).": "Model or address unknown to the AI service (check IA_MODELE2 and IA_API2_URL)."
+  "Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE2 et IA_API2_URL).": "Model or address unknown to the AI service (check IA_MODELE2 and IA_API2_URL).",
+  "Réponse du service d’IA interrompue (flux coupé avant la fin).": "Answer from the AI service interrupted (stream cut before the end)."
  },
  "motifs": [
   [
@@ -1065,6 +1066,50 @@
   [
    "^Plafond mensuel d’appels à l’IA atteint \\(moteur secondaire ; réglable dans Administration › IA\\)\\.$",
    "Monthly AI call limit reached (secondary engine; adjustable in Administration › AI)."
+  ],
+  [
+   "^Résolution DNS de l’adresse du service d’IA trop longue après (\\d+) s \\(réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia\\.mjs\\)\\.$",
+   "DNS resolution of the AI service address too slow (after $1 s) (hosting network: try IA_IPV4=oui, or run esport/outils/tester-ia.mjs)."
+  ],
+  [
+   "^Adresse du service d’IA introuvable \\(DNS : (.+)\\) : vérifiez IA_API_URL / IA_API2_URL\\.$",
+   "AI service address not found (DNS: $1): check IA_API_URL / IA_API2_URL."
+  ],
+  [
+   "^Connexion TCP au service d’IA impossible après (\\d+) s \\(réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia\\.mjs\\)\\.$",
+   "TCP connection to the AI service impossible (after $1 s) (hosting network: try IA_IPV4=oui, or run esport/outils/tester-ia.mjs)."
+  ],
+  [
+   "^Connexion au service d’IA refusée ou coupée \\((.+)\\) \\(réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia\\.mjs\\)\\.$",
+   "Connection to the AI service refused or cut ($1) (hosting network: try IA_IPV4=oui, or run esport/outils/tester-ia.mjs)."
+  ],
+  [
+   "^Négociation TLS avec le service d’IA trop longue après (\\d+) s \\(réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia\\.mjs\\)\\.$",
+   "TLS handshake with the AI service too slow (after $1 s) (hosting network: try IA_IPV4=oui, or run esport/outils/tester-ia.mjs)."
+  ],
+  [
+   "^Échec de la négociation TLS avec le service d’IA \\((.+)\\)\\.$",
+   "TLS handshake with the AI service failed ($1)."
+  ],
+  [
+   "^Le service d’IA n’a pas commencé à répondre (?:en|après) (\\d+) s \\(requête envoyée, le modèle calcule encore\\) : modèle à raisonnement trop lent \\(essayez IA_API_EFFORT=low / IA_API2_EFFORT=low, ou IA_API_FLUX=oui\\)\\.$",
+   "The AI service did not start answering within $1 s (request sent, the model is still computing): reasoning model too slow (try IA_API_EFFORT=low / IA_API2_EFFORT=low, or IA_API_FLUX=oui)."
+  ],
+  [
+   "^Le service d’IA a coupé la connexion avant de répondre \\((.+)\\)\\.$",
+   "The AI service closed the connection before answering ($1)."
+  ],
+  [
+   "^Réponse du service d’IA commencée mais pas terminée après (\\d+) s \\(lecture interrompue\\)\\.$",
+   "AI service answer started but not finished after $1 s (reading interrupted)."
+  ],
+  [
+   "^Le service d’IA a coupé la connexion pendant sa réponse \\((.+)\\)\\.$",
+   "The AI service closed the connection during its answer ($1)."
+  ],
+  [
+   "^Test resté sans résultat après (\\d+) s : le processus de l’app a sans doute été redémarré pendant le test \\(relancez-le ; diagnostic : esport/outils/tester-ia\\.mjs\\)\\.$",
+   "Test still without a result after $1 s: the app process was probably restarted during the test (run it again; diagnosis: esport/outils/tester-ia.mjs)."
   ]
  ]
 }

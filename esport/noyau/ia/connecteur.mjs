@@ -21,6 +21,7 @@
  *     IA_API_EFFORT    effort de raisonnement envoyé (low, medium, high ; « aucun » pour ne rien envoyer) ;
  *                      par défaut celui du profil du modèle (`PROFILS_MODELES`), rien pour un modèle inconnu
  *     IA_API_FLUX      « oui » : réponse en flux (SSE), utile pour les très longues réponses
+ *   IA_IPV4          « oui » : connexions aux API en IPv4 seulement (transport Node, esport/adaptateurs/fetchIaNode.mjs)
  *     IA_API_IMAGES    « oui » / « non » : le modèle lit-il des images (défaut : profil du modèle)
  *
  *   IA_ORDRE         ordre de repli des PROFILS DE JEU (brouillons, vérifications) : défaut « api,api2,local »
@@ -78,7 +79,9 @@ export const EFFORTS_IA = ['low', 'medium', 'high'];
  */
 export const PROFILS_MODELES = [
   { motif: /^mistralai\/mistral-large-4/i, raisonnement: true, effort: 'high', images: true, temperature: 0.5, topP: 1 },
-  { motif: /^openai\/gpt-oss-/i, raisonnement: true, effort: null, images: false, temperature: 1, topP: 1 },
+  // gpt-oss : `reasoning_effort` ACCEPTÉ par NVIDIA. Sans lui (effort « medium » par défaut), avec la sortie JSON
+  // forcée, une réponse pouvait dépasser 90 s (test de connexion en échec) quand « low » répond en moins d'1 s.
+  { motif: /^openai\/gpt-oss-/i, raisonnement: true, effort: 'low', images: false, temperature: 1, topP: 1 },
 ];
 /** Modèle à raisonnement : au moins 4096 jetons (le raisonnement en consomme), 5 min par réponse (2 min au moins). */
 const REGLAGES_RAISONNEMENT = { jetonsMin: 4096, delaiMs: 5 * 60_000, delaiMinMs: 2 * 60_000 };
@@ -296,7 +299,7 @@ export const ADAPTATEURS = {
         url: config.url,
         init: {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${config.lireCle()}` },
+          headers: { 'Content-Type': 'application/json', Accept: flux ? 'text/event-stream' : 'application/json', Authorization: `Bearer ${config.lireCle()}` },
           body: JSON.stringify(corps),
         },
       };
@@ -362,16 +365,72 @@ export function causeEchec(e) {
 const COUPURES = new Set(['ECONNRESET', 'EPIPE', 'UND_ERR_SOCKET', 'UND_ERR_CLOSED', 'ECONNABORTED']);
 const DELAIS_CLIENT = new Set(['UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_CONNECT_TIMEOUT', 'ETIMEDOUT']);
 
-/** Erreur stable d'un `fetch` échoué (code précis pour l'IA locale), avec sa cause technique jointe. */
-function erreurTransport(e, local) {
+/** Étapes lisibles d'une requête (« DNS 12 ms, connexion 40 ms, TLS 95 ms, premier octet 650 ms, fin 660 ms, IPv4 … »). */
+export function etapesTexte(e) {
+  if (!e || typeof e !== 'object') return '';
+  const ms = v => (Number.isFinite(v) ? (v >= 10_000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`) : '—');
+  const morceaux = [`DNS ${ms(e.dnsMs)}`, `connexion ${ms(e.connexionMs)}`];
+  if (e.tls !== false) morceaux.push(`TLS ${ms(e.tlsMs)}`);
+  morceaux.push(`premier octet ${ms(e.premierOctetMs)}`, `fin ${ms(e.finMs)}`);
+  if (Number.isFinite(e.octets) && e.octets > 0) morceaux.push(`${e.octets} octets`);
+  // Adresse IP du fournisseur (rien de secret) : montre IPv4 ou IPv6.
+  if (typeof e.ip === 'string' && /^[0-9a-fA-F.:]{2,45}$/.test(e.ip)) morceaux.push(`${e.famille === 6 ? 'IPv6' : 'IPv4'} ${e.ip}`);
+  return morceaux.join(', ');
+}
+
+const ERREURS_DNS = new Set(['ENOTFOUND', 'EAI_AGAIN', 'EAI_FAIL', 'EAI_NONAME', 'ENODATA']);
+export const LIBELLES_ETAPES = { dns: 'résolution DNS', connexion: 'connexion TCP', tls: 'négociation TLS', 'premier-octet': 'attente du premier octet de la réponse', lecture: 'lecture de la réponse' };
+const enSecondes = ms => (Number.isFinite(ms) ? Math.max(0, Math.round(ms / 1000)) : null);
+
+/**
+ * Erreur d'une ÉTAPE nommée (transport Node `fetchIaNode` : `e.phase` ; ou délai du premier octet / de lecture
+ * posé par le connecteur) : code et message précis au lieu d'un « ia-delai » générique.
+ */
+function erreurEtape(e, etape, { secondes, delaiS } = {}) {
   const cause = causeEchec(e);
-  let err;
-  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') err = echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
+  const delai = e?.name === 'TimeoutError' || e?.name === 'AbortError' || DELAIS_CLIENT.has(cause) || cause === 'DELAI_CONNEXION';
+  const s = Number.isFinite(secondes) ? secondes : 0;
+  if (etape === 'dns') {
+    if (delai) return echec(504, 'ia-delai-dns', `Résolution DNS de l’adresse du service d’IA trop longue après ${s} s (réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia.mjs).`);
+    return echec(502, 'ia-dns', `Adresse du service d’IA introuvable (DNS : ${cause}) : vérifiez IA_API_URL / IA_API2_URL.`);
+  }
+  if (etape === 'connexion') {
+    if (delai) return echec(504, 'ia-delai-connexion', `Connexion TCP au service d’IA impossible après ${s} s (réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia.mjs).`);
+    return echec(502, 'ia-injoignable', `Connexion au service d’IA refusée ou coupée (${cause}) (réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia.mjs).`);
+  }
+  if (etape === 'tls') {
+    if (delai) return echec(504, 'ia-delai-tls', `Négociation TLS avec le service d’IA trop longue après ${s} s (réseau de l’hébergeur : essayez IA_IPV4=oui, ou lancez esport/outils/tester-ia.mjs).`);
+    return echec(502, 'ia-tls', `Échec de la négociation TLS avec le service d’IA (${cause}).`);
+  }
+  if (etape === 'premier-octet') {
+    if (delai) return echec(504, 'ia-delai-premier-octet', `Le service d’IA n’a pas commencé à répondre en ${delaiS || s} s (requête envoyée, le modèle calcule encore) : modèle à raisonnement trop lent (essayez IA_API_EFFORT=low / IA_API2_EFFORT=low, ou IA_API_FLUX=oui).`);
+    return echec(502, 'ia-injoignable', `Le service d’IA a coupé la connexion avant de répondre (${cause}).`);
+  }
+  if (etape === 'lecture') {
+    if (delai) return echec(504, 'ia-delai-lecture', `Réponse du service d’IA commencée mais pas terminée après ${s} s (lecture interrompue).`);
+    return echec(502, 'ia-injoignable', `Le service d’IA a coupé la connexion pendant sa réponse (${cause}).`);
+  }
+  return null;
+}
+
+/**
+ * Erreur stable d'un `fetch` échoué (code précis pour l'IA locale), avec sa cause technique jointe. `contexte`
+ * (moteurs d'API) : `etape` connue du connecteur (premier octet, lecture), durée écoulée, délai du premier octet.
+ */
+function erreurTransport(e, local, contexte = null) {
+  const cause = causeEchec(e);
+  let err = null;
+  const etape = !local ? (e?.phase ?? contexte?.etape ?? null) : null;
+  if (etape) err = erreurEtape(e, etape, contexte ?? {});
+  if (err) err.etape = etape;
+  else if (e?.name === 'TimeoutError' || e?.name === 'AbortError') err = echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
   else if (DELAIS_CLIENT.has(cause)) err = echec(504, 'ia-delai-connexion', `La connexion au service d’IA a expiré avant sa réponse (${cause}).`);
   else if (local && cause === 'ECONNREFUSED') err = echec(502, 'ia-locale-arretee', 'L’IA locale ne répond plus : son moteur s’est arrêté (voir ~/logs/esport-ia-locale.log).');
   else if (local && COUPURES.has(cause)) err = echec(502, 'ia-locale-coupee', `Le moteur d’IA locale a coupé la connexion pendant le calcul (${cause} ; voir ~/logs/esport-ia-locale.log).`);
+  else if (!local && ERREURS_DNS.has(cause)) err = erreurEtape(e, 'dns', contexte ?? {});
   else err = echec(502, 'ia-injoignable', `Service d’IA injoignable${cause !== 'inconnue' ? ` (${cause})` : ''}.`);
   err.cause = cause;
+  if (e?.etapes) err.etapes = e.etapes;
   return err;
 }
 
@@ -410,25 +469,64 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
     }
   };
   const secondes = () => Math.round((maintenant() - debut) / 1000);
+  // Étapes mesurées par le transport Node (DNS, connexion, TLS, premier octet, fin) : journalisées pour un test
+  // de connexion (`options.diagnostic`) ou une réponse lente (plus de 20 s).
+  const noterEtapes = r => {
+    if (!r?.etapesIa || !(options.diagnostic || maintenant() - debut > 20_000)) return;
+    noter(`réponse en ${secondes()} s ; étapes : ${etapesTexte(r.etapesIa)}`, 'ia-etapes');
+  };
   const flux = Boolean(options.flux ?? config.flux);
   const duree0 = options.delai !== undefined && options.delai !== null ? Math.max(options.delai, config.delaiMinMs ?? 0) : (config.delaiMs ?? delai);
   // Plafond imposé par l'appelant (test de connexion de l'Administration IA) : même pour un modèle à raisonnement.
   const duree = options.delaiMax > 0 ? Math.min(duree0, options.delaiMax) : duree0;
+  // Délai du PREMIER OCTET (début de la réponse, en-têtes HTTP) : test de connexion. Sans flux, la réponse arrive
+  // entière : c'est alors aussi le délai du calcul. Jamais au-delà du délai total.
+  const premierOctet = options.premierOctet > 0 ? Math.min(options.premierOctet, duree) : null;
   const essais429 = Number.isInteger(options.essais429) ? Math.max(0, options.essais429) : 1;
   let attentes = 0;
+  const echecTransport = (e, contexte, depuisTour) => {
+    const err = erreurTransport(e, local, { secondes: Math.round((maintenant() - depuisTour) / 1000), ...contexte });
+    const detail = err.etapes ? ` ; étapes : ${etapesTexte(err.etapes)}` : '';
+    noter(`requête échouée après ${secondes()} s : ${err.code}${err.etape ? ` (étape ${err.etape})` : ''} (cause ${err.cause})${detail}`, err.code);
+    return err;
+  };
   for (let tour = 0; tour < 6; tour++) {
     const { url, init } = adaptateur.requete(config, messages, { ...options, flux }, etat);
     const envoye = JSON.parse(init.body);
+    const debutTour = maintenant();
+    const total = AbortSignal.timeout(duree);
+    const garde = new AbortController();
+    let premierOctetDepasse = false;
+    const minuterie = premierOctet
+      ? setTimeout(() => {
+          premierOctetDepasse = true;
+          garde.abort(new DOMException('premier octet', 'TimeoutError'));
+        }, premierOctet)
+      : null;
+    minuterie?.unref?.();
     let r;
     try {
-      r = await fetchIa(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(duree) });
+      r = await fetchIa(url, { ...init, redirect: 'error', signal: premierOctet ? AbortSignal.any([total, garde.signal]) : total });
     } catch (e) {
-      const err = erreurTransport(e, local);
-      noter(`requête échouée après ${secondes()} s : ${err.code} (cause ${err.cause})`, err.code);
-      throw err;
+      // Pas encore de réponse : délai du premier octet dépassé (ou délai total avant toute réponse).
+      const sansEtape = !e?.phase && (e?.name === 'TimeoutError' || e?.name === 'AbortError') ? { etape: 'premier-octet', delaiS: enSecondes(premierOctetDepasse ? premierOctet : duree) } : {};
+      throw echecTransport(e, sansEtape, debutTour);
+    } finally {
+      clearTimeout(minuterie);
     }
-    const enFlux = r.ok && flux && /event-stream/i.test(r.headers?.get?.('content-type') ?? '');
-    const texte = enFlux ? null : await lireBorne(r, TAILLE_MAX_REPONSE_IA).catch(() => null);
+    const typeReponse = r.headers?.get?.('content-type') ?? '';
+    let enFlux = r.ok && flux && /event-stream/i.test(typeReponse);
+    let texte = null;
+    if (!enFlux) {
+      try {
+        texte = await lireBorne(r, TAILLE_MAX_REPONSE_IA);
+      } catch (e) {
+        // Corps commencé puis coupé (délai total, connexion fermée) : étape « lecture ».
+        throw echecTransport(e, { etape: 'lecture' }, debutTour);
+      }
+      // Flux demandé mais type de contenu non annoncé : un corps « data: … » est lu comme un flux SSE.
+      if (r.ok && flux && texte !== null && /^\s*(data|event|:)/.test(texte)) enFlux = true;
+    }
     if (r.status === 401 || r.status === 403) throw echec(502, 'ia-cle-refusee', `Le service d’IA refuse la clé d’API (vérifiez ${config.moteur === 'api2' ? 'IA_API2_CLE' : 'IA_API_CLE'}).`);
     if (r.status === 429) {
       const ms = attenteApres429(r.headers, attentes, Date.now());
@@ -465,7 +563,7 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
     if (enFlux) {
       let f;
       try {
-        f = await lireFluxLocal(r.body, {
+        f = await lireFluxLocal(texte !== null ? new Response(texte).body : r.body, {
           surVie: () => undefined,
           surMorceau: m => {
             try {
@@ -478,12 +576,18 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
         });
       } catch (e) {
         if (e instanceof ErreurEsport) throw e;
-        throw erreurTransport(e, false);
+        throw echecTransport(e, { etape: 'lecture' }, debutTour);
       }
       const t = sansPensees(f.texte);
+      if (!f.termine && !f.fin) {
+        // Flux fermé sans `finish_reason` ni `[DONE]` : réponse coupée en route.
+        noter(`flux interrompu après ${secondes()} s (${f.texte.length} caractères reçus, ni fin ni [DONE])`, 'ia-reponse');
+        throw echec(502, 'ia-reponse', 'Réponse du service d’IA interrompue (flux coupé avant la fin).');
+      }
       if (f.fin === 'length' && !t) throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
       if (!t) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
       const u = f.usage ?? {};
+      noterEtapes(r);
       return { texte: t, jetons: { entree: Number.isFinite(u.prompt_tokens) ? u.prompt_tokens : null, sortie: Number.isFinite(u.completion_tokens) ? u.completion_tokens : null }, dureeMs: maintenant() - debut };
     }
     let json;
@@ -501,6 +605,7 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
       if (choix?.finish_reason === 'length') throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
       throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
     }
+    noterEtapes(r);
     return { ...sortie, dureeMs: maintenant() - debut };
   }
   throw echec(502, 'ia-requete-refusee', 'Le service d’IA refuse la requête : modèle ou paramètres non acceptés.');
@@ -511,8 +616,10 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
  * réel) ; `journal(texte, code)` facultatif (codes et durées seulement) ; `attendre(ms)` injectable (429).
  * `discuter(messages, options)` → { texte, jetons, dureeMs } ; options : `json` (défaut true), `maxJetons`,
  * `temperature`, `effort` (low/medium/high, modèle à raisonnement seulement), `delai`, `flux`, `essais429`,
- * `progression` (flux). Erreurs : ErreurEsport au code stable (ia-non-configuree, ia-cle-refusee,
- * ia-limite-fournisseur, ia-requete-refusee, ia-modele, ia-delai, ia-delai-connexion, ia-injoignable, ia-reponse,
+ * `progression` (flux), `premierOctet` (délai du début de la réponse, ms), `diagnostic` (étapes au journal).
+ * Erreurs : ErreurEsport au code stable (ia-non-configuree, ia-cle-refusee, ia-limite-fournisseur,
+ * ia-requete-refusee, ia-modele, ia-delai, ia-dns, ia-tls, ia-delai-dns, ia-delai-connexion, ia-delai-tls,
+ * ia-delai-premier-octet, ia-delai-lecture, ia-injoignable, ia-reponse,
  * ia-reponse-tronquee, ia-image-non-geree ; IA locale : ia-locale-arretee, ia-locale-coupee…), dont le message ne
  * contient JAMAIS la clé.
  */
@@ -713,20 +820,23 @@ async function lireFluxLocal(corps, { surMorceau, surVie, erreur = j => erreurMo
     const p = j?.prompt_progress;
     surMorceau({ lecture: p && Number.isFinite(p.total) ? { total: p.total, cache: Number(p.cache) || 0, traites: Number(p.processed) || 0 } : null, ecrits: etat.morceaux });
   };
-  for (;;) {
+  // `[DONE]` reçu : lecture terminée tout de suite (un serveur ou un mandataire qui garde la connexion ouverte
+  // après la fin du flux ne fait plus attendre jusqu'au délai).
+  while (!etat.termine) {
     const { done, value } = await lecteur.read();
     if (done) break;
     surVie();
     tampon += decodeur.decode(value, { stream: true });
     if (tampon.length > LIGNE_MAX_FLUX && !tampon.includes('\n')) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
     let i;
-    while ((i = tampon.indexOf('\n')) >= 0) {
+    while (!etat.termine && (i = tampon.indexOf('\n')) >= 0) {
       const l = tampon.slice(0, i).replace(/\r$/, '');
       tampon = tampon.slice(i + 1);
       ligne(l);
     }
   }
-  if (tampon.trim()) ligne(tampon.trim());
+  if (etat.termine) await lecteur.cancel().catch(() => undefined);
+  else if (tampon.trim()) ligne(tampon.trim());
   return etat;
 }
 

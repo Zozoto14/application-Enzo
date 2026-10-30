@@ -134,13 +134,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   veille.unref();
   const { basePostgres, optionsDepuisEnv } = await import('../../adaptateurs/postgres.mjs');
   const { resoudreNode, telechargeurNode } = await import('../../adaptateurs/apercuNode.mjs');
+  const { fetchIaDepuisEnv } = await import('../../adaptateurs/fetchIaNode.mjs');
   const { servicesJeux } = await import('../../noyau/jeux/service.mjs');
   const { distribuer } = await import('../../noyau/evenements.mjs');
   const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   const local = creerIaLocale(reglages, { role: 'travailleur' });
   try {
     await nettoyerOrphelinIaLocale({ dossier: reglages.dossier, journal: journalIaLocaleParDefaut(), role: 'travailleur' });
-    const jeux = servicesJeux({ base, socle: {}, ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, local }, travauxIa: 'synchrone' });
+    const jeux = servicesJeux({ base, socle: {}, ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, fetch: fetchIaDepuisEnv(), local }, travauxIa: 'synchrone' });
     const bilan = await executerTravailleur({
       jeux,
       local,

@@ -88,7 +88,7 @@ test('NVIDIA détecté par l’adresse ; moteurs principal et secondaire (adress
   assert.equal(s.actif, true);
   assert.equal(s.fournisseur, 'nvidia', 'IA_API2_URL vide : adresse du principal');
   assert.equal(s.modele, GPTOSS);
-  assert.equal(s.effort, null, 'gpt-oss : pas de reasoning_effort');
+  assert.equal(s.effort, 'low', 'gpt-oss : reasoning_effort low (sans lui, la sortie JSON pouvait dépasser 90 s)');
   assert.equal(s.images, false);
   assert.equal(s.lireCle(), CLE2);
   assert.deepEqual(c.ordres, { profils: ['api', 'api2', 'local'], leger: ['api2', 'api', 'local'] });
@@ -120,7 +120,7 @@ test('NVIDIA détecté par l’adresse ; moteurs principal et secondaire (adress
 
 // ------------------------------------------------------------------ Requêtes et réponses
 
-test('requêtes NVIDIA : reasoning_effort pour Mistral Large seulement (low pour le test), paramètres d’exemple, clé dans l’en-tête seulement', async () => {
+test('requêtes NVIDIA : reasoning_effort (Mistral Large high, gpt-oss low ; low pour le test), paramètres d’exemple, clé dans l’en-tête seulement', async () => {
   const ia = fauxNvidia(() => '{"ok": true}');
   const c = configIa(ENV);
   const principal = creerConnecteur(c, { fetch: ia.fetch });
@@ -138,7 +138,7 @@ test('requêtes NVIDIA : reasoning_effort pour Mistral Large seulement (low pour
   assert.deepEqual(a.corps.response_format, { type: 'json_object' });
   assert.equal(b.corps.reasoning_effort, 'low');
   assert.equal(g.corps.model, GPTOSS);
-  assert.equal(g.corps.reasoning_effort, undefined, 'gpt-oss ne reçoit pas reasoning_effort');
+  assert.equal(g.corps.reasoning_effort, 'high', 'gpt-oss : effort demandé envoyé');
   assert.equal(g.corps.temperature, 1);
   assert.equal(g.corps.top_p, 1);
   assert.equal(a.cle, CLE1);
@@ -338,7 +338,7 @@ test('Administration IA : moteurs listés (clé présente/absente, jamais la val
   assert.equal(t2.ok, true);
   assert.equal(t2.cible, 'api2');
   assert.equal(ia.appels.at(-1).cle, CLE2);
-  assert.equal(ia.appels.at(-1).corps.reasoning_effort, undefined);
+  assert.equal(ia.appels.at(-1).corps.reasoning_effort, 'low', 'gpt-oss : test en effort bas, comme curl');
   const t1 = (await b.appel('/jeux/ia/test', { methode: 'POST', jeton: f, corps: { cible: 'api' } })).corps;
   assert.equal(t1.ok, true);
   assert.equal(ia.appels.at(-1).corps.reasoning_effort, 'low', 'test rapide : effort bas');
@@ -473,7 +473,7 @@ test('Administration IA : test d’un moteur long (raisonnement) EN TÂCHE DE FO
   const id = '00000000-0000-4000-8000-0000000000aa';
   await b.base.executer('INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', [`test:${id}`, JSON.stringify({ statut: 'en_cours', cible: 'local', debut: new Date(b.horloge.t - 10 * 60_000).toISOString(), plafondMs: 240_000 }), new Date(b.horloge.t).toISOString()]);
   e = (await b.appel(`/jeux/ia/test/${id}`, { jeton: f })).corps;
-  assert.deepEqual([e.ok, e.enCours, e.erreur.code, e.cible], [false, false, 'ia-delai', 'local']);
+  assert.deepEqual([e.ok, e.enCours, e.erreur.code, e.cible], [false, false, 'ia-test-sans-resultat', 'local']);
   assert.equal((await b.appel('/jeux/ia/test/00000000-0000-4000-8000-0000000000bb', { jeton: f })).corps.code, 'test-introuvable');
   // Réservé au Fondateur.
   const autre = await b.session('membre12', 'Membre');

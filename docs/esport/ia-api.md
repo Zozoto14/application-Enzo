@@ -45,8 +45,9 @@ Lignes facultatives (le suffixe `API2` règle le secondaire de la même façon) 
 | `IA_API2_URL` | Vide : même adresse que `IA_API_URL`. |
 | `IA_FOURNISSEUR` / `IA_FOURNISSEUR2` | `nvidia`, `openai`, `mistral`, `gemini`, `deepseek`, `groq`, `autre` ; déduit de l'adresse sinon (`integrate.api.nvidia.com` → `nvidia`). `IA_FOURNISSEUR=local` met l'IA locale en tête de l'ordre des profils par défaut. |
 | `IA_API_DELAI_S` | Durée maximale d'une réponse (défaut 90 s ; **300 s** pour un modèle à raisonnement ; 10 à 1800). |
-| `IA_API_EFFORT` | `low`, `medium`, `high` : `reasoning_effort` envoyé ; `aucun` : rien. Défaut : celui du profil du modèle (Mistral Large 4 : `high` ; gpt-oss : rien). |
+| `IA_API_EFFORT` | `low`, `medium`, `high` : `reasoning_effort` envoyé ; `aucun` : rien. Défaut : celui du profil du modèle (Mistral Large 4 : `high` ; gpt-oss : `low`). |
 | `IA_API_FLUX` | `oui` : réponse en flux (SSE), pour les très longues réponses (le raisonnement ne coupe pas la connexion). |
+| `IA_IPV4` | `oui` : connexions aux API en **IPv4 seulement** (hébergeur dont l'IPv6 sortante est cassée ; commun aux deux moteurs). |
 | `IA_API_IMAGES` | `oui` / `non` : le modèle lit-il les images (défaut : profil du modèle ; Mistral Large 4 : oui). |
 | `IA_ORDRE` | Ordre de repli des **profils de jeu** (défaut `api,api2,local`). |
 | `IA_ORDRE_LEGER` | Ordre de repli des **tâches légères** (défaut `api2,api,local`). |
@@ -89,9 +90,11 @@ l'ordre des profils (`local` → `local` ; `api` → `api,api2` ; `local-api` �
 - **Profils de modèles** (`PROFILS_MODELES` du connecteur) :
   - `mistralai/mistral-large-4…` : raisonnement, `reasoning_effort: "high"` (test de connexion : `low`),
     `temperature 0.5`, `top_p 1`, lit les images ;
-  - `openai/gpt-oss-…` : raisonnement, `temperature 1`, `top_p 1`, **pas** de `reasoning_effort` envoyé.
+  - `openai/gpt-oss-…` : raisonnement, `temperature 1`, `top_p 1`, `reasoning_effort: "low"` (NVIDIA l'accepte ;
+    **sans lui**, avec la sortie JSON forcée, une réponse pouvait dépasser 90 s alors que `low` répond en < 1 s :
+    c'était la cause du test « API secondaire » en échec `ia-delai · 90 s`).
   - Modèle à raisonnement : `max_tokens` d'au moins **4096** (le raisonnement en consomme) et délai de **5 min**
-    (2 min au moins ; le test de connexion est plafonné à **90 s**).
+    (2 min au moins ; le test de connexion est plafonné à **90 s**, et à **30 s pour le premier octet**).
 - **`reasoning_content`** (raisonnement renvoyé à côté de `message.content`, ex. gpt-oss) : **ignoré**. Seul
   `content` est la réponse ; le raisonnement n'est jamais lu comme la réponse ni copié dans un journal (seule sa
   taille peut y figurer). Les blocs `<think>…</think>` laissés dans `content` sont retirés.
@@ -99,7 +102,14 @@ l'ordre des profils (`local` → `local` ; `api` → `api,api2` ; `local-api` �
   requête est refaite sans et le connecteur s'en souvient (la consigne demande du JSON, et l'extraction tolère du
   texte autour ou un bloc de code). Même chose pour `reasoning_effort` refusé.
 - **Réponse coupée** (`finish_reason: "length"` sans contenu) : code `ia-reponse-tronquee`.
-- **Flux** (`IA_API_FLUX=oui`) : lecture SSE (`delta.content` seulement ; `delta.reasoning_content` ignoré).
+- **Flux** (`IA_API_FLUX=oui`) : lecture SSE (`delta.content` seulement ; `delta.reasoning_content` ignoré), en-tête
+  `Accept: text/event-stream`. La lecture s'arrête dès `data: [DONE]` (même si le serveur garde la connexion ouverte) ;
+  un flux fermé sans `finish_reason` ni `[DONE]` est une réponse interrompue (`ia-reponse`). Un flux servi sans le type
+  `text/event-stream` est reconnu à son contenu (`data: …`).
+- **Transport** (serveur Node) : `esport/adaptateurs/fetchIaNode.mjs` (node:https, une connexion neuve par requête)
+  mesure chaque **étape** : DNS, connexion TCP, TLS, premier octet (début de la réponse : sans flux, c'est tout le
+  calcul du modèle), fin. Connexion (DNS + TCP + TLS) : 15 s au plus. Les étapes vont au journal de l'app pour un test
+  de connexion, une réponse de plus de 20 s et toute erreur (jamais la clé, ni un corps de requête ou de réponse).
 
 ## 4. Images (modèles multimodaux)
 
@@ -162,12 +172,33 @@ Base : `ia_appels.moteur` (migration 0034) ; réglages `ordre_profils`, `ordre_l
 
 ## 7. Tester sans appel réel
 
-`node --test esport/test/ia-moteurs.test.mjs` (faux serveurs : détection NVIDIA, `reasoning_effort`,
+`node --test esport/test/ia-moteurs.test.mjs esport/test/ia-transport.test.mjs` (faux serveurs : détection NVIDIA, `reasoning_effort`,
 `reasoning_content` ignoré, 429 → attente puis moteur suivant, ordre par tâche, plafond par moteur, images, clés
 absentes de tout message et de tout journal). Sur le serveur, après avoir mis les clés : **Administration IA ›
 Tester** sur chaque moteur.
 
 ## 8. Dépannage
+
+### Outil de diagnostic (sur le serveur)
+
+```bash
+source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
+cd ~/application-enzo
+node esport/outils/tester-ia.mjs api2            # API secondaire (api : principale)
+node esport/outils/tester-ia.mjs api2 --flux     # en flux SSE (comme IA_API2_FLUX=oui)
+node esport/outils/tester-ia.mjs api2 --ipv4     # IPv4 seulement (comme IA_IPV4=oui)
+node esport/outils/tester-ia.mjs api2 --effort aucun   # sans reasoning_effort (ancien comportement)
+node esport/outils/tester-ia.mjs api2 --comme-curl     # corps minimal, pour comparer avec un curl
+```
+
+L'outil lit `~/.appdashboard/esport.env` **par le chargeur de l'app** (ne faites pas `source esport.env` : la ligne
+`MAIL_FROM=Nom <adresse>` casse le shell), affiche la configuration (clé : **longueur et 6 premiers caractères
+seulement**), les variables de mandataire présentes (curl suit `HTTPS_PROXY`, Node non), la résolution DNS, la requête
+exacte (clé masquée), puis l'envoie trois fois : `fetch` (undici), `node:https` (DNS, connexion, TLS, premier octet,
+fin, adresse IP) et le **connecteur de l'app** (test de connexion : message d'erreur exact). `--delai N` : délai de
+chaque essai (défaut 90 s). Code de sortie 0 si tout va bien.
+
+### Messages
 
 | Message | Que faire |
 | --- | --- |
@@ -176,4 +207,9 @@ Tester** sur chaque moteur.
 | « Le service d'IA limite les appels (quota ou débit…) » | Limite de débit NVIDIA (429) sur tous les moteurs de l'ordre : réessayez plus tard, ou ajoutez l'IA locale à l'ordre. |
 | « Le service d'IA refuse la requête (HTTP 400)… » | Paramètre non accepté par ce modèle : essayez `IA_API_EFFORT=aucun`. |
 | « Réponse du service d'IA incomplète (limite de jetons atteinte, raisonnement compris) » | `IA_API_EFFORT=medium` (moins de raisonnement), ou un autre modèle pour cette tâche. |
-| « Le service d'IA met trop de temps à répondre » | `IA_API_DELAI_S=600`, ou `IA_API_FLUX=oui`. |
+| `ia-dns` / `ia-delai-dns` | Nom introuvable ou DNS lent : vérifiez l'adresse ; lancez l'outil. |
+| `ia-delai-connexion` / `ia-delai-tls` / `ia-tls` | Réseau de l'hébergeur : `IA_IPV4=oui`, puis l'outil (`--ipv4`) pour comparer. |
+| `ia-delai-premier-octet` « n'a pas commencé à répondre » | Connexion faite, le modèle calcule encore : `IA_API2_EFFORT=low`, `IA_API2_FLUX=oui`, ou `IA_API2_DELAI_S` plus grand. |
+| `ia-delai-lecture` | Réponse commencée puis bloquée : `IA_API2_FLUX=oui`, ou relancer. |
+| `ia-test-sans-resultat` | Le processus de l'app a été redémarré pendant le test : relancez-le. |
+| « Le service d'IA met trop de temps à répondre » (`ia-delai`) | `IA_API_DELAI_S=600`, ou `IA_API_FLUX=oui`. |
