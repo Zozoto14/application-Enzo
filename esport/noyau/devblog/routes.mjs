@@ -8,6 +8,10 @@
  *   GET|PATCH|DELETE    /devblog/:id                   détail ; { date?, version?, fr?, en?, statut? } ; suppression
  *   POST                /devblog/:id/vu                « J'ai compris » (fenêtre Nouveautés)
  *   GET|POST            /devblog/:id/discord           aperçu et état (?here=0|1) ; { cibles, mentionHere? } publier / corriger
+ *   POST                /devblog/:id/tout-publier      « 🚀 Tout publier » : app + salons { cibles, mentionHere? }
+ *   PUT|DELETE          /devblog/:id/programmation     { le, cibles?, mentionHere? } publication programmée ; annulation
+ *   GET|PUT             /devblog/auto                  mode automatique : réglages, prochain passage, journal (?attente=1)
+ *   POST                /devblog/auto/generer          « Générer maintenant » (brouillon de test)
  */
 
 import { echec } from '../outils.mjs';
@@ -38,7 +42,15 @@ export async function routesDevblog({ dv, acteur, chemin, methode: m, url, lireC
     await limite('devblog_ia', acteur.compte);
     return dv.traduire(acteur, corps);
   }
-  const e = /^\/devblog\/([^/]+)(?:\/(vu|discord))?$/.exec(chemin);
+  if (chemin === '/devblog/auto') {
+    if (m === 'GET') return dv.lireAuto(acteur, { attente: url.searchParams.get('attente') === '1' });
+    if (m === 'PUT') return dv.reglerAuto(acteur, await lireCorps());
+  }
+  if (chemin === '/devblog/auto/generer' && m === 'POST') {
+    await limite('devblog_ia', acteur.compte);
+    return dv.generer(acteur);
+  }
+  const e = /^\/devblog\/([^/]+)(?:\/(vu|discord|tout-publier|programmation))?$/.exec(chemin);
   if (e) {
     const id = segment(e[1]);
     if (!e[2]) {
@@ -47,6 +59,15 @@ export async function routesDevblog({ dv, acteur, chemin, methode: m, url, lireC
       if (m === 'DELETE') return dv.supprimer(acteur, id);
     }
     if (e[2] === 'vu' && m === 'POST') return dv.marquerVu(acteur, id);
+    if (e[2] === 'tout-publier' && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('devblog_discord', acteur.compte);
+      return dv.toutPublier(acteur, id, corps);
+    }
+    if (e[2] === 'programmation') {
+      if (m === 'PUT') return dv.programmer(acteur, id, await lireCorps());
+      if (m === 'DELETE') return dv.annulerProgrammation(acteur, id);
+    }
     if (e[2] === 'discord') {
       if (m === 'GET') return dv.etatDiscord(acteur, id, { here: url.searchParams.get('here') !== '0' });
       if (m === 'POST') {

@@ -29,9 +29,12 @@ import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { fetchIaDepuisEnv } from '../adaptateurs/fetchIaNode.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
+import { executerDevblogAuto } from '../noyau/devblog/auto.mjs';
+import { traiterDevblogDiscord } from '../noyau/devblog/discord.mjs';
+import { sourceGitDepot } from './devblog-source.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
-export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale } = {}) {
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale, devblogSource } = {}) {
   const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
   const rapport = await tachesPlanifiees(base, {
     cle: config.cleDiscord || config.cleSession,
@@ -58,6 +61,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
   }
   // Profils de jeu : vérification automatique limitée (au plus une par passage, plafond mensuel), si l'IA est configurée.
   // IA locale : le cron ne calcule pas lui-même ; il arrête un moteur orphelin et lance le processus de fond.
+  let discuterIa = null;
   try {
     if (config.iaLocale?.installation?.installe) {
       const n = await nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'cron' });
@@ -71,6 +75,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
       ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, fetch: fetchIa ?? fetchIaDepuisEnv(), ...(local ? { local } : {}) },
       travauxIa: 'synchrone',
     });
+    discuterIa = jeux.discuterPour;
     const r = await jeux.tacheCron();
     // Notifications (« mises à jour proposées ») tout de suite, sans attendre le passage suivant.
     if (r.n) await distribuer(base, { maintenant: maintenant ? maintenant() : Date.now() });
@@ -79,6 +84,17 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     rapport.push({ tache: 'profils de jeu (IA)', ok: true, n: r.n, ...(etat ? { etat } : {}) });
   } catch (e) {
     rapport.push({ tache: 'profils de jeu (IA)', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
+  }
+  // Devblog automatique (désactivé par défaut) : au plus un par jour, à l'heure des réglages ; rédigé par l'IA à partir
+  // des mises à jour déployées (historique git du dépôt), puis publié (app + Discord) ou laissé en brouillon.
+  try {
+    const r = await executerDevblogAuto(base, { source: devblogSource ?? sourceGitDepot(), discuterPour: discuterIa, maintenant: maintenant ? maintenant() : Date.now() });
+    if (r.statut === 'publie') {
+      await traiterDevblogDiscord(base, { cle: config.cleDiscord || config.cleSession, maintenant: maintenant ? maintenant() : Date.now(), jetonBot: config.discordBot?.jetonBot, ...(fetch ? { fetch } : {}) });
+    }
+    rapport.push({ tache: 'devblog automatique', ok: r.statut !== 'echec', etat: r.statut, ...(r.statut === 'echec' ? { erreur: r.message } : {}) });
+  } catch (e) {
+    rapport.push({ tache: 'devblog automatique', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
   }
   // Transcription sur le serveur : processus de fond détaché (un seul à la fois), si des réunions attendent.
   if (config.transcriptionServeur?.disponible) {

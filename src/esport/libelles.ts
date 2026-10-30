@@ -3,6 +3,7 @@
  * (« Max a changé le rôle de Léa de Joueur à Coach »). Pur, testé.
  */
 
+import { trDv } from './i18n/devblog';
 import { nomModule, nomPermission, nomRole, type AlerteTableau, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
 
 /** Statuts d'un dépôt de réunion. */
@@ -303,6 +304,15 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return tr('nt.jeu_brouillon_pret', { nom: str(c.nom, '?') });
     case 'jeu-maj-proposee':
       return tr('nt.jeu_maj_proposee', { nom: str(c.nom, '?'), n: typeof c.n === 'number' ? c.n : '?' });
+    // Devblog publié automatiquement, brouillon à valider, IA en échec, programmation annulée (sans team).
+    case 'devblog-auto':
+      return c.etat === 'publie'
+        ? trDv('nt_publie', { titre: str(c.titre, 'DEVBLOG') })
+        : c.etat === 'brouillon'
+          ? trDv('nt_brouillon', { titre: str(c.titre, 'DEVBLOG') })
+          : c.etat === 'programme-annule'
+            ? trDv('nt_programme_annule', { titre: str(c.titre, 'DEVBLOG') })
+            : trDv(c.motif === 'source' ? 'nt_echec_source' : 'nt_echec');
     case 'tache-echeance':
       return tr(c.retard ? 'nt.tache_en_retard' : 'nt.tache_echeance_proche', {
         titre: str(c.titre, tr('nt.une_tache')),

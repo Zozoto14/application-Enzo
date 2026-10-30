@@ -18,7 +18,7 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia } = {}) {
+export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia, devblogSource } = {}) {
   const base = await baseMigree();
   const stockage = sansStockage ? undefined : stockageMemoire();
   const envRelais = { JETON: JETON_MAITRE, BOITE: kvMemoire() };
@@ -53,6 +53,8 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
     // Assistant IA (profils de jeu) : désactivé par défaut ; les tests fournissent un faux serveur (jamais de réseau réel).
     ia: ia ?? {},
     travauxIa: 'synchrone',
+    // Devblog automatique : faux historique git (jamais le vrai dépôt en test).
+    devblogSource: devblogSource ?? null,
   });
   let ipCompteur = 0;
   async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json', entetes = {} } = {}) {

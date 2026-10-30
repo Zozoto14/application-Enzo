@@ -16,5 +16,7 @@ export function effacementDevblog(compte) {
     { sql: 'UPDATE devblog_entrees SET publie_par = NULL WHERE publie_par = ?', params: [compte] },
     { sql: 'UPDATE devblog_discord SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
     { sql: 'UPDATE devblog_reglages SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE devblog_entrees SET programme_par = NULL WHERE programme_par = ?', params: [compte] },
+    { sql: 'UPDATE devblog_auto SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
   ];
 }

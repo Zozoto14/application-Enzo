@@ -4,7 +4,8 @@ Le devblog annonce aux membres ce qui a changé dans l'app, dans la DA du devblo
 sur Discord (« 🚀 DEVBLOG — Nouvelle Mise à Jour ! 🛠️ ») : un titre, une phrase d'intro, des sections (emoji + titre
 en gras) avec des puces courtes « **Nom :** description », une phrase de fin.
 
-Migration `0036_devblog.sql` · serveur `esport/noyau/devblog/` · app `src/esport/ui/devblog/`, `src/esport/devblog/`.
+Migrations `0036_devblog.sql`, `0037_devblog_auto.sql` · serveur `esport/noyau/devblog/`, `esport/serveur/devblog-source.mjs` ·
+app `src/esport/ui/devblog/`, `src/esport/devblog/`.
 
 ## Ce que voient les membres
 
@@ -77,6 +78,80 @@ entre deux mots) : plusieurs messages anglais à la suite, plusieurs messages fr
   français ».
 - Publication refusée tant que le devblog est en brouillon, ou qu'il reste des modifications non enregistrées.
 
+## Publier en un clic, programmer, publier automatiquement
+
+Tout est réservé au Fondateur et à la permission du club `devblog.gerer`.
+
+### 🚀 Tout publier
+
+Dans l'éditeur (devblog enregistré, versions française ET anglaise complètes), carte **🚀 Tout publier** : un
+panneau s'ouvre avec les **salons cochés par défaut** (« annonces du club », modifiables), la case **@here** (cochée)
+et l'**aperçu exact** des messages Discord. **Confirmer : tout publier** publie dans l'app (s'il était en brouillon)
+puis sur les salons, en une seule action ; **Annuler** ne fait rien. Aucun salon coché : l'app seulement. Le bouton
+reste grisé tant qu'il y a des modifications non enregistrées. Deux clics ne publient jamais deux fois (« Déjà
+publié »).
+
+### 🗓️ Publication programmée
+
+Sur un **brouillon prêt**, carte **Publication programmée** : date et heure (« AAAA-MM-JJ HH:MM », **heure de Paris**,
+fuseau du club ; demain 18:00 proposé), salons (par défaut ceux d'« annonces du club ») et @here. Le cron (toutes les
+5 minutes, étape `devblog programmé`) le publie **à l'heure, jamais avant** : app, puis salons Discord (envoi dans la
+foulée). **Modifier la programmation** ou **Annuler la programmation** jusqu'à l'heure. Un devblog publié à la main
+entre-temps perd sa programmation ; devenu incomplet (version vidée), la programmation est annulée et les gestionnaires
+sont notifiés. Au plus 90 jours à l'avance. La liste et l'éditeur affichent « 🗓️ Programmé · … ».
+
+### ⚙️ Publication automatique
+
+Page Devblog › **⚙️ Publication automatique** (bouton de l'en-tête, gestionnaires seulement) :
+
+| Réglage | Défaut |
+| --- | --- |
+| **Mode automatique** (interrupteur) | **désactivé** |
+| **Fréquence** | « Après chaque mise à jour » : regroupées, **au plus un devblog par jour**, à l'heure choisie ; ou « Une fois par semaine » (jour + heure) |
+| **Heure** (heure de Paris) | 18:00 (jour : vendredi en hebdomadaire) |
+| **Validation avant publication** | **désactivée** (publié tout seul) ; activée : brouillon + notification |
+| **Salons Discord** | ceux cochés par défaut (« annonces du club ») ; ou une liste choisie |
+| **Mentionner @here** | oui (une seule fois, à la fin du message anglais) |
+
+Ce que fait le cron (`esport/serveur/cron.mjs`, étape `devblog automatique`) à l'heure dite :
+
+1. **Source des changements** : l'historique git du dépôt **réellement déployé** sur le serveur (o2switch :
+   `~/application-enzo`, mis à jour par `esport/serveur/deployer.sh`), depuis le dernier devblog : `git log
+   <dernier>..HEAD`. Au premier passage (activation), le point de départ est le premier déploiement noté
+   « code : <ancien> → <nouveau> » dans `~/logs/esport-deploy.log` après le dernier devblog publié, sinon l'état
+   actuel (rien d'ancien n'est raconté). Sûreté (`devblog-source.mjs`) : chemins fixes, git lancé **sans shell**
+   avec un environnement minimal (aucune variable du serveur), délai et taille bornés, identifiants vérifiés ; seuls
+   le sujet, le corps et la date des commits sont lus (jamais l'auteur ni les fichiers).
+2. **Filtrage** : les commits sans intérêt pour les membres sont écartés par des règles (`auto-regles.mjs` : tests,
+   e2e, Jest, docs, refactor, CI, dépendances, journaux, diagnostic, déploiement, travail en cours, fusions…), puis
+   par l'IA (consigne).
+3. **Nettoyage** : rien d'interne ne part — identifiants de commit, chemins, noms de fichiers, variables
+   d'environnement, adresses, e-mails, options de ligne de commande, lignes de fin (Co-Authored-By…) sont retirés.
+4. **Rédaction** : l'IA (connecteur `discuterPour`, tâche **« devblog »**, non confidentielle — des messages de commit,
+   aucune donnée de réunion — donc autorisée vers l'API externe, ordre de repli « léger ») écrit le devblog **FR + EN
+   dans la DA exacte** : exemples fournis (devblog du 23/10 et premier devblog du 30/10), titre « Nouvelle Mise à
+   Jour ! » / « New Update! », intro, sections emoji + titre, puces « **Nom :** description », phrase de fin ; ton
+   positif, sans jargon ni nom de fournisseur ou de technologie.
+5. **Validation stricte** du JSON : structure, longueurs, un emoji par section, mêmes sections et puces en français et
+   en anglais, aucune mention, aucun élément interne (hash, chemin, fichier, variable, adresse), aucun nom de
+   technologie ou de fournisseur. Refusé = jamais publié.
+6. **Publication** (validation désactivée) : dans l'app, puis sur les salons des réglages (@here selon les réglages) ;
+   notification « Devblog publié automatiquement ». Validation activée : brouillon « ✨ Rédigé automatiquement » +
+   notification « Nouveau devblog à valider » ; « 🚀 Tout publier » le publie.
+
+Garde-fous :
+
+- **rien à publier** sans changement notable (ou si l'IA répond qu'il n'y a rien pour les membres) : aucun devblog ;
+- **IA en échec** ou réponse refusée : **brouillon de secours** (les sujets nettoyés, à réécrire) + notification ;
+  jamais de publication d'un texte invalide ;
+- **au plus une publication automatique par jour** : le passage du jour est réservé en base (`devblog_auto.jour`
+  unique), même si deux cron se chevauchent ;
+- **journal** de chaque passage (date, résultat, commits lus / retenus, lien vers le devblog) dans le panneau ;
+- **Générer maintenant** : brouillon de test à partir des mises à jour en attente ; ne publie rien, ne consomme pas le
+  passage du jour ; publier ce brouillon fait avancer le point de départ (pas de doublon ensuite).
+
+Administration IA : la tâche « Devblog » apparaît parmi celles qui peuvent partir chez le fournisseur d'API.
+
 ## API
 
 | Route | Droit | Rôle |
@@ -88,13 +163,19 @@ entre deux mots) : plusieurs messages anglais à la suite, plusieurs messages fr
 | `POST /devblog/ia/traduire` `{ fr }` | devblog.gerer | Version anglaise proposée (limite `devblog_ia`) |
 | `GET` / `PUT /devblog/salons` | devblog.gerer | Salons possibles, cochés par défaut, salon du bot, nouveau webhook |
 | `GET /devblog/:id/discord?here=0\|1` · `POST` `{ cibles, mentionHere }` | devblog.gerer | Aperçu et état ; publier / corriger (limite `devblog_discord`) |
+| `POST /devblog/:id/tout-publier` `{ cibles, mentionHere }` | devblog.gerer | « 🚀 Tout publier » : app + salons (limite `devblog_discord`) |
+| `PUT` / `DELETE /devblog/:id/programmation` `{ le, cibles, mentionHere }` | devblog.gerer | Programmer (`le` : « AAAA-MM-JJ HH:MM », heure de Paris), annuler |
+| `GET` / `PUT /devblog/auto` (`?attente=1`) | devblog.gerer | Mode automatique : réglages, prochain passage, journal, changements en attente |
+| `POST /devblog/auto/generer` | devblog.gerer | « Générer maintenant » : brouillon de test (limite `devblog_ia`) |
 
 `/moi` renvoie `peutGererDevblog`. La fonction `devblog` est annoncée par `/sante`.
 
 ## Données, export, RGPD
 
-- Tables `devblog_entrees`, `devblog_vus`, `devblog_discord`, `devblog_reglages` : comprises dans l'export / import
-  de la base (`transfert.mjs`).
+- Tables `devblog_entrees` (avec `origine`, la programmation et `auto_commit`, migration 0037), `devblog_vus`,
+  `devblog_discord`, `devblog_reglages` (dont `auto` : réglages du mode automatique, `auto_etat` : dernière mise à jour
+  couverte) et `devblog_auto` (journal du mode automatique) : comprises dans l'export / import de la base
+  (`transfert.mjs`).
 - Export RGPD d'un compte : les devblogs qu'il a vus (`devblogVus`).
 - Suppression d'un compte (par lui-même ou par l'Administration) : ses marques « vu » sont **effacées** ; les devblogs
-  qu'il a écrits restent (textes du club), sans auteur.
+  qu'il a écrits restent (textes du club), sans auteur (programmations et journal du mode automatique compris).

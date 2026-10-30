@@ -22,6 +22,9 @@ import { extraireJson } from '../ia/connecteur.mjs';
 import { chiffrerWebhook, finDeWebhook, validerUrlWebhook } from '../discord/chiffrement.mjs';
 import { PERMISSION_DEVBLOG, contenuComplet, contenuVide, empreinteTextes, lireContenu, lireDate, lireVersion, messagesDiscord } from './regles.mjs';
 import { DATE_PREMIER_DEVBLOG, ID_PREMIER_DEVBLOG, PREMIER_DEVBLOG_EN, PREMIER_DEVBLOG_FR } from './premier.mjs';
+import { FUSEAU_DEVBLOG, REGLAGES_AUTO_DEFAUT, echeanceAuto, jourClub, lireInstantProgramme, lireReglagesAuto, texteMuralClub } from './auto-regles.mjs';
+import { ciblesPossibles as ciblesDuClub, ecrireReglage as ecrireReglageBase, entreeDiscord, exigerComplet, lireReglage, mettreEnFileDiscord, publierDansApp } from './publication.mjs';
+import { apresPublication, changementsDeployes, genererMaintenant, lireEtatAuto, lireReglagesEnBase } from './auto.mjs';
 
 const MOTIF_ID = /^[a-z0-9-]{6,64}$/i;
 const MOTIF_SALON_DISCORD = /^\d{5,25}$/;
@@ -37,7 +40,14 @@ export function entreePublique(l, { gestion = false } = {}) {
     fr: jsonOu(l.contenu_fr, contenuVide()),
     en: jsonOu(l.contenu_en, contenuVide()),
     publieLe: l.publie_le ?? null,
-    ...(gestion ? { creeLe: l.cree_le, majLe: l.maj_le } : {}),
+    ...(gestion
+      ? {
+        creeLe: l.cree_le,
+        majLe: l.maj_le,
+        origine: l.origine === 'auto' ? 'auto' : 'manuel',
+        programmation: l.programme_le ? { le: l.programme_le, mural: texteMuralClub(Date.parse(l.programme_le)), cibles: jsonOu(l.programme_cibles, []), mentionHere: Number(l.programme_here) === 1 } : null,
+      }
+      : {}),
   };
 }
 
@@ -71,7 +81,7 @@ export const CONSIGNE_TRADUCTION = [
   'Answer with JSON only: {"titre": "...", "intro": "...", "sections": [{"titre": "...", "puces": [{"nom": "...", "description": "..."}]}], "conclusion": "..."}',
 ].join('\n');
 
-export function servicesDevblog({ base, maintenant = () => Date.now(), discuterPour = null, cle }) {
+export function servicesDevblog({ base, maintenant = () => Date.now(), discuterPour = null, cle, source = null }) {
   /** Gestionnaire du devblog ? (le premier devblog est posé, en brouillon, à son premier passage). */
   async function gestionnaire(acteur) {
     const g = await gereDevblog(base, acteur);
@@ -147,10 +157,12 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
     }
     const t = iso(maintenant());
     const publieLe = statut === 'publie' ? (l.statut === 'publie' ? l.publie_le : t) : l.publie_le;
+    const devientPublie = statut === 'publie' && l.statut !== 'publie';
     await base.executer(
-      'UPDATE devblog_entrees SET date_maj = ?, version = ?, contenu_fr = ?, contenu_en = ?, statut = ?, publie_le = ?, publie_par = ?, maj_par = ?, maj_le = ? WHERE id = ?',
-      [s.date, s.version, JSON.stringify(s.fr), JSON.stringify(s.en), statut, publieLe, statut === 'publie' && l.statut !== 'publie' ? acteur.compte : l.publie_par, acteur.compte, t, id],
+      `UPDATE devblog_entrees SET date_maj = ?, version = ?, contenu_fr = ?, contenu_en = ?, statut = ?, publie_le = ?, publie_par = ?, maj_par = ?, maj_le = ?${devientPublie ? ', programme_le = NULL, programme_cibles = NULL' : ''} WHERE id = ?`,
+      [s.date, s.version, JSON.stringify(s.fr), JSON.stringify(s.en), statut, publieLe, devientPublie ? acteur.compte : l.publie_par, acteur.compte, t, id],
     );
+    if (devientPublie) await apresPublication(base, l, t);
     return detail(acteur, id);
   }
 
@@ -208,36 +220,9 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
 
   // ---------------------------------------------------------------- Discord : salons
 
-  async function reglage(cleR, repli) {
-    return jsonOu((await base.premier('SELECT valeur FROM devblog_reglages WHERE cle = ?', [cleR]))?.valeur, repli);
-  }
-  async function ecrireReglage(cleR, valeur, acteur) {
-    await base.executer(
-      'INSERT INTO devblog_reglages (cle, valeur, maj_par, maj_le) VALUES (?, ?, ?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur, maj_par = excluded.maj_par, maj_le = excluded.maj_le',
-      [cleR, JSON.stringify(valeur), acteur.compte, iso(maintenant())],
-    );
-  }
-
-  /** Salons possibles : salons du club (webhooks de la page Réseaux), salon du bot, salons des teams. */
-  async function ciblesPossibles() {
-    const club = (await base.tous('SELECT id, nom, fin, invalide_le FROM cm_rs_salons ORDER BY nom', [])).map(s => ({ cle: `salon:${s.id}`, genre: 'club', nom: s.nom, detail: `webhook …${s.fin}`, invalide: Boolean(s.invalide_le) }));
-    const bot = await reglage('salon_bot', null);
-    if (bot?.id) club.push({ cle: 'bot:club', genre: 'club', nom: bot.nom || `#${bot.id}`, detail: `bot · ${bot.id}`, invalide: false });
-    const teams = await base.tous(
-      `SELECT t.id, t.nom,
-              (SELECT 1 FROM discord_serveurs s WHERE s.team_id = t.id) AS bot,
-              (SELECT 1 FROM discord_webhooks w WHERE w.team_id = t.id) AS webhook
-         FROM teams t
-        WHERE t.supprimee_le IS NULL AND t.archivee_le IS NULL
-          AND EXISTS (SELECT 1 FROM team_modules m WHERE m.team_id = t.id AND m.module = 'discord' AND m.active = 1)
-        ORDER BY t.nom`,
-      [],
-    );
-    return [
-      ...club,
-      ...teams.filter(t => t.bot || t.webhook).map(t => ({ cle: `team:${t.id}`, genre: 'team', nom: t.nom, detail: t.bot ? 'bot' : 'webhook', invalide: false })),
-    ];
-  }
+  const reglage = (cleR, repli) => lireReglage(base, cleR, repli);
+  const ecrireReglage = (cleR, valeur, acteur) => ecrireReglageBase(base, cleR, valeur, { par: acteur.compte, t: iso(maintenant()) });
+  const ciblesPossibles = () => ciblesDuClub(base);
 
   /** `GET /devblog/salons` : salons possibles, cochés par défaut, salon du bot. */
   async function salons(acteur) {
@@ -293,8 +278,6 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
 
   // ---------------------------------------------------------------- Discord : publication
 
-  const entreeDiscord = l => ({ date: l.date_maj, version: l.version, contenuFr: jsonOu(l.contenu_fr, contenuVide()), contenuEn: jsonOu(l.contenu_en, contenuVide()) });
-
   /** `GET /devblog/:id/discord?here=1` : aperçu des messages (anglais, fil français) et état par salon. */
   async function etatDiscord(acteur, id, { here = true } = {}) {
     await exigerGestion(acteur);
@@ -306,6 +289,7 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
     return {
       apercu: messages,
       pretAPublier: l.statut === 'publie' && contenuComplet(jsonOu(l.contenu_en, null)) && contenuComplet(jsonOu(l.contenu_fr, null)),
+      complet: contenuComplet(jsonOu(l.contenu_en, null)) && contenuComplet(jsonOu(l.contenu_fr, null)),
       publications: lignes.map(x => ({
         cible: x.cible,
         nom: noms.get(x.cible) ?? null,
@@ -327,48 +311,143 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
    */
   async function publierDiscord(acteur, id, corps) {
     await exigerGestion(acteur);
-    const l = await ligneEntree(id, { gestion: true });
-    if (l.statut !== 'publie') throw echec(409, 'devblog-brouillon', 'Publiez d’abord le devblog dans l’app (il est encore en brouillon).');
-    lireContenu(jsonOu(l.contenu_en, null), { exiger: true, langue: 'en' });
-    lireContenu(jsonOu(l.contenu_fr, null), { exiger: true, langue: 'fr' });
-    const possibles = new Map((await ciblesPossibles()).map(p => [p.cle, p]));
-    const cibles = [...new Set(Array.isArray(corps?.cibles) ? corps.cibles : [])];
-    if (!cibles.length) throw echec(400, 'devblog-salons', 'Choisissez au moins un salon Discord.');
-    for (const c of cibles) if (!possibles.has(c)) throw echec(400, 'devblog-salon-inconnu', 'Salon Discord inconnu (supprimé ?) : rechargez la liste.');
+    await ligneEntree(id, { gestion: true });
     const here = corps?.mentionHere !== false;
-    const empreinte = empreinteTextes(messagesDiscord(entreeDiscord(l), { here: false }));
-    const t = iso(maintenant());
-    const resultats = [];
-    for (const c of cibles) {
-      const x = await base.premier('SELECT * FROM devblog_discord WHERE entree_id = ? AND cible = ?', [id, c]);
-      const [genre, ref] = c.split(':');
-      if (!x) {
-        await base.executer(
-          `INSERT INTO devblog_discord (id, entree_id, cible, team_id, salon_id, operation, statut, mention_here, prochain_essai_le, demande_par, cree_le, maj_le)
-           VALUES (?, ?, ?, ?, ?, 'poster', 'attente', ?, ?, ?, ?, ?) ON CONFLICT (entree_id, cible) DO NOTHING`,
-          [nouvelId(), id, c, genre === 'team' ? ref : null, genre === 'salon' ? ref : null, here ? 1 : 0, t, acteur.compte, t, t],
-        );
-        resultats.push({ cible: c, etat: 'publication' });
-        continue;
-      }
-      if (x.statut === 'attente') {
-        resultats.push({ cible: c, etat: 'en_cours' });
-        continue;
-      }
-      if (x.statut === 'envoye' && x.empreinte === empreinte) {
-        resultats.push({ cible: c, etat: 'deja_publie' });
-        continue;
-      }
-      const poste = jsonOu(x.message_ids, []).length > 0;
-      await base.executer(
-        `UPDATE devblog_discord SET operation = ?, statut = 'attente', essais = 0, prochain_essai_le = ?, verrou_jusqua = NULL, derniere_erreur = NULL, revision = revision + 1,
-                mention_here = CASE WHEN ? = 1 THEN mention_here ELSE ? END, demande_par = ?, maj_le = ? WHERE id = ?`,
-        [poste ? 'editer' : 'poster', t, poste ? 1 : 0, here ? 1 : 0, acteur.compte, t, x.id],
-      );
-      resultats.push({ cible: c, etat: poste ? 'correction' : 'publication' });
-    }
+    const resultats = await mettreEnFileDiscord(base, id, { cibles: corps?.cibles, here, par: acteur.compte, t: iso(maintenant()) });
     return { resultats, ...(await etatDiscord(acteur, id, { here })) };
   }
 
-  return { liste, detail, creer, modifier, supprimer, nouveautes, marquerVu, traduire, salons, reglerSalons, etatDiscord, publierDiscord };
+  /** Salons choisis (liste de clés connues), vérifiés. Vide autorisé (l'app seulement). */
+  async function lireCibles(cibles) {
+    if (cibles === undefined || cibles === null) return [];
+    if (!Array.isArray(cibles)) throw echec(400, 'devblog-salons', 'Salons : une liste.');
+    const connues = new Set((await ciblesPossibles()).map(p => p.cle));
+    const liste = [...new Set(cibles)];
+    for (const c of liste) if (typeof c !== 'string' || !connues.has(c)) throw echec(400, 'devblog-salon-inconnu', 'Salon Discord inconnu (supprimé ?) : rechargez la liste.');
+    return liste;
+  }
+
+  /**
+   * `POST /devblog/:id/tout-publier` `{ cibles, mentionHere? }` : « 🚀 Tout publier » en une action : publié dans
+   * l'app (s'il était en brouillon ; versions française ET anglaise complètes), puis mis en file sur les salons
+   * Discord choisis (par défaut ceux de « annonces du club », envoyés par l'appelant).
+   */
+  async function toutPublier(acteur, id, corps) {
+    await exigerGestion(acteur);
+    const l = await ligneEntree(id, { gestion: true });
+    exigerComplet(l);
+    const cibles = await lireCibles(corps?.cibles);
+    const here = corps?.mentionHere !== false;
+    const t = iso(maintenant());
+    const app = l.statut === 'brouillon' ? await publierDansApp(base, id, { par: acteur.compte, t }) : false;
+    if (app) await apresPublication(base, l, t);
+    const resultats = cibles.length ? await mettreEnFileDiscord(base, id, { cibles, here, par: acteur.compte, t }) : [];
+    return { app: app ? 'publie' : 'deja_publie', resultats, entree: entreePublique(await ligneEntree(id, { gestion: true }), { gestion: true }), ...(await etatDiscord(acteur, id, { here })) };
+  }
+
+  /**
+   * `PUT /devblog/:id/programmation` `{ le: 'AAAA-MM-JJ HH:MM' (heure du club) | ISO, cibles?, mentionHere? }` :
+   * publication programmée d'un brouillon prêt (app + salons choisis). Modifiable et annulable
+   * (`DELETE /devblog/:id/programmation`) jusqu'à l'heure.
+   */
+  async function programmer(acteur, id, corps) {
+    await exigerGestion(acteur);
+    const l = await ligneEntree(id, { gestion: true });
+    if (l.statut !== 'brouillon') throw echec(409, 'devblog-deja-publie', 'Ce devblog est déjà publié.');
+    exigerComplet(l);
+    const ms = lireInstantProgramme(corps?.le, maintenant());
+    const cibles = await lireCibles(corps?.cibles);
+    await base.executer('UPDATE devblog_entrees SET programme_le = ?, programme_cibles = ?, programme_here = ?, programme_par = ?, maj_le = ? WHERE id = ?', [
+      iso(ms),
+      JSON.stringify(cibles),
+      corps?.mentionHere === false ? 0 : 1,
+      acteur.compte,
+      iso(maintenant()),
+      id,
+    ]);
+    return detail(acteur, id);
+  }
+
+  async function annulerProgrammation(acteur, id) {
+    await exigerGestion(acteur);
+    await ligneEntree(id, { gestion: true });
+    await base.executer('UPDATE devblog_entrees SET programme_le = NULL, programme_cibles = NULL, maj_le = ? WHERE id = ?', [iso(maintenant()), id]);
+    return detail(acteur, id);
+  }
+
+  // ---------------------------------------------------------------- Mode automatique
+
+  async function vueAuto() {
+    const reglages = await lireReglagesEnBase(base);
+    const ms = maintenant();
+    const faitAujourdhui = Boolean(await base.premier("SELECT jour FROM devblog_auto WHERE declencheur = 'auto' AND jour = ?", [jourClub(ms)]));
+    const journal = await base.tous('SELECT * FROM devblog_auto ORDER BY cree_le DESC, id LIMIT 20', []);
+    const etat = await lireEtatAuto(base);
+    return {
+      reglages,
+      defaut: REGLAGES_AUTO_DEFAUT,
+      fuseau: FUSEAU_DEVBLOG,
+      prochain: reglages.actif ? (t => (t ? iso(t) : null))(echeanceAuto(reglages, ms, { dejaFaitAujourdhui: faitAujourdhui })) : null,
+      source: Boolean(source),
+      ia: Boolean(discuterPour),
+      couvertJusquau: etat.le ?? null,
+      cibles: reglages.cibles ?? (await reglage('cibles', [])),
+      journal: journal.map(j => ({
+        id: j.id,
+        le: j.cree_le,
+        declencheur: j.declencheur,
+        statut: j.statut,
+        entree: j.entree_id ?? null,
+        commitsLus: Number(j.commits_lus ?? 0),
+        commitsRetenus: Number(j.commits_retenus ?? 0),
+        moteur: j.moteur ?? null,
+        message: j.message ?? null,
+      })),
+    };
+  }
+
+  /** `GET /devblog/auto` : réglages, prochain passage, journal ; `en_attente` : mises à jour notables en attente. */
+  async function lireAuto(acteur, { attente = false } = {}) {
+    await exigerGestion(acteur);
+    const v = await vueAuto();
+    if (attente && source) {
+      try {
+        const ch = await changementsDeployes(base, source);
+        v.enAttente = ch ? { lus: ch.lus, retenus: ch.retenus.length } : null;
+      } catch {
+        v.enAttente = null;
+      }
+    }
+    return v;
+  }
+
+  /** `PUT /devblog/auto` `{ actif?, frequence?, heure?, jour?, validation?, mentionHere?, cibles? }`. */
+  async function reglerAuto(acteur, corps) {
+    await exigerGestion(acteur);
+    const avant = await lireReglagesEnBase(base);
+    const connues = new Set((await ciblesPossibles()).map(p => p.cle));
+    const r = lireReglagesAuto(corps, avant, { connues });
+    await ecrireReglage('auto', r, acteur);
+    // Première activation : le point de départ est posé (premier déploiement après le dernier devblog, sinon
+    // l'état actuel) pour ne pas raconter tout l'historique du dépôt.
+    if (r.actif && !avant.actif && source && !(await lireEtatAuto(base)).commit) {
+      try {
+        const ch = await changementsDeployes(base, source);
+        if (ch?.de) await ecrireReglageBase(base, 'auto_etat', { commit: ch.de, le: iso(maintenant()) }, { par: acteur.compte, t: iso(maintenant()) });
+      } catch {
+        // Source illisible : le premier passage reprendra.
+      }
+    }
+    return vueAuto();
+  }
+
+  /** `POST /devblog/auto/generer` : « Générer maintenant » (brouillon de test). */
+  async function generer(acteur) {
+    await exigerGestion(acteur);
+    if (!source) throw echec(503, 'devblog-source', 'Historique des mises à jour indisponible sur ce serveur.');
+    const r = await genererMaintenant(base, { source, discuterPour, maintenant: maintenant(), par: acteur.compte });
+    return { resultat: { statut: r.statut, entree: r.entree_id ?? null, message: r.message ?? null }, ...(await vueAuto()) };
+  }
+
+  return { liste, detail, creer, modifier, supprimer, nouveautes, marquerVu, traduire, salons, reglerSalons, etatDiscord, publierDiscord, toutPublier, programmer, annulerProgrammation, lireAuto, reglerAuto, generer };
 }

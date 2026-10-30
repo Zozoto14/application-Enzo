@@ -711,7 +711,7 @@ function EditeurOrdre({ theme, tache, ordre, moteurs, desactive, onChanger }: {
  * Confidentialité : tâches qui restent sur le serveur (réunions, suivi, strats : IA locale seulement) et tâches qui
  * peuvent partir chez le fournisseur d'API. Le Fondateur seul lève la règle, tâche par tâche, avec confirmation.
  */
-const TACHES_EXTERNES = ['profils', 'traduction', 'cm'] as const;
+const TACHES_EXTERNES = ['profils', 'traduction', 'cm', 'devblog'] as const;
 function CarteConfidentialite({ theme, etat, desactive, onChanger }: { theme: ThemeHub; etat: EtatIa; desactive: boolean; onChanger: (t: TacheConfidentielle, v: boolean) => void }) {
   const c = etat.confidentialite;
   if (!c) return null;

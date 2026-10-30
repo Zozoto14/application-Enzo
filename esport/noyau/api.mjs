@@ -154,6 +154,7 @@ export function creerApi({
   apercuLiens = {},
   ia = {},
   travauxIa = 'fond',
+  devblogSource = null,
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -202,7 +203,9 @@ export function creerApi({
   const rl = servicesRoles({ base, maintenant, noyau: s });
   // Devblog (migration 0036) : notes de mise à jour FR/EN, fenêtre « Nouveautés », publication Discord ; la version
   // anglaise peut être préparée par l'IA (tâche légère « traduction », texte du devblog seulement).
-  const dv = servicesDevblog({ base, maintenant, discuterPour: jx.discuterPour, cle: secretDiscord });
+  // Publication automatique : `devblogSource` = historique git du dépôt déployé (serveur/devblog-source.mjs ; simulé en
+  // test), rédaction par l'IA (tâche « devblog », non confidentielle : messages de commit nettoyés seulement).
+  const dv = servicesDevblog({ base, maintenant, discuterPour: jx.discuterPour, cle: secretDiscord, source: devblogSource });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;

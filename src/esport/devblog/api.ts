@@ -32,6 +32,55 @@ export interface EntreeDevblog {
   publieLe: string | null;
   creeLe?: string;
   majLe?: string;
+  /** Gestionnaires : « auto » si rédigé par le mode automatique. */
+  origine?: 'manuel' | 'auto';
+  /** Gestionnaires : publication programmée (heure du club), ou null. */
+  programmation?: ProgrammationDevblog | null;
+}
+export interface ProgrammationDevblog {
+  /** Instant UTC (ISO). */
+  le: string;
+  /** « AAAA-MM-JJ HH:MM », heure du club (Paris). */
+  mural: string;
+  cibles: string[];
+  mentionHere: boolean;
+}
+export type FrequenceAuto = 'apres_maj' | 'hebdo';
+export interface ReglagesAuto {
+  actif: boolean;
+  frequence: FrequenceAuto;
+  /** « HH:MM », heure du club. */
+  heure: string;
+  /** Jour de la semaine (1 = lundi … 7 = dimanche), fréquence hebdomadaire. */
+  jour: number;
+  validation: boolean;
+  mentionHere: boolean;
+  /** null : les salons cochés par défaut (« annonces du club »). */
+  cibles: string[] | null;
+}
+export interface PassageAuto {
+  id: string;
+  le: string;
+  declencheur: 'auto' | 'manuel';
+  statut: 'en_cours' | 'rien' | 'brouillon' | 'publie' | 'echec';
+  entree: string | null;
+  commitsLus: number;
+  commitsRetenus: number;
+  moteur: string | null;
+  message: string | null;
+}
+export interface VueAuto {
+  reglages: ReglagesAuto;
+  defaut: ReglagesAuto;
+  fuseau: string;
+  prochain: string | null;
+  source: boolean;
+  ia: boolean;
+  couvertJusquau: string | null;
+  cibles: string[];
+  journal: PassageAuto[];
+  enAttente?: { lus: number; retenus: number } | null;
+  resultat?: { statut: PassageAuto['statut']; entree: string | null; message: string | null };
 }
 export interface SalonDevblog {
   cle: string;
@@ -59,6 +108,8 @@ export interface PublicationDiscord {
 export interface EtatDiscord {
   apercu: { en: string[]; fr: string[] };
   pretAPublier: boolean;
+  /** Versions française ET anglaise complètes (prêt pour « Tout publier » ou une programmation). */
+  complet?: boolean;
   publications: PublicationDiscord[];
   resultats?: Array<{ cible: string; etat: 'publication' | 'correction' | 'deja_publie' | 'en_cours' }>;
 }
@@ -95,6 +146,12 @@ export function apiDevblog(client: ClientEsport) {
     reglerSalons: (corps: { defaut?: string[]; salonBot?: { id: string; nom: string } | null; webhook?: { nom: string; url: string } }) => r<Salons>('/devblog/salons', 'PUT', corps),
     etatDiscord: (x: string, here = true) => r<EtatDiscord>(`${id(x)}/discord?here=${here ? 1 : 0}`),
     publierDiscord: (x: string, cibles: string[], mentionHere: boolean) => r<EtatDiscord>(`${id(x)}/discord`, 'POST', { cibles, mentionHere }),
+    toutPublier: (x: string, cibles: string[], mentionHere: boolean) => r<EtatDiscord & { app: 'publie' | 'deja_publie'; entree: EntreeDevblog }>(`${id(x)}/tout-publier`, 'POST', { cibles, mentionHere }),
+    programmer: (x: string, le: string, cibles: string[], mentionHere: boolean) => r<{ entree: EntreeDevblog }>(`${id(x)}/programmation`, 'PUT', { le, cibles, mentionHere }),
+    annulerProgrammation: (x: string) => r<{ entree: EntreeDevblog }>(`${id(x)}/programmation`, 'DELETE'),
+    auto: (attente = false) => r<VueAuto>(`/devblog/auto${attente ? '?attente=1' : ''}`),
+    reglerAuto: (reglages: Partial<ReglagesAuto>) => r<VueAuto>('/devblog/auto', 'PUT', reglages),
+    generer: () => r<VueAuto>('/devblog/auto/generer', 'POST', {}),
   };
 }
 export type ApiDevblog = ReturnType<typeof apiDevblog>;

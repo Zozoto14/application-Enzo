@@ -109,7 +109,8 @@ Par prudence, **tout nom de tâche qui contient** « transcri », « reunion »,
   `503 ia-confidentielle-sans-local` (« … Rien n'a été envoyé à un service externe. »), **aucun appel réseau**. La
   relecture des transcriptions est alors simplement **absente** (voir [transcription.md](transcription.md)).
 - **Peuvent partir chez le fournisseur** (aucune donnée de réunion) : **profils de jeu** (brouillons, vérifications,
-  sources), **traductions**, **textes des posts CM**.
+  sources), **traductions**, **textes des posts CM**, **devblog** (rédigé à partir des messages de commit nettoyés,
+  voir [devblog.md](devblog.md)).
 
 **Lever la règle (Fondateur seulement, tâche par tâche)** : Administration IA › carte **« Confidentialité : ce qui
 quitte le serveur »** › interrupteur **« Autoriser l'envoi à un service externe »** (désactivé par défaut, avertissement

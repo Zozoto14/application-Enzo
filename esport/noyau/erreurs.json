@@ -724,7 +724,17 @@
   "Version française : titre obligatoire.": "French version: title required.",
   "Version anglaise : titre obligatoire.": "English version: title required.",
   "Version française : au moins une section avec une puce.": "French version: at least one section with a bullet.",
-  "Version anglaise : au moins une section avec une puce.": "English version: at least one section with a bullet."
+  "Version anglaise : au moins une section avec une puce.": "English version: at least one section with a bullet.",
+  "Mode automatique : oui ou non.": "Automatic mode: yes or no.",
+  "Fréquence : après chaque mise à jour ou une fois par semaine.": "Frequency: after each update or once a week.",
+  "Heure : au format HH:MM.": "Time: in HH:MM format.",
+  "Jour de la semaine : de 1 (lundi) à 7 (dimanche).": "Day of the week: from 1 (Monday) to 7 (Sunday).",
+  "Salons : une liste.": "Channels: a list.",
+  "Date et heure de publication : AAAA-MM-JJ HH:MM (heure de Paris).": "Publication date and time: YYYY-MM-DD HH:MM (Paris time).",
+  "Choisissez une date et une heure à venir.": "Choose a future date and time.",
+  "Au plus 90 jours à l’avance.": "At most 90 days ahead.",
+  "Ce devblog est déjà publié.": "This devblog is already published.",
+  "Historique des mises à jour indisponible sur ce serveur.": "Update history unavailable on this server."
  },
  "motifs": [
   [

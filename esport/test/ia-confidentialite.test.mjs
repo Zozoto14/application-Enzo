@@ -65,7 +65,7 @@ const localFactice = (pret = true) => {
 
 test('classement : réunions, transcription, relecture, suivi, strats confidentiels ; profils, traductions, CM non', () => {
   for (const t of ['transcription', 'correction', 'resumes', 'resume', 'reunion', 'suivi', 'notes-staff', 'strats', 'playbook', 'resume-auto-reunion', 'relecture-transcription']) assert.ok(tacheConfidentielle(t), `${t} confidentielle`);
-  for (const t of ['profils', 'brouillon', 'verification', 'sources', 'test', 'traduction', 'cm', 'leger']) assert.equal(tacheConfidentielle(t), null, `${t} peut partir chez le fournisseur`);
+  for (const t of ['profils', 'brouillon', 'verification', 'sources', 'test', 'traduction', 'cm', 'devblog', 'leger']) assert.equal(tacheConfidentielle(t), null, `${t} peut partir chez le fournisseur`);
 });
 
 // ------------------------------------------------------------------ Répartiteur
@@ -140,7 +140,7 @@ test('service : Administration IA affiche local/externe ; seul le Fondateur lèv
   const app = servicesJeux({ base, maintenant: () => horloge.t, socle: {}, ia: { config: configIa(ENV), fetch: ia.fetch }, travauxIa: 'synchrone', journal });
   let e = await app.etatIa(fondateur);
   assert.deepEqual(e.confidentialite.locales.map(t => [t.cle, t.externeAutorise]), Object.keys(TACHES_CONFIDENTIELLES).map(t => [t, false]));
-  assert.deepEqual(e.confidentialite.externes.map(t => t.cle), ['profils', 'traduction', 'cm']);
+  assert.deepEqual(e.confidentialite.externes.map(t => t.cle), ['profils', 'traduction', 'cm', 'devblog']);
   // Ordre léger réglé sur les API : la relecture d'une réunion reste refusée sans IA locale.
   await app.reglerIa(fondateur, { ordres: { leger: ['api2', 'api'] } });
   assert.equal((await app.discuterPour('correction', msg).catch(x => x)).code, 'ia-confidentielle-sans-local');

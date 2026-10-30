@@ -185,6 +185,147 @@ describe('éditeur du devblog', () => {
   });
 });
 
+const BROUILLON: EntreeDevblog = { ...ENTREE, id: 'devblog-2', statut: 'brouillon', publieLe: null, origine: 'auto', programmation: null };
+const VUE_AUTO = {
+  reglages: { actif: false, frequence: 'apres_maj', heure: '18:00', jour: 5, validation: false, mentionHere: true, cibles: null },
+  defaut: { actif: false, frequence: 'apres_maj', heure: '18:00', jour: 5, validation: false, mentionHere: true, cibles: null },
+  fuseau: 'Europe/Paris',
+  prochain: null,
+  source: true,
+  ia: true,
+  couvertJusquau: null,
+  cibles: ['salon:s1'],
+  enAttente: { lus: 9, retenus: 3 },
+  journal: [{ id: 'j1', le: '2026-10-29T17:05:00.000Z', declencheur: 'auto', statut: 'publie', entree: 'devblog-1', commitsLus: 9, commitsRetenus: 3, moteur: 'api2', message: null }],
+};
+
+function serveurAuto() {
+  const base = serveurFaux({ gestion: true });
+  return jest.fn(async (chemin: string, methode = 'GET', corps?: unknown) => {
+    if (chemin === '/devblog' && methode === 'GET') return { entrees: [BROUILLON, ENTREE], gestion: true };
+    if (chemin.startsWith('/devblog/auto/generer')) return { ...VUE_AUTO, resultat: { statut: 'brouillon', entree: 'devblog-3', message: null } };
+    if (chemin.startsWith('/devblog/auto')) {
+      const r = (corps ?? {}) as Record<string, unknown>;
+      return methode === 'PUT' ? { ...VUE_AUTO, reglages: { ...VUE_AUTO.reglages, ...r }, prochain: r.actif ? '2026-10-30T17:00:00.000Z' : null } : VUE_AUTO;
+    }
+    if (chemin === '/devblog/devblog-2/tout-publier') return { app: 'publie', entree: { ...BROUILLON, statut: 'publie', publieLe: '2026-10-30T12:00:00.000Z' }, apercu: { en: ['EN 1'], fr: ['FR 1'] }, pretAPublier: true, complet: true, publications: [], resultats: [{ cible: 'salon:s1', etat: 'publication' }] };
+    if (chemin === '/devblog/devblog-2/programmation') {
+      const r = (corps ?? {}) as { le?: string; cibles?: string[]; mentionHere?: boolean };
+      return { entree: { ...BROUILLON, programmation: methode === 'DELETE' ? null : { le: '2026-10-31T17:00:00.000Z', mural: r.le, cibles: r.cibles, mentionHere: r.mentionHere } } };
+    }
+    if (/\/discord\?here=/.test(chemin)) return { apercu: { en: ['EN 1'], fr: ['FR 1'] }, pretAPublier: false, complet: true, publications: [] };
+    return base(chemin, methode, corps);
+  });
+}
+
+async function ouvrirBrouillon(requete: jest.Mock, mode: 'large' | 'telephone' = 'large') {
+  const client = fauxClient(requete, { superAdmin: true, peutGererDevblog: true });
+  await render(
+    <ModeAffichageForce mode={mode}>
+      <PageDevblog theme={theme} client={client} large={mode === 'large'} />
+    </ModeAffichageForce>,
+  );
+  const modifier = await screen.findByTestId('esport-devblog-devblog-2-modifier');
+  await act(async () => {
+    fireEvent.press(modifier);
+  });
+}
+
+describe('publication en un clic, programmée, automatique', () => {
+  it('« 🚀 Tout publier » : aperçu et salons par défaut, puis confirmation ; rien sans confirmation', async () => {
+    const requete = serveurAuto();
+    await ouvrirBrouillon(requete);
+    expect(screen.getByTestId('esport-devblog-origine-auto')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-tout-ouvrir'));
+    });
+    await waitFor(() => expect(screen.getByTestId('esport-devblog-tout-salon-salon-s1').props.accessibilityState.checked).toBe(true));
+    expect(screen.getByTestId('esport-devblog-tout-here').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('esport-devblog-tout-apercu-en-0')).toBeTruthy();
+    expect(requete).not.toHaveBeenCalledWith('/devblog/devblog-2/tout-publier', 'POST', expect.anything());
+    // Annuler : rien n'est publié.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-tout-annuler'));
+    });
+    expect(requete).not.toHaveBeenCalledWith('/devblog/devblog-2/tout-publier', 'POST', expect.anything());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-tout-ouvrir'));
+    });
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('esport-devblog-tout-confirmer'));
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/devblog-2/tout-publier', 'POST', { cibles: ['salon:s1'], mentionHere: true });
+    expect(await screen.findByTestId('esport-devblog-tout-avis')).toBeTruthy();
+    // Publié : plus de carte de programmation.
+    expect(screen.queryByTestId('esport-devblog-programmation')).toBeNull();
+  });
+
+  it('modifications non enregistrées : « Tout publier » désactivé', async () => {
+    const requete = serveurAuto();
+    await ouvrirBrouillon(requete);
+    await fireEvent.changeText(screen.getByTestId('esport-devblog-fr-titre'), 'Autre titre');
+    expect(screen.getByTestId('esport-devblog-tout-ouvrir').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('programmation (téléphone) : date et heure de Paris, salons par défaut, puis annulation', async () => {
+    const requete = serveurAuto();
+    await ouvrirBrouillon(requete, 'telephone');
+    await waitFor(() => expect(screen.getByTestId('esport-devblog-programmation-salon-salon-s1').props.accessibilityState.checked).toBe(true));
+    await fireEvent.changeText(screen.getByTestId('esport-devblog-programmation-quand'), '2026-10-31 18:00');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-programmation-valider'));
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/devblog-2/programmation', 'PUT', { le: '2026-10-31 18:00', cibles: ['salon:s1'], mentionHere: true });
+    expect(await screen.findByTestId('esport-devblog-programmation-etat')).toBeTruthy();
+    expect(screen.getByTestId('esport-devblog-badge-programme')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-programmation-annuler'));
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/devblog-2/programmation', 'DELETE', undefined);
+    await waitFor(() => expect(screen.queryByTestId('esport-devblog-programmation-etat')).toBeNull());
+  });
+
+  it('réglages du mode automatique : désactivé par défaut, activation, hebdomadaire, « Générer maintenant », journal', async () => {
+    const requete = serveurAuto();
+    const client = fauxClient(requete, { superAdmin: true, peutGererDevblog: true });
+    await render(<PageDevblog theme={theme} client={client} large />);
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('esport-devblog-auto-ouvrir'));
+    });
+    const actif = await screen.findByTestId('esport-devblog-auto-actif');
+    expect(actif.props.value).toBe(false);
+    expect(screen.getByTestId('esport-devblog-auto-validation').props.value).toBe(false);
+    expect(screen.getByTestId('esport-devblog-auto-salons-defaut').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('esport-devblog-auto-attente')).toBeTruthy();
+    expect(screen.getByTestId('esport-devblog-auto-journal-j1')).toBeTruthy();
+    // Activation : enregistrée tout de suite.
+    await act(async () => {
+      fireEvent(actif, 'valueChange', true);
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/auto', 'PUT', expect.objectContaining({ actif: true, frequence: 'apres_maj', heure: '18:00', validation: false }));
+    // Une fois par semaine, le lundi à 09:30.
+    await fireEvent.press(screen.getByTestId('esport-devblog-auto-frequence-hebdo'));
+    await fireEvent.press(screen.getByTestId('esport-devblog-auto-jour-1'));
+    await fireEvent.changeText(screen.getByTestId('esport-devblog-auto-heure'), '09:30');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-auto-enregistrer'));
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/auto', 'PUT', expect.objectContaining({ frequence: 'hebdo', jour: 1, heure: '09:30' }));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-devblog-auto-generer'));
+    });
+    expect(requete).toHaveBeenCalledWith('/devblog/auto/generer', 'POST', {});
+    expect(await screen.findByTestId('esport-devblog-auto-avis')).toBeTruthy();
+  });
+
+  it('membre : ni réglages automatiques ni bouton', async () => {
+    const requete = serveurFaux({ gestion: false });
+    await render(<PageDevblog theme={theme} client={fauxClient(requete)} large />);
+    await screen.findByTestId('esport-devblog-devblog-1');
+    expect(screen.queryByTestId('esport-devblog-auto-ouvrir')).toBeNull();
+  });
+});
+
 describe('rendu Discord de l’app', () => {
   it('identique au serveur (DA, découpage) pour le premier devblog', () => {
     for (const [langue, contenu] of [['fr', premier.PREMIER_DEVBLOG_FR], ['en', premier.PREMIER_DEVBLOG_EN]] as const) {

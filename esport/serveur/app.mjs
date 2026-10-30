@@ -21,12 +21,13 @@ import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
 import { etatAdministration } from './transcription/moteur.mjs';
 import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
+import { sourceGitDepot } from './devblog-source.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale, devblogSource } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -67,6 +68,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     // Transport des API d'IA : node:https avec étapes mesurées (DNS, connexion, TLS, premier octet), IA_IPV4=oui possible.
     ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, fetch: fetchIa ?? fetchIaDepuisEnv(), ...(local ? { local } : {}), transcription: () => etatAdministration(config.transcriptionServeur) },
     ...(travauxIa ? { travauxIa } : {}),
+    // Devblog automatique : historique git du dépôt déployé (chemins fixes, git sans shell).
+    devblogSource: devblogSource ?? sourceGitDepot(),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

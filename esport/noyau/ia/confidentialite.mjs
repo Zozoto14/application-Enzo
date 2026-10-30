@@ -13,7 +13,7 @@
  * (événement `ia.confidentialite_changed`). Toute valeur autre que '1', une base illisible ou une tâche inconnue de
  * cette liste = REFUS.
  *
- * Les autres tâches (profils de jeu, traductions, textes des posts CM) peuvent partir chez le fournisseur.
+ * Les autres tâches (profils de jeu, traductions, textes des posts CM, devblog) peuvent partir chez le fournisseur.
  */
 
 /** Tâches confidentielles (clé du réglage) et leur libellé (Administration IA). */
@@ -30,6 +30,7 @@ export const TACHES_EXTERNES_OK = {
   profils: 'Profils de jeu (brouillons, vérifications, recherche de sources)',
   traduction: 'Traductions',
   cm: 'Textes des posts CM',
+  devblog: 'Devblog (notes de mise à jour rédigées à partir des messages de commit, sans donnée de réunion)',
 };
 
 /**

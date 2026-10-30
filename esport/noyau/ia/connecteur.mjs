@@ -142,6 +142,7 @@ const ALIAS_TACHES = {
   leger: 'leger',
   traduction: 'leger',
   cm: 'leger',
+  devblog: 'leger',
   transcription: 'leger',
   correction: 'leger',
 };

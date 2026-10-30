@@ -3,7 +3,8 @@
  * contenu en français et en anglais (titre, intro, sections { emoji, titre, puces { nom, description } }, phrase
  * de fin) ; aperçu en direct « comme sur Discord » (messages découpés à 2000 caractères, fil français) ou « comme
  * dans l'app » ; « Préparer avec l'IA » (version anglaise proposée depuis le français, à relire) ; publication dans
- * l'app (brouillon / publié) puis sur Discord (salons, @here, aperçu exact du serveur, correction rééditée).
+ * l'app (brouillon / publié) puis sur Discord (salons, @here, aperçu exact du serveur, correction rééditée) ;
+ * « 🚀 Tout publier » (app + salons en une action) et publication programmée (Automatique.tsx).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,6 +19,7 @@ import { PageEsport } from '../CadreEsport';
 import { BoutonConfirme, Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, TitreCarte, attenue, texte } from '../design';
 import { ApercuDiscord, VueDevblog } from './Contenu';
+import { Programmation, ToutPublier, dateHeureClub } from './Automatique';
 
 type Langue = 'fr' | 'en';
 interface Brouillon {
@@ -190,6 +192,8 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs, alignItems: 'center' }}>
         <Badge theme={theme} texte={statut === 'publie' ? trDv('publie') : trDv('brouillon')} ton={statut === 'publie' ? 'ok' : 'alerte'} testID="esport-devblog-statut" />
         {modifie ? <Badge theme={theme} texte={trDv('modifications')} ton="accent" testID="esport-devblog-modifie" /> : null}
+        {entree?.origine === 'auto' ? <Badge theme={theme} texte={`✨ ${trDv('badge_auto')}`} testID="esport-devblog-origine-auto" /> : null}
+        {entree?.programmation && statut === 'brouillon' ? <Badge theme={theme} texte={`🗓️ ${trDv('badge_programme', { date: dateHeureClub(entree.programmation.le) })}`} ton="accent" testID="esport-devblog-badge-programme" /> : null}
         <View style={{ flex: 1 }} />
         {statut === 'brouillon' ? (
           <BoutonHub theme={theme} titre={`🚀 ${trDv('publier_app')}`} desactive={Boolean(enCours)} onPress={() =>
@@ -233,6 +237,20 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
           {vueApercu}
         </>
       )}
+      {entree ? (
+        <ToutPublier
+          theme={theme}
+          client={client}
+          entree={entree}
+          modifie={modifie}
+          onPublie={e => {
+            setEntree(e);
+            setB(depuis(e));
+            setModifie(false);
+          }}
+        />
+      ) : null}
+      {entree && statut === 'brouillon' ? <Programmation key={entree.id} theme={theme} client={client} entree={entree} modifie={modifie} onChange={setEntree} /> : null}
       {entree ? <PublierDiscord theme={theme} client={client} entree={entree} modifie={modifie} /> : null}
     </PageEsport>
   );
