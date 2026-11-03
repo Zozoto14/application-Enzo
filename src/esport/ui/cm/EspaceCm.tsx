@@ -25,7 +25,7 @@ import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { tr } from '../../i18n';
 import { EntreeLaterale, PageEsport, SiBarreEtendue, useBlocLateral } from '../CadreEsport';
 import { PastilleRole, Retours, styles, useAgir } from '../commun';
-import { Badge, COULEUR_CM_CLUB, Carte, ESP, EtatVide, Grille, MenuActions, Onglets, Squelette, SqueletteCartes, TitreCarte, Volet, attenue, couleurTeam, texte, type ActionSecondaire } from '../design';
+import { Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EtatVide, Grille, MenuActions, Onglets, Squelette, SqueletteCartes, TitreCarte, Volet, attenue, couleurTeam, texte, type ActionSecondaire } from '../design';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PALETTE, PastilleReseau, Teinte, nomTableau, quand, useEtatCm } from './commun';
 import { Tableau } from './Tableau';
 import { Calendrier } from './Calendrier';
@@ -97,11 +97,11 @@ export interface GroupeCm {
  * Chaque groupe porte ses sous-sections (mêmes conditions qu'avant pour chacune) ; un groupe sans sous-section visible
  * n'apparaît pas. L'accueil (vue d'ensemble) est proposé à qui voit les contenus ; sans lui, l'espace s'ouvre sur le Drive, les Sponsors ou les réunions.
  */
-export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number }): GroupeCm[] {
+export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number }): GroupeCm[] {
   const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, compteur: compteur || undefined });
   const brut: Array<{ id: GroupeCmId; libelle: string; entrees: EntreeCm[] }> = [
     { id: 'accueil', libelle: trCm('espace.g.accueil'), entrees: voirCm ? [e('accueil', trCm('espace.g.accueil'))] : [] },
-    { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux')), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
+    { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux'), commentairesNonLus), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
     { id: 'data', libelle: trCm('espace.g.data'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : []), ...(voirCm ? [e('ressources', trCm('espace.ressources'))] : [])] },
     { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
     { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
@@ -227,7 +227,7 @@ export function EspaceCm({
       vivant = false;
     };
   }, [client, onOuvrirTeam]);
-  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive });
+  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total });
   const toutes = groupes.flatMap(g => g.entrees);
   const courante = toutes.find(e => e.id === onglet);
   const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));
@@ -345,7 +345,7 @@ export function EspaceCm({
         ouvert ? (
           <Tableau theme={theme} api={api} id={ouvert} large={large} teams={teams} versionServeur={etat?.versions[ouvert]} onRetour={() => setOuvert(undefined)} />
         ) : (
-          <ListeTableauxCm theme={theme} api={api} large={large} onOuvrir={setOuvert} />
+          <ListeTableauxCm theme={theme} api={api} large={large} onOuvrir={setOuvert} nonLus={etat?.nonLus?.tableaux} />
         )
       ) : null}
       {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={ouvrirTableau} /> : null}
@@ -486,7 +486,8 @@ function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValide
 
 // ------------------------------------------------------------------ Tableaux
 
-function ListeTableauxCm({ theme, api, large, onOuvrir }: { theme: ThemeHub; api: ApiCm; large: boolean; onOuvrir(id: string): void }) {
+/** `nonLus` : commentaires non lus par tableau (état de la section, temps réel), à défaut ceux de la liste. */
+function ListeTableauxCm({ theme, api, large, onOuvrir, nonLus }: { theme: ThemeHub; api: ApiCm; large: boolean; onOuvrir(id: string): void; nonLus?: Record<string, number> }) {
   const [liste, setListe] = useState<ListeTableaux | undefined>();
   const [archives, setArchives] = useState(false);
   const [nouveau, setNouveau] = useState<{ nom: string; portee: string; couleur: string; modele: 'vide' | 'contenus' } | undefined>();
@@ -532,6 +533,11 @@ function ListeTableauxCm({ theme, api, large, onOuvrir }: { theme: ThemeHub; api
                 <Badge theme={theme} ton={t.team ? 'neutre' : 'accent'} texte={t.team ? (t.team.nom ?? '') : trCm('portee.club')} />
                 <Badge theme={theme} texte={trnCm('espace.cartes_n', t.cartes ?? 0)} />
                 {t.aValider ? <Badge theme={theme} ton="alerte" texte={trnCm('espace.a_valider_n', t.aValider)} /> : null}
+                {(nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0)) ? (
+                  <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0))}>
+                    <Compteur theme={theme} n={nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0)} testID={`esport-cm-tableau-${t.cleDefaut && !t.team ? 'club' : t.id}-nonlus`} />
+                  </View>
+                ) : null}
                 {t.trello ? <Badge theme={theme} texte="Trello" /> : null}
                 {t.archive ? <Badge theme={theme} ton="alerte" texte={trCm('c.archive')} /> : null}
               </View>

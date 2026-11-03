@@ -198,6 +198,12 @@ export const PALETTE: ReadonlyArray<readonly [string, CleCm]> = [
 /** La page est-elle visible (onglet du navigateur au premier plan) ? Toujours vrai hors web. */
 const pageVisible = () => Platform.OS !== 'web' || (globalThis as { document?: { visibilityState?: string } }).document?.visibilityState !== 'hidden';
 
+const ecouteursEtat = new Set<() => void>();
+/** Fait relire l'état de la section partout où il est affiché (pastilles de commentaires non lus après une ouverture, « Tout marquer comme lu »). */
+export function signalerEtatCm(): void {
+  for (const f of [...ecouteursEtat]) f();
+}
+
 /**
  * Rafraîchissement léger de la section : relit `GET /cm/etat` dès qu'un autre change quelque chose (temps
  * réel), sinon toutes les 60 s (12 s face à un serveur sans temps réel) quand la page est visible
@@ -205,12 +211,12 @@ const pageVisible = () => Platform.OS !== 'web' || (globalThis as { document?: {
  * chargée et ne rechargent que s'il a changé. Une seule requête courte : compatible avec l'hébergement
  * mutualisé (pas de connexion ouverte en permanence).
  */
-export function useEtatCm(api: ApiCm, actif = true): { etat: EtatCm | undefined; relire(): void } {
+export function useEtatCm(api: ApiCm | undefined, actif = true): { etat: EtatCm | undefined; relire(): void } {
   const [etat, setEtat] = useState<EtatCm | undefined>();
   const enCours = useRef(false);
   const encore = useRef(false);
   const relire = useCallback(() => {
-    if (!pageVisible()) return;
+    if (!api || !pageVisible()) return;
     // Un changement arrivé pendant une lecture : une lecture de plus juste après (jamais perdu, jamais en double).
     if (enCours.current) {
       encore.current = true;
@@ -231,7 +237,14 @@ export function useEtatCm(api: ApiCm, actif = true): { etat: EtatCm | undefined;
   }, [api]);
   // Temps réel (docs/esport/temps-reel.md) : tout changement de la section CM fait relire l'état aussitôt ; la
   // relecture périodique ne sert plus que de secours (60 s hors direct ; 12 s face à un serveur sans temps réel).
-  const direct = useTempsReel(api.client, 'cm', relire, { actif });
+  const direct = useTempsReel(api?.client, 'cm', relire, { actif: actif && Boolean(api) });
+  useEffect(() => {
+    if (!actif) return undefined;
+    ecouteursEtat.add(relire);
+    return () => {
+      ecouteursEtat.delete(relire);
+    };
+  }, [actif, relire]);
   const pas = direct === 'direct' ? 0 : direct === 'indisponible' ? RAFRAICHISSEMENT_MS : SECOURS_MS;
   useEffect(() => {
     if (!actif) return undefined;

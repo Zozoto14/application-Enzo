@@ -48,6 +48,8 @@ export const LISTES_DEFAUT = Object.freeze(['idees', 'preparation', 'a_valider',
 export const CLE_TABLEAU_DEFAUT = 'contenus';
 export const FUSEAU_CLUB = 'Europe/Paris';
 export const DUREE_LIEN_CM_MS = 2 * 3600 * 1000;
+/** Clé « premier passage » de `cm_commentaires_vus` (migration 0045). */
+const CLE_VU_TOUT = '*';
 const MAX_TABLEAUX = 200;
 const MAX_LISTES = 100;
 const MAX_CARTES_TABLEAU = 10_000;
@@ -246,6 +248,74 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return [...comptes].filter(c => noms[c]).map(c => ({ compte: c, pseudo: noms[c] })).sort((a, b) => a.pseudo.localeCompare(b.pseudo));
   }
 
+  // ---------------------------------------------------------------- Commentaires non lus (migration 0045)
+
+  /**
+   * État « vu » des commentaires du compte (`cm_commentaires_vus`) : un commentaire est NON LU pour lui s'il a été
+   * écrit par quelqu'un d'autre après la plus récente de : sa dernière ouverture de la carte, son « Tout marquer comme
+   * lu » sur le tableau, et son premier passage (rien n'est « non lu » au premier passage).
+   */
+  async function lireVus(compte) {
+    const vus = new Map((await base.tous('SELECT cle, vu_le FROM cm_commentaires_vus WHERE compte_id = ?', [compte])).map(l => [l.cle, l.vu_le]));
+    if (!vus.has(CLE_VU_TOUT)) {
+      const t0 = iso(maintenant());
+      await base.executer('INSERT INTO cm_commentaires_vus (compte_id, cle, vu_le) VALUES (?, ?, ?) ON CONFLICT (compte_id, cle) DO NOTHING', [compte, CLE_VU_TOUT, t0]);
+      vus.set(CLE_VU_TOUT, t0);
+    }
+    return vus;
+  }
+
+  const seuilVu = (vus, tableauId, carteId) => [vus.get(CLE_VU_TOUT), vus.get(`t:${tableauId}`), vus.get(carteId)].filter(Boolean).sort().pop();
+
+  const marquerVu = (compte, cle, t = maintenant()) =>
+    base.executer('INSERT INTO cm_commentaires_vus (compte_id, cle, vu_le) VALUES (?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET vu_le = excluded.vu_le', [compte, cle, iso(t)]);
+
+  /**
+   * Commentaires non lus de l'acteur sur des tableaux QU'IL VOIT (à l'appelant de ne donner que ceux-là) : par carte,
+   * par tableau et au total. Les cartes archivées, supprimées et les commentaires importés de Trello ne comptent pas.
+   */
+  async function nonLus(acteur, tableauIds) {
+    const parCarte = new Map();
+    const parTableau = new Map();
+    let total = 0;
+    if (!acteur.compte || !tableauIds.length) return { parCarte, parTableau, total };
+    const vus = await lireVus(acteur.compte);
+    const lignes = await lignesParIds(
+      base,
+      "SELECT x.carte_id, x.cree_le, c.tableau_id FROM cm_commentaires x JOIN cm_cartes c ON c.id = x.carte_id WHERE x.supprime_le IS NULL AND x.trello_id IS NULL AND x.cree_le > ? AND COALESCE(x.auteur_id, '') <> ? AND c.supprime_le IS NULL AND c.archive_le IS NULL AND c.tableau_id",
+      tableauIds,
+      { paramsAvant: [vus.get(CLE_VU_TOUT), acteur.compte] },
+    );
+    for (const l of lignes) {
+      if (l.cree_le <= seuilVu(vus, l.tableau_id, l.carte_id)) continue;
+      parCarte.set(l.carte_id, (parCarte.get(l.carte_id) ?? 0) + 1);
+      parTableau.set(l.tableau_id, (parTableau.get(l.tableau_id) ?? 0) + 1);
+      total++;
+    }
+    return { parCarte, parTableau, total };
+  }
+
+  /** `POST /cm/tableaux/:id/tout-vu` : « Tout marquer comme lu » sur un tableau visible. */
+  async function toutVu(acteur, id) {
+    const { tableau: tb } = await tableauVisible(acteur, id);
+    if (!acteur.compte) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    await lireVus(acteur.compte);
+    await base.lot([
+      { sql: 'DELETE FROM cm_commentaires_vus WHERE compte_id = ? AND cle IN (SELECT id FROM cm_cartes WHERE tableau_id = ?)', params: [acteur.compte, tb.id] },
+      { sql: 'INSERT INTO cm_commentaires_vus (compte_id, cle, vu_le) VALUES (?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET vu_le = excluded.vu_le', params: [acteur.compte, `t:${tb.id}`, iso(maintenant())] },
+    ]);
+    return { ok: true };
+  }
+
+  /** `POST /cm/cartes/:id/suivre { suivre }` : suivre (ou ne plus suivre) une carte visible : prévenu de ses commentaires. */
+  async function suivre(acteur, carteId, corps) {
+    const { carte: c } = await carteVisible(acteur, carteId);
+    if (!acteur.compte) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (corps?.suivre === false) await base.executer('DELETE FROM cm_carte_suivis WHERE carte_id = ? AND compte_id = ?', [c.id, acteur.compte]);
+    else await base.executer('INSERT INTO cm_carte_suivis (carte_id, compte_id, cree_le) VALUES (?, ?, ?) ON CONFLICT (carte_id, compte_id) DO NOTHING', [c.id, acteur.compte, iso(maintenant())]);
+    return { ok: true, suivie: corps?.suivre !== false };
+  }
+
   async function piecesIds(carteId) {
     return (await base.tous('SELECT id FROM cm_pieces WHERE carte_id = ? AND supprime_le IS NULL', [carteId])).map(l => l.id);
   }
@@ -359,9 +429,11 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const aValider = new Map(
       (await lignesParIds(base, "SELECT tableau_id, COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND statut = 'a_valider' AND tableau_id", lignes.map(t => t.id), { apres: 'GROUP BY tableau_id' })).map(l => [l.tableau_id, Number(l.n)]),
     );
+    const non = await nonLus(acteur, lignes.filter(t => !t.archive_le).map(t => t.id));
     lignes.sort((a, b) => (a.portee === PORTEE_CLUB ? 0 : 1) - (b.portee === PORTEE_CLUB ? 0 : 1) || (a.cle_defaut ? 0 : 1) - (b.cle_defaut ? 0 : 1) || Number(a.position) - Number(b.position) || String(a.cree_le).localeCompare(String(b.cree_le)));
     return {
-      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, droits: droitsDe({ permissions: permissionsSur(portees, t.portee) }) })),
+      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, nonLus: non.parTableau.get(t.id) ?? 0, droits: droitsDe({ permissions: permissionsSur(portees, t.portee) }) })),
+      nonLus: non.total,
       portees: [
         ...(portees.club.size ? [{ portee: PORTEE_CLUB, team: null, permissions: [...portees.club].sort() }] : []),
         ...[...portees.teams].map(([id, s]) => ({ portee: id, team: portees.noms.get(id), permissions: [...s].sort() })),
@@ -502,7 +574,9 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       couvertures.set(carteId, `${origine}${chemin}`);
     }
     const pseudos = await pseudosDe(base, [...new Set(cartes.flatMap(c => memb.get(c.id) ?? []))]);
+    const non = await nonLus(acteur, [tb.id]);
     return {
+      nonLus: non.total,
       tableau: tableauPublic(tb, noms, { fond: fondPublic(tb, await imageFond(tb, acteur, origine)) }),
       droits: droitsDe(ctx),
       moi: acteur.compte,
@@ -529,6 +603,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
           etiquettes: etiq.get(c.id) ?? [],
           membres: memb.get(c.id) ?? [],
           commentaires: com.get(c.id) ?? 0,
+          nonLus: non.parCarte.get(c.id) ?? 0,
           checklist: chk.get(c.id) ?? { total: 0, faits: 0 },
           pieces: nbPieces.get(c.id) ?? 0,
           archive: Boolean(c.archive_le),
@@ -789,9 +864,15 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return t.id;
   }
 
+  const nouveauPour = (x, compte, vuAvant) => Boolean(vuAvant) && !x.trello_id && (x.auteur_id ?? '') !== compte && x.cree_le > vuAvant;
+
   /** `GET /cm/cartes/:id` : la carte complète (checklists, commentaires, pièces, activité, liens résolus). */
-  async function carte(acteur, id, { origine = '', langue = 'fr' } = {}) {
+  async function carte(acteur, id, { origine = '', langue = 'fr', vu = false } = {}) {
     const { carte: c, tableau: tb, ctx } = await carteVisible(acteur, id);
+    // Commentaires non lus de cette carte AVANT la lecture ; `vu` (ouverture de la fiche) la marque lue pour ce compte.
+    const vuAvant = acteur.compte ? seuilVu(await lireVus(acteur.compte), tb.id, c.id) : null;
+    if (vu && acteur.compte) await marquerVu(acteur.compte, c.id);
+    const suivie = acteur.compte ? Boolean(await base.premier('SELECT carte_id FROM cm_carte_suivis WHERE carte_id = ? AND compte_id = ?', [c.id, acteur.compte])) : false;
     const etiquettes = (await base.tous('SELECT ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_etiquettes e ON e.id = ce.etiquette_id WHERE ce.carte_id = ? ORDER BY e.position, e.nom, e.id', [c.id])).map(l => l.etiquette_id);
     const membres = (await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
     const checklists = await base.tous('SELECT * FROM cm_checklists WHERE carte_id = ? ORDER BY position', [c.id]);
@@ -846,7 +927,10 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
           nom: k.nom,
           elements: elements.filter(e => e.checklist_id === k.id).map(e => ({ id: e.id, texte: e.texte, fait: Number(e.fait) === 1 })),
         })),
-        commentaires: commentaires.map(x => ({ id: x.id, auteur: x.auteur_id ?? null, auteurNom: x.auteur_nom ?? null, texte: x.texte, creeLe: x.cree_le, majLe: x.maj_le, trello: Boolean(x.trello_id), moi: x.auteur_id === acteur.compte })),
+        commentaires: commentaires.map(x => ({ id: x.id, auteur: x.auteur_id ?? null, auteurNom: x.auteur_nom ?? null, texte: x.texte, creeLe: x.cree_le, majLe: x.maj_le, trello: Boolean(x.trello_id), moi: x.auteur_id === acteur.compte, nouveau: nouveauPour(x, acteur.compte, vuAvant) })),
+        vuAvant,
+        nonLus: commentaires.filter(x => nouveauPour(x, acteur.compte, vuAvant)).length,
+        suivie,
         pieces: pieces.map(p => {
           const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
           return { id: p.id, genre: p.genre, nom: p.nom, url: p.genre === 'lien' ? p.url : null, trello: Number(p.trello) === 1, fichier: f && !f.supprime_le ? { id: f.id, type: f.type_mime, taille: Number(f.taille) } : null, creeLe: p.cree_le };
@@ -1130,12 +1214,19 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const personnes = await personnesTableau(tb);
     const cites = new Set(mentionsDe(texte).map(m => m.toLowerCase()));
     const mentionnes = personnes.filter(p => cites.has(p.pseudo.toLowerCase()) && p.compte !== acteur.compte).map(p => p.compte);
+    // Notification « nouveau commentaire » : membres assignés, auteur de la carte, personnes qui la suivent (jamais
+    // l'auteur du commentaire ni les personnes @mentionnées, qui ont leur propre notification), et seulement celles
+    // qui ont accès au tableau.
+    const suiveurs = (await base.tous('SELECT compte_id FROM cm_carte_suivis WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
+    const assignes = (await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
+    const accessibles = new Set(personnes.map(p => p.compte));
+    const concernes = [...new Set([...assignes, c.cree_par, ...suiveurs])].filter(x => x && x !== acteur.compte && accessibles.has(x) && !mentionnes.includes(x));
     await base.lot([
       { sql: 'INSERT INTO cm_commentaires (id, carte_id, auteur_id, texte, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?)', params: [id, c.id, acteur.compte, texte, iso(t), iso(t)] },
       activite(c.id, tb.id, acteur.compte, 'commentaire', {}, t),
       { sql: 'UPDATE cm_cartes SET version = version + 1 WHERE id = ?', params: [c.id] },
       versionTableau(tb.id, t),
-      evenement('cm.commentaire_ajoute', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, mentions: mentionnes }, maintenant: t }),
+      evenement('cm.commentaire_ajoute', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, mentions: mentionnes, concernes }, maintenant: t }),
     ]);
     return carte(acteur, c.id);
   }
@@ -1470,7 +1561,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const lignes = await lignesParIds(base, 'SELECT id, version, portee FROM cm_tableaux WHERE supprime_le IS NULL AND portee', liste);
     const validables = lignes.filter(t => permissionsSur(portees, t.portee).has('cm.valider')).map(t => t.id);
     const n = (await lignesParIds(base, "SELECT COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND statut = 'a_valider' AND tableau_id", validables)).reduce((s, l) => s + Number(l.n), 0);
-    return { versions: Object.fromEntries(lignes.map(t => [t.id, Number(t.version)])), aValider: n };
+    const non = await nonLus(acteur, lignes.map(t => t.id));
+    return { versions: Object.fromEntries(lignes.map(t => [t.id, Number(t.version)])), aValider: n, nonLus: { total: non.total, tableaux: Object.fromEntries(non.parTableau) } };
   }
 
   return {
@@ -1499,6 +1591,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     modifierElement,
     supprimerElement,
     commenter,
+    toutVu,
+    suivre,
     modifierCommentaire,
     supprimerCommentaire,
     ajouterPiece,

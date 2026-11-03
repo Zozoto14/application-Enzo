@@ -20,6 +20,9 @@ export async function exportCm(base, compte) {
   return {
     cmRoles: (await q('SELECT a.portee, a.cree_le, r.nom FROM cm_affectations a JOIN cm_roles r ON r.id = a.role_id WHERE a.compte_id = ? ORDER BY a.cree_le')).map(a => ({ role: a.nom, portee: a.portee === 'club' ? 'club' : (teams.get(a.portee) ?? a.portee), depuis: a.cree_le })),
     cmCartesCreees: (await q('SELECT tableau_id, titre, statut, origine, cree_le FROM cm_cartes WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre, statut: c.statut ?? null, origine: c.origine, creeLe: c.cree_le })),
+    // Commentaires non lus (migration 0045) : quand il a ouvert chaque carte (ou marqué un tableau lu) et les cartes suivies.
+    cmCommentairesVus: (await q('SELECT v.cle, v.vu_le, c.titre FROM cm_commentaires_vus v LEFT JOIN cm_cartes c ON c.id = v.cle WHERE v.compte_id = ? ORDER BY v.vu_le')).map(v => ({ cible: v.cle === '*' ? 'premier passage' : v.cle.startsWith('t:') ? `tableau : ${tableaux.get(v.cle.slice(2)) ?? v.cle.slice(2)}` : `carte : ${v.titre ?? v.cle}`, vuLe: v.vu_le })),
+    cmCartesSuivies: (await q('SELECT c.tableau_id, c.titre, s.cree_le FROM cm_carte_suivis s JOIN cm_cartes c ON c.id = s.carte_id WHERE s.compte_id = ? AND c.supprime_le IS NULL ORDER BY s.cree_le')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre, depuis: c.cree_le })),
     cmCartesAssignees: (await q('SELECT c.tableau_id, c.titre FROM cm_carte_membres m JOIN cm_cartes c ON c.id = m.carte_id WHERE m.compte_id = ? AND c.supprime_le IS NULL')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre })),
     cmCommentaires: (await q('SELECT c.titre, x.texte, x.cree_le FROM cm_commentaires x JOIN cm_cartes c ON c.id = x.carte_id WHERE x.auteur_id = ? AND x.supprime_le IS NULL ORDER BY x.cree_le')).map(x => ({ carte: x.titre, texte: x.texte, date: x.cree_le })),
     cmClips: (await q('SELECT team_id, genre, url, titre, description, instant, statut, motif, cree_le FROM cm_clips WHERE propose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: teams.get(x.team_id) ?? null, genre: x.genre, url: x.url ?? null, titre: x.titre, description: x.description, instant: x.instant === null ? null : Number(x.instant), statut: x.statut, motif: x.motif ?? null, date: x.cree_le })),
@@ -38,7 +41,7 @@ export async function exportCm(base, compte) {
     cmRendezVous: (await q('SELECT titre, description, duree_minutes, ouverte, cree_le FROM cm_rdv_offres WHERE proprietaire_id = ? ORDER BY cree_le')).map(o => ({ titre: o.titre, description: o.description, dureeMinutes: Number(o.duree_minutes), ouverte: Number(o.ouverte) === 1, creeLe: o.cree_le })),
     // Nouveautés du Drive (migration 0041) : dossiers vus et quand (pour les pastilles « nouveau »).
     cmDriveVus: (await q('SELECT portee, dossier, vu_le FROM cm_drive_vus WHERE compte_id = ? ORDER BY vu_le')).map(v => ({ portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), dossier: v.dossier, vuLe: v.vu_le })),
-    // Liens utiles de DATA › Ressources (migration 0044) : ceux qu'il a ajoutés.
+    // Liens utiles de DATA › Ressources (migration 0045) : ceux qu'il a ajoutés.
     cmLiens: (await q('SELECT titre, url, categorie, cree_le FROM cm_liens WHERE cree_par = ? ORDER BY cree_le')).map(l => ({ titre: l.titre, url: l.url, categorie: l.categorie ?? null, creeLe: l.cree_le })),
     cmVisuelsDossiers: (await q('SELECT nom, cle, portee, cree_le FROM cm_visuels_dossiers WHERE cree_par = ? ORDER BY cree_le')).map(d => ({ nom: d.nom ?? d.cle, portee: d.portee === 'club' ? 'club' : (teams.get(d.portee) ?? d.portee), creeLe: d.cree_le })),
     cmVisuels: (await q('SELECT nom, type, format, langue, portee, cree_le FROM cm_visuels WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(v => ({ nom: v.nom, type: v.type, format: v.format, langue: v.langue, portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), creeLe: v.cree_le })),
@@ -51,6 +54,9 @@ export async function effacementCm(base, compte) {
     { sql: 'DELETE FROM cm_affectations WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_preferences WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_carte_membres WHERE compte_id = ?', params: [compte] },
+    // Migration 0045 : son état « lu » des commentaires et ses cartes suivies disparaissent.
+    { sql: 'DELETE FROM cm_commentaires_vus WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_carte_suivis WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE cm_commentaires SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
     { sql: 'UPDATE cm_activite SET acteur_id = NULL WHERE acteur_id = ?', params: [compte] },
     { sql: 'UPDATE cm_clips SET propose_par = NULL WHERE propose_par = ?', params: [compte] },

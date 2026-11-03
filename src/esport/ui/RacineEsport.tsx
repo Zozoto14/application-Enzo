@@ -37,6 +37,7 @@ import { EspaceCm, Jeux, PageDevblog, Statistiques } from './differe';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
 import { useNouveautesDrive } from '../cm/nouveautesDrive';
 import type { OngletCm } from './cm/EspaceCm';
+import { useEtatCm } from './cm/commun';
 import { demarrerUsage, noterPage } from '../usage';
 import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
 import { trDv } from '../i18n/devblog';
@@ -571,20 +572,14 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
   const contenus = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
-  const [aValider, setAValider] = useState(0);
+  // État de la section (posts à valider, commentaires non lus), relu en temps réel.
+  const apiEtat = useMemo(() => (client ? apiCm(client) : undefined), [client]);
+  const { etat } = useEtatCm(apiEtat, contenus);
+  const aValider = etat?.aValider ?? 0;
+  // Commentaires non lus des tableaux : un compteur à part de celui du Drive (jamais comptés deux fois).
+  const commentairesNonLus = etat?.nonLus?.total ?? 0;
   // Nouveautés du Drive (tous les Drive visibles) : pastille sur la puce « Drive ».
   const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
-  useEffect(() => {
-    if (!contenus || !client) return;
-    let actif = true;
-    void Promise.resolve()
-      .then(() => apiCm(client).etat())
-      .then(e => actif && setAValider(e?.aValider ?? 0))
-      .catch(() => undefined);
-    return () => {
-      actif = false;
-    };
-  }, [client, contenus]);
   const nb = Number(contenus) + Number(drive) + Number(sponsors);
   const couleur = COULEUR_CM_CLUB;
   const rayon = theme.id === 'terminal' ? 0 : Math.round(48 * 0.28);
@@ -608,7 +603,12 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
         {tr('cm.tuile_description')}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }} testID="esport-teams-cm-contenu">
-        {contenus ? <Badge theme={theme} texte={tr('cm.tuile_contenus')} /> : null}
+        {contenus ? (
+          <View accessible={commentairesNonLus > 0} accessibilityLabel={commentairesNonLus ? `${tr('cm.tuile_contenus')} (${commentairesNonLus})` : undefined} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Badge theme={theme} texte={tr('cm.tuile_contenus')} />
+            <Compteur theme={theme} n={commentairesNonLus} testID="esport-teams-cm-commentaires" />
+          </View>
+        ) : null}
         {contenus && aValider > 0 ? <Badge theme={theme} texte={`${tr('cm.tuile_a_valider')} (${aValider})`} ton="accent" testID="esport-teams-cm-a-valider" /> : null}
         {drive && contenus ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`${tr('cm.club_ouvrir_drive')}${nouveautesDrive ? ` (${nouveautesDrive})` : ''}`} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>

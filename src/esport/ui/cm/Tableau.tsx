@@ -33,11 +33,11 @@ import { minuscules } from '../../i18n';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { ACCEPT_IMAGE_FOND, choisirFichier, choixFichierDisponible } from '../../medias/choixFichier';
 import { Retours, styles, useAgir } from '../commun';
-import { Badge, ESP, MenuActions, Pliable, Volet, attenue, initiales, rayonCarte, texte, type ActionSecondaire, type EtatPresse } from '../design';
+import { Badge, Compteur, ESP, MenuActions, Pliable, Volet, attenue, initiales, rayonCarte, texte, type ActionSecondaire, type EtatPresse } from '../design';
 import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { trDr } from '../../i18n/drive';
 import { ChoixDrive } from './drive/ChoixDrive';
-import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand } from './commun';
+import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand, signalerEtatCm } from './commun';
 import { FicheCarte } from './FicheCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
 
@@ -239,6 +239,8 @@ export function Tableau({
   }, [d]);
   const visibles = useCallback((listeId: string) => (parListe.get(listeId) ?? []).filter(c => carteVisible(c, filtres, maintenant, d?.noms ?? {})), [parListe, filtres, maintenant, d]);
   const listes = useMemo(() => d?.listes ?? [], [d]);
+  /** Commentaires non lus d'une colonne : la somme de ceux de ses cartes (archivées exclues). */
+  const nonLusListe = (listeId: string) => (parListe.get(listeId) ?? []).reduce((n, c) => n + (c.archive ? 0 : (c.nonLus ?? 0)), 0);
   const nbFiltres = (filtres.q.trim() ? 1 : 0) + filtres.etiquettes.length + filtres.membres.length + (filtres.echeance !== 'toutes' ? 1 : 0) + (filtres.type !== 'tout' ? 1 : 0) + (filtres.statut ? 1 : 0);
 
   /** Déplace une carte (index parmi toutes les cartes de la liste, sans elle) : local d'abord, puis le serveur. */
@@ -418,8 +420,26 @@ export function Tableau({
           </Text>
           {t.team ? <Badge theme={theme} texte={t.team.nom ?? ''} /> : <Badge theme={theme} ton="accent" texte={trCm('portee.club')} />}
           {t.trello ? <Badge theme={theme} texte="Trello" /> : null}
+          <View accessible={Boolean(d.nonLus)} accessibilityLabel={d.nonLus ? trnCm('nonlus.carte_n', d.nonLus) : undefined}>
+            <Compteur theme={theme} n={d.nonLus ?? 0} testID="esport-cm-tableau-nonlus" />
+          </View>
         </View>
         <View style={[styles.ligne, { gap: ESP.xs }]}>
+          {d.nonLus ? (
+            <BoutonHub
+              theme={theme}
+              titre={trCm('nonlus.tout_lu')}
+              onPress={() =>
+                void agir('tout-vu', async () => {
+                  await api.toutVu(id);
+                  await recharger();
+                  signalerEtatCm();
+                  return trCm('nonlus.tout_lu_fait');
+                })
+              }
+              testID="esport-cm-tableau-tout-lu"
+            />
+          ) : null}
           {d.droits.editer ? <BoutonHub theme={theme} titre={trCm('liste.nouvelle')} onPress={() => setNouvelleListe('')} testID="esport-cm-liste-nouvelle" /> : null}
           <MenuActions
             theme={theme}
@@ -556,6 +576,7 @@ export function Tableau({
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700' }} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
+                  <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
                   {/* Nom à la verticale : écriture verticale sur le web, texte tourné sur iPhone / Android. */}
                   {Platform.OS === 'web' ? (
                     <Text numberOfLines={1} style={{ ...texte(theme, 14), fontWeight: '700', writingMode: 'vertical-rl', maxHeight: 190, overflow: 'hidden' } as unknown as TextStyle}>
@@ -600,6 +621,11 @@ export function Tableau({
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700', paddingHorizontal: 4 }} accessibilityLabel={trnCm('liste.cartes_n', vues.length)} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
+                  {nonLusListe(l.id) ? (
+                    <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLusListe(l.id))}>
+                      <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
+                    </View>
+                  ) : null}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={trCm('liste.reduire_libelle', { nom: nomListe(l) })}
@@ -936,7 +962,17 @@ function TuileCarte({
                 </Text>
               ) : null}
               {c.description ? <Text style={attenue(theme, 12)} accessibilityLabel={trCm('carte.a_description')} testID={`esport-cm-carte-${c.id}-description`}>≡</Text> : null}
-              {c.commentaires ? <Text style={attenue(theme, 12)} accessibilityLabel={trnCm('carte.commentaires_n', c.commentaires)}>{`❝ ${c.commentaires}`}</Text> : null}
+              {c.commentaires ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={attenue(theme, 12)} accessibilityLabel={trnCm('carte.commentaires_n', c.commentaires)}>{`❝ ${c.commentaires}`}</Text>
+                  {/* Pastille de commentaires non lus (écrits par d'autres depuis la dernière ouverture de la carte). */}
+                  {c.nonLus ? (
+                    <View accessible accessibilityLabel={trnCm('nonlus.carte_n', c.nonLus)}>
+                      <Compteur theme={theme} n={c.nonLus} testID={`esport-cm-carte-${c.id}-nonlus`} />
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
               {c.checklist.total ? (
                 <Text style={{ ...attenue(theme, 12), color: c.checklist.faits === c.checklist.total ? theme.ok : theme.attenue }} accessibilityLabel={trCm('carte.checklist_n', { faits: c.checklist.faits, total: c.checklist.total })}>
                   {`☑︎ ${c.checklist.faits}/${c.checklist.total}`}

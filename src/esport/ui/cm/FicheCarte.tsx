@@ -29,7 +29,7 @@ import { CLES_RESEAUX, RESEAUX, analyserTexte } from '../../cm/reseaux';
 import { choisirFichier, choixFichierDisponible, ACCEPT_CM } from '../../medias/choixFichier';
 import { tailleMedia } from '../../medias/envoi';
 import { langueCourante } from '../../i18n';
-import { trCm, type CleCm } from '../../i18n/cm';
+import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { ChampNote } from '../ChampNote';
 import { NoteMarkdown } from '../review/Note';
 import { BoutonConfirme, Choix, Intertitre, Panneau, Retours, styles, useAgir } from '../commun';
@@ -38,7 +38,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { ChoixDrive } from './drive/ChoixDrive';
 import { trDr } from '../../i18n/drive';
 import { ouvrirLienDiffere } from '../ouvrirLien';
-import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand } from './commun';
+import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand, signalerEtatCm } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
@@ -76,7 +76,7 @@ const GROUPES_RETOURS: Record<string, string[]> = {
   details: ['etiquettes', 'etiquette', 'etiquettes-gestion', 'membres', 'echeance', 'faite', 'couverture', 'team'],
   checklists: ['checklist', 'element'],
   pieces: ['lien', 'fichier', 'drive', 'piece'],
-  commentaires: ['commenter', 'commentaire'],
+  commentaires: ['commenter', 'commentaire', 'suivre'],
   fin: ['archive', 'supprimer'],
 };
 const groupeDe = (cle: string | undefined) => Object.keys(GROUPES_RETOURS).find(g => cle && GROUPES_RETOURS[g].includes(cle));
@@ -106,7 +106,21 @@ export function FicheCarte({
   const { erreur, avis, agir, enCours, setAvis } = useAgir();
   // Dernière action lancée : son message (erreur ou « Enregistré ») s'affiche dans son bloc, près du bouton.
   const [derniere, setDerniere] = useState<string | undefined>();
-  const charger = useCallback(async () => setR(await api.carte(id)), [api, id]);
+  // Ouvrir la fiche marque ses commentaires lus pour ce compte (par le serveur) ; ceux écrits depuis sa visite précédente
+  // restent mis en évidence (« Nouveaux ») tant que la fiche est ouverte, même si elle est relue entre-temps.
+  const vuInitial = useRef<string | null | undefined>(undefined);
+  const surChangement = useRef(onChange);
+  surChangement.current = onChange;
+  const charger = useCallback(async () => {
+    const res = await api.carte(id, true);
+    setR(res);
+    if (vuInitial.current === undefined) vuInitial.current = res.carte.vuAvant ?? null;
+    // Des commentaires viennent d'être lus : les pastilles du tableau, de la colonne et de la section se mettent à jour.
+    if ((res.carte.nonLus ?? 0) > 0) {
+      surChangement.current();
+      signalerEtatCm();
+    }
+  }, [api, id]);
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
@@ -225,7 +239,7 @@ export function FicheCarte({
       <Checklists theme={theme} api={api} c={c} editer={dr.editer} faire={faire} retour={retour('checklists')} />
       <Pieces theme={theme} api={api} c={c} portee={tableau.tableau.portee} modifier={dr.modifier} faire={faire} retour={retour('pieces')} />
       <LiensLies theme={theme} client={api.client} genre="carte" cibleId={c.id} />
-      <Commentaires theme={theme} api={api} c={c} commenter={dr.commenter} gerer={dr.gerer} nom={nom} joueurs={tableau.personnes.map(p => p.pseudo)} faire={faire} retour={retour('commentaires')} />
+      <Commentaires theme={theme} api={api} c={c} nouveauxDepuis={vuInitial.current ?? null} commenter={dr.commenter} gerer={dr.gerer} nom={nom} joueurs={tableau.personnes.map(p => p.pseudo)} faire={faire} retour={retour('commentaires')} />
 
       <Panneau theme={theme} testID="esport-cm-fiche-activite">
         <Intertitre theme={theme}>{trCm('fiche.activite')}</Intertitre>
@@ -964,14 +978,41 @@ function Pieces({ theme, api, c, portee, modifier, faire, retour }: { theme: The
   );
 }
 
-function Commentaires({ theme, api, c, commenter, gerer, nom, joueurs, faire, retour }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; commenter: boolean; gerer: boolean; nom(c: string | null): string; joueurs: string[]; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
+function Commentaires({ theme, api, c, nouveauxDepuis, commenter, gerer, nom, joueurs, faire, retour }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; nouveauxDepuis: string | null; commenter: boolean; gerer: boolean; nom(c: string | null): string; joueurs: string[]; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
   const [texteNouveau, setTexteNouveau] = useState('');
   return (
     <Panneau theme={theme} testID="esport-cm-fiche-commentaires">
-      <Intertitre theme={theme}>{trCm('fiche.commentaires')}</Intertitre>
+      <View style={[styles.ligne, { justifyContent: 'space-between', alignItems: 'center' }]}>
+        <Intertitre theme={theme}>{trCm('fiche.commentaires')}</Intertitre>
+        {/* « Suivre » : prévenu des nouveaux commentaires (comme les membres assignés et l'auteur de la carte). */}
+        <BoutonHub
+          theme={theme}
+          titre={c.suivie ? trCm('fiche.suivie') : trCm('fiche.suivre')}
+          libelle={c.suivie ? trCm('fiche.suivie_aide') : trCm('fiche.suivre_aide')}
+          variante={c.suivie ? 'plein' : 'normal'}
+          onPress={() =>
+            void faire('suivre', async () => {
+              await api.suivre(c.id, !c.suivie);
+              return api.carte(c.id);
+            })
+          }
+          testID="esport-cm-fiche-suivre"
+        />
+      </View>
       {!c.commentaires.length ? <Text style={attenue(theme)}>{trCm('fiche.commentaires_vide')}</Text> : null}
-      {c.commentaires.map(x => (
-        <View key={x.id} style={{ gap: 4, borderLeftWidth: 3, borderLeftColor: theme.ligne, paddingLeft: ESP.s }} testID={`esport-cm-commentaire-${x.id}`}>
+      {c.commentaires.map((x, i) => {
+        const nouveau = Boolean(nouveauxDepuis) && !x.moi && !x.trello && x.creeLe > (nouveauxDepuis ?? '');
+        const premierNouveau = nouveau && !c.commentaires.slice(0, i).some(y => !y.moi && !y.trello && y.creeLe > (nouveauxDepuis ?? ''));
+        return (
+        <React.Fragment key={x.id}>
+        {premierNouveau ? (
+          <View style={[styles.ligne, { alignItems: 'center', gap: ESP.xs }]} testID="esport-cm-commentaires-nouveaux" accessibilityRole="header">
+            <View style={{ flex: 1, height: 1, backgroundColor: theme.accent }} />
+            <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '800' }}>{trnCm('fiche.nouveaux_n', c.commentaires.filter(y => !y.moi && !y.trello && y.creeLe > (nouveauxDepuis ?? '')).length)}</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: theme.accent }} />
+          </View>
+        ) : null}
+        <View style={{ gap: 4, borderLeftWidth: 3, borderLeftColor: nouveau ? theme.accent : theme.ligne, paddingLeft: ESP.s, backgroundColor: nouveau ? teinteTransparente(theme.accent, 0.08) : 'transparent' }} testID={`esport-cm-commentaire-${x.id}`} accessibilityLabel={nouveau ? trCm('fiche.nouveaux') : undefined}>
           <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={{ ...texte(theme, 13), fontWeight: '700' }}>{`${x.auteur ? nom(x.auteur) : (x.auteurNom ?? trCm('c.compte_supprime'))} · ${quand(x.creeLe)}${x.trello ? ' · Trello' : ''}`}</Text>
             {x.moi || gerer ? (
@@ -982,7 +1023,9 @@ function Commentaires({ theme, api, c, commenter, gerer, nom, joueurs, faire, re
           </View>
           <NoteMarkdown theme={theme} source={x.texte} />
         </View>
-      ))}
+        </React.Fragment>
+        );
+      })}
       {commenter ? (
         <View style={{ gap: ESP.xs }}>
           <ChampNote theme={theme} libelle={trCm('fiche.commentaire_nouveau')} valeur={texteNouveau} onChanger={setTexteNouveau} testID="esport-cm-commentaire-champ" maxLength={4000} apercu="jamais" joueurs={joueurs} />

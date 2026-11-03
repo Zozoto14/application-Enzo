@@ -127,6 +127,9 @@ export const TABLES = [
   ['cm_checklists', 'id'],
   ['cm_checklist_elements', 'id'],
   ['cm_commentaires', 'id'],
+  // Commentaires non lus (migration 0045) : état « vu » par compte, cartes suivies.
+  ['cm_commentaires_vus', 'compte_id, cle'],
+  ['cm_carte_suivis', 'carte_id, compte_id'],
   ['cm_fichiers', 'id'],
   ['cm_pieces', 'id'],
   ['cm_activite', 'id'],

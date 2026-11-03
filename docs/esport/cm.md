@@ -26,7 +26,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -182,6 +182,45 @@ Le groupe **DATA** (ex-« Médias ») garde **Clips | Visuels | Drive** et ajout
   (quelques octets) toutes les 12 s quand la page est visible et recharge le tableau s'il a changé. Pas de
   websocket ni de connexion ouverte (hébergement mutualisé o2switch).
 
+### Commentaires non lus (migration 0045)
+
+Quand quelqu'un commente une carte, une **petite pastille rouge** (la même que les nouveautés du Drive, avec le
+nombre) prévient les autres. L'état « lu » est gardé **par le serveur, par compte** (jamais dans le navigateur) :
+
+- **Ce qui compte** : un commentaire écrit par **quelqu'un d'autre** après la dernière ouverture de la carte par ce
+  compte (ou son dernier « Tout marquer comme lu »). **Ses propres commentaires ne comptent jamais.** Ne comptent pas
+  non plus : les commentaires supprimés, ceux importés de Trello, ceux des cartes archivées ou supprimées. Au
+  **premier passage** d'un compte, rien n'est « non lu » (ce qui existait avant n'encombre pas les pastilles).
+- **Qui le voit** : seulement les tableaux que le compte voit (`cm.voir`) ; un compte sans accès n'a aucune pastille et
+  reçoit 404 sur les routes du tableau et de la carte.
+- **Où** : sur chaque **carte** (à côté de ❝ n), dans l'**en-tête de la colonne** (somme de ses cartes, aussi sur une
+  colonne réduite), à côté du **nom du tableau**, sur le tableau dans la **liste des tableaux**, sur le sous-onglet
+  **Tableaux**, sur le groupe **Contenus** de la barre latérale (somme de « Tableaux » et « À valider »), sur la
+  puce **Contenus** de la tuile « CM du club » de Teams, et sur l'onglet **Tableau** de la partie CM d'une team. Les
+  nouveautés du **Drive** gardent leur propre pastille : les deux comptes ne s'additionnent jamais (« À valider » est un
+  autre compteur, déjà existant).
+- **Disparition** : ouvrir la carte la marque lue (`GET /cm/cartes/:id?vu=1`, une lecture, rien n'est diffusé) ;
+  **« Tout marquer comme lu »** (bouton du tableau, `POST /cm/tableaux/:id/tout-vu`) marque tout le tableau lu pour ce
+  compte seulement.
+- **Dans la fiche** : les commentaires écrits depuis la visite précédente sont mis en évidence (fond teinté, filet
+  d'accent) sous un séparateur **« N nouveaux commentaires »** qui reste tant que la fiche est ouverte, même si elle
+  est relue entre-temps (un commentaire qui arrive pendant la lecture est marqué lu aussitôt, la pastille s'efface).
+- **Temps réel** : un commentaire est une écriture du sujet `cm` (voir [temps-reel.md](temps-reel.md)) ; l'état de la
+  section (`GET /cm/etat`, qui rend aussi `nonLus: { total, tableaux }`) est relu aussitôt chez les autres, la
+  pastille apparaît en moins d'une seconde. « Tout marquer comme lu », « Suivre » et la lecture `?vu=1` ne sont
+  jamais diffusés (état personnel). Le tableau lui-même se recharge via la version de la carte, comme avant.
+- **Notification** (centre de notifications, catégorie **CM**, type `cm-commentaire` : « X a commenté « titre » ») :
+  seulement pour les **membres assignés** à la carte, l'**auteur de la carte** et les personnes qui la **suivent**
+  (bouton **Suivre** / **Suivie** de la fiche, `POST /cm/cartes/:id/suivre { suivre }`), à condition qu'elles aient accès
+  au tableau ; jamais l'auteur du commentaire. Les personnes **@mentionnées** gardent leur notification `cm-mention`
+  (jamais en double). **Une seule** notification non lue par carte et par personne (pas de rafale quand la
+  conversation s'anime). Le commentaire n'apparaît plus dans le fil du centre de tous ceux qui voient le CM (règle
+  `cm.commentaire_ajoute` : aucune) ; il reste dans le journal d'activité.
+- **Données** : `cm_commentaires_vus` (`compte_id`, `cle` : identifiant de la carte, `t:<tableau>` pour « tout lu » ou
+  `*` pour le premier passage, `vu_le`) et `cm_carte_suivis` (`carte_id`, `compte_id`). Export / import de la base
+  (`transfert.mjs`) ; **RGPD** : l'export d'un compte contient son état « lu » (`cmCommentairesVus`) et ses cartes
+  suivies (`cmCartesSuivies`), sa suppression efface les deux.
+
 ## Posts et validation
 
 Une carte peut être un **post** : réseaux ciblés, **textes FR et EN par réseau** avec compteur de caractères
@@ -291,7 +330,7 @@ Trello pour les ouvrir (l'app le dit) ; une image de couverture Trello reste une
 
 ## Notifications, journal, Discord
 
-Notifications : carte assignée, @mention dans un commentaire, post à valider (et à valider de nouveau après une
+Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), post à valider (et à valider de nouveau après une
 modification), post validé ou refusé (auteur et membres de la carte), dépôt d'une team (CM du club), clip proposé (CM
 de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive).
 
@@ -314,6 +353,7 @@ d'un post publié** part sur Discord, en anglais avec un fil français, réglée
 | `cm_checklists`, `cm_checklist_elements`, `cm_commentaires`, `cm_pieces`, `cm_activite` | détails d'une carte |
 | `cm_fichiers` | fichiers de la section (club ou team), stockage privé |
 | `cm_clips`, `cm_imports` | clips proposés ; historique des imports Trello |
+| `cm_commentaires_vus`, `cm_carte_suivis` (migration 0045) | commentaires lus par compte, cartes suivies |
 
 `envois` est reconstruite (comme en 0017) : usage « cm », `team_id` facultatif, colonne `portee`. Les rôles système
 des teams existantes reçoivent `cm.clips.proposer` (et `cm.voir`, `cm.deposer` pour le Manager) ; le module n'est
@@ -335,6 +375,7 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `GET\|PATCH\|DELETE /cm/cartes/:id` ; `POST /cm/cartes/:id/deplacer` (`{ listeId, index, tableauId? }`) | voir ; editer (auteur d'un dépôt : titre, description, pièces) |
 | `POST /cm/cartes/:id/(soumettre\|publier\|depublier)` ; `…/(valider\|refuser)` | editer ; valider |
 | `POST /cm/cartes/:id/(checklists\|commentaires\|pieces)` ; `PATCH\|DELETE /cm/(checklists\|elements\|commentaires)/:id` ; `DELETE /cm/pieces/:id` ; `POST /cm/pieces/:id/lien` | editer (commenter : deposer ou editer) |
+| `POST /cm/tableaux/:id/tout-vu` ; `GET /cm/cartes/:id?vu=1` (fiche ouverte : commentaires marqués lus) ; `POST /cm/cartes/:id/suivre { suivre }` | voir (état personnel) |
 | `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` | voir |
 | `PATCH /cm/tableaux/:id { fond }` (fond seul : `null`, `{ genre: 'couleur' \| 'degrade', cle }`, `{ genre: 'image', drive \| envoi }`) | editer |
 | `GET /cm/calendrier/teams?du&au` (calendriers des teams, lecture seule) | voir (et droits de chaque team) |
@@ -367,7 +408,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
   FicheCarte, Calendrier, Clips, ImportTrello, RolesCm, CmTeam), textes `src/esport/i18n/cm.ts`.
 - Tests : `esport/test/cm.test.mjs` (SQLite et PostgreSQL : règles, migration sur base existante, périmètre et
   permissions, tableaux, circuit de validation et invalidation, suggestions, clips, import Trello et entrées
-  malformées, RGPD, export / import), `esport/test/cm-tableaux.test.mjs` (chaque modification d'une carte en
+  malformées, RGPD, export / import), `esport/test/cm-commentaires.test.mjs` (SQLite et PostgreSQL : commentaires non lus par compte, vu à l'ouverture, tout lu, permissions, notifications aux bonnes personnes, temps réel, RGPD) et `src/esport/CmCommentairesNonLus.test.tsx` (pastilles carte, colonne, tableau, groupe, tuile), `esport/test/cm-tableaux.test.mjs` (chaque modification d'une carte en
   POST + `X-Methode` relue en base, cartes Trello, suggestions, post validé → « à valider », version 409,
   permissions, fond, préférences, calendriers des teams et périmètre), `src/esport/Cm.test.tsx`,
   `src/esport/CmTableaux.test.tsx` (brouillons gardés, conflit, défilement par colonne, colonne réduite, cartes
@@ -378,7 +419,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 
 1. Mettre à jour le serveur Esport (déploiement automatique o2switch, ou `npm run migrer --prefix esport`) : la
    migration `0023_cm.sql` s'applique seule (puis les suivantes, dont `0042_cm_tableaux_fond.sql` : fond des
-   tableaux et choix d'affichage). Publier le site et l'app PC.
+   tableaux et choix d'affichage ; `0045_cm_commentaires_non_lus.sql` : commentaires non lus). Publier le site et l'app PC.
 2. **Esport › Teams › CM du club › Équipe CM** : affecter le rôle **Responsable CM** au CM du club (portée « Club »), et
    **Correspondant CM** à une personne de chaque team (portée = la team ; elle doit en être membre).
 3. Dans chaque team : **Paramètres › Modules › CM** (activé d'office pour une nouvelle team « complète »).

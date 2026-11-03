@@ -2649,6 +2649,7 @@ export const fr = {
   'cm.jr.annonce_fil': 'Annonce Discord ({reseau}) : {motif}',
   'cm.nt.assigne': '{membre} vous a assigné la carte « {titre} »',
   'cm.nt.mention': '{membre} vous a mentionné sur « {titre} »',
+  'cm.nt.commentaire': '{membre} a commenté « {titre} »',
   'cm.nt.a_valider': 'Post à valider : « {titre} »',
   'cm.nt.a_revalider': 'Post modifié après validation, à valider de nouveau : « {titre} »',
   'cm.nt.valide': 'Votre post « {titre} » est validé',

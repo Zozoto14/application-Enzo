@@ -4,7 +4,8 @@
  * portée de team ; journal de la section pour le club). `cm.post_publie` et `cm.post_adresses` sont consommés
  * par la page Réseaux (reseaux/annonces.mjs : annonce Discord, publications suivies pour les statistiques).
  *
- * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, valideurs
+ * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, personnes concernées par un
+ * nouveau commentaire (assignées, auteur de la carte, suiveurs : `cm-commentaire`, migration 0045), valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
  * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
  * du Drive (espace utilisé à 80 %). Réunions de l'équipe CM : invités (créée, modifiée, annulée), organisateur
@@ -71,7 +72,7 @@ export const TYPES_CM = [
   'cm.reunion_reponse',
   'cm.reunion_rappel',
   'cm.rdv_reserve',
-  // Liens utiles de DATA › Ressources (migration 0044) : charge { titre, hote, portee } (+ { genre } d'une liaison, { epingle }).
+  // Liens utiles de DATA › Ressources (migration 0045) : charge { titre, hote, portee } (+ { genre } d'une liaison, { epingle }).
   'cm.lien_cree',
   'cm.lien_modifie',
   'cm.lien_supprime',
@@ -112,8 +113,24 @@ export async function abonneCm(base, ev) {
   switch (ev.type) {
     case 'cm.carte_assignee':
       return envoyer(charge.comptes ?? [], 'cm-assigne', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id });
-    case 'cm.commentaire_ajoute':
-      return envoyer(charge.mentions ?? [], 'cm-mention', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id });
+    case 'cm.commentaire_ajoute': {
+      const donnees = { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id };
+      await envoyer(charge.mentions ?? [], 'cm-mention', donnees);
+      // Personnes concernées (assignées, auteur de la carte, suiveurs ; migration 0045) : une seule notification non lue
+      // par carte et par personne (pas de rafale quand la conversation s'anime).
+      for (const compte of new Set(charge.concernes ?? [])) {
+        if (!compte || compte === ev.acteur_id || (charge.mentions ?? []).includes(compte)) continue;
+        const deja = (await base.tous("SELECT charge FROM notifications WHERE compte_id = ? AND type = 'cm-commentaire' AND lue_le IS NULL", [compte])).some(l => {
+          try {
+            return JSON.parse(l.charge).carte === carte;
+          } catch {
+            return false;
+          }
+        });
+        if (!deja) await notifier(base, ev, compte, 'cm-commentaire', donnees);
+      }
+      return;
+    }
     case 'cm.post_soumis':
     case 'cm.post_invalide':
       return envoyer([...(await valideurs(base, ev, charge))], 'cm-a-valider', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, invalide: ev.type === 'cm.post_invalide', membre: ev.acteur_id });

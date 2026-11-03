@@ -158,6 +158,8 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
       return tr('cm.nt.assigne', { membre: nom(c.membre), titre });
     case 'cm-mention':
       return tr('cm.nt.mention', { membre: nom(c.membre), titre });
+    case 'cm-commentaire':
+      return tr('cm.nt.commentaire', { membre: nom(c.membre), titre });
     case 'cm-a-valider':
       return tr(c.invalide ? 'cm.nt.a_revalider' : 'cm.nt.a_valider', { titre });
     case 'cm-valide':

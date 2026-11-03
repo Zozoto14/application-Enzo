@@ -41,6 +41,9 @@ export const REGLES = Object.freeze({
   'match.*': { categorie: 'resultats', acces: 'team:resultats.voir', lien: TEAM('module:resultats') },
   // ---- Section CM (posts, validations, clips, dépôts, suggestions, visuels, réseaux).
   'cm.*': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('tableaux') },
+  // Commentaire d'une carte : jamais dans le fil de tout le monde, seulement la notification personnelle (cm-commentaire,
+  // cm-mention) des personnes concernées.
+  'cm.commentaire_ajoute': AUCUN,
   'cm.post_soumis': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_valide': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_refuse': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },

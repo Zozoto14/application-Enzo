@@ -115,12 +115,16 @@ export interface TableauListe {
   majLe: string;
   cartes?: number;
   aValider?: number;
+  /** Commentaires non lus du compte sur ce tableau (migration 0045). */
+  nonLus?: number;
   droits?: DroitsTableau;
   /** Fond (migration 0042) ; null : fond du thème. */
   fond?: FondTableau | null;
 }
 export interface ListeTableaux {
   tableaux: TableauListe[];
+  /** Commentaires non lus sur tous les tableaux visibles (serveur récent). */
+  nonLus?: number;
   portees: Array<{ portee: string; team: TeamCm | null; permissions: PermissionCm[] }>;
 }
 export interface ListeCm {
@@ -156,6 +160,8 @@ export interface CarteResume {
   etiquettes: string[];
   membres: string[];
   commentaires: number;
+  /** Commentaires de la carte écrits par d'autres depuis la dernière ouverture (migration 0045). */
+  nonLus?: number;
   checklist: { total: number; faits: number };
   pieces: number;
   archive: boolean;
@@ -175,6 +181,8 @@ export interface DetailTableau {
   cartes: CarteResume[];
   noms: Record<string, string | null>;
   personnes: Personne[];
+  /** Total des commentaires non lus du tableau. */
+  nonLus?: number;
 }
 export interface Piece {
   id: string;
@@ -194,6 +202,8 @@ export interface Commentaire {
   majLe: string;
   trello: boolean;
   moi: boolean;
+  /** Écrit par quelqu'un d'autre depuis la dernière ouverture de la carte par le compte. */
+  nouveau?: boolean;
 }
 export interface Activite {
   id: string;
@@ -240,6 +250,11 @@ export interface CarteDetail {
   membres: string[];
   checklists: Array<{ id: string; nom: string; elements: Array<{ id: string; texte: string; fait: boolean }> }>;
   commentaires: Commentaire[];
+  /** Dernière ouverture de la carte par le compte avant cette lecture (séparateur « Nouveaux »). */
+  vuAvant?: string | null;
+  nonLus?: number;
+  /** Le compte suit la carte (notifié de ses commentaires). */
+  suivie?: boolean;
   pieces: Piece[];
   activite: Activite[];
   clips: Array<{ id: string; titre: string; statut: StatutClip; genre: 'fichier' | 'lien' }>;
@@ -282,6 +297,8 @@ export interface CarteTransverse {
 export interface EtatCm {
   versions: Record<string, number>;
   aValider: number;
+  /** Commentaires non lus : total et par tableau (migration 0045). */
+  nonLus?: { total: number; tableaux: Record<string, number> };
 }
 export interface PageTeamCm {
   team: TeamCm & { fuseau: string };
@@ -425,7 +442,12 @@ export function apiCm(client: ClientEsport) {
     ordonnerEtiquettes: (tableauId: string, ids: string[]) => r<{ ok: true }>(`/cm/tableaux/${e(tableauId)}/etiquettes/ordre`, 'PUT', { ids }),
     fusionnerEtiquettes: (id: string, vers: string) => r<{ ok: true; cartes: number }>(`/cm/etiquettes/${e(id)}/fusionner`, 'POST', { vers }),
     creerCarte: (tableauId: string, c: SaisieCarte & { listeId: string; titre: string; enHaut?: boolean }) => r<ReponseCarte>(`/cm/tableaux/${e(tableauId)}/cartes`, 'POST', c),
-    carte: (id: string) => r<ReponseCarte>(`/cm/cartes/${e(id)}`),
+    /** `vu` : la fiche est ouverte, ses commentaires sont marqués lus pour le compte (la réponse dit encore ce qui était nouveau). */
+    carte: (id: string, vu = false) => r<ReponseCarte>(`/cm/cartes/${e(id)}${vu ? '?vu=1' : ''}`),
+    /** « Tout marquer comme lu » sur un tableau. */
+    toutVu: (tableauId: string) => r<{ ok: true }>(`/cm/tableaux/${e(tableauId)}/tout-vu`, 'POST', {}),
+    /** Suivre (ou ne plus suivre) une carte : notifié de ses nouveaux commentaires. */
+    suivre: (id: string, suivre: boolean) => r<{ ok: true; suivie: boolean }>(`/cm/cartes/${e(id)}/suivre`, 'POST', { suivre }),
     modifierCarte: (id: string, c: SaisieCarte) => r<ReponseCarte>(`/cm/cartes/${e(id)}`, 'PATCH', c),
     supprimerCarte: (id: string) => r<{ ok: true }>(`/cm/cartes/${e(id)}`, 'DELETE'),
     deplacerCarte: (id: string, d: { listeId: string; index: number; tableauId?: string }) => r<{ ok: true }>(`/cm/cartes/${e(id)}/deplacer`, 'POST', d),

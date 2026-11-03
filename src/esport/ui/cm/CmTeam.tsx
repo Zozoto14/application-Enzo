@@ -40,15 +40,16 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
   const peut = (p: string) => Boolean(page?.permissions.includes(p as never));
   // Pastille du Drive de la team : nouveautés depuis la dernière visite (migration 0041).
   const nouveautesDrive = useNouveautesDrive(client, teamId, Boolean(page && voitDrive(page.permissions)));
+  // État de la section (versions des tableaux, commentaires non lus), relu en temps réel : pastille sur « Tableau ».
+  const { etat } = useEtatCm(api, Boolean(page && peut('cm.voir')));
   const sections: Array<{ id: Section; libelle: string; pastille?: number }> = [
     ...(peut('cm.deposer') ? [{ id: 'deposer' as const, libelle: trCm('team.deposer') }] : []),
-    ...(peut('cm.voir') && page?.tableaux.length ? [{ id: 'tableau' as const, libelle: trCm('team.tableau') }] : []),
+    ...(peut('cm.voir') && page?.tableaux.length ? [{ id: 'tableau' as const, libelle: trCm('team.tableau'), pastille: etat?.nonLus?.tableaux[page.tableaux[0].id] ?? 0 }] : []),
     ...(peut('cm.clips.proposer') || peut('cm.voir') ? [{ id: 'clips' as const, libelle: trCm('team.clips') }] : []),
     // Drive (migration 0027) : celui de la team, ou son seul dossier « Dépôt joueurs ».
     ...(page && (voitDrive(page.permissions) || peut('cm.clips.proposer') || peut('cm.deposer')) ? [{ id: 'drive' as const, libelle: trCm('team.drive'), pastille: nouveautesDrive }] : []),
   ];
   const actif = section && sections.some(s => s.id === section) ? section : sections[0]?.id;
-  const { etat } = useEtatCm(api, actif === 'tableau');
   return (
     <View style={{ gap: ESP.l }} testID="esport-cm-team">
       <EnTetePage theme={theme} large={large} titre={trCm('team.titre')} sous={trCm('team.sous')} />

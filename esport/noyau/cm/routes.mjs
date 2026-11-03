@@ -9,11 +9,12 @@
  *   GET|POST          /cm/tableaux                               tableaux visibles (?archives=1) ; créer (cm.gerer)
  *   GET|PATCH|DELETE  /cm/tableaux/:id                           tableau complet (?archives=1) ; modifier ; supprimer
  *   POST              /cm/tableaux/:id/(listes|etiquettes|cartes) créer une liste, une étiquette, une carte
+ *   POST              /cm/tableaux/:id/tout-vu                   « Tout marquer comme lu » (commentaires, migration 0044)
  *   PATCH             /cm/listes/:id ; POST …/deplacer { index }
  *   PUT               /cm/tableaux/:id/etiquettes/ordre { ids }  réordonner les étiquettes (cm.editer)
  *   PATCH|DELETE      /cm/etiquettes/:id ; POST …/fusionner { vers }   modifier (cm.editer) ; supprimer définitivement, fusionner (cm.gerer)
- *   GET|PATCH|DELETE  /cm/cartes/:id
- *   POST              /cm/cartes/:id/(deplacer|soumettre|valider|refuser|publier|depublier|checklists|commentaires|pieces)
+ *   GET|PATCH|DELETE  /cm/cartes/:id                             (GET ?vu=1 : fiche ouverte, commentaires marqués lus)
+ *   POST              /cm/cartes/:id/(deplacer|soumettre|valider|refuser|publier|depublier|checklists|commentaires|suivre|pieces)
  *   PATCH|DELETE      /cm/checklists/:id ; POST …/elements ; PATCH|DELETE /cm/elements/:id
  *   PATCH|DELETE      /cm/commentaires/:id ; DELETE /cm/pieces/:id ; POST /cm/pieces/:id/lien { telecharger }
  *   GET               /cm/a-valider ; /cm/calendrier?du&au&reseau ; /cm/recherche?q
@@ -126,6 +127,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 3 && c === 'etiquettes' && m === 'POST') return tb.creerEtiquette(acteur, b, await lireCorps());
     if (n === 4 && c === 'etiquettes' && d === 'ordre' && m === 'PUT') return tb.ordonnerEtiquettes(acteur, b, await lireCorps());
     if (n === 3 && c === 'cartes' && m === 'POST') return tb.creerCarte(acteur, b, await lireCorps());
+    if (n === 3 && c === 'tout-vu' && m === 'POST') return tb.toutVu(acteur, b);
   }
   if (a === 'listes') {
     if (n === 2 && m === 'PATCH') return tb.modifierListe(acteur, b, await lireCorps());
@@ -184,7 +186,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   }
   if (a === 'cartes' && n === 3 && c === 'visuels' && m === 'GET') return vi.visuelsCarte(acteur, b);
   if (a === 'cartes') {
-    if (n === 2 && m === 'GET') return tb.carte(acteur, b, { origine, langue });
+    if (n === 2 && m === 'GET') return tb.carte(acteur, b, { origine, langue, vu: q.get('vu') === '1' });
     if (n === 2 && m === 'PATCH') return tb.modifierCarte(acteur, b, await lireCorps());
     if (n === 2 && m === 'DELETE') return tb.supprimerCarte(acteur, b);
     if (n === 3 && m === 'POST') {
@@ -197,6 +199,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
       if (c === 'depublier') return tb.depublier(acteur, b);
       if (c === 'checklists') return tb.creerChecklist(acteur, b, corps);
       if (c === 'commentaires') return tb.commenter(acteur, b, corps);
+      if (c === 'suivre') return tb.suivre(acteur, b, corps);
       if (c === 'pieces') return tb.ajouterPiece(acteur, b, corps);
     }
   }

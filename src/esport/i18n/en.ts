@@ -2444,6 +2444,7 @@ export const en: Record<Cle, string> = {
   'cm.jr.annonce_fil': 'Discord announcement ({reseau}): {motif}',
   'cm.nt.assigne': '{membre} assigned you the card “{titre}”',
   'cm.nt.mention': '{membre} mentioned you on “{titre}”',
+  'cm.nt.commentaire': '{membre} commented on “{titre}”',
   'cm.nt.a_valider': 'Post to approve: “{titre}”',
   'cm.nt.a_revalider': 'Post changed after approval, to approve again: “{titre}”',
   'cm.nt.valide': 'Your post “{titre}” is approved',
