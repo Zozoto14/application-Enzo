@@ -2,7 +2,7 @@
  * Onglet « Visuels » de l'espace CM : galerie des modèles (11 modèles par défaut qui suivent la charte, et
  * les modèles du club : ouvrir dans l'éditeur, dupliquer, versions, supprimer), visuels générés (aperçu,
  * retouche, génération sans carte), charte graphique du club. Modèles et visuels se rangent dans des dossiers
- * (migration 0039, Dossiers.tsx : dans le style du Drive, glisser-déposer compris), par club ou par team.
+ * (migration 0040, Dossiers.tsx : dans le style du Drive, glisser-déposer compris), par club ou par team.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -40,7 +40,7 @@ export function Visuels({ theme, apiCm, large, moi }: { theme: ThemeHub; apiCm: 
   const { erreur, avis, agir } = useAgir();
   const editerClub = moi.club.includes('cm.editer');
   const porteeEdition = editerClub ? 'club' : (moi.teams.find(t => t.permissions.includes('cm.editer'))?.id ?? null);
-  // Dossiers (migration 0039) : une arborescence par portée (club ou team), commune aux modèles et aux visuels.
+  // Dossiers (migration 0040) : une arborescence par portée (club ou team), commune aux modèles et aux visuels.
   const porteesDossiers = [
     ...(moi.club.includes('cm.voir') || moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.voir')) ? [{ id: 'club', nom: trVi('espace.club') }] : []),
     ...moi.teams.filter(t => t.permissions.includes('cm.voir') || t.permissions.includes('cm.editer')).map(t => ({ id: t.id, nom: t.nom ?? '' })),

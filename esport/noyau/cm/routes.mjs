@@ -128,7 +128,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 5 && c === 'versions' && p[4] === 'restaurer' && m === 'POST') return vi.restaurerModele(acteur, b, p[3], await lireCorps());
   }
   if (a === 'visuels') {
-    // Dossiers des modèles et visuels (migration 0039).
+    // Dossiers des modèles et visuels (migration 0040).
     if (b === 'dossiers') {
       if (n === 2 && m === 'GET') return vi.dossiers(acteur, { portee: q.get('portee') || undefined });
       if (n === 2 && m === 'POST') return vi.creerDossier(acteur, await lireCorps());

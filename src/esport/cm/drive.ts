@@ -91,7 +91,7 @@ export interface MaillonDrive {
   nom: string | null;
   cle: CleDossier | null;
 }
-/** Nouveautés d'un Drive pour le compte (migration 0039) : total, éléments à la racine, compteur par dossier (sous-dossiers compris). */
+/** Nouveautés d'un Drive pour le compte (migration 0040) : total, éléments à la racine, compteur par dossier (sous-dossiers compris). */
 export interface NouveautesDrive {
   total: number;
   racine: number;

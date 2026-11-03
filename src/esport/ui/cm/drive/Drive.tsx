@@ -7,7 +7,7 @@
  * Tout est décidé par le serveur (droits, visibilité) ; l'écran n'affiche que ce que la réponse permet. Un
  * joueur sans droit sur le Drive ne voit que le dossier « Dépôt joueurs » et ses propres fichiers.
  *
- * Migration 0039 : déplacer à la souris (glisser-déposer sur un dossier, le fil d'Ariane ou l'arborescence
+ * Migration 0040 : déplacer à la souris (glisser-déposer sur un dossier, le fil d'Ariane ou l'arborescence
  * latérale ; Ctrl / Maj-clic et cadre de sélection ; toast « Annuler » ; appui long sur écran tactile, menu
  * « Déplacer vers… » partout) et pastilles de nouveautés par dossier (état « vu » gardé par le serveur).
  */

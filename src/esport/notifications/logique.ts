@@ -42,7 +42,7 @@ export function phraseCentre(n: NotificationCentre, noms: Record<string, string 
     case 'devblog':
       return trNf('devblog_publie', { titre: texte(m.titre) || 'DEVBLOG' });
     case 'drive':
-      // `type` (drive.ajout, migration 0039) : fichier, dossier ou nouvelle version.
+      // `type` (drive.ajout, migration 0040) : fichier, dossier ou nouvelle version.
       return trNf(m.type === 'dossier' ? 'drive_ajout_dossier' : m.type === 'version' ? 'drive_ajout_version' : 'drive_ajout', { qui, nom: texte(m.nom) ? ` : ${texte(m.nom)}` : '' });
     case 'trombi':
       return trNf('trombi', { qui });

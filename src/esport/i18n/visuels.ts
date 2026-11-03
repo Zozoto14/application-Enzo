@@ -123,7 +123,7 @@ const fr = {
   'espace.copie_de': '{nom} (copie)',
   'espace.portee': 'Pour',
   'espace.club': 'Le club',
-  // Dossiers des modèles et visuels (migration 0039).
+  // Dossiers des modèles et visuels (migration 0040).
   'dossiers.annonces': 'Annonces',
   'dossiers.resultats': 'Résultats',
   'dossiers.recrues': 'Recrues',

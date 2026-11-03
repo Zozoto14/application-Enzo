@@ -57,7 +57,7 @@ export async function routesDrive({ drive, medias, acteur, p, methode: m, url, r
   const portee = q.get('portee') || undefined;
 
   if (n === 1 && m === 'GET') return drive.lister(acteur, { portee, dossier: q.get('dossier') || undefined, origine, vu: q.get('vu') === '1' });
-  // Nouveautés par compte (migration 0039) : compteurs, dossier vu, tout marquer comme vu.
+  // Nouveautés par compte (migration 0040) : compteurs, dossier vu, tout marquer comme vu.
   if (n === 2 && b === 'nouveautes' && m === 'GET') return drive.nouveautes(acteur, { portee });
   if (n === 2 && b === 'vu' && m === 'POST') return drive.vu(acteur, await lireCorps());
   if (n === 2 && b === 'tout-vu' && m === 'POST') return drive.toutVu(acteur, await lireCorps());
