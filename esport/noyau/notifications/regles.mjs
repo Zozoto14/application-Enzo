@@ -61,6 +61,12 @@ export const REGLES = Object.freeze({
   'cm.reseau_export': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('reseaux') },
   'cm.reseau_reglages': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('reseaux') },
   // Rôles CM et affectations : page Rôles et permissions / équipe CM.
+  // Réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md) : les invités, l'organisateur et la personne qui
+  // propose un rendez-vous reçoivent leur notification PERSONNELLE ; le fil d'activité ne montre ces événements
+  // qu'à qui gère toutes les réunions (cm.reunions.gerer). Rendez-vous (privés) et rappels : jamais dans le fil.
+  'cm.reunion_*': { categorie: 'reunions', acces: 'club:cm.reunions.gerer', lien: CM('reunions') },
+  'cm.reunion_rappel': AUCUN,
+  'cm.rdv_*': AUCUN,
   'cm.role_cree': { categorie: 'membres', acces: 'club:cm.gerer|roles.gerer', lien: CM('equipe') },
   'cm.role_modifie': { categorie: 'membres', acces: 'club:cm.gerer|roles.gerer', lien: CM('equipe') },
   'cm.role_supprime': { categorie: 'membres', acces: 'club:cm.gerer|roles.gerer', lien: CM('equipe') },
@@ -203,6 +209,13 @@ export const CATEGORIES_PERSO = Object.freeze({
   'jeu-brouillon-pret': 'systeme',
   'jeu-maj-proposee': 'systeme',
   'devblog-auto': 'devblog',
+  // Réunions de l'équipe CM (migration 0039).
+  'cm-reunion-invite': 'reunions',
+  'cm-reunion-modifiee': 'reunions',
+  'cm-reunion-annulee': 'reunions',
+  'cm-reunion-reponse': 'reunions',
+  'cm-reunion-rappel': 'reunions',
+  'cm-rdv-reserve': 'reunions',
 });
 
 /** Catégorie d'une notification personnelle (préfixes des modules : `cm-`, `sp-`, planning, review…). */
@@ -233,6 +246,7 @@ export function lienDeCategorie(categorie, teamId) {
     discord: 'parametres',
   };
   if (categorie === 'cm') return CM('tableaux');
+  if (categorie === 'reunions' && !teamId) return CM('reunions');
   if (categorie === 'drive') return CM('drive');
   if (categorie === 'sponsors') return CM('sponsors');
   if (categorie === 'devblog') return { vue: 'devblog' };

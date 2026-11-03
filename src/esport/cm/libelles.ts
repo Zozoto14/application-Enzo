@@ -119,7 +119,7 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return trDr('jr.tag_supprime', { qui, tag: texte(m.tag), n: typeof m.fichiers === 'number' ? m.fichiers : 0 });
     case 'cm.drive_quota':
       return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
-    // Réunions de l'équipe CM (migration 0038).
+    // Réunions de l'équipe CM (migration 0039).
     case 'cm.reunion_creee':
       return trRe('jr.creee', { qui, titre });
     case 'cm.reunion_modifiee':
@@ -170,7 +170,7 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
       const octets = (v: unknown) => tailleMedia(typeof v === 'number' ? v : 0, langueCourante());
       return trDr('nt.quota', { p: typeof c.pourcent === 'number' ? c.pourcent : '?', u: octets(c.utilise), l: octets(c.limite) });
     }
-    // Réunions de l'équipe CM (migration 0038) : l'heure dans le fuseau de la réunion.
+    // Réunions de l'équipe CM (migration 0039) : l'heure dans le fuseau de la réunion.
     case 'cm-reunion-invite':
       return trRe(c.genre === 'rdv' ? 'nt.invite_rdv' : 'nt.invite', { membre: nom(c.membre), titre, quand: quandReunion(c) });
     case 'cm-reunion-modifiee':

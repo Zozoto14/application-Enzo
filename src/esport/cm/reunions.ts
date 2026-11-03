@@ -1,5 +1,5 @@
 /**
- * Client des réunions de l'équipe CM (migration 0038, docs/esport/cm-reunions.md) : agenda, réponses, disponibilités,
+ * Client des réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md) : agenda, réponses, disponibilités,
  * statut du moment, « Trouver un créneau », rendez-vous, notes (confidentielles) et tâches, iCal.
  * Types miroirs de l'API (esport/noyau/cm/reunions/). Règles pures de calendrier (jours affichés, positions).
  */

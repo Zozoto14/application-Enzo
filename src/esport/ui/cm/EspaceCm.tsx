@@ -64,7 +64,7 @@ export function EspaceCm({
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
   // Drive (migration 0027) : du club ou d'une team, pour qui y a un droit (un compte peut n'avoir QUE le Drive).
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
-  // Réunions de l'équipe CM (migration 0038) : l'équipe CM, et tout membre du club invité à une réunion.
+  // Réunions de l'équipe CM (migration 0039) : l'équipe CM, et tout membre du club invité à une réunion.
   const reunions = Boolean(moi.reunions?.voir || moi.reunions?.invite);
   const [onglet, setOnglet] = useState<OngletCm>(() => {
     const permis: Partial<Record<OngletCm, boolean>> = { drive, sponsors, reunions, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };

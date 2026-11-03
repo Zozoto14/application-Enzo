@@ -6,7 +6,7 @@ disponibilités de chacun. »
 Où : **Esport › Teams › CM du club › onglet « Réunions »** (PC et téléphone ; pas de nouvelle section dans la barre du
 bas). L'onglet a trois parties : **Agenda**, **Disponibilités**, **Rendez-vous**, et le **statut du moment** de chacun.
 
-Migration : `esport/migrations/0038_cm_reunions.sql`. Code : `esport/noyau/cm/reunions/` (serveur),
+Migration : `esport/migrations/0039_cm_reunions.sql`. Code : `esport/noyau/cm/reunions/` (serveur),
 `src/esport/cm/reunions.ts` (client), `src/esport/ui/cm/reunions/` (écrans), `src/esport/i18n/reunions.ts` (FR / EN).
 Tests : `esport/test/cm-reunions.test.mjs` (SQLite et PostgreSQL), `src/esport/Reunions.test.tsx` (Jest).
 
