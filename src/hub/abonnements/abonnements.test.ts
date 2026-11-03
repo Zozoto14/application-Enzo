@@ -224,7 +224,7 @@ describe('fusion et synchronisation', () => {
   });
   it('deux appareils convergent vers les mêmes données (entités abo:<id>)', () => {
     const maintenant = '2026-10-05T12:00:00.000Z';
-    const A = modifierCompteAboPar(fondateur, donneesVides(), profils, 'hugo000002', c => marquerPaye(c, { date: '2026-10-05', moyen: 'virement', id: 'pay00041' }, maintenant), 'A', T);
+    const A = modifierCompteAboPar(fondateur, donneesVides(), profils, 'hugo000002', c => marquerPaye(c, { date: '2026-10-05', moyen: 'virement', id: 'pay00040' }, maintenant), 'A', T);
     const B = modifierCompteAboPar(fondateur, donneesVides(), profils, 'hugo000002', c => enregistrerPaiement(c, { date: '2026-10-06', montant: 300, moyen: 'espèces', id: 'pay00041' }, '2026-10-06T08:00:00.000Z'), 'B', T + 1);
     const fusions = fusionsDonnees(A.reglages, T);
     const eA = entitesDonnees(A);
@@ -234,7 +234,7 @@ describe('fusion et synchronisation', () => {
     const resultat = fusionner(eA, etatA, docB, fusions);
     const fusionne = donneesDepuisEntites(resultat.entites, T);
     const ids = fusionne.abonnements.comptes.hugo000002.paiements.map(p => p.id).sort();
-    expect(ids).toEqual(['pay00041', 'pay00041']);
+    expect(ids).toEqual(['pay00040', 'pay00041']);
     // Dans l'autre sens : même résultat.
     const etatB = noterLocal(etatLwwVide(), eB, maintenant, fusions);
     const docA = fusionner(eA, etatA, undefined, fusions).document;
