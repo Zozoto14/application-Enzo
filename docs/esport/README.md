@@ -29,6 +29,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [visuels.md](visuels.md) | Fondateur, CM | Visuels de la section CM : charte graphique (thème cyberpunk), modèles d'affiches par défaut (4 formats, FR / EN), éditeur, génération PNG / JPEG jointe aux posts |
 | [reseaux-stats.md](reseaux-stats.md) | Fondateur, CM | Page Réseaux du CM : comptes du club et des teams, annonce Discord des posts publiés (anglais + fil français), statistiques des posts, vidéos et comptes (relevés datés, engagement, tableaux de bord, import / export CSV) |
 | [drive.md](drive.md) | Fondateur, CM | Drive du CM : dossiers et fichiers du club et des teams, envoi multiple et glisser-déposer, versions, corbeille (30 jours), recherche, aperçus, ZIP, quota, dépôt des joueurs, pièces jointes et images prises dans le Drive |
+| [cm-reunions.md](cm-reunions.md) | Fondateur, CM | Réunions de l'équipe CM « comme Teams » : agenda jour / semaine / mois, réponses, disponibilités et statut de chacun, « Trouver un créneau » (fuseaux, absences, réunions), rendez-vous réservables, notes confidentielles et tâches de suivi, rappels in-app et MP Discord, iCal |
 | [trombinoscope.md](trombinoscope.md) | Fondateur, CM, staff, joueurs | Trombinoscope (Membres, premier onglet) : fiches des joueurs (photo, teams et jeu, postes, elo, palmarès saisi et calculé, anciennes structures, réseaux pro), visibilité par champ, texte d'annonce FR / EN, RGPD |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [roles-permissions.md](roles-permissions.md) | Fondateur | Page Membres › Rôles et permissions : rôles du club (Second CEO…), rôles CM, rôles des teams et modèle des nouvelles teams, matrice par catégories, garde-fous, journal |
@@ -74,7 +75,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres             Trombinoscope (par défaut, voir trombinoscope.md) · Tous les membres · Rôles et permissions (Fondateur, voir roles-permissions.md)
-├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, Drive, voir drive.md, Réseaux, voir reseaux-stats.md, et Sponsors, voir sponsors.md)
+├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, Réunions, voir cm-reunions.md, Drive, voir drive.md, Réseaux, voir reseaux-stats.md, et Sponsors, voir sponsors.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```

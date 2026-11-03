@@ -29,6 +29,7 @@ const EXCEPTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['strats/assets.ts', 'Legal Jibber Jabber', 'mention légale imposée par Riot Games (anglais)'],
   ['i18n/', 'Français', 'nom de la langue, écrit dans sa langue'],
   ['sponsors/api.ts', 'aucun', 'valeur technique du renouvellement d’un contrat (API), traduite à l’affichage'],
+  ['ui/cm/reunions/', 'aucun', 'valeur technique du lieu d’une réunion CM (API : aucun, discord, lien, lieu), traduite à l’affichage'],
   ['devblog/rendu.ts', 'Nouvelle Mise à Jour', 'titre de repli du message Discord français du devblog (miroir du serveur, regles.mjs)'],
 ];
 

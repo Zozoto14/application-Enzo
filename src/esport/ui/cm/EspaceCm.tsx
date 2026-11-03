@@ -4,7 +4,9 @@
  * CM, import Trello, réglages (suggestions automatiques), journal de la section. Page « Réseaux » (comptes, bot
  * d'annonce Discord, statistiques ; docs/esport/reseaux-stats.md) pour qui voit la section CM. Drive (dossiers et fichiers du
  * club et des teams ; docs/esport/drive.md) pour qui a un droit cm.drive.*. Rubrique « Sponsors » pour qui a
- * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Tout est décidé
+ * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Onglet « Réunions »
+ * (réunions, disponibilités et rendez-vous de l'équipe CM ; docs/esport/cm-reunions.md) pour l'équipe CM et pour
+ * un membre du club invité à une réunion. Tout est décidé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
 
@@ -32,8 +34,10 @@ import { EspaceReseaux } from './reseaux/EspaceReseaux';
 import { Visuels } from './visuels/Visuels';
 import { trVi } from '../../i18n/visuels';
 import { Drive } from './drive/Drive';
+import { Reunions } from './reunions/Reunions';
+import { trRe } from '../../i18n/reunions';
 
-export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
 export function EspaceCm({
   theme,
@@ -60,10 +64,12 @@ export function EspaceCm({
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
   // Drive (migration 0027) : du club ou d'une team, pour qui y a un droit (un compte peut n'avoir QUE le Drive).
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
+  // Réunions de l'équipe CM (migration 0038) : l'équipe CM, et tout membre du club invité à une réunion.
+  const reunions = Boolean(moi.reunions?.voir || moi.reunions?.invite);
   const [onglet, setOnglet] = useState<OngletCm>(() => {
-    const permis: Partial<Record<OngletCm, boolean>> = { drive, sponsors, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    const permis: Partial<Record<OngletCm, boolean>> = { drive, sponsors, reunions, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
     if (ongletInitial && (permis[ongletInitial] ?? voirCm)) return ongletInitial;
-    return voirCm ? 'tableaux' : drive ? 'drive' : sponsors ? 'sponsors' : 'tableaux';
+    return voirCm ? 'tableaux' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : 'tableaux';
   });
   const [ouvert, setOuvert] = useState<string | undefined>();
   const { etat } = useEtatCm(api, voirCm);
@@ -78,6 +84,7 @@ export function EspaceCm({
           { id: 'visuels', libelle: trVi('espace.titre') },
         ]
       : []),
+    ...(reunions ? [{ id: 'reunions', libelle: trRe('onglet') }] : []),
     ...(drive ? [{ id: 'drive', libelle: trCm('espace.drive') }] : []),
     // Page Réseaux (migration 0026) : comptes, annonce Discord des posts publiés, statistiques.
     ...(voirCm ? [{ id: 'reseaux', libelle: trCm('espace.reseaux') }] : []),
@@ -121,6 +128,7 @@ export function EspaceCm({
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
       {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}
+      {onglet === 'reunions' && reunions ? <Reunions theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'drive' && drive ? (
         <Drive
           theme={theme}

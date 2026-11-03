@@ -6,6 +6,8 @@
 import { langueCourante, tr } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
 import { trDr } from '../i18n/drive';
+import { trRe, type CleRe } from '../i18n/reunions';
+import { formaterDate } from '../i18n';
 import { tailleMedia } from '../medias/envoi';
 
 const texte = (v: unknown, secours = '?'): string => (typeof v === 'string' && v ? v : secours);
@@ -117,6 +119,19 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return trDr('jr.tag_supprime', { qui, tag: texte(m.tag), n: typeof m.fichiers === 'number' ? m.fichiers : 0 });
     case 'cm.drive_quota':
       return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
+    // Réunions de l'équipe CM (migration 0038).
+    case 'cm.reunion_creee':
+      return trRe('jr.creee', { qui, titre });
+    case 'cm.reunion_modifiee':
+      return trRe('jr.modifiee', { qui, titre });
+    case 'cm.reunion_annulee':
+      return trRe('jr.annulee', { qui, titre });
+    case 'cm.reunion_reponse':
+      return trRe('jr.reponse', { qui, titre });
+    case 'cm.reunion_rappel':
+      return trRe('jr.rappel', { titre });
+    case 'cm.rdv_reserve':
+      return trRe('jr.rdv', { qui, titre });
     default:
       return undefined;
   }
@@ -155,9 +170,32 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
       const octets = (v: unknown) => tailleMedia(typeof v === 'number' ? v : 0, langueCourante());
       return trDr('nt.quota', { p: typeof c.pourcent === 'number' ? c.pourcent : '?', u: octets(c.utilise), l: octets(c.limite) });
     }
+    // Réunions de l'équipe CM (migration 0038) : l'heure dans le fuseau de la réunion.
+    case 'cm-reunion-invite':
+      return trRe(c.genre === 'rdv' ? 'nt.invite_rdv' : 'nt.invite', { membre: nom(c.membre), titre, quand: quandReunion(c) });
+    case 'cm-reunion-modifiee':
+      return trRe('nt.modifiee', { titre, quand: quandReunion(c) });
+    case 'cm-reunion-annulee':
+      return trRe('nt.annulee', { titre, quand: quandReunion(c), motif: typeof c.motif === 'string' && c.motif ? trRe('nt.motif', { motif: c.motif }) : '' });
+    case 'cm-reunion-reponse':
+      return ['accepte', 'peut_etre', 'refuse', 'propose'].includes(String(c.reponse)) ? trRe(`nt.reponse.${String(c.reponse)}` as CleRe, { membre: nom(c.membre), titre }) : undefined;
+    case 'cm-rdv-reserve':
+      return trRe('nt.rdv_reserve', { membre: nom(c.membre), titre, quand: quandReunion(c) });
+    case 'cm-reunion-rappel':
+      return trRe('nt.rappel', { titre, heure: typeof c.debut === 'string' ? formaterDate(c.debut, { hour: '2-digit', minute: '2-digit', timeZone: typeof c.fuseau === 'string' ? c.fuseau : undefined }) : '?' });
     case 'cm-releve':
       return tr('cm.nt.releve', { titre, reseau: texte(c.reseau), j: typeof c.j === 'number' ? c.j : '?' });
     default:
       return undefined;
+  }
+}
+
+/** « mar. 22 oct. 18:00 » d'une notification de réunion (fuseau de la réunion). */
+function quandReunion(c: Record<string, unknown>): string {
+  if (typeof c.debut !== 'string') return '?';
+  try {
+    return formaterDate(c.debut, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: typeof c.fuseau === 'string' ? c.fuseau : undefined });
+  } catch {
+    return formaterDate(c.debut, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 }

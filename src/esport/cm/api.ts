@@ -23,7 +23,10 @@ export type PermissionCm =
   | 'membres.trombi.voir'
   | 'membres.trombi.editer'
   // Badges du trombinoscope (migration 0032).
-  | 'membres.badges.gerer';
+  | 'membres.badges.gerer'
+  // Réunions de l'équipe CM (migration 0038).
+  | 'cm.reunions.voir'
+  | 'cm.reunions.gerer';
 /** Le compte a-t-il un droit sur le Drive (dans une liste de permissions CM) ? */
 export const voitDrive = (p: readonly string[]): boolean => p.some(x => x === 'cm.drive.voir' || x === 'cm.drive.envoyer' || x === 'cm.drive.gerer');
 export type Reseau = 'x' | 'instagram' | 'tiktok';
@@ -60,6 +63,8 @@ export interface MoiCm {
   club: PermissionCm[];
   teams: Array<TeamCm & { permissions: PermissionCm[] }>;
   gerer: boolean;
+  /** Réunions de l'équipe CM (migration 0038) : l'équipe CM voit l'agenda ; un membre du club invité voit ses réunions. */
+  reunions?: { voir: boolean; gerer: boolean; invite: boolean };
 }
 export interface DroitsTableau {
   voir: boolean;
