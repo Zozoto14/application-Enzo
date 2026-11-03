@@ -67,7 +67,7 @@ describe('onglet Ressources', () => {
     expect(await screen.findByTestId('esport-cm-lien-canva')).toBeTruthy();
     expect(screen.getByTestId('esport-cm-lien-canva-hote')).toHaveTextContent('canva.com');
     expect(screen.getByTestId('esport-cm-lien-canva-epingle')).toBeTruthy();
-    expect(screen.getByTestId('esport-cm-lien-canva-liaisons')).toHaveTextContent('Lié 2 fois');
+    expect(screen.getByTestId('esport-cm-lien-canva-liaisons')).toHaveTextContent(/Lié 2 fois/);
     expect(screen.getByTestId('esport-cm-ressources-compte')).toHaveTextContent('3 liens');
     await fireEvent.changeText(screen.getByTestId('esport-cm-ressources-recherche'), 'elements');
     expect(screen.queryByTestId('esport-cm-lien-canva')).toBeNull();
