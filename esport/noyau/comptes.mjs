@@ -35,6 +35,7 @@ import { effacementUsage } from './usage/collecte.mjs';
 import { aGlobale, permissionsGlobalesDe } from './roles/globales.mjs';
 import { effacementRoles } from './roles/rgpd.mjs';
 import { effacementDevblog } from './devblog/rgpd.mjs';
+import { effacementCentre } from './notifications/centre.mjs';
 
 /**
  * Permissions de team qui font d'un rôle un rôle de GESTION : avec la permission du club « Inviter des membres »
@@ -513,6 +514,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       ...effacementRoles(compte),
       // Devblog (migration 0036) : ses marques « vu » effacées.
       ...effacementDevblog(compte),
+      ...effacementCentre(compte),
       { sql: 'DELETE FROM permissions_globales WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),

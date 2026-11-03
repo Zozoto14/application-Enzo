@@ -39,6 +39,9 @@ import type { OngletCm } from './cm/EspaceCm';
 import { demarrerUsage, noterPage } from '../usage';
 import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
 import { trDv } from '../i18n/devblog';
+import { trNf } from '../i18n/notifications';
+import { ClocheNotifications, PageNotifications, useCompteurNotifications } from './notifications/CentreNotifications';
+import type { LienNotification } from '../notifications/api';
 
 type Etat =
   | { e: 'chargement' }
@@ -51,10 +54,10 @@ type Onglet = OngletEsport;
  * Écran affiché. `cm` : l'espace CM du club, rangé dans Teams (l'entrée « Teams » reste surlignée) ; une ancienne
  * navigation vers « cm » (entrée de premier niveau d'avant) mène toujours à cet écran, ou à Teams sans droit CM.
  */
-type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'devblog' } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'devblog' } | { v: 'notifications' } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
 
 /** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
-export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v === 'devblog' ? 'dashboard' : v);
+export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v === 'devblog' || v === 'notifications' ? 'dashboard' : v);
 
 /** Fabrique du client (remplaçable par les tests) : voir ../fabrique.ts. */
 export { fabrique };
@@ -120,6 +123,17 @@ export function Esport(props: PropsRacineApp) {
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
+
+  // Centre de notifications : compteur des non lues (cloche de l'en-tête, entrée de la barre latérale).
+  const notifs = useCompteurNotifications(profilPret ? clientPret : undefined);
+  /** Ouvre l'écran d'une notification (si ce compte y a accès : sinon l'écran retombe sur une page permise). */
+  const ouvrirLien = useCallback((lien: LienNotification, teamId: string | null) => {
+    if (lien.vue === 'team') {
+      if (teamId) setVue({ v: 'team', id: teamId, section: lien.section as SectionTeam });
+    } else if (lien.vue === 'cm') setVue({ v: 'cm', onglet: lien.onglet as OngletCm });
+    else if (lien.vue === 'membres') setVue({ v: 'membres', sous: lien.sous });
+    else setVue({ v: lien.vue });
+  }, []);
 
   const exporter = contexte.enregistrerFichier ? (nom: string, contenu: string, type = 'application/json') => contexte.enregistrerFichier!(nom, contenu, type) : undefined;
   const fondateur = !contexte.profil || contexte.profil.admin;
@@ -191,6 +205,9 @@ export function Esport(props: PropsRacineApp) {
           <BoiteResumes theme={theme} client={etat.client} large={large} />
         </PageEsport>
       );
+    } else if (vue.v === 'notifications') {
+      // Centre de notifications : tout ce que le rôle du compte permet de voir (filtré par le serveur).
+      page = <PageNotifications theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} onOuvrir={ouvrirLien} />;
     } else if (vue.v === 'devblog') {
       // Devblog : historique des mises à jour (tous les membres) ; éditeur et publication Discord pour qui les gère.
       page = <PageDevblog theme={theme} client={etat.client} large={large} avant={<LienRetour theme={theme} titre={trDv('retour')} onPress={() => setVue({ v: 'dashboard' })} testID="esport-devblog-retour" />} />;
@@ -260,11 +277,20 @@ export function Esport(props: PropsRacineApp) {
           onProfilSupprime={() => void ouvrir()}
           moiCm={cm ? moiCm : undefined}
           onCm={o => setVue({ v: 'cm', onglet: o })}
+          onNotifications={() => setVue({ v: 'notifications' })}
         />
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })} pseudo={etat.moi.profil.pseudo} fondateur={stats} gererJeux={Boolean(etat.moi.peutGererJeux)}>
+      <CadreEsport
+        theme={theme}
+        large={large}
+        onglet={onglet}
+        onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })}
+        pseudo={etat.moi.profil.pseudo}
+        fondateur={stats}
+        gererJeux={Boolean(etat.moi.peutGererJeux)}
+        notifications={{ n: notifs.nonLues, actif: vue.v === 'notifications', onPress: () => setVue({ v: 'notifications' }) }}>
         {page}
       </CadreEsport>
     );
@@ -272,7 +298,12 @@ export function Esport(props: PropsRacineApp) {
 
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-esport">
-      <RetourHub theme={theme} onRetour={onRetour} titre="Esport" />
+      <RetourHub
+        theme={theme}
+        onRetour={onRetour}
+        titre="Esport"
+        droite={etat.e === 'pret' && etat.moi.profil ? <ClocheNotifications theme={theme} n={notifs.nonLues} actif={vue.v === 'notifications'} onPress={() => setVue({ v: 'notifications' })} /> : undefined}
+      />
       <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>{contenu}</View>
       {nouveautes.entree && etat.e === 'pret' && etat.moi.profil ? (
         <FenetreNouveautes
@@ -374,6 +405,7 @@ function MesTeams({
   onProfilSupprime,
   moiCm,
   onCm,
+  onNotifications,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -389,6 +421,8 @@ function MesTeams({
   moiCm?: MoiCm;
   /** Ouvrir l'espace CM du club (sur un onglet : « drive »). */
   onCm(onglet?: OngletCm): void;
+  /** Centre de notifications (toutes, filtres, préférences). */
+  onNotifications?(): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
   const [notifs, setNotifs] = useState<Notifications | undefined>();
@@ -474,7 +508,9 @@ function MesTeams({
           titre={nonLues.length ? tr('racineEsport.notifications_n', { n: nonLues.length }) : tr('racineEsport.notifications')}
           sous={nonLues.length ? tr('racineEsport.les_plus_recentes_de') : undefined}
           droite={
-            nonLues.length ? (
+            <View style={communs.ligne}>
+              {onNotifications ? <BoutonHub theme={theme} titre={trNf('titre')} libelle={trNf('sous')} onPress={onNotifications} testID="esport-notifications-centre" /> : null}
+              {nonLues.length ? (
               <BoutonHub
                 theme={theme}
                 titre={tr('racineEsport.tout_marquer_lu')}
@@ -485,7 +521,8 @@ function MesTeams({
                 }
                 testID="esport-notifications-lues"
               />
-            ) : undefined
+              ) : null}
+            </View>
           }
         />
         {notifs?.liste.length ? null : <Text style={attenue(theme, 15)}>{tr('pageTeam.rien_de_nouveau')}</Text>}

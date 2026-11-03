@@ -18,6 +18,7 @@ import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
 import { Compteur, ESP, attenue, rayonControle, texte, useDensite, type EtatPresse } from './design';
 import { tr } from '../i18n';
 import { BandeauTranscriptions } from './medias/Transcription';
+import { trNf } from '../i18n/notifications';
 
 export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques' | 'jeux';
 
@@ -277,6 +278,7 @@ export function CadreEsport({
   enTeteMobile,
   fondateur,
   gererJeux,
+  notifications,
   children,
 }: {
   theme: ThemeHub;
@@ -296,6 +298,11 @@ export function CadreEsport({
   barreBasse?: React.ReactNode;
   /** Téléphone : en-tête propre (team ouverte). */
   enTeteMobile?: React.ReactNode;
+  /**
+   * PC : entrée « Notifications » (compteur des non lues) sous l'Esport. Téléphone : rien dans la barre du bas, la
+   * cloche est dans l'en-tête (RacineEsport.tsx).
+   */
+  notifications?: { n: number; actif: boolean; onPress(): void };
   children: React.ReactNode;
 }) {
   const { reduite, basculer } = useBarreLaterale(large);
@@ -401,12 +408,25 @@ export function CadreEsport({
                 libelle={n.libelle}
                 glyphe={n.glyphe}
                 description={n.description}
-                choisi={onglet === n.cle && !blocTeam}
+                choisi={onglet === n.cle && !blocTeam && !notifications?.actif}
                 compteur={compteurs?.[n.cle]}
                 onPress={() => onOnglet(n.cle)}
                 testID={`esport-nav-${n.cle}`}
               />
             ))}
+            {notifications ? (
+              <EntreeLaterale
+                theme={theme}
+                libelle={trNf('titre')}
+                glyphe="🔔"
+                description={trNf('sous')}
+                choisi={notifications.actif && !blocTeam}
+                compteur={notifications.n}
+                onPress={notifications.onPress}
+                testID="esport-nav-notifications"
+                role="link"
+              />
+            ) : null}
           </View>
           {blocTeam ? (
             <View

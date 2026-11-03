@@ -1109,7 +1109,19 @@ export function BoutonHub({
 }
 
 /** Barre « ← Hub » des apps qui n'ont pas leur propre navigation. */
-export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetour(): void; /** Nom de l'app (en-tête du téléphone). */ titre?: string }) {
+export function RetourHub({
+  theme,
+  onRetour,
+  titre,
+  droite,
+}: {
+  theme: ThemeHub;
+  onRetour(): void;
+  /** Nom de l'app (en-tête du téléphone). */
+  titre?: string;
+  /** Action propre à l'app, à droite de l'en-tête (cloche des notifications de l'Esport…). */
+  droite?: React.ReactNode;
+}) {
   // Pastille de synchro et bouton « Paramètres » : les mêmes que dans l'en-tête du hub.
   const barre = useBarreApp();
   const nav = useNavigationMobile();
@@ -1124,6 +1136,7 @@ export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetou
         <Text numberOfLines={1} style={{ flex: 1, color: theme.texte, fontSize: 17, fontWeight: '600', textAlign: 'center', ...police(theme.policeTexte) }}>
           {titre ?? ''}
         </Text>
+        {droite}
         {nav?.synchro ? <IndicateurSynchro theme={theme} synchro={nav.synchro} condense onPress={() => nav.onParametres()} /> : null}
         <SelecteurOngletsMobile theme={theme} />
         {nav ? <BoutonIcone theme={theme} titre="⚙︎" libelle="Paramètres" onPress={nav.onParametres} testID="app-parametres-ouvrir" /> : null}
@@ -1136,7 +1149,14 @@ export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetou
         <BoutonHub theme={theme} titre="← Hub" onPress={onRetour} testID="retour-hub" />
         {CLAVIER_PROBABLE ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
       </View>
-      {barre}
+      {droite ? (
+        <View style={styles.retourGauche}>
+          {droite}
+          {barre}
+        </View>
+      ) : (
+        barre
+      )}
     </View>
   );
 }

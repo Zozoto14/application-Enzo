@@ -66,10 +66,12 @@ import { servicesDevblog } from './devblog/service.mjs';
 import { routesDevblog } from './devblog/routes.mjs';
 import { traiterDevblogDiscord } from './devblog/discord.mjs';
 import { routesDeploiement } from './deploiement.mjs';
+import { servicesCentre } from './notifications/centre.mjs';
+import { routesNotifications } from './notifications/routes.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -208,6 +210,8 @@ export function creerApi({
   // anglaise peut être préparée par l'IA (tâche légère « traduction », texte du devblog seulement).
   // Publication automatique : `devblogSource` = historique git du dépôt déployé (serveur/devblog-source.mjs ; simulé en
   // test), rédaction par l'IA (tâche « devblog », non confidentielle : messages de commit nettoyés seulement).
+  // Centre de notifications (migration 0038) : fil filtré par les droits du moment, préférences par compte.
+  const nc = servicesCentre({ base, maintenant });
   const dv = servicesDevblog({ base, maintenant, discuterPour: jx.discuterPour, cle: secretDiscord, source: devblogSource });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
@@ -310,6 +314,8 @@ export function creerApi({
     }
     if (chemin === '/notifications' && m === 'GET') return s.notifications(acteur);
     if (chemin === '/notifications/lues' && m === 'POST') return s.marquerLues(acteur, await lireCorps(requete));
+    const centre = await routesNotifications({ nc, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete), limite });
+    if (centre !== undefined) return centre;
     // Ancienne route des codes esp_ (retirés) : 410, sans rien écrire.
     if (chemin === '/invitations/accepter' && m === 'POST') {
       await limite('acceptation_ip', ip);

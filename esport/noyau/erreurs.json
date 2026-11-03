@@ -674,6 +674,8 @@
   "Choisissez le jeu.": "Choose the game.",
   "Clé inconnue du profil de jeu de la team.": "Unknown key in the team’s game profile.",
   "Liste illisible.": "Unreadable list.",
+  "Curseur illisible.": "Unreadable cursor.",
+  "Liste d’identifiants attendue (200 au plus).": "List of identifiers expected (200 at most).",
   "Élément illisible.": "Unreadable item.",
   "Image illisible.": "Unreadable image.",
   "Donnez un nom au badge.": "Give the badge a name.",

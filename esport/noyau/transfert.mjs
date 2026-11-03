@@ -189,6 +189,10 @@ export const TABLES = [
   ['devblog_reglages', 'cle'],
   // Devblog automatique (migration 0037) : journal des passages (réglages et état : lignes de devblog_reglages).
   ['devblog_auto', 'cree_le, id'],
+  // Centre de notifications (migration 0038) : fil, lectures et préférences par compte.
+  ['notifs_centre', 'cree_le, id'],
+  ['notifs_lectures', 'compte_id, notif_id'],
+  ['notifs_preferences', 'compte_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

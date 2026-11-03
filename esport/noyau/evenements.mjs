@@ -1,5 +1,7 @@
 /**
- * Bus d'événements interne (table `evenements`, modèle « outbox »).
+ * Bus d'événements interne (table `evenements`, modèle « outbox »). Centre de notifications : abonné
+ * `abonneCentre` (notifications/centre.mjs, docs/esport/notifications.md) ; tout nouveau type d'événement y
+ * reçoit une catégorie et une clé d'accès dans notifications/regles.mjs (défaut : Fondateur seul).
  *
  * Chaque écriture importante ajoute, DANS LE MÊME LOT atomique que
  * l'écriture elle-même, une ligne d'événement de domaine (`team.created`,
@@ -27,6 +29,7 @@ import { abonneCmSuggestions } from './cm/suggestions.mjs';
 import { TYPES_SPONSORS, abonneSponsors } from './sponsors/bus.mjs';
 import { TYPES_RESEAUX, abonneReseaux } from './reseaux/bus.mjs';
 import { TYPES_BADGES, TYPES_TROMBI, abonneTrombi } from './trombi/bus.mjs';
+import { abonneCentre } from './notifications/centre.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -116,6 +119,8 @@ export const TYPES_EVENEMENTS = [
   'roles.global_attribue',
   'roles.global_retire',
   'roles.modele_modifie',
+  // Devblog publié dans l'app (centre de notifications, migration 0038 : visible de tous).
+  'devblog.publie',
 ];
 
 const ESSAIS_MAX = 8;
@@ -253,7 +258,9 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi];
+// Centre de notifications (migration 0038) : TOUJOURS le dernier (il relie le fil aux notifications personnelles
+// que les abonnés précédents viennent d'écrire pour le même événement, et les annonce en direct).
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi, abonneCentre];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

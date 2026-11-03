@@ -13,6 +13,7 @@ import { traiterFile } from './discord/file.mjs';
 import { debutsDiscord, rappelsDiscord } from './discord/rappels.mjs';
 import { distribuer } from './evenements.mjs';
 import { purgerJournal } from './journal.mjs';
+import { purgerNotifications } from './notifications/centre.mjs';
 import { purgerLimites } from './limites.mjs';
 import { rappelsEcheances } from './objectifs.mjs';
 import { rappelsPresence } from './planning/rappels.mjs';
@@ -59,6 +60,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['devblog programmé', () => publierProgrammes(base, { maintenant: maintenant() })],
     ['devblog Discord', () => traiterDevblogDiscord(base, { cle, maintenant: maintenant(), jetonBot, ...(fetch ? { fetch } : {}) })],
     ['rétention du journal', () => purgerJournal(base, { maintenant: maintenant() })],
+    // Centre de notifications : fil, lectures et notifications personnelles de plus de 90 jours.
+    ['rétention des notifications', () => purgerNotifications(base, { maintenant: maintenant() })],
     // Statistiques d'usage : agrégation des jours terminés (une fois par jour), puis détail brut de plus de 90 jours effacé.
     ['agrégation de l’usage', () => agregerUsage(base, { maintenant: maintenant() })],
     ['rétention de l’usage', () => purgerUsage(base, { maintenant: maintenant() })],

@@ -11,6 +11,7 @@
 
 import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import { comptesAvecGlobale } from '../roles/globales.mjs';
+import { evenement } from '../evenements.mjs';
 import { PERMISSION_DEVBLOG, contenuVide, empreinteTextes, lireContenu, messagesDiscord } from './regles.mjs';
 
 export async function lireReglage(base, cle, repli) {
@@ -74,7 +75,18 @@ export async function publierDansApp(base, id, { par = null, t, seulementSiProgr
       "UPDATE devblog_entrees SET statut = 'publie', publie_le = ?, publie_par = ?, programme_le = NULL, programme_cibles = NULL, maj_par = COALESCE(?, maj_par), maj_le = ? WHERE id = ? AND statut = 'brouillon'",
       [t, par, par, t, id],
     );
-  return r.changements === 1;
+  if (r.changements !== 1) return false;
+  await evenementPublication(base, id, { par, t });
+  return true;
+}
+
+/** Événement `devblog.publie` (centre de notifications : visible de tous), une fois par publication. */
+export async function evenementPublication(base, id, { par = null, t }) {
+  const l = await base.premier('SELECT contenu_fr, contenu_en, version FROM devblog_entrees WHERE id = ?', [id]);
+  if (!l) return;
+  const titre = (c, v) => (typeof jsonOu(c, {})?.titre === 'string' ? jsonOu(c, {}).titre.slice(0, 120) : v);
+  const e = evenement('devblog.publie', { acteur: par, entiteType: 'devblog', entiteId: id, charge: { titre: titre(l.contenu_fr, null), titreEn: titre(l.contenu_en, null), version: l.version ?? null }, maintenant: Date.parse(t) || Date.now() });
+  await base.executer(e.sql, e.params);
 }
 
 /**

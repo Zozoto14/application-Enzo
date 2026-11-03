@@ -23,7 +23,7 @@ import { chiffrerWebhook, finDeWebhook, validerUrlWebhook } from '../discord/chi
 import { PERMISSION_DEVBLOG, contenuComplet, contenuVide, empreinteTextes, lireContenu, lireDate, lireVersion, messagesDiscord } from './regles.mjs';
 import { DATE_PREMIER_DEVBLOG, ID_PREMIER_DEVBLOG, PREMIER_DEVBLOG_EN, PREMIER_DEVBLOG_FR } from './premier.mjs';
 import { FUSEAU_DEVBLOG, REGLAGES_AUTO_DEFAUT, echeanceAuto, jourClub, lireInstantProgramme, lireReglagesAuto, texteMuralClub } from './auto-regles.mjs';
-import { ciblesPossibles as ciblesDuClub, ecrireReglage as ecrireReglageBase, entreeDiscord, exigerComplet, lireReglage, mettreEnFileDiscord, publierDansApp } from './publication.mjs';
+import { ciblesPossibles as ciblesDuClub, ecrireReglage as ecrireReglageBase, entreeDiscord, evenementPublication, exigerComplet, lireReglage, mettreEnFileDiscord, publierDansApp } from './publication.mjs';
 import { apresPublication, changementsDeployes, genererMaintenant, lireEtatAuto, lireReglagesEnBase } from './auto.mjs';
 
 const MOTIF_ID = /^[a-z0-9-]{6,64}$/i;
@@ -162,7 +162,10 @@ export function servicesDevblog({ base, maintenant = () => Date.now(), discuterP
       `UPDATE devblog_entrees SET date_maj = ?, version = ?, contenu_fr = ?, contenu_en = ?, statut = ?, publie_le = ?, publie_par = ?, maj_par = ?, maj_le = ?${devientPublie ? ', programme_le = NULL, programme_cibles = NULL' : ''} WHERE id = ?`,
       [s.date, s.version, JSON.stringify(s.fr), JSON.stringify(s.en), statut, publieLe, devientPublie ? acteur.compte : l.publie_par, acteur.compte, t, id],
     );
-    if (devientPublie) await apresPublication(base, l, t);
+    if (devientPublie) {
+      await evenementPublication(base, id, { par: acteur.compte, t });
+      await apresPublication(base, l, t);
+    }
     return detail(acteur, id);
   }
 

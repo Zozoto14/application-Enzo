@@ -33,6 +33,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [roles-permissions.md](roles-permissions.md) | Fondateur | Page Membres › Rôles et permissions : rôles du club (Second CEO…), rôles CM, rôles des teams et modèle des nouvelles teams, matrice par catégories, garde-fous, journal |
 | [devblog.md](devblog.md) | Fondateur, tous les membres | Devblog : notes de mise à jour FR / EN, fenêtre « Nouveautés » à l'entrée (une fois par compte), historique (bouton « Nouveautés » du Dashboard), éditeur avec aperçus et IA, publication Discord (anglais + fil français, @here) |
+| [notifications.md](notifications.md) | Tous les membres, Fondateur | Centre de notifications : cloche et compteur dans l'en-tête, toutes les notifications que votre rôle permet de voir (le Fondateur voit tout), filtres, préférences par compte, temps réel, ajout d'un événement |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |

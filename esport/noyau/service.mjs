@@ -41,6 +41,7 @@ import { PERMISSIONS_GLOBALES, aGlobale, permissionsGlobalesDe } from './roles/g
 import { modeleRolesTeam } from './roles/modele.mjs';
 import { effacementRoles, exportRoles } from './roles/rgpd.mjs';
 import { effacementDevblog, exportDevblog } from './devblog/rgpd.mjs';
+import { effacementCentre, exportCentre } from './notifications/centre.mjs';
 import { PERMISSION_DEVBLOG } from './devblog/regles.mjs';
 
 /**
@@ -937,6 +938,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...(await exportTrombi(base, compte)),
       // Devblog (migration 0036) : les devblogs qu'il a vus.
       ...(await exportDevblog(base, compte)),
+      // Centre de notifications (migration 0038) : préférences et éléments du fil marqués lus.
+      centreNotifications: await exportCentre(base, compte),
     };
   }
 
@@ -1039,6 +1042,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementTrombi(compte),
       // Devblog (migration 0036) : ses marques « vu » effacées.
       ...effacementDevblog(compte),
+      // Centre de notifications (migration 0038) : préférences et lectures.
+      ...effacementCentre(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );
