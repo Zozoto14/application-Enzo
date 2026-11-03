@@ -43,7 +43,7 @@ import { ReglagesTranscriptionTeam } from './medias/TranscriptionServeur';
 import { BoutonConfirme, Choix, Panneau, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 import { CodeAffiche } from './CodeLiaison';
 import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
-import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
+import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
 import { NOM_LANGUE, definirLangue, tr, trn, useLangue, type Langue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { ReglageRecapCourriel } from './DiscordId';
@@ -178,6 +178,7 @@ export function PageTeam({
   onNaviguer,
   gererJeux,
   onChangerTeam,
+  onOuvrirCm,
   pseudo,
   contexte,
 }: {
@@ -196,6 +197,8 @@ export function PageTeam({
   gererJeux?: boolean;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
+  /** Le compte a accès à l'espace CM du club (mêmes conditions que la tuile « CM du club ») : le sélecteur le propose en tête. */
+  onOuvrirCm?(): void;
   pseudo?: string;
   /** Contexte du hub (comptes du hub à ajouter à la team depuis « Membres et rôles »). */
   contexte?: ContexteHub;
@@ -250,13 +253,16 @@ export function PageTeam({
   };
   const autres = (teams ?? []).filter(t => t.id !== detail.team.id && !t.suspendu);
   const selecteur =
-    onChangerTeam && autres.length ? (
+    onChangerTeam && (autres.length || onOuvrirCm) ? (
       <MenuActions
         theme={theme}
         testID="esport-changer-team"
         libelle={tr('pageTeam.changer_de_team')}
         titreBouton={large ? tr('pageTeam.changer_de_team_2') : '⇄'}
-        actions={autres.map(t => ({ titre: t.nom, onPress: () => onChangerTeam(t.id, active), testID: `esport-changer-team-${t.slug}` }))}
+        actions={[
+          ...(onOuvrirCm ? [{ titre: tr('cm.club_titre'), onPress: onOuvrirCm, testID: 'esport-changer-cm', pastille: { texte: 'CM', couleur: COULEUR_CM_CLUB } }] : []),
+          ...autres.map(t => ({ titre: t.nom, onPress: () => onChangerTeam(t.id, active), testID: `esport-changer-team-${t.slug}`, pastille: { couleur: couleurTeam(t.slug) } })),
+        ]}
       />
     ) : null;
   const couleur = couleurTeam(detail.team.slug);

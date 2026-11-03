@@ -119,6 +119,7 @@ try {
   await pc.getByTestId('app-esport').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-nav-teams').first().click();
   await pc.getByTestId('esport-teams-cm-ouvrir').click();
+  await pc.getByTestId('esport-cm-groupe-contenus').first().click();
   await pc.getByTestId('esport-cm-tableau-club').click();
   await pc.getByTestId(`esport-cm-carte-${carte.id}-tuile`).click();
   await pc.getByTestId('esport-cm-fiche-titre').waitFor();
@@ -335,6 +336,7 @@ try {
     const demain = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const ev = await api(`/teams/${team.id}/planning`, sess, { methode: 'POST', corps: { type: 'match', titre: 'Match contre Nova', date: demain, heureDebut: '20:00', heureFin: '22:00', convocation: { groupes: ['joueurs'] } } });
     verifier(ev.statut === 200, `match au planning de la team (${ev.statut})`);
+    await pc.getByTestId('esport-cm-groupe-contenus').first().click();
     await pc.getByTestId('esport-cm-onglet-calendrier').first().click();
     await pc.getByTestId(`esport-cm-calendrier-team-${team.id}`).waitFor({ timeout: 15_000 });
     const evenement = pc.locator(`[data-testid^="esport-cm-calendrier-ev-${team.id}-"]`).first();

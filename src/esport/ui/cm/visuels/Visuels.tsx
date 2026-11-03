@@ -18,7 +18,7 @@ import { TYPES_VISUEL, type Charte, type DocumentVisuel, type TypeVisuel } from 
 import { langueCourante } from '../../../i18n';
 import { trVi, type CleVi } from '../../../i18n/visuels';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
-import { Badge, Carte, ESP, EtatVide, Grille, Onglets, TitreCarte, attenue, texte } from '../../design';
+import { Badge, Carte, ESP, EtatVide, Onglets, TitreCarte, attenue } from '../../design';
 import { Apercu } from './Apercu';
 import { CharteClub } from './Charte';
 import { EditeurDiffere } from './EditeurDiffere';
@@ -46,15 +46,15 @@ export function Visuels({ theme, apiCm, large, moi }: { theme: ThemeHub; apiCm: 
     ...moi.teams.filter(t => t.permissions.includes('cm.voir') || t.permissions.includes('cm.editer')).map(t => ({ id: t.id, nom: t.nom ?? '' })),
   ];
   const [portee, setPortee] = useState<string>(porteeEdition ?? porteesDossiers[0]?.id ?? 'club');
-  const [dossiers, setDossiers] = useState<{ editer: boolean; dossiers: DossierVisuel[] }>({ editer: false, dossiers: [] });
+  const [dossiers, setDossiers] = useState<{ editer: boolean; dossiers: DossierVisuel[]; defauts: Record<string, string> }>({ editer: false, dossiers: [], defauts: {} });
   const [courant, setCourant] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
-    const [c, m, v, d] = await Promise.all([api.charte(), api.modeles(portee), api.visuels({ portee }), api.dossiers(portee).catch(() => ({ editer: false, dossiers: [] as DossierVisuel[] }))]);
+    const [c, m, v, d] = await Promise.all([api.charte(), api.modeles(portee), api.visuels({ portee }), api.dossiers(portee).catch(() => ({ editer: false, dossiers: [] as DossierVisuel[], defauts: {} as Record<string, string> }))]);
     setCharte(lireCharte(c.charte));
     setListe(m);
     setVisuels(v.visuels);
-    setDossiers({ editer: d.editer, dossiers: d.dossiers });
+    setDossiers({ editer: d.editer, dossiers: d.dossiers, defauts: d.defauts ?? {} });
     setCourant(x => (x && d.dossiers.some(y => y.id === x) ? x : null));
   }, [api, portee]);
   useEffect(() => {
@@ -162,28 +162,34 @@ export function Visuels({ theme, apiCm, large, moi }: { theme: ThemeHub; apiCm: 
           onOuvrir={setCourant}
           onChange={charger}
           testID="esport-vi-modeles"
+          nbDefautsRanges={Object.keys(dossiers.defauts).length}
+          onReinitialiserDefauts={() => api.reinitialiserDefauts(portee)}
           avant={
-            <View style={{ gap: ESP.m }}>
+            <View style={{ gap: ESP.xs }}>
               <TitreCarte theme={theme} titre={trVi('espace.par_defaut')} sous={trVi('espace.par_defaut_aide')} />
-              <Grille min={large ? 240 : 160} testID="esport-vi-defauts">
-                {TYPES_VISUEL.map(t => (
-                  <Carte key={t} theme={theme} dense testID={`esport-vi-defaut-${t}`}>
-                    <Apercu theme={theme} api={api} charte={charte} document={apercusDefaut[t]} donnees={exemple} langue={langue} largeur={large ? 200 : 140} libelle={trVi(`type.${t}` as CleVi)} />
-                    <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{trVi(`type.${t}` as CleVi)}</Text>
-                    {porteeEdition ? (
-                      <View style={[styles.ligne, { gap: 4 }]}>
-                        <BoutonHub theme={theme} titre={trVi('espace.ouvrir')} onPress={() => setEdition({ genre: 'modele', type: t, modele: null, portee: porteeEdition })} testID={`esport-vi-defaut-${t}-ouvrir`} />
-                        <BoutonHub theme={theme} titre={trVi('espace.dupliquer')} onPress={() => void dupliquerDefaut(t)} testID={`esport-vi-defaut-${t}-dupliquer`} />
-                      </View>
-                    ) : null}
-                  </Carte>
-                ))}
-              </Grille>
-              <TitreCarte theme={theme} titre={trVi('espace.personnalises')} />
               {liste && !liste.modeles.some(m => m.portee === portee) ? <Text style={attenue(theme)}>{trVi('espace.aucun_modele')}</Text> : null}
             </View>
           }
-          elements={(liste?.modeles ?? [])
+          elements={[
+            // Modèles par défaut : rangeables comme les autres ; seul leur rangement est mémorisé (le modèle ne change pas).
+            ...TYPES_VISUEL.map(t => ({
+              genre: 'defaut' as const,
+              id: t,
+              nom: trVi(`type.${t}` as CleVi),
+              dossierId: dossiers.defauts[t] ?? null,
+              modifiable: dossiers.editer,
+              sous: trVi('espace.defaut_sous'),
+              apercu: <Apercu theme={theme} api={api} charte={charte} document={apercusDefaut[t]} donnees={exemple} langue={langue} largeur={large ? 200 : 140} libelle={trVi(`type.${t}` as CleVi)} />,
+              badges: <Badge theme={theme} texte={trVi('espace.defaut_badge')} />,
+              actions: porteeEdition ? (
+                <View style={[styles.ligne, { gap: 4 }]}>
+                  <BoutonHub theme={theme} titre={trVi('espace.ouvrir')} onPress={() => setEdition({ genre: 'modele', type: t, modele: null, portee: porteeEdition })} testID={`esport-vi-defaut-${t}-ouvrir`} />
+                  <BoutonHub theme={theme} titre={trVi('espace.dupliquer')} onPress={() => void dupliquerDefaut(t)} testID={`esport-vi-defaut-${t}-dupliquer`} />
+                </View>
+              ) : undefined,
+              onOuvrir: porteeEdition ? () => setEdition({ genre: 'modele', type: t, modele: null, portee: porteeEdition }) : undefined,
+            })),
+            ...(liste?.modeles ?? [])
             .filter(m => m.portee === portee)
             .map(m => {
               const peutEditer = Boolean(m.portee === 'club' ? liste?.editer.club : liste?.editer.teams.includes(m.portee));
@@ -211,7 +217,8 @@ export function Visuels({ theme, apiCm, large, moi }: { theme: ThemeHub; apiCm: 
                   </View>
                 ),
               };
-            })}
+            }),
+          ]}
         />
       ) : null}
       {onglet === 'visuels' ? (

@@ -177,6 +177,7 @@ export function Esport(props: PropsRacineApp) {
         onNaviguer={o => setVue({ v: o })}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
+        onOuvrirCm={cm ? () => setVue({ v: 'cm' }) : undefined}
         pseudo={etat.moi.profil.pseudo}
         contexte={contexte}
       />

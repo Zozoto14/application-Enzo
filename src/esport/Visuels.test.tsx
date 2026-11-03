@@ -317,10 +317,83 @@ describe('visuels : écrans', () => {
     await fireEvent.press(await screen.findByTestId('esport-vi-visuels-destination-racine'));
     await fireEvent.press(screen.getByTestId('esport-vi-visuels-destination-ok'));
     await waitFor(() => expect(appels.some(a => a.chemin === '/cm/visuels/deplacer')).toBe(true));
-    expect(appels.find(a => a.chemin === '/cm/visuels/deplacer')?.corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: null });
+    expect(appels.find(a => a.chemin === '/cm/visuels/deplacer')?.corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: null, portee: 'club' });
     await fireEvent.press(await screen.findByTestId('esport-vi-visuels-toast-annuler'));
     await waitFor(() => expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer').length).toBe(2));
-    expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer')[1].corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: D_PLAYOFFS });
+    expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer')[1].corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: D_PLAYOFFS, portee: 'club' });
+  });
+
+  it('modèles par défaut : rangés dans un dossier par le menu « Déplacer vers… », « Annuler », puis « Réinitialiser le rangement »', async () => {
+    const { client, appels } = fauxClient();
+    // Le serveur mémorise le rangement des modèles par défaut (type → dossier) : on le simule.
+    let defauts: Record<string, string> = {};
+    const base = client.requete.bind(client) as <R>(chemin: string, methode?: string, corps?: unknown) => Promise<R>;
+    (client as unknown as { requete: unknown }).requete = async (chemin: string, methode = 'GET', corps?: unknown) => {
+      const c = chemin.split('?')[0];
+      if (c === '/cm/visuels/dossiers' && methode === 'GET') return { portee: 'club', editer: true, dossiers: DOSSIERS, defauts };
+      if (c === '/cm/visuels/deplacer') {
+        appels.push({ chemin, methode, corps });
+        const { elements, dossierId } = corps as { elements: Array<{ genre: string; id: string }>; dossierId: string | null };
+        const avant: Record<string, string | null> = {};
+        for (const e of elements) {
+          avant[e.id] = defauts[e.id] ?? null;
+          if (dossierId) defauts = { ...defauts, [e.id]: dossierId };
+          else delete defauts[e.id];
+        }
+        return { faits: elements.map(e => e.id), erreurs: [], avant };
+      }
+      if (c === '/cm/visuels/defauts/reinitialiser') {
+        appels.push({ chemin, methode, corps });
+        defauts = {};
+        return { ok: true, n: 1 };
+      }
+      return base(chemin, methode, corps);
+    };
+    const moi: MoiCm = { espace: true, club: ['cm.voir', 'cm.editer'], teams: [], gerer: true };
+    await render(<Visuels theme={theme} apiCm={apiCm(client)} large moi={moi} />);
+    // À la racine : les 11 modèles par défaut, comme avant, sans bouton de réinitialisation.
+    expect(await screen.findByTestId('esport-vi-modeles-defaut-resultat')).toBeTruthy();
+    expect(TYPES_VISUEL.every(t => screen.queryByTestId(`esport-vi-modeles-defaut-${t}`))).toBe(true);
+    expect(screen.queryByTestId('esport-vi-modeles-reinitialiser')).toBeNull();
+    // Menu « ⋯ » › Déplacer vers… › « Résultats ».
+    await fireEvent.press(screen.getByTestId('esport-vi-modeles-defaut-resultat-menu'));
+    await fireEvent.press(await screen.findByText('Déplacer vers…'));
+    await fireEvent.press(await screen.findByTestId(`esport-vi-modeles-destination-${D_RESULTATS}`));
+    await fireEvent.press(screen.getByTestId('esport-vi-modeles-destination-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/visuels/deplacer')).toBe(true));
+    expect(appels.find(a => a.chemin === '/cm/visuels/deplacer')?.corps).toEqual({ elements: [{ genre: 'defaut', id: 'resultat' }], dossierId: D_RESULTATS, portee: 'club' });
+    // Il a quitté la racine ; il est dans « Résultats ».
+    await waitFor(() => expect(screen.queryByTestId('esport-vi-modeles-defaut-resultat')).toBeNull());
+    expect(await screen.findByTestId('esport-vi-modeles-reinitialiser')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId(`esport-vi-modeles-dossier-${D_RESULTATS}`));
+    expect(await screen.findByTestId('esport-vi-modeles-defaut-resultat')).toBeTruthy();
+    // « Annuler » : le modèle revient à sa place d'origine (la racine).
+    await fireEvent.press(await screen.findByTestId('esport-vi-modeles-toast-annuler'));
+    await waitFor(() => expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer')).toHaveLength(2));
+    expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer')[1].corps).toEqual({ elements: [{ genre: 'defaut', id: 'resultat' }], dossierId: null, portee: 'club' });
+    // Re-rangé, puis « Réinitialiser le rangement » (confirmation).
+    await fireEvent.press(screen.getByTestId('esport-vi-modeles-ariane-racine'));
+    await fireEvent.press(await screen.findByTestId('esport-vi-modeles-defaut-lineup-menu'));
+    await fireEvent.press(await screen.findByText('Déplacer vers…'));
+    await fireEvent.press(await screen.findByTestId(`esport-vi-modeles-destination-${D_RESULTATS}`));
+    await fireEvent.press(screen.getByTestId('esport-vi-modeles-destination-ok'));
+    await waitFor(() => expect(screen.queryByTestId('esport-vi-modeles-defaut-lineup')).toBeNull());
+    await fireEvent.press(await screen.findByTestId('esport-vi-modeles-reinitialiser'));
+    await fireEvent.press(await screen.findByText('Remettre les modèles par défaut à leur place d’origine ?'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/visuels/defauts/reinitialiser')).toBe(true));
+    expect(appels.find(a => a.chemin === '/cm/visuels/defauts/reinitialiser')?.corps).toEqual({ portee: 'club' });
+    expect(await screen.findByTestId('esport-vi-modeles-defaut-lineup')).toBeTruthy();
+  });
+
+  it('modèles par défaut : sans cm.editer, ni menu « Déplacer vers… » ni réinitialisation', async () => {
+    const { client } = fauxClient();
+    const base = client.requete.bind(client) as <R>(chemin: string, methode?: string, corps?: unknown) => Promise<R>;
+    (client as unknown as { requete: unknown }).requete = async (chemin: string, methode = 'GET', corps?: unknown) => (chemin.split('?')[0] === '/cm/visuels/dossiers' ? { portee: 'club', editer: false, dossiers: DOSSIERS, defauts: { resultat: D_RESULTATS } } : base(chemin, methode, corps));
+    const moi: MoiCm = { espace: true, club: ['cm.voir'], teams: [], gerer: false };
+    await render(<Visuels theme={theme} apiCm={apiCm(client)} large moi={moi} />);
+    await screen.findByTestId('esport-vi-modeles-defaut-lineup');
+    expect(screen.queryByTestId('esport-vi-modeles-defaut-lineup-menu')).toBeNull();
+    expect(screen.queryByTestId('esport-vi-modeles-reinitialiser')).toBeNull();
   });
 
   it('serveur sans visuels : pas de panneau', async () => {

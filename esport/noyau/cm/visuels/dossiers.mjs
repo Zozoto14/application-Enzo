@@ -28,6 +28,8 @@ export const DOSSIER_PAR_TYPE = Object.freeze({
   libre: 'divers',
 });
 const NOMS_DEFAUT = { annonces: 'Annonces', resultats: 'Résultats', recrues: 'Recrues', programmes: 'Programmes', sponsors: 'Sponsors', divers: 'Divers' };
+/** Types des modèles par défaut (ceux du code de l'app) : rangeables dans un dossier sans changer le modèle. */
+export const TYPES_DEFAUT = Object.freeze(Object.keys(DOSSIER_PAR_TYPE));
 export const DOSSIERS_VISUELS_MAX = 500;
 export const PROFONDEUR_VISUELS_MAX = 8;
 const LOT_MAX = 200;
@@ -105,7 +107,15 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
         n.get(l.dossier_id)[cleN] = Number(l.n);
       }
     }
-    return { portee: c.portee, editer: c.editer, dossiers: [...map.values()].map(d => publier(d, n.get(d.id))) };
+    // Modèles par défaut rangés (migration 0043) : un dossier disparu vaut la racine (la ligne est ignorée).
+    const defauts = {};
+    for (const l of await base.tous('SELECT type, dossier_id FROM cm_visuels_defauts WHERE portee = ?', [c.portee])) {
+      if (!map.has(l.dossier_id) || !TYPES_DEFAUT.includes(l.type)) continue;
+      defauts[l.type] = l.dossier_id;
+      if (!n.has(l.dossier_id)) n.set(l.dossier_id, {});
+      n.get(l.dossier_id).modeles = (n.get(l.dossier_id).modeles ?? 0) + 1;
+    }
+    return { portee: c.portee, editer: c.editer, dossiers: [...map.values()].map(d => publier(d, n.get(d.id))), defauts };
   }
 
   /** `POST /cm/visuels/dossiers { portee, parentId?, nom }` (cm.editer). */
@@ -175,6 +185,8 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
       { sql: 'UPDATE cm_visuels_dossiers SET parent_id = ? WHERE parent_id = ?', params: [parent, d.id] },
       { sql: 'UPDATE cm_modeles SET dossier_id = ? WHERE dossier_id = ?', params: [parent, d.id] },
       { sql: 'UPDATE cm_visuels SET dossier_id = ? WHERE dossier_id = ?', params: [parent, d.id] },
+      // Modèles par défaut rangés ici : ils remontent aussi (racine : retour à leur place d'origine).
+      parent ? { sql: 'UPDATE cm_visuels_defauts SET dossier_id = ? WHERE dossier_id = ?', params: [parent, d.id] } : { sql: 'DELETE FROM cm_visuels_defauts WHERE dossier_id = ?', params: [d.id] },
       { sql: 'DELETE FROM cm_visuels_dossiers WHERE id = ?', params: [d.id] },
     ]);
     return { ok: true, parentId: parent };
@@ -184,6 +196,10 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
    * `POST /cm/visuels/deplacer { elements: [{ genre: modele | visuel | dossier, id }], dossierId }` : range des
    * modèles, des visuels et des dossiers dans un dossier (null : racine) de LEUR portée. Rend `{ faits, erreurs,
    * avant }` (`avant` : dossier d'avant de chaque élément, pour « Annuler »).
+   *
+   * Un modèle par défaut (`genre: 'defaut'`, `id` : son type) se range aussi, dans la portée `corps.portee` (ou celle
+   * du dossier d'arrivée) : seul son rangement est mémorisé (`cm_visuels_defauts`), le modèle ne change pas ; la
+   * racine le remet à sa place d'origine. Permission : cm.editer de la portée, comme pour les dossiers.
    */
   async function deplacer(acteur, corps) {
     const elements = corps?.elements;
@@ -194,9 +210,23 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
     const t = iso(maintenant());
     for (const e of elements) {
       try {
-        const genre = ['modele', 'visuel', 'dossier'].includes(e?.genre) ? e.genre : null;
+        const genre = ['modele', 'visuel', 'dossier', 'defaut'].includes(e?.genre) ? e.genre : null;
         if (!genre) throw echec(400, 'genre', 'Élément inconnu.');
-        if (genre === 'dossier') {
+        if (genre === 'defaut') {
+          if (!TYPES_DEFAUT.includes(e?.id)) throw echec(404, 'modele-introuvable', 'Modèle introuvable.');
+          const dossierId = corps?.dossierId ?? null;
+          const arrivee = dossierId ? await base.premier('SELECT portee FROM cm_visuels_dossiers WHERE id = ?', [String(dossierId)]) : null;
+          if (dossierId && !arrivee) throw echec(404, 'dossier-introuvable', 'Dossier introuvable.');
+          const portee = lirePortee(corps?.portee ?? arrivee?.portee ?? PORTEE_CLUB);
+          if (arrivee && arrivee.portee !== portee) throw echec(404, 'dossier-introuvable', 'Dossier introuvable.');
+          await ctx(acteur, portee, 'cm.editer');
+          const map = await arbre(portee);
+          const dest = cible(map, dossierId);
+          const ancien = await base.premier('SELECT dossier_id FROM cm_visuels_defauts WHERE portee = ? AND type = ?', [portee, e.id]);
+          avant[e.id] = ancien && map.has(ancien.dossier_id) ? ancien.dossier_id : null;
+          if (!dest) await base.executer('DELETE FROM cm_visuels_defauts WHERE portee = ? AND type = ?', [portee, e.id]);
+          else await base.executer('INSERT INTO cm_visuels_defauts (portee, type, team_id, dossier_id, maj_par, maj_le) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (portee, type) DO UPDATE SET dossier_id = excluded.dossier_id, maj_par = excluded.maj_par, maj_le = excluded.maj_le', [portee, e.id, teamDePortee(portee), dest.id, acteur.compte, t]);
+        } else if (genre === 'dossier') {
           const { d } = await dossierEditable(acteur, e?.id);
           await modifier(acteur, d.id, { parentId: corps?.dossierId ?? null });
           avant[d.id] = d.parent_id ?? null;
@@ -221,6 +251,14 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
     return { faits, erreurs, avant };
   }
 
+  /** `POST /cm/visuels/defauts/reinitialiser { portee }` : tous les modèles par défaut de la portée reviennent à leur place d'origine. */
+  async function reinitialiserDefauts(acteur, corps) {
+    const c = await ctx(acteur, corps?.portee, 'cm.editer');
+    const n = Number((await base.premier('SELECT COUNT(*) AS n FROM cm_visuels_defauts WHERE portee = ?', [c.portee]))?.n ?? 0);
+    await base.executer('DELETE FROM cm_visuels_defauts WHERE portee = ?', [c.portee]);
+    return { ok: true, n };
+  }
+
   /**
    * Dossier d'un nouveau modèle ou visuel : celui demandé (de la portée, sinon 404), ou le dossier par défaut de
    * son genre.
@@ -235,5 +273,5 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
     return (await base.premier('SELECT id FROM cm_visuels_dossiers WHERE portee = ? AND cle = ?', [portee, cle]))?.id ?? null;
   }
 
-  return { lister, creer, modifier, supprimer, deplacer, dossierPour, NOMS_DEFAUT };
+  return { lister, creer, modifier, supprimer, deplacer, reinitialiserDefauts, dossierPour, NOMS_DEFAUT };
 }

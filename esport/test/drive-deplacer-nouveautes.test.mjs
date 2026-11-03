@@ -331,6 +331,63 @@ test('dossiers des visuels : par défaut, rangement par genre, dossier choisi, d
   assert.equal(autre.erreurs[0].code, 'dossier-introuvable');
 });
 
+test('modèles par défaut : rangés dans un dossier sans changer le modèle, annuler, réinitialiser, supprimer le dossier, permissions, export', async () => {
+  const { A, s, api, ok } = await preparer();
+  const parCle = Object.fromEntries((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).dossiers.map(d => [d.cle, d.id]));
+  assert.deepEqual((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).defauts, {}, 'à leur place d’origine : aucun rangement');
+  const avantModeles = JSON.stringify((await ok('/cm/modeles?portee=club', s.cm123456)).modeles);
+  const saison = (await ok('/cm/visuels/dossiers', s.cm123456, { methode: 'POST', corps: { portee: 'club', nom: 'Saison 2026' } })).id;
+
+  // Déplacer deux modèles par défaut (portée du dossier d'arrivée) : seul le rangement est mémorisé.
+  const r = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'resultat' }, { genre: 'defaut', id: 'lineup' }], dossierId: saison } });
+  assert.deepEqual(r.faits.sort(), ['lineup', 'resultat']);
+  assert.deepEqual(r.avant, { resultat: null, lineup: null });
+  let liste = await ok('/cm/visuels/dossiers?portee=club', s.cm123456);
+  assert.deepEqual(liste.defauts, { resultat: saison, lineup: saison });
+  assert.equal(liste.dossiers.find(d => d.id === saison).modeles, 2);
+  assert.equal(JSON.stringify((await ok('/cm/modeles?portee=club', s.cm123456)).modeles), avantModeles, 'le modèle lui-même ne change pas');
+  // Type inconnu et dossier inconnu refusés.
+  const mauvais = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'inconnu' }], dossierId: saison } });
+  assert.equal(mauvais.erreurs[0].code, 'modele-introuvable');
+  const sansDossier = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'mvp' }], dossierId: '00000000-0000-4000-8000-000000000000', portee: 'club' } });
+  assert.equal(sansDossier.erreurs[0].code, 'dossier-introuvable');
+  // « Annuler » : le dossier d'avant (null : racine) remet le modèle à sa place.
+  const sousDossier = (await ok('/cm/visuels/dossiers', s.cm123456, { methode: 'POST', corps: { portee: 'club', nom: 'Playoffs', parentId: saison } })).id;
+  const r2 = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'lineup' }], dossierId: sousDossier } });
+  assert.deepEqual(r2.avant, { lineup: saison });
+  await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'lineup' }], dossierId: null, portee: 'club' } });
+  assert.deepEqual((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).defauts, { resultat: saison });
+
+  // Permissions : le correspondant d'une team (pas de cm.editer) ne range rien ; chaque portée a son rangement.
+  const refus = await ok('/cm/visuels/deplacer', s.kai12345, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'annonce' }], dossierId: parCle.annonces } });
+  assert.equal(refus.erreurs[0].code, 'permission');
+  assert.equal((await api('/cm/visuels/defauts/reinitialiser', s.kai12345, { methode: 'POST', corps: { portee: 'club' } })).statut, 403);
+  const dossiersTeam = (await ok(`/cm/visuels/dossiers?portee=${A.teamId}`, s.cm123456)).dossiers;
+  const refusTeam = await ok('/cm/visuels/deplacer', s.kai12345, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'annonce' }], dossierId: dossiersTeam[0].id } });
+  assert.equal(refusTeam.erreurs[0].code, 'permission');
+  const chezTeam = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'annonce' }], dossierId: dossiersTeam[0].id } });
+  assert.deepEqual(chezTeam.faits, ['annonce']);
+  assert.deepEqual((await ok(`/cm/visuels/dossiers?portee=${A.teamId}`, s.cm123456)).defauts, { annonce: dossiersTeam[0].id });
+  assert.deepEqual((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).defauts, { resultat: saison }, 'chaque portée a son rangement');
+  // Un dossier d'une autre portée n'est pas une destination pour la portée demandée.
+  const croise = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'mvp' }], dossierId: dossiersTeam[0].id, portee: 'club' } });
+  assert.equal(croise.erreurs[0].code, 'dossier-introuvable');
+
+  // Supprimer le dossier : le modèle remonte dans le parent (ici la racine : retour à la place d'origine).
+  await ok(`/cm/visuels/dossiers/${saison}`, s.cm123456, { methode: 'DELETE' });
+  liste = await ok('/cm/visuels/dossiers?portee=club', s.cm123456);
+  assert.deepEqual(liste.defauts, {});
+  // Réinitialiser le rangement.
+  await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'defaut', id: 'resultat' }, { genre: 'defaut', id: 'mvp' }], dossierId: parCle.resultats } });
+  assert.equal(Object.keys((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).defauts).length, 2);
+  const reinit = await ok('/cm/visuels/defauts/reinitialiser', s.cm123456, { methode: 'POST', corps: { portee: 'club' } });
+  assert.equal(reinit.n, 2);
+  assert.deepEqual((await ok('/cm/visuels/dossiers?portee=club', s.cm123456)).defauts, {});
+  assert.deepEqual((await ok(`/cm/visuels/dossiers?portee=${A.teamId}`, s.cm123456)).defauts, { annonce: dossiersTeam[0].id }, 'l’autre portée n’est pas touchée');
+  // Export / import de la base.
+  assert.ok(TABLES.some(([t]) => t === 'cm_visuels_defauts'));
+});
+
 test('centre de notifications : drive.ajout (nom, type, dossier, portée, auteur) ; jamais pour qui ne voit pas un dossier restreint', async () => {
   const { b, A, s, ok, tic, deposer, dossier } = await preparer();
   const p = A.teamId;

@@ -6,8 +6,10 @@
  * club et des teams ; docs/esport/drive.md) pour qui a un droit cm.drive.*. Rubrique « Sponsors » pour qui a
  * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Section « Réunions »
  * (réunions, disponibilités et rendez-vous de l'équipe CM ; docs/esport/cm-reunions.md) pour l'équipe CM et pour
- * un membre du club invité à une réunion. Les sections sont rangées dans la barre latérale du cadre (bloc « CM du club »,
- * comme les sections d'une team) ; sur téléphone, un sélecteur de section en haut de page. Tout est décidé
+ * un membre du club invité à une réunion. Les GROUPES (Accueil CM, Contenus, Médias, Diffusion, Partenaires, Équipe,
+ * Gestion) sont les entrées de la barre latérale du cadre (bloc « CM du club », comme les sections d'une team) ; chaque
+ * groupe a ses sous-onglets en haut de la page (aucun s'il n'a qu'une sous-section) ; sur téléphone, un sélecteur de
+ * groupe puis les sous-onglets. Tout est décidé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
 
@@ -21,9 +23,9 @@ import { phraseJournalCm } from '../../cm/libelles';
 import { CLES_RESEAUX, RESEAUX } from '../../cm/reseaux';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { tr } from '../../i18n';
-import { EntreeLaterale, PageEsport, SiBarreEtendue, SiBarreReduite, useBlocLateral } from '../CadreEsport';
+import { EntreeLaterale, PageEsport, SiBarreEtendue, useBlocLateral } from '../CadreEsport';
 import { PastilleRole, Retours, styles, useAgir } from '../commun';
-import { Badge, COULEUR_CM_CLUB, Carte, ESP, EtatVide, Grille, MenuActions, SqueletteCartes, TitreCarte, Volet, attenue, texte, type ActionSecondaire } from '../design';
+import { Badge, COULEUR_CM_CLUB, Carte, ESP, EtatVide, Grille, MenuActions, Onglets, Squelette, SqueletteCartes, TitreCarte, Volet, attenue, couleurTeam, texte, type ActionSecondaire } from '../design';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PALETTE, PastilleReseau, Teinte, nomTableau, quand, useEtatCm } from './commun';
 import { Tableau } from './Tableau';
 import { Calendrier } from './Calendrier';
@@ -38,55 +40,75 @@ import { Drive } from './drive/Drive';
 import { Reunions } from './reunions/Reunions';
 import { trRe } from '../../i18n/reunions';
 import { useNouveautesDrive } from '../../cm/nouveautesDrive';
+import { apiReunions, plusJours, type Reunion } from '../../cm/reunions';
 
-export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+export type OngletCm = 'accueil' | 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+export type GroupeCmId = 'accueil' | 'contenus' | 'medias' | 'diffusion' | 'partenaires' | 'equipe' | 'gestion';
 
-/** Pictogrammes des sections dans la barre latérale (colonne d'icônes quand elle est réduite). */
-const GLYPHES_CM: Record<OngletCm, string> = {
-  tableaux: '▦',
-  valider: '✓',
-  calendrier: '▤',
-  clips: '▶',
-  visuels: '◩',
-  drive: '☁',
-  reseaux: '◉',
-  sponsors: '★',
-  reunions: '◷',
+/** Pictogrammes des groupes dans la barre latérale (colonne d'icônes quand elle est réduite). */
+const GLYPHES_GROUPES: Record<GroupeCmId, string> = {
+  accueil: '⌂',
+  contenus: '▦',
+  medias: '◩',
+  diffusion: '◉',
+  partenaires: '★',
   equipe: '☺',
-  import: '⇩',
-  reglages: '⚙︎',
-  journal: '≡',
+  gestion: '⚙︎',
 };
 
+/** Groupe de chaque section (sous-onglet). */
+export const GROUPE_DE_ONGLET: Record<OngletCm, GroupeCmId> = {
+  accueil: 'accueil',
+  tableaux: 'contenus',
+  valider: 'contenus',
+  calendrier: 'contenus',
+  clips: 'medias',
+  visuels: 'medias',
+  drive: 'medias',
+  reseaux: 'diffusion',
+  sponsors: 'partenaires',
+  reunions: 'equipe',
+  equipe: 'equipe',
+  import: 'gestion',
+  reglages: 'gestion',
+  journal: 'gestion',
+};
+
+/** Sous-section (sous-onglet) d'un groupe. */
 export interface EntreeCm {
   id: OngletCm;
   libelle: string;
-  glyphe: string;
-  /** Compteur (posts à valider, nouveautés du Drive). */
+  /** Compteur (posts à valider, nouveautés du Drive) affiché sur le sous-onglet. */
   compteur?: number;
 }
 export interface GroupeCm {
-  id: string;
+  id: GroupeCmId;
   libelle: string;
+  glyphe: string;
   entrees: EntreeCm[];
+  /** Somme des compteurs des sous-sections (bulle de l'entrée de la barre latérale). */
+  compteur?: number;
 }
 
 /**
- * Sections de l'espace CM rangées par groupe, selon les droits (mêmes conditions qu'avant dans la rangée d'onglets) :
- * Contenus, Médias, Diffusion, Partenaires, Équipe, Gestion. Un groupe sans section n'apparaît pas.
+ * Groupes de l'espace CM selon les droits : Accueil CM, Contenus, Médias, Diffusion, Partenaires, Équipe, Gestion.
+ * Chaque groupe porte ses sous-sections (mêmes conditions qu'avant pour chacune) ; un groupe sans sous-section visible
+ * n'apparaît pas. L'accueil (vue d'ensemble) est proposé à qui voit les contenus ; sans lui, l'espace s'ouvre sur le Drive, les Sponsors ou les réunions.
  */
 export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number }): GroupeCm[] {
-  const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, glyphe: GLYPHES_CM[id], compteur: compteur || undefined });
-  return (
-    [
-      { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux')), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
-      { id: 'medias', libelle: trCm('espace.g.medias'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : [])] },
-      { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
-      { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
-      { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...(reunions ? [e('reunions', trRe('onglet'))] : []), ...(gerer ? [e('equipe', trCm('espace.equipe'))] : [])] },
-      { id: 'gestion', libelle: trCm('espace.g.gestion'), entrees: gerer ? [e('import', trCm('espace.import')), e('reglages', trCm('espace.reglages')), e('journal', trCm('espace.journal'))] : [] },
-    ] as GroupeCm[]
-  ).filter(g => g.entrees.length > 0);
+  const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, compteur: compteur || undefined });
+  const brut: Array<{ id: GroupeCmId; libelle: string; entrees: EntreeCm[] }> = [
+    { id: 'accueil', libelle: trCm('espace.g.accueil'), entrees: voirCm ? [e('accueil', trCm('espace.g.accueil'))] : [] },
+    { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux')), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
+    { id: 'medias', libelle: trCm('espace.g.medias'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : [])] },
+    { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
+    { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
+    { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...(reunions ? [e('reunions', trRe('onglet'))] : []), ...(gerer ? [e('equipe', trCm('espace.equipe'))] : [])] },
+    { id: 'gestion', libelle: trCm('espace.g.gestion'), entrees: gerer ? [e('import', trCm('espace.import')), e('reglages', trCm('espace.reglages')), e('journal', trCm('espace.journal'))] : [] },
+  ];
+  return brut
+    .filter(g => g.entrees.length > 0)
+    .map(g => ({ ...g, glyphe: GLYPHES_GROUPES[g.id], compteur: g.entrees.reduce((s, x) => s + (x.compteur ?? 0), 0) || undefined }));
 }
 
 /** Rôle CM affiché dans le bloc de la barre latérale : le plus haut niveau de permission CM du compte. */
@@ -99,8 +121,8 @@ function roleCm(moi: MoiCm, fondateur: boolean | undefined, voirCm: boolean): st
   return voirCm ? trCm('espace.role_lecture') : trCm('espace.role_partiel');
 }
 
-/** Bloc de la barre latérale : pastille « CM », titre, rôle, « ⇄ Changer », sections par groupe. */
-function BlocLateralCm({ theme, groupes, actif, onChoisir, role, destinations }: { theme: ThemeHub; groupes: GroupeCm[]; actif: OngletCm; onChoisir(id: OngletCm): void; role: string; destinations: ActionSecondaire[] }) {
+/** Bloc de la barre latérale : pastille « CM », titre, rôle, « ⇄ Changer », un groupe par entrée (comme les sections d'une team). */
+function BlocLateralCm({ theme, groupes, actif, onChoisir, role, destinations }: { theme: ThemeHub; groupes: GroupeCm[]; actif?: GroupeCmId; onChoisir(g: GroupeCm): void; role: string; destinations: ActionSecondaire[] }) {
   const rayon = theme.id === 'terminal' ? 0 : Math.round(40 * 0.28);
   return (
     <View style={{ gap: ESP.xs }} testID="esport-cm-barre">
@@ -125,28 +147,18 @@ function BlocLateralCm({ theme, groupes, actif, onChoisir, role, destinations }:
         </SiBarreEtendue>
       ) : null}
       <View accessibilityRole="tablist" accessibilityLabel={trCm('espace.sections_de')} style={{ gap: ESP.xxs }} testID="esport-cm-onglets">
-        {groupes.map((g, i) => (
-          <View key={g.id} style={{ gap: ESP.xxs }} testID={`esport-cm-groupe-${g.id}`}>
-            <SiBarreEtendue>
-              <Text style={{ ...attenue(theme, 11), fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', paddingHorizontal: ESP.s, paddingTop: i ? ESP.xs : 0 }} accessibilityRole="header">
-                {g.libelle}
-              </Text>
-            </SiBarreEtendue>
-            {i > 0 ? <SiBarreReduite><View style={{ height: 1, backgroundColor: theme.ligne, marginVertical: ESP.xxs, marginHorizontal: ESP.xs }} /></SiBarreReduite> : null}
-            {g.entrees.map(en => (
-              <EntreeLaterale
-                key={en.id}
-                theme={theme}
-                libelle={en.libelle}
-                glyphe={en.glyphe}
-                description={en.compteur ? `${en.libelle} (${en.compteur})` : en.libelle}
-                choisi={en.id === actif}
-                compteur={en.compteur}
-                onPress={() => onChoisir(en.id)}
-                testID={`esport-cm-onglet-${en.id}`}
-              />
-            ))}
-          </View>
+        {groupes.map(g => (
+          <EntreeLaterale
+            key={g.id}
+            theme={theme}
+            libelle={g.libelle}
+            glyphe={g.glyphe}
+            description={g.compteur ? `${g.libelle} (${g.compteur})` : g.libelle}
+            choisi={g.id === actif}
+            compteur={g.compteur}
+            onPress={() => onChoisir(g)}
+            testID={`esport-cm-groupe-${g.id}`}
+          />
         ))}
       </View>
     </View>
@@ -186,17 +198,20 @@ export function EspaceCm({
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   // Réunions de l'équipe CM (migration 0039) : l'équipe CM, et tout membre du club invité à une réunion.
   const reunions = Boolean(moi.reunions?.voir || moi.reunions?.invite);
+  const accueil = voirCm;
   const [onglet, setOnglet] = useState<OngletCm>(() => {
-    const permis: Partial<Record<OngletCm, boolean>> = { drive, sponsors, reunions, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
     if (ongletInitial && (permis[ongletInitial] ?? voirCm)) return ongletInitial;
-    return voirCm ? 'tableaux' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : 'tableaux';
+    return accueil ? 'accueil' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : 'tableaux';
   });
+  // Dernière sous-section ouverte de chaque groupe (on y revient en rouvrant le groupe), comme dans une team.
+  const [derniers, setDerniers] = useState<Partial<Record<GroupeCmId, OngletCm>>>({});
   const [ouvert, setOuvert] = useState<string | undefined>();
   const { etat } = useEtatCm(api, voirCm);
   // Pastille du Drive : nouveautés (fichiers, dossiers, versions ajoutés par d'autres) dans tous les Drive visibles.
   const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
   const teams: TeamCm[] = moi.teams;
-  // « ⇄ Changer » : Teams, puis chaque team (comme le sélecteur d'une team).
+  // « ⇄ Changer » : Teams, puis chaque team (comme le sélecteur d'une team, qui propose aussi « CM du club »).
   const [mesTeams, setMesTeams] = useState<TeamListee[]>([]);
   useEffect(() => {
     if (!onOuvrirTeam) return;
@@ -211,39 +226,73 @@ export function EspaceCm({
   const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive });
   const toutes = groupes.flatMap(g => g.entrees);
   const courante = toutes.find(e => e.id === onglet);
+  const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));
   const choisir = (id: OngletCm) => {
     if (id === 'tableaux') setOuvert(undefined);
     setOnglet(id);
+    setDerniers(d => ({ ...d, [GROUPE_DE_ONGLET[id]]: id }));
+  };
+  const ouvrirGroupe = (g: GroupeCm) => {
+    const memo = derniers[g.id];
+    choisir(memo && g.entrees.some(e => e.id === memo) ? memo : g.entrees[0].id);
   };
   const destinations: ActionSecondaire[] = [
     ...(onQuitter ? [{ titre: tr('dashboard.teams'), onPress: onQuitter, testID: 'esport-cm-changer-teams' }] : []),
-    ...mesTeams.filter(t => !t.suspendu).map(t => ({ titre: t.nom, onPress: () => onOuvrirTeam?.(t.id), testID: `esport-cm-changer-${t.slug}` })),
+    ...mesTeams.filter(t => !t.suspendu).map(t => ({ titre: t.nom, onPress: () => onOuvrirTeam?.(t.id), testID: `esport-cm-changer-${t.slug}`, pastille: { couleur: couleurTeam(t.slug) } })),
   ];
   const role = roleCm(moi, fondateur, voirCm);
-  // PC : sections dans la barre latérale du cadre (sous l'Esport), comme les sections d'une team.
-  useBlocLateral(<BlocLateralCm theme={theme} groupes={groupes} actif={onglet} onChoisir={choisir} role={role} destinations={destinations} />, large);
+  // PC : groupes dans la barre latérale du cadre (sous l'Esport), comme les sections d'une team.
+  useBlocLateral(<BlocLateralCm theme={theme} groupes={groupes} actif={groupe?.id} onChoisir={ouvrirGroupe} role={role} destinations={destinations} />, large);
+  // Sous-onglets en haut de la page (un groupe à une seule sous-section n'en a pas).
+  const sousOnglets =
+    groupe && groupe.entrees.length > 1 ? (
+      <Onglets
+        theme={theme}
+        prefixe="esport-cm-onglet"
+        testID="esport-cm-sous-onglets"
+        actif={onglet}
+        pleineLargeur={false}
+        defilant={!large}
+        onChoisir={id => choisir(id as OngletCm)}
+        entrees={groupe.entrees.map(e => ({ id: e.id, libelle: e.libelle, description: e.libelle, pastille: e.compteur }))}
+      />
+    ) : null;
+  const ouvrirTableau = (id: string) => {
+    setOuvert(id);
+    setOnglet('tableaux');
+    setDerniers(d => ({ ...d, contenus: 'tableaux' }));
+  };
   return (
     <PageEsport large={large} testID="esport-cm" largeur={1600}>
       {large ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')} testID="esport-cm-fil">
-          {onQuitter ? (
-            <>
-              <Pressable testID="esport-cm-retour" accessibilityRole="link" onPress={onQuitter} style={{ minHeight: 32, justifyContent: 'center' }}>
-                <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }}>{tr('dashboard.teams')}</Text>
-              </Pressable>
-              <Text style={attenue(theme, 14)}>›</Text>
-            </>
-          ) : null}
-          <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{tr('cm.club_titre')}</Text>
-          {courante ? (
-            <>
-              <Text style={attenue(theme, 14)}>›</Text>
-              <Text style={attenue(theme, 14)} testID="esport-cm-fil-section">{courante.libelle}</Text>
-            </>
-          ) : null}
+        <View style={{ gap: ESP.s }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')} testID="esport-cm-fil">
+            {onQuitter ? (
+              <>
+                <Pressable testID="esport-cm-retour" accessibilityRole="link" onPress={onQuitter} style={{ minHeight: 32, justifyContent: 'center' }}>
+                  <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }}>{tr('dashboard.teams')}</Text>
+                </Pressable>
+                <Text style={attenue(theme, 14)}>›</Text>
+              </>
+            ) : null}
+            <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{tr('cm.club_titre')}</Text>
+            {groupe ? (
+              <>
+                <Text style={attenue(theme, 14)}>›</Text>
+                <Text style={attenue(theme, 14)} testID="esport-cm-fil-groupe">{groupe.libelle}</Text>
+              </>
+            ) : null}
+            {groupe && courante && courante.libelle !== groupe.libelle ? (
+              <>
+                <Text style={attenue(theme, 14)}>›</Text>
+                <Text style={attenue(theme, 14)} testID="esport-cm-fil-section">{courante.libelle}</Text>
+              </>
+            ) : null}
+          </View>
+          {sousOnglets}
         </View>
       ) : (
-        // Téléphone : pas de nouvelle section dans la barre du bas ; retour et sélecteur de section en haut de page.
+        // Téléphone : pas de nouvelle section dans la barre du bas ; retour, titre, sélecteur de groupe et sous-onglets en haut de page.
         <View style={{ gap: ESP.xs }} testID="esport-cm-mobile">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
             {onQuitter ? (
@@ -260,16 +309,19 @@ export function EspaceCm({
                 {role}
               </Text>
             </View>
+            {destinations.length ? <MenuActions theme={theme} testID="esport-cm-changer" libelle={trCm('espace.changer_libelle')} titreBouton="⇄" actions={destinations} /> : null}
           </View>
           <MenuActions
             theme={theme}
             testID="esport-cm-sections"
             libelle={trCm('espace.sections_de')}
-            titreBouton={`${courante?.libelle ?? trCm('espace.titre')} ▾`}
-            actions={toutes.map(en => ({ titre: en.compteur ? `${en.libelle} (${en.compteur})` : en.libelle, onPress: () => choisir(en.id), testID: `esport-cm-onglet-${en.id}` }))}
+            titreBouton={`${groupe?.libelle ?? trCm('espace.titre')} ▾`}
+            actions={groupes.map(g => ({ titre: g.compteur ? `${g.libelle} (${g.compteur})` : g.libelle, onPress: () => ouvrirGroupe(g), testID: `esport-cm-groupe-${g.id}` }))}
           />
+          {sousOnglets}
         </View>
       )}
+      {onglet === 'accueil' && accueil ? <AccueilCm theme={theme} api={api} client={client} large={large} voirCm={voirCm} drive={drive} reunions={reunions} aValider={etat?.aValider} nouveautesDrive={nouveautesDrive} onAller={choisir} onOuvrirTableau={ouvrirTableau} /> : null}
       {onglet === 'sponsors' && sponsors ? (
         <EspaceSponsors
           theme={theme}
@@ -278,10 +330,7 @@ export function EspaceCm({
           gerer={Boolean(moi.sponsors?.includes('sponsors.gerer'))}
           teams={teams.map(t => ({ id: t.id, nom: t.nom ?? '' }))}
           onExporter={onExporter}
-          onOuvrirTableau={id => {
-            setOuvert(id);
-            setOnglet('tableaux');
-          }}
+          onOuvrirTableau={ouvrirTableau}
         />
       ) : null}
       {onglet === 'tableaux' && voirCm ? (
@@ -291,8 +340,8 @@ export function EspaceCm({
           <ListeTableauxCm theme={theme} api={api} large={large} onOuvrir={setOuvert} />
         )
       ) : null}
-      {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
-      {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} creerPost={moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.editer'))} onOuvrirTableau={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
+      {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={ouvrirTableau} /> : null}
+      {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} creerPost={moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.editer'))} onOuvrirTableau={ouvrirTableau} /> : null}
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
       {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}
@@ -302,21 +351,125 @@ export function EspaceCm({
           theme={theme}
           client={client}
           large={large}
-          onOuvrirTableau={
-            voirCm
-              ? id => {
-                  setOuvert(id);
-                  setOnglet('tableaux');
-                }
-              : undefined
-          }
+          onOuvrirTableau={voirCm ? ouvrirTableau : undefined}
         />
       ) : null}
       {onglet === 'equipe' && moi.gerer ? <RolesCm theme={theme} api={api} large={large} /> : null}
-      {onglet === 'import' && moi.gerer ? <ImportTrello theme={theme} api={api} large={large} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
+      {onglet === 'import' && moi.gerer ? <ImportTrello theme={theme} api={api} large={large} onOuvrir={ouvrirTableau} /> : null}
       {onglet === 'reglages' && moi.gerer ? <Reglages theme={theme} api={api} /> : null}
       {onglet === 'journal' && moi.gerer ? <JournalCm theme={theme} api={api} /> : null}
     </PageEsport>
+  );
+}
+
+// ------------------------------------------------------------------ Accueil CM
+
+/** Vue d'ensemble : posts à valider, prochaines publications, nouveautés du Drive, prochaines réunions (selon les droits). */
+function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValider, nouveautesDrive, onAller, onOuvrirTableau }: { theme: ThemeHub; api: ApiCm; client: ClientEsport; large: boolean; voirCm: boolean; drive: boolean; reunions: boolean; aValider?: number; nouveautesDrive: number; onAller(o: OngletCm): void; onOuvrirTableau(id: string): void }) {
+  const [attente, setAttente] = useState<CarteTransverse[] | undefined>();
+  const [publications, setPublications] = useState<CarteTransverse[] | undefined>();
+  const [prochaines, setProchaines] = useState<Reunion[] | undefined>();
+  useEffect(() => {
+    let vivant = true;
+    const jour = new Date().toISOString().slice(0, 10);
+    const maintenant = Date.now();
+    if (voirCm) {
+      void Promise.resolve()
+        .then(() => api.aValider())
+        .then(r => vivant && setAttente(r?.cartes ?? []), () => vivant && setAttente([]));
+      void Promise.resolve()
+        .then(() => api.calendrier(jour, plusJours(jour, 30)))
+        .then(
+          r =>
+            vivant &&
+            setPublications(
+              (r?.cartes ?? [])
+                .filter(c => c.datePublication && !c.archive && Date.parse(c.datePublication) >= maintenant - 3_600_000)
+                .sort((a, b) => Date.parse(a.datePublication ?? '') - Date.parse(b.datePublication ?? '')),
+            ),
+          () => vivant && setPublications([]),
+        );
+    }
+    if (reunions) {
+      void Promise.resolve()
+        .then(() => apiReunions(client).agenda(plusJours(jour, -1), plusJours(jour, 14)))
+        .then(
+          r => vivant && setProchaines((r?.reunions ?? []).filter(x => x.statut === 'active' && Date.parse(x.fin) >= maintenant).sort((a, b) => Date.parse(a.debut) - Date.parse(b.debut))),
+          () => vivant && setProchaines([]),
+        );
+    }
+    return () => {
+      vivant = false;
+    };
+  }, [api, client, voirCm, reunions]);
+  const ligne = (cle: string, titre: string, sous: string | undefined, onPress?: () => void) => (
+    <Pressable key={cle} accessibilityRole={onPress ? 'button' : undefined} onPress={onPress} disabled={!onPress} testID={`esport-cm-accueil-ligne-${cle}`} style={{ minHeight: 36, justifyContent: 'center', gap: 2 }}>
+      <Text style={{ ...texte(theme, 15), fontWeight: '600' }} numberOfLines={1}>
+        {titre}
+      </Text>
+      {sous ? <Text style={attenue(theme, 13)} numberOfLines={1}>{sous}</Text> : null}
+    </Pressable>
+  );
+  const carte = (id: string, titre: string, bouton: { titre: string; onPress(): void }, corps: React.ReactNode) => (
+    <Carte theme={theme} testID={`esport-cm-accueil-${id}`}>
+      <TitreCarte theme={theme} titre={titre} droite={<BoutonHub theme={theme} titre={bouton.titre} onPress={bouton.onPress} testID={`esport-cm-accueil-${id}-voir`} />} />
+      {corps}
+    </Carte>
+  );
+  const vide = (texteVide: string) => <Text style={attenue(theme, 14)}>{texteVide}</Text>;
+  return (
+    <View style={{ gap: ESP.m }} testID="esport-cm-accueil">
+      <Grille min={large ? 340 : 280}>
+        {voirCm
+          ? carte(
+              'valider',
+              trCm('accueil.valider'),
+              { titre: trCm('accueil.voir'), onPress: () => onAller('valider') },
+              <>
+                <Text style={{ ...texte(theme, 28), fontWeight: '800' }} testID="esport-cm-accueil-valider-n">
+                  {aValider ?? attente?.length ?? 0}
+                </Text>
+                {attente && !attente.length ? vide(trCm('accueil.rien_valider')) : null}
+                {attente?.slice(0, 3).map(c => ligne(c.id, c.titre, c.tableau ? nomTableau(c.tableau) : undefined, () => onOuvrirTableau(c.tableauId)))}
+              </>,
+            )
+          : null}
+        {voirCm
+          ? carte(
+              'publications',
+              trCm('accueil.publications'),
+              { titre: trCm('accueil.voir_calendrier'), onPress: () => onAller('calendrier') },
+              <>
+                {publications && !publications.length ? vide(trCm('accueil.rien_publication')) : null}
+                {!publications ? <Squelette theme={theme} lignes={2} hauteur={16} /> : null}
+                {publications?.slice(0, 5).map(c => ligne(c.id, c.titre, quand(c.datePublication), () => onOuvrirTableau(c.tableauId)))}
+              </>,
+            )
+          : null}
+        {drive
+          ? carte(
+              'drive',
+              trCm('accueil.drive'),
+              { titre: trCm('accueil.ouvrir_drive'), onPress: () => onAller('drive') },
+              <Text style={nouveautesDrive ? { ...texte(theme, 15), fontWeight: '700' } : attenue(theme, 14)} testID="esport-cm-accueil-drive-n">
+                {nouveautesDrive ? trnCm('accueil.drive_n', nouveautesDrive) : trCm('accueil.rien_drive')}
+              </Text>,
+            )
+          : null}
+        {reunions
+          ? carte(
+              'reunions',
+              trCm('accueil.reunions'),
+              { titre: trCm('accueil.voir'), onPress: () => onAller('reunions') },
+              <>
+                {prochaines && !prochaines.length ? vide(trCm('accueil.rien_reunion')) : null}
+                {!prochaines ? <Squelette theme={theme} lignes={2} hauteur={16} /> : null}
+                {prochaines?.slice(0, 4).map(r => ligne(`${r.id}-${r.cle}`, r.titre, quand(r.debut), () => onAller('reunions')))}
+              </>,
+            )
+          : null}
+      </Grille>
+    </View>
   );
 }
 

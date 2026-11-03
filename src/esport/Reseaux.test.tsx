@@ -125,13 +125,13 @@ describe('page Réseaux', () => {
     const { client } = fauxClient(false);
     const moi = (club: string[], sponsors: string[] = []): MoiCm => ({ espace: true, club: club as MoiCm['club'], teams: [], gerer: club.includes('cm.gerer'), sponsors });
     const r = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.voir'])} /></CadreEsport>);
-    await fireEvent.press(screen.getByTestId('esport-cm-onglet-reseaux'));
+    await fireEvent.press(screen.getByTestId('esport-cm-groupe-diffusion'));
     expect(await screen.findByTestId('esport-rs-tdb')).toBeTruthy();
     // Sans cm.gerer : pas d'onglet « Bot Discord ».
     expect(screen.queryByTestId('esport-rs-onglet-bot')).toBeNull();
     await r.unmount();
     await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.deposer'])} /></CadreEsport>);
-    expect(screen.queryByTestId('esport-cm-onglet-reseaux')).toBeNull();
+    expect(screen.queryByTestId('esport-cm-groupe-diffusion')).toBeNull();
   });
 
   it('tableau de bord : totaux, abonnés, top posts, comparaison des réseaux ; filtres envoyés au serveur', async () => {

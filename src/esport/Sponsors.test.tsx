@@ -140,13 +140,13 @@ describe('rubrique Sponsors', () => {
     const { client, appels } = fauxClient();
     const moi = (club: string[], sponsors: string[]): MoiCm => ({ espace: true, club: club as MoiCm['club'], teams: [], gerer: club.includes('cm.gerer'), sponsors });
     const r = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.voir', 'cm.editer'], [])} /></CadreEsport>);
-    expect(screen.queryByTestId('esport-cm-onglet-sponsors')).toBeNull();
+    expect(screen.queryByTestId('esport-cm-groupe-partenaires')).toBeNull();
     await r.unmount();
     appels.length = 0;
     // Lecteur Sponsors seulement : l'espace s'ouvre sur la rubrique, sans tableau CM ni requête /cm/etat.
     const r2 = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi([], ['sponsors.voir'])} /></CadreEsport>);
-    expect(screen.getByTestId('esport-cm-onglet-sponsors')).toBeTruthy();
-    expect(screen.queryByTestId('esport-cm-onglet-tableaux')).toBeNull();
+    expect(screen.getByTestId('esport-cm-groupe-partenaires')).toBeTruthy();
+    expect(screen.queryByTestId('esport-cm-groupe-contenus')).toBeNull();
     expect(await screen.findByTestId('esport-sp-tdb')).toBeTruthy();
     expect(screen.queryByTestId('esport-sp-onglet-outils')).toBeNull();
     expect(screen.getByTestId(`esport-sp-tdb-retard-o1-2026-09`)).toBeTruthy();

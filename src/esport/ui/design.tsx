@@ -231,6 +231,8 @@ export interface ActionSecondaire {
   onPress(): void;
   testID?: string;
   danger?: boolean;
+  /** Pastille devant le titre (sélecteur d'espace : « CM » rose, couleur d'une team). */
+  pastille?: { texte?: string; couleur: string };
 }
 
 export function EnTetePage({
@@ -411,7 +413,16 @@ export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_
                     borderRadius: rayonControle(theme) === 999 ? 14 : Math.max(0, rayonControle(theme) - 4),
                     backgroundColor: etat.hovered || etat.focused ? teinteTransparente(theme.accent, 0.12) : 'transparent',
                   })}>
-                  <Text style={{ ...texte(theme), color: a.danger ? theme.critique : theme.texte, fontWeight: '600' }}>{a.titre}</Text>
+                  {a.pastille ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
+                      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID={a.testID ? `${a.testID}-pastille` : undefined} style={{ minWidth: 22, height: 22, paddingHorizontal: a.pastille.texte ? 4 : 0, borderRadius: 6, backgroundColor: a.pastille.couleur, alignItems: 'center', justifyContent: 'center' }}>
+                        {a.pastille.texte ? <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>{a.pastille.texte}</Text> : null}
+                      </View>
+                      <Text style={{ ...texte(theme), color: a.danger ? theme.critique : theme.texte, fontWeight: '600', flexShrink: 1 }}>{a.titre}</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ ...texte(theme), color: a.danger ? theme.critique : theme.texte, fontWeight: '600' }}>{a.titre}</Text>
+                  )}
                 </Pressable>
               ))}
             </ScrollView>

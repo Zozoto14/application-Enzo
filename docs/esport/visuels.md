@@ -72,7 +72,12 @@ briques : fil d'Ariane, arborescence latérale, glisser-déposer, toast « Annul
   perdu) ; glisser-déposer des modèles, visuels et dossiers (sélection multiple, cadre, Ctrl / Maj-clic, appui long
   sur écran tactile) ou menu **« ⋯ » › Déplacer vers…** ;
 - **vue grille ou liste**, **recherche** par nom (dossiers, modèles, visuels de l'espace) ; les 11 modèles par défaut
-  restent en tête de la racine de l'onglet Modèles ;
+  sont en tête de la racine de l'onglet Modèles ;
+- les **modèles par défaut se rangent aussi** (glisser-déposer ou « ⋯ » › Déplacer vers…, comme les modèles du club) :
+  le rangement est un choix d'organisation du club, **le modèle ne change pas** (il suit toujours la charte). Il est
+  mémorisé par espace (club ou team) dans `cm_visuels_defauts` (migration `0043_cm_visuels_defauts_rangement.sql`,
+  exportée avec la base). Le bouton **Réinitialiser le rangement** remet tous les modèles par défaut de l'espace à
+  leur place d'origine (la racine) ; supprimer un dossier fait remonter ses modèles par défaut comme le reste ;
 - **Générer le visuel** (depuis une carte post ou la galerie) propose le **dossier** où ranger les visuels : « Selon
   le genre », la racine, ou n'importe quel dossier de l'espace (« Résultats › Playoffs ») ; depuis la galerie, le
   dossier ouvert est proposé.
@@ -81,7 +86,9 @@ Droits : voir les dossiers avec `cm.voir` (club : qui voit la section) ; créer,
 ranger avec `cm.editer` de l'espace. API : `GET|POST /cm/visuels/dossiers` (`?portee` ; `{ portee, parentId, nom }`),
 `PATCH|DELETE /cm/visuels/dossiers/:id` (`{ nom?, parentId? }`), `POST /cm/visuels/deplacer { elements: [{ genre:
 modele | visuel | dossier, id }], dossierId }` (rend `faits`, `erreurs`, `avant` pour « Annuler ») ;
-`POST /cm/modeles` et `POST /cm/visuels` acceptent `dossierId` (null : racine). Code :
+`POST /cm/modeles` et `POST /cm/visuels` acceptent `dossierId` (null : racine). Un modèle par défaut se range avec
+`{ genre: 'defaut', id: <type> }` (+ `portee` si la destination est la racine ; `GET …/dossiers` rend `defauts`,
+type → dossier) et `POST /cm/visuels/defauts/reinitialiser { portee }` (cm.editer). Code :
 `esport/noyau/cm/visuels/dossiers.mjs`, `src/esport/ui/cm/visuels/Dossiers.tsx`.
 
 ## Données et champs dynamiques
@@ -181,6 +188,7 @@ de sa team et du club, sans les modifier s'il n'a pas `cm.editer`.
 | `cm_modeles`, `cm_modele_versions` | modèles du club (un document par format), anciennes versions (30) |
 | `cm_visuels` | visuels générés : modèle, format, langue, source, retouche, rendu (fichier, pièce jointe), état au dernier rendu |
 | `cm_visuel_images` | images importées dans l'éditeur et logos |
+| `cm_visuels_defauts` (migration 0043) | rangement des modèles par défaut : portée, type, dossier (pas de ligne : à leur place d'origine) |
 | `cm_visuels_dossiers` (migration 0041) | dossiers des modèles et visuels (portée, parent, nom ou clé du dossier par défaut) ; `dossier_id` sur `cm_modeles` et `cm_visuels` |
 
 Les fichiers (images, rendus) sont des `cm_fichiers` (stockage privé de la section CM). Tout est dans l'**export /

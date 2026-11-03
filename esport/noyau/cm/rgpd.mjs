@@ -80,6 +80,8 @@ export async function effacementCm(base, compte) {
     { sql: 'DELETE FROM cm_drive_vus WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE cm_visuels_dossiers SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_visuels_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    // Migration 0043 : le rangement des modèles par défaut qu'il a fait reste, sans auteur.
+    { sql: 'UPDATE cm_visuels_defauts SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
   ];
   // Réunions de l'équipe CM (migration 0039).
   lot.push(

@@ -94,7 +94,8 @@ export interface DossierVisuel {
   creeLe: string;
   majLe: string;
 }
-export type ElementVisuel = { genre: 'modele' | 'visuel' | 'dossier'; id: string };
+/** `defaut` : modèle par défaut (id : son type) ; seul son rangement est mémorisé. */
+export type ElementVisuel = { genre: 'modele' | 'visuel' | 'dossier' | 'defaut'; id: string };
 
 export function apiVisuels(client: ClientEsport) {
   const r = <T>(chemin: string, methode = 'GET', corps?: unknown) => client.requete<T>(chemin, methode, corps);
@@ -115,11 +116,12 @@ export function apiVisuels(client: ClientEsport) {
     lienFichier: (id: string) => r<{ url: string; expire: string }>(`/cm/visuels/fichiers/${e(id)}/lien`, 'POST', {}),
     modeles: (portee?: string) => r<ListeModeles>(`/cm/modeles${qs({ portee })}`),
     modele: (id: string) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}`),
-    dossiers: (portee: string) => r<{ portee: string; editer: boolean; dossiers: DossierVisuel[] }>(`/cm/visuels/dossiers${qs({ portee })}`),
+    dossiers: (portee: string) => r<{ portee: string; editer: boolean; dossiers: DossierVisuel[]; /** Dossier de chaque modèle par défaut rangé (type → dossier). */ defauts?: Record<string, string> }>(`/cm/visuels/dossiers${qs({ portee })}`),
     creerDossier: (d: { portee: string; parentId: string | null; nom: string }) => r<{ id: string }>('/cm/visuels/dossiers', 'POST', d),
     modifierDossier: (id: string, d: { nom?: string | null; parentId?: string | null }) => r<{ ok: true }>(`/cm/visuels/dossiers/${e(id)}`, 'PATCH', d),
     supprimerDossier: (id: string) => r<{ ok: true; parentId: string | null }>(`/cm/visuels/dossiers/${e(id)}`, 'DELETE'),
-    deplacer: (c: { elements: ElementVisuel[]; dossierId: string | null }) => r<{ faits: string[]; erreurs: Array<{ id: string | null; code: string; erreur: string }>; avant: Record<string, string | null> }>('/cm/visuels/deplacer', 'POST', c),
+    deplacer: (c: { elements: ElementVisuel[]; dossierId: string | null; portee?: string }) => r<{ faits: string[]; erreurs: Array<{ id: string | null; code: string; erreur: string }>; avant: Record<string, string | null> }>('/cm/visuels/deplacer', 'POST', c),
+    reinitialiserDefauts: (portee: string) => r<{ ok: true; n: number }>('/cm/visuels/defauts/reinitialiser', 'POST', { portee }),
     creerModele: (m: { portee: string; nom: string; type: TypeVisuel; base?: string | null; documents: Partial<Record<CleFormat, DocumentVisuel>>; dossierId?: string | null }) => r<{ modele: ModeleComplet }>('/cm/modeles', 'POST', m),
     modifierModele: (id: string, version: number, m: { nom?: string; documents?: Partial<Record<CleFormat, DocumentVisuel>> }) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}`, 'PATCH', { version, ...m }),
     supprimerModele: (id: string) => r<{ ok: true }>(`/cm/modeles/${e(id)}`, 'DELETE'),

@@ -9,6 +9,17 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
 - la **partie CM de chaque team** (module `cm`, onglet **CM** dans la section **Équipe**), où le correspondant de
   la team dépose les informations et où les joueurs proposent leurs clips.
 
+**Navigation de l'espace CM du club** (comme une team) : la barre latérale ne liste que des **groupes** — **Accueil CM**
+(vue d'ensemble : posts à valider, prochaines publications, nouveautés du Drive, prochaines réunions ; pour qui a
+`cm.voir`), **Contenus** (sous-onglets Tableaux | À valider | Calendrier), **Médias** (Clips | Visuels | Drive),
+**Diffusion** (Réseaux), **Partenaires** (Sponsors), **Équipe** (Réunions | Équipe CM), **Gestion** (Import Trello |
+Réglages | Journal) — et chaque groupe a ses **sous-onglets en haut de la page** (aucune rangée s'il n'a qu'une
+sous-section). Les compteurs (posts à valider, nouveautés du Drive) sont sur le sous-onglet et, additionnés, sur
+le groupe. Un groupe sans sous-section permise est masqué. Fil d'Ariane « Teams › CM du club › Groupe › Sous-section ».
+Sur téléphone : sélecteur de groupe puis sous-onglets sous le titre. Le sélecteur **⇄ Changer de team** d'une team
+propose **CM du club** en tête (pastille CM rose) pour qui a accès à l'espace CM ; **⇄ Changer** du CM propose Teams
+et toutes les teams.
+
 Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md). Comptes des réseaux, annonce
 Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md). **Drive**
 (dossiers et fichiers du club et des teams, versions, corbeille, dépôt des joueurs) : [drive.md](drive.md). **Réunions**

@@ -27,7 +27,7 @@ export const nomDossierVisuel = (d: { nom: string | null; cle: string | null }):
 
 /** Élément rangé (modèle ou visuel) tel que l'explorateur l'affiche. */
 export interface ElementRange {
-  genre: 'modele' | 'visuel';
+  genre: 'modele' | 'visuel' | 'defaut';
   id: string;
   nom: string;
   dossierId: string | null;
@@ -57,6 +57,8 @@ export function ExplorateurVisuels({
   avant,
   onChange,
   testID,
+  nbDefautsRanges = 0,
+  onReinitialiserDefauts,
 }: {
   theme: ThemeHub;
   api: ApiVisuels;
@@ -71,6 +73,9 @@ export function ExplorateurVisuels({
   avant?: React.ReactNode;
   onChange(): Promise<void> | void;
   testID: string;
+  /** Modèles par défaut rangés dans un dossier : le bouton « Réinitialiser le rangement » les remet à leur place d'origine. */
+  nbDefautsRanges?: number;
+  onReinitialiserDefauts?(): Promise<unknown>;
 }) {
   const [vue, setVue] = useState<'grille' | 'liste'>(large ? 'grille' : 'liste');
   const [q, setQ] = useState('');
@@ -90,7 +95,7 @@ export function ExplorateurVisuels({
   const sousDossiers = (recherche ? dossiers.filter(d => nomDossierVisuel(d).toLocaleLowerCase().includes(recherche)) : dossiers.filter(d => (d.parentId ?? null) === courant)).sort((a, b) =>
     a.cle && !b.cle ? -1 : !a.cle && b.cle ? 1 : nomDossierVisuel(a).localeCompare(nomDossierVisuel(b)),
   );
-  const visibles = (recherche ? elements.filter(e => e.nom.toLocaleLowerCase().includes(recherche)) : elements.filter(e => (e.dossierId && parId.has(e.dossierId) ? e.dossierId : null) === courant)).sort((a, b) => a.nom.localeCompare(b.nom));
+  const visibles = (recherche ? elements.filter(e => e.nom.toLocaleLowerCase().includes(recherche)) : elements.filter(e => (e.dossierId && parId.has(e.dossierId) ? e.dossierId : null) === courant)).sort((a, b) => (a.genre === 'defaut' ? 0 : 1) - (b.genre === 'defaut' ? 0 : 1) || a.nom.localeCompare(b.nom));
   const tous: ElementVisuel[] = [...sousDossiers.map(d => ({ genre: 'dossier' as const, id: d.id })), ...visibles.map(e => ({ genre: e.genre, id: e.id }))];
   const infos = new Map<string, { genre: ElementVisuel['genre']; id: string; parentId: string | null; modifiable: boolean; systeme: boolean; nom: string }>([
     ...sousDossiers.map(d => [`dossier:${d.id}`, { genre: 'dossier' as const, id: d.id, parentId: d.parentId, modifiable: editer, systeme: d.systeme, nom: nomDossierVisuel(d) }] as const),
@@ -111,7 +116,7 @@ export function ExplorateurVisuels({
   const deplacer = (els: ElementVisuel[], cible: string | null) =>
     agir('deplacer', async () => {
       setErreurLocale(undefined);
-      const r = await api.deplacer({ elements: els, dossierId: cible });
+      const r = await api.deplacer({ elements: els, dossierId: cible, portee });
       setSelection(new Map());
       await onChange();
       if (r.erreurs.length) setErreurLocale(trVi('dossiers.erreurs', { n: r.erreurs.length, liste: r.erreurs.map(x => x.erreur).join(' · ') }));
@@ -123,7 +128,7 @@ export function ExplorateurVisuels({
         annuler: () => {
           setToast(undefined);
           void agir('annuler', async () => {
-            for (const g of groupesAnnulation(faits, r.avant)) await api.deplacer({ elements: g.elements, dossierId: g.dossierId });
+            for (const g of groupesAnnulation(faits, r.avant)) await api.deplacer({ elements: g.elements, dossierId: g.dossierId, portee });
             await onChange();
             setToast({ cle: `${Date.now()}`, texte: trVi('dossiers.annule') });
             return undefined;
@@ -289,6 +294,21 @@ export function ExplorateurVisuels({
         <Champ theme={theme} libelle={trVi('dossiers.recherche')} valeur={q} onChanger={setQ} maxLength={80} testID={`${testID}-recherche`} style={{ flex: 1, minWidth: 180 }} />
         {q ? <BoutonHub theme={theme} titre={trVi('dossiers.effacer')} onPress={() => setQ('')} testID={`${testID}-recherche-effacer`} /> : null}
         {editer ? <BoutonHub theme={theme} titre={trVi('dossiers.nouveau')} onPress={() => setDialogue({ genre: 'nouveau', nom: '' })} testID={`${testID}-nouveau`} /> : null}
+        {editer && onReinitialiserDefauts && nbDefautsRanges > 0 ? (
+          <BoutonConfirme
+            theme={theme}
+            titre={trVi('dossiers.reinitialiser')}
+            confirmation={trVi('dossiers.reinitialiser_confirmer')}
+            onConfirme={() =>
+              void agir('reinitialiser', async () => {
+                await onReinitialiserDefauts();
+                await onChange();
+                return undefined;
+              })
+            }
+            testID={`${testID}-reinitialiser`}
+          />
+        ) : null}
         <BoutonHub theme={theme} titre={vue === 'grille' ? `☰ ${trVi('dossiers.liste')}` : `▦ ${trVi('dossiers.grille')}`} libelle={trVi('dossiers.vue')} onPress={() => setVue(v => (v === 'grille' ? 'liste' : 'grille'))} testID={`${testID}-vue`} />
       </View>
       {recherche ? null : <FilAriane theme={theme} racine={trVi('dossiers.racine')} chemin={chemin} onOuvrir={onOuvrir} glisser={glisser} testID={`${testID}-ariane`} />}
@@ -317,7 +337,7 @@ export function ExplorateurVisuels({
       ) : (
         <View testID={`${testID}-liste`}>
           {sousDossiers.map(d => ligne({ genre: 'dossier', id: d.id }, '📁', nomDossierVisuel(d), trVi('dossiers.contenu', { m: d.modeles, v: d.visuels }), () => onOuvrir(d.id), menuDossier(d)))}
-          {visibles.map(e => ligne({ genre: e.genre, id: e.id }, e.genre === 'modele' ? '◈' : '🖼', e.nom, e.sous ?? '', e.onOuvrir, menuElement(e), e.actions))}
+          {visibles.map(e => ligne({ genre: e.genre, id: e.id }, e.genre === 'visuel' ? '🖼' : '◈', e.nom, e.sous ?? '', e.onOuvrir, menuElement(e), e.actions))}
         </View>
       )}
       {editer ? <Aide theme={theme}>{glisser.disponible ? trVi('dossiers.aide') : trVi('dossiers.aide_mobile')}</Aide> : null}

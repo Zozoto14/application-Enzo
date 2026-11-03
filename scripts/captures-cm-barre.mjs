@@ -1,6 +1,7 @@
 /**
- * Captures de l'espace CM du club rangé dans la barre latérale (comme une team) : PC 1440 × 900 (barre étendue puis
- * réduite) et iPhone 390 × 844 (sélecteur de section en haut de page). Serveur Esport local avec graines, Fondateur.
+ * Captures de l'espace CM du club rangé dans la barre latérale (comme une team) : PC 1440 × 900 (Accueil CM, groupes et
+ * sous-onglets, visuels par défaut rangés, sélecteurs « ⇄ Changer » dans les deux sens, barre réduite) et iPhone
+ * 390 × 844 (sélecteur de groupe puis sous-onglets en haut de page). Serveur Esport local avec graines, Fondateur.
  *
  *   npx vite build
  *   SORTIE=/chemin PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/captures-cm-barre.mjs
@@ -80,12 +81,50 @@ try {
     await pause(1500);
     await page.screenshot({ path: join(SORTIE, `${nom}-cm-etendue.png`) });
     if (nom === '1440x900') {
+      // Contenus : sous-onglets Tableaux | À valider | Calendrier en haut de la page.
+      await page.getByTestId('esport-cm-groupe-contenus').click();
       await page.getByTestId('esport-cm-onglet-calendrier').click();
       await pause(1200);
       await page.screenshot({ path: join(SORTIE, `${nom}-cm-calendrier.png`) });
+      // Médias › Visuels : un modèle par défaut rangé dans un dossier (sans changer le modèle).
+      await page.getByTestId('esport-cm-groupe-medias').click();
+      await page.getByTestId('esport-cm-onglet-visuels').click();
+      await page.getByTestId('esport-vi-modeles-defaut-resultat').waitFor({ timeout: 15_000 });
+      await pause(1200);
+      await page.mouse.move(800, 400);
+      await page.mouse.wheel(0, -6000);
+      await pause(400);
+      await page.screenshot({ path: join(SORTIE, `${nom}-cm-visuels-avant.png`) });
+      await page.mouse.move(800, 400);
+      await page.mouse.wheel(0, -6000);
+      await pause(400);
+      await page.getByTestId('esport-vi-modeles-defaut-resultat-menu').click();
+      await page.getByText('Déplacer vers…').click();
+      await page.getByTestId('esport-vi-modeles-destination').getByText('Résultats').first().click();
+      await page.getByTestId('esport-vi-modeles-destination-ok').click();
+      await pause(1500);
+      await page.mouse.wheel(0, -6000);
+      await pause(400);
+      await page.screenshot({ path: join(SORTIE, `${nom}-cm-visuels-range.png`) });
+      await page.getByTestId('esport-vi-modeles-reinitialiser').waitFor({ timeout: 5000 });
+      await page.getByTestId('esport-vi-modeles-reinitialiser').click();
+      await page.getByText('Remettre les modèles par défaut à leur place d’origine ?').click();
+      await pause(800);
+      // « ⇄ Changer » du CM : Teams et toutes les teams ; puis « ⇄ Changer de team » d'une team : « CM du club » en tête.
+      await page.getByTestId('esport-cm-changer').click();
+      await pause(500);
+      await page.screenshot({ path: join(SORTIE, `${nom}-cm-changer.png`) });
+      await page.locator('[role="menuitem"][data-testid^="esport-cm-changer-"]').nth(1).click();
+      await page.getByTestId('esport-team').waitFor({ timeout: 15_000 });
+      await page.getByTestId('esport-changer-team').click();
+      await pause(500);
+      await page.screenshot({ path: join(SORTIE, `${nom}-team-changer.png`) });
+      await page.getByTestId('esport-changer-cm').click();
+      await page.getByTestId('esport-cm').waitFor({ timeout: 15_000 });
+      await page.getByTestId('esport-cm-groupe-medias').click();
       await page.getByTestId('esport-barre-bascule').click();
       await pause(700);
-      await page.getByTestId('esport-cm-onglet-clips').hover();
+      await page.getByTestId('esport-cm-groupe-contenus').hover();
       await pause(400);
       await page.getByTestId('esport-barre-infobulle').waitFor({ timeout: 3000 });
       await page.screenshot({ path: join(SORTIE, `${nom}-cm-reduite.png`) });
@@ -94,6 +133,9 @@ try {
       await page.getByTestId('esport-cm-sections').click();
       await pause(500);
       await page.screenshot({ path: join(SORTIE, `${nom}-cm-menu-sections.png`) });
+      await page.getByTestId('esport-cm-groupe-contenus').click();
+      await pause(900);
+      await page.screenshot({ path: join(SORTIE, `${nom}-cm-sous-onglets.png`) });
     }
     log(nom);
   }
