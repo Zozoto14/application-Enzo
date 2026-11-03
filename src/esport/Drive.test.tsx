@@ -10,12 +10,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { themeHub } from '../hub/themes';
 import { CATALOGUE, type ClientEsport, type DetailTeam, type Notification } from './client';
 import { apiCm, type DetailTableau, type ReponseCarte } from './cm/api';
-import { dureeLisible, lireLienDrive, trierFichiers, type ContenuDrive, type FichierDrive } from './cm/drive';
+import { descendantsDe, dureeLisible, groupesAnnulation, lireLienDrive, refusDeplacement, trierFichiers, type ContenuDrive, type FichierDrive } from './cm/drive';
 import { definirLangue } from './i18n';
 import { phraseJournal, phraseNotification } from './libelles';
 import { CmTeam } from './ui/cm/CmTeam';
 import { Tableau } from './ui/cm/Tableau';
 import { Drive } from './ui/cm/drive/Drive';
+import { CarteCmClub } from './ui/RacineEsport';
 
 const theme = themeHub('nuit');
 const T = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -66,6 +67,7 @@ function racine(dossier: string | null): ContenuDrive {
     noms: { cm123456: 'Clara' },
     tronque: false,
     quota,
+    nouveautes: { total: 2, racine: 0, dossiers: { [D_LOGOS]: 2 } },
   };
 }
 
@@ -105,6 +107,9 @@ function fauxClient({ depot = false } = {}) {
       if (depot) return { ...racine(null), portee: 't1', droits: { voir: false, envoyer: false, gerer: false, depot: true }, dossier: { ...racine(D_LOGOS).dossier!, id: D_DEPOT, cle: 'depot' }, chemin: [{ id: D_DEPOT, nom: null, cle: 'depot' }], dossiers: [], fichiers: [fichier(F1, 'ma-photo.png', { portee: 't1', dossierId: D_DEPOT })] } as R;
       return racine(q.get('dossier')) as R;
     }
+    if (c === '/cm/drive/arbre') return { portee: 'club', dossiers: [{ id: D_LOGOS, parentId: null, nom: null, cle: 'logos', restreint: false }] } as R;
+    if (c === '/cm/drive/lot') return { faits: [F1], erreurs: [], avant: { [F1]: null } } as R;
+    if (c === '/cm/drive/nouveautes') return { total: 3, portees: [{ portee: 'club', total: 3 }] } as R;
     if (c === '/cm/drive/filtres') return { tags: [{ tag: 'saison', n: 1 }], auteurs: [{ compte: 'cm123456', pseudo: 'Clara' }], genres: [] } as R;
     if (c === '/cm/drive/recherche') return { portee: 'club', droits: droitsCm, fichiers: [fichier(F2, 'blason.png', { dossierId: D_LOGOS })], dossiers: [], noms: {}, chemins: { [D_LOGOS]: [{ id: D_LOGOS, nom: null, cle: 'logos' }] } } as R;
     if (c === `/cm/drive/elements/${F2}`) return { genre: 'fichier', id: F2, portee: 'club', dossierId: D_LOGOS } as R;
@@ -144,6 +149,67 @@ describe('Drive CM', () => {
     expect([dureeLisible(65), dureeLisible(3723), dureeLisible(null)]).toEqual(['1:05', '1:02:03', '']);
   });
 
+  it('déplacer : refus (permission, dossier par défaut, cycle, déjà ici) et annulation regroupée par origine', () => {
+    const arbre = [
+      { id: 'a', parentId: null },
+      { id: 'b', parentId: 'a' },
+      { id: 'c', parentId: 'b' },
+      { id: 'x', parentId: null },
+    ];
+    expect([...descendantsDe(arbre, 'a')].sort()).toEqual(['a', 'b', 'c']);
+    const dossierA = { genre: 'dossier' as const, id: 'a', parentId: null, modifiable: true };
+    expect(refusDeplacement([dossierA], 'c', arbre)).toBe('boucle');
+    expect(refusDeplacement([dossierA], 'a', arbre)).toBe('boucle');
+    expect(refusDeplacement([dossierA], 'x', arbre)).toBeNull();
+    expect(refusDeplacement([dossierA], null, arbre)).toBe('meme');
+    expect(refusDeplacement([{ ...dossierA, systeme: true }], 'x', arbre)).toBe('systeme');
+    expect(refusDeplacement([dossierA, { genre: 'fichier', id: 'f', parentId: 'b', modifiable: false }], 'x', arbre)).toBe('permission');
+    const els = [
+      { genre: 'fichier' as const, id: 'f1' },
+      { genre: 'fichier' as const, id: 'f2' },
+      { genre: 'dossier' as const, id: 'd1' },
+      { genre: 'fichier' as const, id: 'f3' },
+    ];
+    expect(groupesAnnulation(els, { f1: 'a', f2: null, d1: 'a' })).toEqual([
+      { dossierId: 'a', elements: [els[0], els[2]] },
+      { dossierId: null, elements: [els[1]] },
+    ]);
+  });
+
+  it('nouveautés : pastille par dossier et dans l’arborescence, tout marquer comme vu ; déplacer par le menu puis « Annuler »', async () => {
+    const { client, appels } = fauxClient();
+    await render(<Drive theme={theme} client={client} large />);
+    await screen.findByText('affiche.png');
+    expect(appels.some(a => a.chemin === '/cm/drive?portee=club&vu=1')).toBe(true);
+    expect(screen.getByTestId(`esport-drive-dossier-${D_LOGOS}-nouveautes`)).toBeTruthy();
+    expect(await screen.findByTestId('esport-drive-arbre')).toBeTruthy();
+    expect(screen.getByTestId(`esport-drive-arbre-${D_LOGOS}-nouveautes`)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-drive-tout-vu'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/drive/tout-vu' && a.methode === 'POST')).toBe(true));
+    expect(appels.find(a => a.chemin === '/cm/drive/tout-vu')?.corps).toEqual({ portee: 'club' });
+    // Déplacer (menu « ⋯ » › Déplacer) : choix du dossier, lot « deplacer », toast « Annuler ».
+    await fireEvent.press(screen.getByTestId(`esport-drive-fichier-${F1}-menu`));
+    await fireEvent.press(await screen.findByText('Déplacer'));
+    await fireEvent.press(await screen.findByTestId(`esport-drive-destination-${D_LOGOS}`));
+    await fireEvent.press(screen.getByTestId('esport-drive-destination-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/drive/lot')).toBe(true));
+    expect(appels.find(a => a.chemin === '/cm/drive/lot')?.corps).toEqual({ action: 'deplacer', elements: [{ genre: 'fichier', id: F1 }], dossierId: D_LOGOS });
+    expect(await screen.findByText('1 élément déplacé vers « Logos ».')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-drive-toast-annuler'));
+    await waitFor(() => expect(appels.filter(a => a.chemin === '/cm/drive/lot').length).toBe(2));
+    expect(appels.filter(a => a.chemin === '/cm/drive/lot')[1].corps).toEqual({ action: 'deplacer', elements: [{ genre: 'fichier', id: F1 }], dossierId: null });
+    expect(await screen.findByText('Déplacement annulé.')).toBeTruthy();
+  });
+
+  it('pastille du Drive sur la tuile « CM du club » : total des nouveautés de tous les Drive visibles', async () => {
+    const { client, appels } = fauxClient();
+    const moi = { espace: true, club: ['cm.voir', 'cm.drive.voir'], teams: [], gerer: false } as never;
+    await render(<CarteCmClub theme={theme} moi={moi} client={client} onOuvrir={() => undefined} />);
+    expect(await screen.findByTestId('esport-teams-cm-drive-nouveautes')).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+    expect(appels.some(a => a.chemin === '/cm/drive/nouveautes')).toBe(true);
+  });
+
   it('écran : dossiers par défaut traduits, ouverture d’un dossier et fil d’Ariane, alerte d’espace, corbeille', async () => {
     const { client, appels } = fauxClient();
     await render(<Drive theme={theme} client={client} large />);
@@ -153,7 +219,7 @@ describe('Drive CM', () => {
     // Portées : club et team.
     expect(screen.getByTestId('esport-drive-portee-t1')).toBeTruthy();
     await fireEvent.press(screen.getByTestId(`esport-drive-dossier-${D_LOGOS}`));
-    await waitFor(() => expect(appels.some(a => a.chemin === `/cm/drive?portee=club&dossier=${D_LOGOS}`)).toBe(true));
+    await waitFor(() => expect(appels.some(a => a.chemin === `/cm/drive?portee=club&dossier=${D_LOGOS}&vu=1`)).toBe(true));
     expect(await screen.findByText('blason.png')).toBeTruthy();
     expect(screen.getByTestId('esport-drive-ariane-racine')).toBeTruthy();
     // Corbeille : élément, auteur, date d'effacement, restaurer.

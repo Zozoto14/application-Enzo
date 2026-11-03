@@ -589,6 +589,8 @@ export interface EntreeOngletEsport {
   /** Nom accessible complet (le libellé visible peut être abrégé). */
   description?: string;
   bientot?: boolean;
+  /** Pastille de compteur (nouveautés…) à côté du libellé ; rien à 0. */
+  pastille?: number;
 }
 
 /** Sous-onglets d'une section : soulignés, 44 px, rôle « tab ». Sur téléphone, parts égales. */
@@ -625,13 +627,15 @@ export function Onglets({
             accessibilityRole="tab"
             accessibilityState={{ selected: choisi }}
             aria-selected={choisi}
-            accessibilityLabel={`${e.description ?? e.libelle}${e.bientot ? tr('design.bientot') : ''}`}
+            accessibilityLabel={`${e.description ?? e.libelle}${e.bientot ? tr('design.bientot') : ''}${e.pastille ? ` (${e.pastille})` : ''}`}
             onPress={() => onChoisir(e.id)}
             style={(etat: EtatPresse) => ({
               flexGrow: pleineLargeur ? 1 : 0,
               flexBasis: pleineLargeur ? 0 : undefined,
               minHeight: 44,
               paddingHorizontal: pleineLargeur ? ESP.xxs : ESP.s,
+              flexDirection: 'row',
+              gap: 6,
               alignItems: 'center',
               justifyContent: 'center',
               borderBottomWidth: 3,
@@ -643,6 +647,7 @@ export function Onglets({
               style={{ color: choisi ? theme.texte : theme.attenue, fontSize: 15, fontWeight: choisi ? '700' : '500', ...police(theme.policeTexte) }}>
               {e.libelle}
             </Text>
+            {e.pastille ? <Compteur theme={theme} n={e.pastille} testID={`${prefixe}-${e.id.replace(':', '-')}-pastille`} /> : null}
           </Pressable>
         );
       })}

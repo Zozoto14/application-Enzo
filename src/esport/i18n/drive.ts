@@ -200,6 +200,28 @@ const fr = {
   'jr.tag_renomme': '{qui} a renommé l’étiquette #{tag} en #{nom} dans le Drive ({n} fichiers)',
   'jr.tag_supprime': '{qui} a supprimé définitivement l’étiquette #{tag} du Drive ({n} fichiers)',
   'nt.quota': 'Le Drive CM est rempli à {p} % ({u} sur {l}) : videz la corbeille ou faites du tri.',
+  // Déplacer à la souris et nouveautés (migration 0038).
+  'glisser.n.one': '{n} élément',
+  'glisser.n.other': '{n} éléments',
+  'glisser.refus.boucle': 'Un dossier ne se range pas dans lui-même ni dans ses sous-dossiers.',
+  'glisser.refus.systeme': 'Un dossier par défaut reste à la racine.',
+  'glisser.refus.permission': 'Vous ne pouvez déplacer que vos propres éléments : demandez à un gestionnaire du Drive.',
+  'glisser.refus.meme': 'Déjà dans ce dossier.',
+  'glisser.restreint': 'dossier restreint (gestionnaires seulement)',
+  'glisser.aide': 'Glissez un fichier ou un dossier sur un dossier, le fil d’Ariane ou l’arborescence pour le déplacer (appui long puis glisser sur écran tactile). Ctrl / Maj-clic ou un cadre tracé dans le vide sélectionnent plusieurs éléments.',
+  'glisser.aide_mobile': 'Pour déplacer : menu « ⋯ » › Déplacer, ou appui long pour sélectionner plusieurs éléments.',
+  'deplace.n.one': '{n} élément déplacé vers « {nom} ».',
+  'deplace.n.other': '{n} éléments déplacés vers « {nom} ».',
+  'deplace.annuler': 'Annuler',
+  'deplace.annule': 'Déplacement annulé.',
+  'arbre.titre': 'Dossiers',
+  'arbre.ouvrir': 'Ouvrir {nom}',
+  'arbre.deplier': 'Déplier {nom}',
+  'arbre.replier': 'Replier {nom}',
+  'nouveautes.tout_vu': 'Tout marquer comme vu',
+  'nouveautes.tout_vu_fait': 'Tout est marqué comme vu.',
+  'nouveautes.libelle.one': '{n} nouveauté depuis votre dernière visite',
+  'nouveautes.libelle.other': '{n} nouveautés depuis votre dernière visite',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -397,6 +419,27 @@ const en: Record<keyof typeof fr, string> = {
   'jr.tag_renomme': '{qui} renamed the tag #{tag} to #{nom} in the Drive ({n} files)',
   'jr.tag_supprime': '{qui} permanently deleted the tag #{tag} from the Drive ({n} files)',
   'nt.quota': 'The CM Drive is {p}% full ({u} of {l}): empty the trash or clean up.',
+  'glisser.n.one': '{n} item',
+  'glisser.n.other': '{n} items',
+  'glisser.refus.boucle': 'A folder cannot go inside itself or one of its subfolders.',
+  'glisser.refus.systeme': 'A default folder stays at the root.',
+  'glisser.refus.permission': 'You can only move your own items: ask a Drive manager.',
+  'glisser.refus.meme': 'Already in this folder.',
+  'glisser.restreint': 'restricted folder (managers only)',
+  'glisser.aide': 'Drag a file or folder onto a folder, the breadcrumb or the tree to move it (long press then drag on touch screens). Ctrl / Shift-click or a box drawn in an empty area selects several items.',
+  'glisser.aide_mobile': 'To move: “⋯” menu › Move, or long press to select several items.',
+  'deplace.n.one': '{n} item moved to “{nom}”.',
+  'deplace.n.other': '{n} items moved to “{nom}”.',
+  'deplace.annuler': 'Undo',
+  'deplace.annule': 'Move undone.',
+  'arbre.titre': 'Folders',
+  'arbre.ouvrir': 'Open {nom}',
+  'arbre.deplier': 'Expand {nom}',
+  'arbre.replier': 'Collapse {nom}',
+  'nouveautes.tout_vu': 'Mark all as seen',
+  'nouveautes.tout_vu_fait': 'Everything is marked as seen.',
+  'nouveautes.libelle.one': '{n} new item since your last visit',
+  'nouveautes.libelle.other': '{n} new items since your last visit',
 };
 
 export type CleDr = keyof typeof fr;
@@ -408,6 +451,6 @@ export function trDr(cle: CleDr, vars?: Variables): string {
 }
 
 /** Pluriel simple (« .one » / « .other ») : n = 1 → one. */
-export function trnDr(cle: 'recherche.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu' | 'tags.fichiers' | 'tags.supprimer_question', n: number, vars?: Variables): string {
+export function trnDr(cle: 'glisser.n' | 'deplace.n' | 'nouveautes.libelle' | 'recherche.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu' | 'tags.fichiers' | 'tags.supprimer_question', n: number, vars?: Variables): string {
   return trDr(`${cle}.${n === 1 ? 'one' : 'other'}` as CleDr, { n, ...vars });
 }

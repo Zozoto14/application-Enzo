@@ -25,6 +25,8 @@ import { definirLangue } from './i18n';
 import { CharteClub } from './ui/cm/visuels/Charte';
 import { PanneauVisuelsCarte } from './ui/cm/visuels/VisuelsCarte';
 import { apiVisuels } from './cm/visuels/api';
+import { Visuels } from './ui/cm/visuels/Visuels';
+import type { MoiCm } from './cm/api';
 
 const theme = themeHub('nuit');
 const CARTE = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1';
@@ -208,6 +210,15 @@ describe('visuels : lecture tolérante et opérations de l’éditeur', () => {
 
 // ------------------------------------------------------------------ Écrans
 
+const D_RESULTATS = '11111111-1111-4111-8111-111111111111';
+const D_PLAYOFFS = '22222222-2222-4222-8222-222222222222';
+const dossierVi = (id: string, cle: string | null, nom: string | null, parentId: string | null = null) => ({ id, portee: 'club', parentId, nom, cle, systeme: Boolean(cle), modeles: 0, visuels: 0, creeLe: '', majLe: '' });
+const DOSSIERS = [
+  dossierVi(D_RESULTATS, 'resultats', null),
+  dossierVi('33333333-3333-4333-8333-333333333333', 'annonces', null),
+  dossierVi(D_PLAYOFFS, null, 'Playoffs', D_RESULTATS),
+];
+
 function fauxClient(o: { gerer?: boolean; visuels?: unknown[] } = {}) {
   const appels: Array<{ chemin: string; methode: string; corps?: unknown }> = [];
   const visuel = {
@@ -240,6 +251,9 @@ function fauxClient(o: { gerer?: boolean; visuels?: unknown[] } = {}) {
     if (c === '/cm/charte' && methode === 'GET') return { charte: CHARTE_DEFAUT, version: 2, majLe: null, defaut: CHARTE_DEFAUT, gerer: o.gerer ?? true, teams: [{ id: TEAM, nom: 'Team Alpha' }] } as R;
     if (c === '/cm/charte' && methode === 'PUT') return { charte: { ...CHARTE_DEFAUT, club: 'Faucons' }, version: 3, majLe: null, defaut: CHARTE_DEFAUT, gerer: true, teams: [] } as R;
     if (c === '/cm/modeles') return { modeles: [], noms: {}, editer: { club: true, teams: [] } } as R;
+    if (c === '/cm/visuels/dossiers') return { portee: 'club', editer: true, dossiers: DOSSIERS } as R;
+    if (c === '/cm/visuels/deplacer') return { faits: ['v1'], erreurs: [], avant: { v1: D_PLAYOFFS } } as R;
+    if (c === '/cm/visuels' && methode === 'GET') return { visuels: [{ ...visuel, dossierId: D_PLAYOFFS }] } as R;
     if (c === `/cm/teams/${TEAM}/matchs`) return { resultats: [{ id: RES, titre: 'Match officiel', phrase: 'Victoire 2-1', date: '' }], matchs: [], tournois: [] } as R;
     if (c === '/cm/visuels' && methode === 'POST') return { visuel: { ...visuel, id: `v-${appels.length}`, format: (corps as { format: string }).format, langue: (corps as { langue: string }).langue, fichierId: null, retouche: false, perime: null } } as R;
     if (c.endsWith('/lien')) return { url: 'https://esport.test/cm/fichiers/f1?sig=x', expire: '' } as R;
@@ -271,6 +285,42 @@ describe('visuels : écrans', () => {
     expect(corps.map(c => `${c.format}-${c.langue}`).sort()).toEqual(['portrait-en', 'portrait-fr', 'story-en', 'story-fr']);
     expect(corps[0]).toMatchObject({ modele: 'defaut:resultat', carteId: CARTE, source: { genre: 'resultat', id: RES } });
     await waitFor(() => expect(onChange).toHaveBeenCalled());
+  });
+
+  it('génération depuis une carte : rangée dans un dossier choisi', async () => {
+    const { client, appels } = fauxClient();
+    await render(<PanneauVisuelsCarte theme={theme} apiCm={apiCm(client)} carteId={CARTE} teams={[{ id: TEAM, nom: 'Team Alpha' }]} onChange={() => undefined} />);
+    await fireEvent.press(await screen.findByTestId('esport-vi-carte-generer'));
+    await fireEvent.press(await screen.findByTestId(`esport-vi-generer-dossier-${D_PLAYOFFS}`));
+    expect(screen.getByText('Résultats › Playoffs')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-vi-generer-ok'));
+    await waitFor(() => expect(appels.filter(a => a.chemin === '/cm/visuels' && a.methode === 'POST').length).toBeGreaterThan(0));
+    expect((appels.find(a => a.chemin === '/cm/visuels' && a.methode === 'POST')?.corps as { dossierId: string }).dossierId).toBe(D_PLAYOFFS);
+  });
+
+  it('dossiers des visuels : dossiers par défaut traduits, ouvrir un dossier (fil d’Ariane), ranger par le menu puis « Annuler »', async () => {
+    const { client, appels } = fauxClient();
+    const moi: MoiCm = { espace: true, club: ['cm.voir', 'cm.editer'], teams: [], gerer: true };
+    await render(<Visuels theme={theme} apiCm={apiCm(client)} large moi={moi} />);
+    await fireEvent.press(await screen.findByTestId('esport-vi-onglet-visuels'));
+    expect(await screen.findByTestId(`esport-vi-visuels-dossier-${D_RESULTATS}`)).toBeTruthy();
+    expect(screen.getAllByText('Annonces').length).toBeGreaterThan(0);
+    // Le visuel est dans « Playoffs » (sous « Résultats ») : pas à la racine.
+    expect(screen.queryByTestId('esport-vi-visuels-visuel-v1')).toBeNull();
+    await fireEvent.press(screen.getByTestId(`esport-vi-visuels-dossier-${D_RESULTATS}`));
+    await fireEvent.press(await screen.findByTestId(`esport-vi-visuels-dossier-${D_PLAYOFFS}`));
+    expect(await screen.findByTestId('esport-vi-visuels-visuel-v1')).toBeTruthy();
+    expect(screen.getByTestId(`esport-vi-visuels-ariane-${D_RESULTATS}`)).toBeTruthy();
+    // Menu « ⋯ » › Déplacer vers… › racine.
+    await fireEvent.press(screen.getByTestId('esport-vi-visuels-visuel-v1-menu'));
+    await fireEvent.press(await screen.findByText('Déplacer vers…'));
+    await fireEvent.press(await screen.findByTestId('esport-vi-visuels-destination-racine'));
+    await fireEvent.press(screen.getByTestId('esport-vi-visuels-destination-ok'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/visuels/deplacer')).toBe(true));
+    expect(appels.find(a => a.chemin === '/cm/visuels/deplacer')?.corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: null });
+    await fireEvent.press(await screen.findByTestId('esport-vi-visuels-toast-annuler'));
+    await waitFor(() => expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer').length).toBe(2));
+    expect(appels.filter(a => a.chemin === '/cm/visuels/deplacer')[1].corps).toEqual({ elements: [{ genre: 'visuel', id: 'v1' }], dossierId: D_PLAYOFFS });
   });
 
   it('serveur sans visuels : pas de panneau', async () => {

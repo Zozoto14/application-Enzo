@@ -6,6 +6,10 @@
  *
  * Tout est décidé par le serveur (droits, visibilité) ; l'écran n'affiche que ce que la réponse permet. Un
  * joueur sans droit sur le Drive ne voit que le dossier « Dépôt joueurs » et ses propres fichiers.
+ *
+ * Migration 0038 : déplacer à la souris (glisser-déposer sur un dossier, le fil d'Ariane ou l'arborescence
+ * latérale ; Ctrl / Maj-clic et cadre de sélection ; toast « Annuler » ; appui long sur écran tactile, menu
+ * « Déplacer vers… » partout) et pastilles de nouveautés par dossier (état « vu » gardé par le serveur).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -17,12 +21,15 @@ import {
   GENRES_DRIVE,
   GLYPHES_DRIVE,
   apiDrive,
+  groupesAnnulation,
+  refusDeplacement,
   lienInterneDrive,
   lireLienDrive,
   trierFichiers,
   type ContenuDrive,
   type CorbeilleDrive,
   type DossierDrive,
+  type ElementDeplacable,
   type ElementDrive,
   type FichierDrive,
   type FiltresRecherche,
@@ -33,10 +40,12 @@ import {
   type TriDrive,
 } from '../../../cm/drive';
 import { choisirFichiers, choixFichierDisponible, type FichierNavigateur } from '../../../medias/choixFichier';
+import { signalerNouveautesDrive } from '../../../cm/nouveautesDrive';
 import { tr } from '../../../i18n';
 import { trDr, trnDr, type CleDr } from '../../../i18n/drive';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
-import { Badge, Carte, ESP, EtatVide, Grille, MenuActions, Pliable, SqueletteCartes, Volet, attenue, texte, type EtatPresse } from '../../design';
+import { Badge, Carte, Compteur, ESP, EtatVide, Grille, MenuActions, Pliable, SqueletteCartes, Volet, attenue, texte, type EtatPresse } from '../../design';
+import { ToastAnnuler } from '../../strats/Suppression';
 import { BarreEnvoi, useEnvoi } from '../../medias/EnvoiMedia';
 import { ouvrirLienDiffere } from '../../ouvrirLien';
 import { Aide, copierTexte, quand } from '../commun';
@@ -45,6 +54,8 @@ import { DetailFichier } from './DetailFichier';
 import { GestionTags } from './GestionTags';
 import { ZoneDepot } from './ZoneDepot';
 import { useTempsReel } from '../../../tempsReel/hooks';
+import { ArbreDossiers, FilAriane, styleCible, type NoeudArbre } from './explorateur';
+import { useGlisser } from './glisser';
 
 type Dialogue =
   | { genre: 'dossier'; nom: string; restreint: boolean }
@@ -88,6 +99,11 @@ export function Drive({
   const [corbeille, setCorbeille] = useState(false);
   const [versionTags, setVersionTags] = useState(0);
   const [file, setFile] = useState<{ i: number; n: number; nom: string } | undefined>();
+  // Arborescence complète (écran large : arbre latéral ; et refus des cycles pendant le glisser).
+  const [arbre, setArbre] = useState<Array<{ id: string; parentId: string | null; nom: string | null; cle: DossierDrive['cle']; restreint: boolean }> | undefined>();
+  const [versionArbre, setVersionArbre] = useState(0);
+  const [toast, setToast] = useState<{ cle: string; texte: string; annuler?: () => void } | undefined>();
+  const [ancre, setAncre] = useState<string | undefined>();
   const envoi = useEnvoi();
   const { erreur, avis, agir, setAvis, setErreur } = useAgir();
 
@@ -101,7 +117,9 @@ export function Drive({
   }, [agir, chargerPortees]);
   const charger = useCallback(async () => {
     if (!portee) return;
-    setContenu(await api.lister(portee, dossier));
+    // `vu` : le dossier ouvert est marqué vu (pastilles de nouveautés, par compte, côté serveur).
+    setContenu(await api.lister(portee, dossier, { vu: true }));
+    signalerNouveautesDrive();
   }, [api, portee, dossier]);
   useEffect(() => {
     setSelection(new Map());
@@ -112,6 +130,18 @@ export function Drive({
 
   const infoPortee = portees?.find(p => p.portee === portee);
   const droits = contenu?.droits ?? infoPortee?.droits;
+  const depot = Boolean(droits?.depot);
+  useEffect(() => {
+    if (!portee || depot || !droits) return undefined;
+    let vivant = true;
+    api.arbre(portee).then(
+      r => vivant && setArbre(r.dossiers),
+      () => undefined,
+    );
+    return () => {
+      vivant = false;
+    };
+  }, [api, portee, depot, droits, versionArbre]);
   const ouvrirDossier = (id: string | null) => {
     setResultats(undefined);
     setCorbeille(false);
@@ -120,6 +150,7 @@ export function Drive({
   const changerPortee = (p: string) => {
     setPortee(p);
     setDossier(null);
+    setArbre(undefined);
     setResultats(undefined);
     setCorbeille(false);
     setOptionsFiltres(undefined);
@@ -205,6 +236,7 @@ export function Drive({
     agir(cleAction, async () => {
       await a();
       setSelection(new Map());
+      setVersionArbre(v => v + 1);
       await charger();
       if (resultats && portee) setResultats(await api.rechercher(portee, { ...filtres, q: q.trim() || undefined }));
       return message;
@@ -226,6 +258,43 @@ export function Drive({
       return n;
     });
 
+  // ---------------------------------------------------------------- Déplacer (glisser-déposer, menu), avec « Annuler »
+  const nomCible = (id: string | null): string => {
+    if (!id) return trDr('racine');
+    const d = arbre?.find(x => x.id === id) ?? contenu?.dossiers.find(x => x.id === id) ?? contenu?.chemin.find(x => x.id === id);
+    return d ? nomDossier(d) : trDr('dossier.sans_nom');
+  };
+  const rechargerApresDeplacement = async () => {
+    setSelection(new Map());
+    setVersionArbre(v => v + 1);
+    await charger();
+    if (resultats && portee) setResultats(await api.rechercher(portee, { ...filtres, q: q.trim() || undefined }));
+  };
+  const deplacer = (elements: ElementDeplacable[], cible: string | null) =>
+    agir('deplacer', async () => {
+      const refs = elements.map(e => ({ genre: e.genre, id: e.id }));
+      const r = await api.lot({ action: 'deplacer', elements: refs, dossierId: cible });
+      await rechargerApresDeplacement();
+      if (r.erreurs.length) setErreur(trDr('action.erreurs', { n: r.erreurs.length, liste: r.erreurs.map(x => x.erreur).join(' · ') }));
+      if (!r.faits.length) return undefined;
+      const faits = refs.filter(e => r.faits.includes(e.id));
+      const avant = r.avant ?? {};
+      setToast({
+        cle: `${Date.now()}`,
+        texte: trnDr('deplace.n', faits.length, { nom: nomCible(cible) }),
+        annuler: () => {
+          setToast(undefined);
+          void agir('annuler', async () => {
+            for (const g of groupesAnnulation(faits, avant)) await api.lot({ action: 'deplacer', elements: g.elements, dossierId: g.dossierId });
+            await rechargerApresDeplacement();
+            setToast({ cle: `${Date.now()}`, texte: trDr('deplace.annule') });
+            return undefined;
+          });
+        },
+      });
+      return undefined;
+    });
+
   // ---------------------------------------------------------------- Éléments affichés
   const dossiers: DossierDrive[] = resultats ? resultats.dossiers : (contenu?.dossiers ?? []);
   const fichiers: FichierDrive[] = trierFichiers(resultats ? resultats.fichiers : (contenu?.fichiers ?? []), tri, inverse);
@@ -233,6 +302,66 @@ export function Drive({
   const noms = { ...(contenu?.noms ?? {}), ...(resultats?.noms ?? {}) };
   const nomDe = (c: string | null) => (c ? (noms[c] ?? (c === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.compte_supprime'));
   const tous: ElementDrive[] = [...dossiersTries.map(d => ({ genre: 'dossier' as const, id: d.id })), ...fichiers.map(f => ({ genre: 'fichier' as const, id: f.id }))];
+  const infos = new Map<string, ElementDeplacable & { nom: string }>([
+    ...dossiersTries.map(d => [`dossier:${d.id}`, { genre: 'dossier' as const, id: d.id, parentId: d.parentId, modifiable: d.modifiable, systeme: d.systeme, nom: nomDossier(d) }] as const),
+    ...fichiers.map(f => [`fichier:${f.id}`, { genre: 'fichier' as const, id: f.id, parentId: f.dossierId, modifiable: f.modifiable, nom: f.nom }] as const),
+  ]);
+  const nouveautes = contenu?.nouveautes ?? null;
+  const arbreConnu: Array<{ id: string; parentId: string | null }> = arbre ?? dossiersTries;
+  const raisonRefus = (r: string) => trDr(`glisser.refus.${r}` as CleDr);
+  const glisser = useGlisser({
+    actif: Boolean(droits && !droits.depot && !corbeille),
+    couleurs: { fond: theme.surface, texte: theme.texte, accent: theme.accent, critique: theme.critique },
+    sources: c => (selection.has(c) ? [...selection.keys()] : [c]).filter(x => infos.has(x)),
+    texteSources: src => (src.length === 1 ? (infos.get(src[0])?.nom ?? '') : trnDr('glisser.n', src.length)),
+    verifier: (src, c) => {
+      const cible = c === 'racine' ? null : c;
+      const els = src.map(x => infos.get(x)).filter((x): x is ElementDeplacable & { nom: string } => Boolean(x));
+      const refus = refusDeplacement(els, cible, arbreConnu);
+      const restreint = cible ? Boolean(arbre?.find(x => x.id === cible)?.restreint ?? contenu?.dossiers.find(x => x.id === cible)?.restreint) : false;
+      return { refus: refus ? raisonRefus(refus) : null, libelle: nomCible(cible), note: restreint ? trDr('glisser.restreint') : undefined };
+    },
+    lacher: (src, c) => {
+      const els = src.map(x => infos.get(x)).filter((x): x is ElementDeplacable & { nom: string } => Boolean(x));
+      void deplacer(els, c === 'racine' ? null : c);
+    },
+    refuse: r => setErreur(r),
+    cadre: (cles, ajout) =>
+      setSelection(s => {
+        const n = ajout ? new Map(s) : new Map<string, ElementDrive>();
+        for (const c of cles) {
+          const i = infos.get(c);
+          if (i) n.set(c, { genre: i.genre, id: i.id });
+        }
+        return n;
+      }),
+    videClique: () => setSelection(new Map()),
+  });
+  /** Clic sur un élément : Ctrl / Cmd ajoute ou retire, Maj étend la sélection ; sinon il s'ouvre. */
+  const clic = (e: ElementDrive, ouvrir: () => void) => {
+    if (glisser.vientDeGlisser()) return;
+    const m = glisser.modificateurs();
+    if (m.plage && ancre) {
+      const i = tous.findIndex(x => cle(x) === ancre);
+      const j = tous.findIndex(x => cle(x) === cle(e));
+      if (i >= 0 && j >= 0) {
+        setSelection(s => {
+          const n = new Map(s);
+          for (const x of tous.slice(Math.min(i, j), Math.max(i, j) + 1)) n.set(cle(x), x);
+          return n;
+        });
+        return;
+      }
+    }
+    if (m.ajout || m.plage || enSelection || selection.size) {
+      basculer(e);
+      setAncre(cle(e));
+      return;
+    }
+    setAncre(cle(e));
+    ouvrir();
+  };
+  const selectionVisible = enSelection || selection.size > 0;
 
   const menuDossier = (d: DossierDrive) => (
     <MenuActions
@@ -266,13 +395,13 @@ export function Drive({
       ]}
     />
   );
-  const caseSelection = (e: ElementDrive, nom: string) => (enSelection ? <Case theme={theme} coche={selection.has(cle(e))} libelle={trDr('element.selectionner', { nom })} onChanger={() => basculer(e)} testID={`esport-drive-${e.genre}-${e.id}-case`} /> : null);
+  const caseSelection = (e: ElementDrive, nom: string) => (selectionVisible ? <Case theme={theme} coche={selection.has(cle(e))} libelle={trDr('element.selectionner', { nom })} onChanger={() => basculer(e)} testID={`esport-drive-${e.genre}-${e.id}-case`} /> : null);
   const sousTitreFichier = (f: FichierDrive) => [infosFichier(f), nomDe(f.creePar), quand(f.majLe)].join(' · ');
   const cheminResultat = (dossierId: string | null) => (resultats && dossierId ? trDr('recherche.dans', { chemin: (resultats.chemins[dossierId] ?? []).map(nomDossier).join(' › ') }) : '');
 
   const elementGrille = (contenuEl: React.ReactNode, e: ElementDrive, nom: string, onOuvrir: () => void, menu: React.ReactNode) => (
-    <View style={{ position: 'relative' }}>
-      <Carte theme={theme} dense onPress={enSelection ? () => basculer(e) : onOuvrir} libelle={trDr('element.ouvrir', { nom })} testID={`esport-drive-${e.genre}-${e.id}`} style={selection.has(cle(e)) ? { borderColor: theme.accent, borderWidth: 2 } : undefined}>
+    <View style={{ position: 'relative', opacity: glisser.glisses.includes(cle(e)) ? 0.45 : 1, userSelect: 'none' } as object} {...glisser.marque({ source: cle(e), cible: e.genre === 'dossier' ? e.id : undefined })}>
+      <Carte theme={theme} dense onPress={() => clic(e, onOuvrir)} libelle={trDr('element.ouvrir', { nom })} testID={`esport-drive-${e.genre}-${e.id}`} style={[selection.has(cle(e)) ? { borderColor: theme.accent, borderWidth: 2 } : undefined, e.genre === 'dossier' ? styleCible(theme, glisser, e.id) : undefined]}>
         {contenuEl}
       </Carte>
       <View style={{ position: 'absolute', top: 6, right: 6, flexDirection: 'row', gap: 4, alignItems: 'center' }}>
@@ -288,7 +417,10 @@ export function Drive({
         elementGrille(
           <View style={{ gap: 6 }}>
             <Vignette theme={theme} f={null} cote={64} />
-            <Text style={{ ...texte(theme, 14), fontWeight: '700' }} numberOfLines={2}>{`${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`}</Text>
+            <View style={[styles.ligne, { gap: 6, flexWrap: 'nowrap' }]}>
+              <Text style={{ ...texte(theme, 14), fontWeight: '700', flex: 1 }} numberOfLines={2}>{`${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`}</Text>
+              <Compteur theme={theme} n={nouveautes?.dossiers[d.id] ?? 0} testID={`esport-drive-dossier-${d.id}-nouveautes`} />
+            </View>
             <Text style={attenue(theme, 12)} numberOfLines={1}>{cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers)}</Text>
           </View>,
           { genre: 'dossier', id: d.id },
@@ -315,12 +447,17 @@ export function Drive({
   );
 
   const ligneListe = (e: ElementDrive, glyphe: string, nom: string, sous: string, onOuvrir: () => void, menu: React.ReactNode, extra?: React.ReactNode) => (
-    <View key={cle(e)} style={[styles.ligne, { gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingVertical: 6, flexWrap: 'nowrap' }]} testID={`esport-drive-${e.genre}-${e.id}`}>
+    <View
+      key={cle(e)}
+      {...glisser.marque({ source: cle(e), cible: e.genre === 'dossier' ? e.id : undefined })}
+      style={[styles.ligne, { gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingVertical: 6, flexWrap: 'nowrap', opacity: glisser.glisses.includes(cle(e)) ? 0.45 : 1, userSelect: 'none' } as object, e.genre === 'dossier' ? styleCible(theme, glisser, e.id) : undefined]}
+      testID={`esport-drive-${e.genre}-${e.id}`}>
       {caseSelection(e, nom)}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={trDr('element.ouvrir', { nom })}
-        onPress={enSelection ? () => basculer(e) : onOuvrir}
+        onPress={() => clic(e, onOuvrir)}
+        onLongPress={glisser.disponible ? undefined : () => { setEnSelection(true); basculer(e); }}
         testID={`esport-drive-${e.genre}-${e.id}-ouvrir`}
         style={(p: EtatPresse) => ({ flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: ESP.s, borderRadius: 8, paddingHorizontal: 4, backgroundColor: selection.has(cle(e)) ? teinteTransparente(theme.accent, 0.16) : p.hovered ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
         <Text style={{ fontSize: 22 }}>{glyphe}</Text>
@@ -339,7 +476,7 @@ export function Drive({
   );
   const vueListe = (
     <View testID="esport-drive-liste">
-      {dossiersTries.map(d => ligneListe({ genre: 'dossier', id: d.id }, GLYPHES_DRIVE.dossier, `${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`, cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers), () => ouvrirDossier(d.id), menuDossier(d)))}
+      {dossiersTries.map(d => ligneListe({ genre: 'dossier', id: d.id }, GLYPHES_DRIVE.dossier, `${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`, cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers), () => ouvrirDossier(d.id), menuDossier(d), <Compteur theme={theme} n={nouveautes?.dossiers[d.id] ?? 0} testID={`esport-drive-dossier-${d.id}-nouveautes`} />))}
       {fichiers.map(f =>
         ligneListe({ genre: 'fichier', id: f.id }, GLYPHES_DRIVE[f.genre], `${f.nom}${f.favori ? ' ★' : ''}`, cheminResultat(f.dossierId) || sousTitreFichier(f), () => setDetail(f.id), menuFichier(f), f.tags.length && large ? <Text style={attenue(theme, 12)}>{f.tags.map(t => `#${t}`).join(' ')}</Text> : null),
       )}
@@ -350,7 +487,7 @@ export function Drive({
   const vide = contenu && !resultats && !dossiers.length && !fichiers.length;
 
   return (
-    <View style={{ gap: ESP.m }} testID="esport-drive">
+    <View ref={glisser.ref as never} style={{ gap: ESP.m }} testID="esport-drive">
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-drive" />
       {!porteeFixe && portees && portees.length > 1 ? (
         <Choix theme={theme} libelle={trDr('portee')} valeur={portee} options={portees.map(p => ({ id: p.portee, nom: nomPortee(p) }))} onChoisir={changerPortee} testID="esport-drive-portee" />
@@ -373,7 +510,21 @@ export function Drive({
             testID="esport-drive-corbeille"
           />
         ) : null}
-        {!corbeille && droits?.voir ? <BoutonHub theme={theme} titre={enSelection ? trDr('selection.annuler') : trDr('barre.selection')} onPress={() => { setEnSelection(s => !s); setSelection(new Map()); }} testID="esport-drive-selection" /> : null}
+        {!corbeille && droits?.voir ? <BoutonHub theme={theme} titre={selectionVisible ? trDr('selection.annuler') : trDr('barre.selection')} onPress={() => { setEnSelection(!selectionVisible); setSelection(new Map()); }} testID="esport-drive-selection" /> : null}
+        {nouveautes?.total && portee ? (
+          <BoutonHub
+            theme={theme}
+            titre={`${trDr('nouveautes.tout_vu')} (${nouveautes.total})`}
+            onPress={() =>
+              void agir('tout-vu', async () => {
+                await api.toutVu(portee);
+                await charger();
+                return trDr('nouveautes.tout_vu_fait');
+              })
+            }
+            testID="esport-drive-tout-vu"
+          />
+        ) : null}
         {!corbeille && droits?.gerer ? <BoutonHub theme={theme} titre={trDr('tags.gerer')} onPress={() => setDialogue({ genre: 'tags' })} testID="esport-drive-tags-gerer" /> : null}
         {portees?.some(p => p.portee === 'club' && p.droits.gerer) ? <BoutonHub theme={theme} titre={trDr('barre.reglages')} onPress={() => setDialogue({ genre: 'reglages' })} testID="esport-drive-reglages" /> : null}
         {contenu && !droits?.depot ? <BarreQuota theme={theme} quota={contenu.quota} /> : null}
@@ -382,7 +533,23 @@ export function Drive({
       {corbeille && portee ? (
         <Corbeille theme={theme} api={api} portee={portee} onChange={recharger} />
       ) : (
-        <>
+        <View style={{ flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' }}>
+          {large && !depot && arbre ? (
+            <View style={{ width: 250, flexShrink: 0, borderRightWidth: 1, borderRightColor: theme.ligne, paddingRight: ESP.xs }}>
+              <ArbreDossiers
+                theme={theme}
+                titre={trDr('arbre.titre')}
+                racine={trDr('racine')}
+                dossiers={arbre.map((d): NoeudArbre => ({ id: d.id, parentId: d.parentId, nom: nomDossier(d), restreint: d.restreint }))}
+                courant={resultats ? null : (contenu?.dossier?.id ?? null)}
+                onOuvrir={ouvrirDossier}
+                compteurs={nouveautes?.dossiers}
+                glisser={glisser}
+                testID="esport-drive-arbre"
+              />
+            </View>
+          ) : null}
+          <View style={{ flex: 1, minWidth: 0, gap: ESP.m }}>
           {/* Recherche et filtres */}
           {!droits?.depot ? (
             <View style={{ gap: ESP.xs }}>
@@ -447,15 +614,7 @@ export function Drive({
                 {trnDr('recherche.resultats', resultats.fichiers.length + resultats.dossiers.length)}
               </Text>
             ) : (
-              <View style={[styles.ligne, { gap: 2 }]} accessibilityLabel={trDr('detail.emplacement')} testID="esport-drive-ariane">
-                {!droits?.depot ? <BoutonHub theme={theme} titre={`⌂ ${trDr('racine')}`} onPress={() => ouvrirDossier(null)} testID="esport-drive-ariane-racine" /> : null}
-                {(contenu?.chemin ?? []).map((m, i, t) => (
-                  <React.Fragment key={m.id}>
-                    <Text style={attenue(theme)}>›</Text>
-                    {i === t.length - 1 ? <Text style={{ ...texte(theme, 15), fontWeight: '700', paddingHorizontal: 6 }}>{nomDossier(m)}</Text> : <BoutonHub theme={theme} titre={nomDossier(m)} onPress={() => ouvrirDossier(m.id)} testID={`esport-drive-ariane-${m.id}`} />}
-                  </React.Fragment>
-                ))}
-              </View>
+              <FilAriane theme={theme} racine={trDr('racine')} chemin={(contenu?.chemin ?? []).map(m => ({ id: m.id, nom: nomDossier(m) }))} onOuvrir={ouvrirDossier} glisser={glisser} masquerRacine={depot} testID="esport-drive-ariane" />
             )}
             <View style={[styles.ligne, { gap: ESP.xs }]}>
               <BoutonHub theme={theme} titre={vue === 'grille' ? `☰ ${trDr('barre.liste')}` : `▦ ${trDr('barre.grille')}`} libelle={trDr('barre.vue')} onPress={() => setVue(v => (v === 'grille' ? 'liste' : 'grille'))} testID="esport-drive-vue" />
@@ -470,7 +629,7 @@ export function Drive({
           </View>
 
           {/* Sélection : actions groupées */}
-          {enSelection ? (
+          {selectionVisible ? (
             <View style={[styles.ligne, { gap: ESP.xs }]} testID="esport-drive-barre-selection">
               <Text style={texte(theme, 13)}>{trnDr('selection.n', selection.size)}</Text>
               <BoutonHub theme={theme} titre={trDr('selection.tout')} onPress={() => setSelection(new Map(tous.map(e => [cle(e), e])))} testID="esport-drive-selection-tout" />
@@ -484,7 +643,7 @@ export function Drive({
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-drive-envoi" />
 
           <ZoneDepot theme={theme} actif={peutDeposer && choixFichierDisponible} onFichiers={f => void envoyer(f)} testID="esport-drive-zone">
-            <View style={{ minHeight: 160, gap: ESP.s }}>
+            <View style={{ minHeight: 160, gap: ESP.s }} {...glisser.marque({ zone: true })}>
               {!contenu && !erreur ? <SqueletteCartes theme={theme} n={large ? 4 : 2} large={large} /> : null}
               {vide ? (
                 <Carte theme={theme}>
@@ -493,9 +652,11 @@ export function Drive({
               ) : null}
               {contenu && !vide ? (vue === 'grille' ? vueGrille : vueListe) : null}
               {peutDeposer ? <Aide theme={theme}>{choixFichierDisponible ? trDr('depot.aide', { max: taille(contenu?.quota.fichierMax ?? 0) }) : trDr('depot.mobile')}</Aide> : null}
+              {contenu && !depot && !vide ? <Aide theme={theme}>{glisser.disponible ? trDr('glisser.aide') : trDr('glisser.aide_mobile')}</Aide> : null}
             </View>
           </ZoneDepot>
-        </>
+          </View>
+        </View>
       )}
 
       <DetailFichier
@@ -581,7 +742,8 @@ export function Drive({
             onChoisir={(p, dossierId) => {
               const elements = dialogue.elements;
               setDialogue(undefined);
-              void enLot(dialogue.action, elements, dossierId, dialogue.action === 'copier' ? p : undefined);
+              if (dialogue.action === 'deplacer') void deplacer(elements.map(x => infos.get(cle(x)) ?? { ...x, parentId: null, modifiable: true }), dossierId);
+              else void enLot(dialogue.action, elements, dossierId, p);
             }}
           />
         </Volet>
@@ -606,6 +768,7 @@ export function Drive({
           <ReglagesRangement theme={theme} api={api} />
         </Volet>
       ) : null}
+      {toast ? <ToastAnnuler theme={theme} cle={toast.cle} texte={toast.texte} action={toast.annuler ? { titre: trDr('deplace.annuler'), onPress: toast.annuler } : undefined} onFermer={() => setToast(undefined)} testID="esport-drive-toast" /> : null}
     </View>
   );
 }

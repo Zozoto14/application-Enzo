@@ -36,6 +36,7 @@ import { trVi } from '../../i18n/visuels';
 import { Drive } from './drive/Drive';
 import { Reunions } from './reunions/Reunions';
 import { trRe } from '../../i18n/reunions';
+import { useNouveautesDrive } from '../../cm/nouveautesDrive';
 
 export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
@@ -73,6 +74,8 @@ export function EspaceCm({
   });
   const [ouvert, setOuvert] = useState<string | undefined>();
   const { etat } = useEtatCm(api, voirCm);
+  // Pastille du Drive : nouveautés (fichiers, dossiers, versions ajoutés par d'autres) dans tous les Drive visibles.
+  const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
   const teams: TeamCm[] = moi.teams;
   const entrees = [
     ...(voirCm
@@ -85,7 +88,7 @@ export function EspaceCm({
         ]
       : []),
     ...(reunions ? [{ id: 'reunions', libelle: trRe('onglet') }] : []),
-    ...(drive ? [{ id: 'drive', libelle: trCm('espace.drive') }] : []),
+    ...(drive ? [{ id: 'drive', libelle: trCm('espace.drive'), pastille: nouveautesDrive }] : []),
     // Page Réseaux (migration 0026) : comptes, annonce Discord des posts publiés, statistiques.
     ...(voirCm ? [{ id: 'reseaux', libelle: trCm('espace.reseaux') }] : []),
     ...(sponsors ? [{ id: 'sponsors', libelle: trCm('espace.sponsors') }] : []),

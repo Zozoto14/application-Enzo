@@ -22,6 +22,8 @@ export interface ModeleResume {
   type: TypeVisuel;
   base: string | null;
   formats: CleFormat[];
+  /** Dossier (migration 0038 ; null : racine). */
+  dossierId?: string | null;
   version: number;
   creePar: string | null;
   majPar: string | null;
@@ -51,6 +53,8 @@ export interface Visuel {
   langue: Langue;
   source: SourceVisuel;
   retouche: boolean;
+  /** Dossier (migration 0038 ; null : racine). */
+  dossierId?: string | null;
   document?: DocumentVisuel | null;
   donnees?: DonneesVisuel | null;
   erreurDonnees?: string | null;
@@ -75,6 +79,23 @@ export interface ImageImportee {
   portee: string;
 }
 
+/** Dossiers par défaut des visuels (migration 0038). */
+export type CleDossierVisuel = 'annonces' | 'resultats' | 'recrues' | 'programmes' | 'sponsors' | 'divers';
+export interface DossierVisuel {
+  id: string;
+  portee: string;
+  parentId: string | null;
+  /** null : dossier par défaut, nom traduit par l'app (`cle`). */
+  nom: string | null;
+  cle: CleDossierVisuel | null;
+  systeme: boolean;
+  modeles: number;
+  visuels: number;
+  creeLe: string;
+  majLe: string;
+}
+export type ElementVisuel = { genre: 'modele' | 'visuel' | 'dossier'; id: string };
+
 export function apiVisuels(client: ClientEsport) {
   const r = <T>(chemin: string, methode = 'GET', corps?: unknown) => client.requete<T>(chemin, methode, corps);
   const e = encodeURIComponent;
@@ -94,16 +115,21 @@ export function apiVisuels(client: ClientEsport) {
     lienFichier: (id: string) => r<{ url: string; expire: string }>(`/cm/visuels/fichiers/${e(id)}/lien`, 'POST', {}),
     modeles: (portee?: string) => r<ListeModeles>(`/cm/modeles${qs({ portee })}`),
     modele: (id: string) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}`),
-    creerModele: (m: { portee: string; nom: string; type: TypeVisuel; base?: string | null; documents: Partial<Record<CleFormat, DocumentVisuel>> }) => r<{ modele: ModeleComplet }>('/cm/modeles', 'POST', m),
+    dossiers: (portee: string) => r<{ portee: string; editer: boolean; dossiers: DossierVisuel[] }>(`/cm/visuels/dossiers${qs({ portee })}`),
+    creerDossier: (d: { portee: string; parentId: string | null; nom: string }) => r<{ id: string }>('/cm/visuels/dossiers', 'POST', d),
+    modifierDossier: (id: string, d: { nom?: string | null; parentId?: string | null }) => r<{ ok: true }>(`/cm/visuels/dossiers/${e(id)}`, 'PATCH', d),
+    supprimerDossier: (id: string) => r<{ ok: true; parentId: string | null }>(`/cm/visuels/dossiers/${e(id)}`, 'DELETE'),
+    deplacer: (c: { elements: ElementVisuel[]; dossierId: string | null }) => r<{ faits: string[]; erreurs: Array<{ id: string | null; code: string; erreur: string }>; avant: Record<string, string | null> }>('/cm/visuels/deplacer', 'POST', c),
+    creerModele: (m: { portee: string; nom: string; type: TypeVisuel; base?: string | null; documents: Partial<Record<CleFormat, DocumentVisuel>>; dossierId?: string | null }) => r<{ modele: ModeleComplet }>('/cm/modeles', 'POST', m),
     modifierModele: (id: string, version: number, m: { nom?: string; documents?: Partial<Record<CleFormat, DocumentVisuel>> }) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}`, 'PATCH', { version, ...m }),
     supprimerModele: (id: string) => r<{ ok: true }>(`/cm/modeles/${e(id)}`, 'DELETE'),
-    dupliquerModele: (id: string, o: { nom?: string; portee?: string } = {}) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}/dupliquer`, 'POST', o),
+    dupliquerModele: (id: string, o: { nom?: string; portee?: string; dossierId?: string | null } = {}) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}/dupliquer`, 'POST', o),
     versionsModele: (id: string) => r<{ actuelle: number; versions: Array<{ version: number; nom: string; auteur: string | null; date: string }>; noms: Record<string, string | null> }>(`/cm/modeles/${e(id)}/versions`),
     restaurerModele: (id: string, version: number, actuelle: number) => r<{ modele: ModeleComplet }>(`/cm/modeles/${e(id)}/versions/${version}/restaurer`, 'POST', { version: actuelle }),
     donnees: (portee: string, source: Partial<SourceVisuel>) => r<{ source: SourceVisuel; donnees: DonneesVisuel }>(`/cm/visuels/donnees${qs({ portee, genre: source.genre, teamId: source.teamId, id: source.id, date: source.date })}`),
     visuels: (o: { portee?: string; carte?: string } = {}) => r<{ visuels: Visuel[] }>(`/cm/visuels${qs(o)}`),
     visuel: (id: string) => r<{ visuel: Visuel }>(`/cm/visuels/${e(id)}`),
-    creerVisuel: (v: { portee?: string; carteId?: string; modele: string; format: CleFormat; langue: Langue; source: Partial<SourceVisuel>; nom?: string }) => r<{ visuel: Visuel }>('/cm/visuels', 'POST', v),
+    creerVisuel: (v: { portee?: string; carteId?: string; modele: string; format: CleFormat; langue: Langue; source: Partial<SourceVisuel>; nom?: string; dossierId?: string | null }) => r<{ visuel: Visuel }>('/cm/visuels', 'POST', v),
     modifierVisuel: (id: string, version: number, v: { nom?: string; document?: DocumentVisuel | null; format?: CleFormat; langue?: Langue; modele?: string; source?: Partial<SourceVisuel> }) => r<{ visuel: Visuel }>(`/cm/visuels/${e(id)}`, 'PATCH', { version, ...v }),
     supprimerVisuel: (id: string) => r<{ ok: true }>(`/cm/visuels/${e(id)}`, 'DELETE'),
     rendu: (id: string, envoi: string, empreinte: string) => r<{ visuel: Visuel }>(`/cm/visuels/${e(id)}/rendu`, 'POST', { envoi, empreinte }),

@@ -29,12 +29,13 @@ import { PageMembres, type SousOngletMembres } from './membres/PageMembres';
 import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam';
 import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './commun';
-import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
+import { AvatarTeam, Badge, Carte, Compteur, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
 import { EspaceCm, Jeux, PageDevblog, Statistiques } from './differe';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
+import { useNouveautesDrive } from '../cm/nouveautesDrive';
 import type { OngletCm } from './cm/EspaceCm';
 import { demarrerUsage, noterPage } from '../usage';
 import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
@@ -567,6 +568,8 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
   const [aValider, setAValider] = useState(0);
+  // Nouveautés du Drive (tous les Drive visibles) : pastille sur la puce « Drive ».
+  const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
   useEffect(() => {
     if (!contenus || !client) return;
     let actif = true;
@@ -604,11 +607,15 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
         {contenus ? <Badge theme={theme} texte={tr('cm.tuile_contenus')} /> : null}
         {contenus && aValider > 0 ? <Badge theme={theme} texte={`${tr('cm.tuile_a_valider')} (${aValider})`} ton="accent" testID="esport-teams-cm-a-valider" /> : null}
         {drive && contenus ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={tr('cm.club_ouvrir_drive')} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive">
+          <Pressable accessibilityRole="button" accessibilityLabel={`${tr('cm.club_ouvrir_drive')}${nouveautesDrive ? ` (${nouveautesDrive})` : ''}`} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive" style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Badge theme={theme} texte={tr('cm.club_drive')} ton="accent" />
+            <Compteur theme={theme} n={nouveautesDrive} testID="esport-teams-cm-drive-nouveautes" />
           </Pressable>
         ) : drive ? (
-          <Badge theme={theme} texte={tr('cm.club_drive')} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Badge theme={theme} texte={tr('cm.club_drive')} />
+            <Compteur theme={theme} n={nouveautesDrive} testID="esport-teams-cm-drive-nouveautes" />
+          </View>
         ) : null}
         {sponsors ? <Badge theme={theme} texte={tr('cm.club_sponsors')} /> : null}
       </View>

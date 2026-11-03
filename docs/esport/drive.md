@@ -12,7 +12,8 @@ par le cron du serveur (≤ 5 min) ; **rechargez la page** ensuite (l'app lit vo
 
 Voir aussi : [cm.md](cm.md) (section CM, rôles), [visuels.md](visuels.md), [sponsors.md](sponsors.md).
 
-Migration : `esport/migrations/0027_cm_drive.sql`. Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
+Migrations : `esport/migrations/0027_cm_drive.sql`, `0038_cm_drive_nouveautes_visuels_dossiers.sql` (nouveautés
+par compte, dossiers des visuels). Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
 et `src/esport/ui/cm/drive/` (app), textes `src/esport/i18n/drive.ts`.
 
 ## Qui fait quoi
@@ -51,6 +52,66 @@ Drive (404 pour les autres, recherche et ZIP compris) ; un lien obtenu avant la 
 - **Télécharger en ZIP** : le dossier et ses sous-dossiers visibles, en flux (rien n'est écrit sur le disque du
   serveur ; pas de compression : les médias le sont déjà). Limite `ESPORT_DRIVE_ZIP_MAX` (2 Go par défaut) et 2 000
   fichiers ; au-delà, téléchargez les sous-dossiers. 20 ZIP par heure et par compte.
+
+## Déplacer à la souris
+
+Sur le **site** et l'**app PC** :
+
+- **glisser-déposer** un fichier ou un dossier sur un **dossier** (grille ou liste), sur un maillon du **fil
+  d'Ariane** (pour remonter, jusqu'à la racine) ou dans l'**arborescence latérale** (écran large : tous les dossiers,
+  dépliables, le dossier ouvert en évidence) ;
+- **sélection multiple** : Ctrl / Cmd-clic ajoute ou retire un élément, Maj-clic sélectionne une plage, un **cadre**
+  tracé dans le vide sélectionne tout ce qu'il touche (Ctrl / Maj : la sélection s'étend) ; glisser un élément
+  sélectionné emporte **toute la sélection** (« 3 éléments ») ; clic dans le vide ou Échap : on abandonne ;
+- **indication de la cible** : la cible survolée est entourée (couleur d'accent) et le fantôme qui suit le pointeur
+  dit « 3 éléments → Logos » ; un dossier restreint est signalé (« gestionnaires seulement ») ;
+- **refus clair**, avant même de lâcher (cible en rouge, raison dans le fantôme, rappelée si l'on lâche) : un dossier
+  dans lui-même ou un de ses sous-dossiers, un dossier par défaut hors de la racine, l'élément d'un autre sans
+  `cm.drive.gerer` (« Vous ne pouvez déplacer que vos propres éléments »), déjà dans ce dossier. Le serveur revérifie
+  tout (dossier restreint invisible : 404 ; dépôt des joueurs : jamais) ;
+- **Annuler** : après chaque déplacement, un toast « 3 éléments déplacés vers « Logos ». **Annuler** » remet chaque
+  élément à **son** emplacement d'origine (le serveur rend l'emplacement d'avant de chaque élément déplacé) ;
+- **écran tactile** (site sur tablette ou téléphone) : **appui long** (≈ 0,5 s) puis glisser ; un mouvement avant
+  l'appui long fait défiler la page normalement.
+
+Partout (et sur l'app iPhone / Android, sans glisser) : menu **« ⋯ » › Déplacer**, ou **Sélectionner** (appui long sur
+une ligne) puis **Déplacer**. Les déplacements passent par `POST /cm/drive/lot { action: 'deplacer' }` (et `PATCH`
+d'un fichier ou d'un dossier) : comme toute écriture de l'app, en **POST + `X-Methode`** quand l'hébergement bloque
+PATCH (client.ts).
+
+## Nouveautés (pastilles)
+
+Une **pastille avec un compteur** montre, **pour chaque utilisateur**, ce qui a été ajouté depuis sa dernière visite :
+
+- sur la puce **Drive** de la tuile **« CM du club »** (page Teams), sur l'onglet **Drive** de l'espace CM et sur
+  l'onglet **Drive** de l'onglet CM d'une team (ce Drive-là) ;
+- sur **chaque dossier** qui contient des nouveautés (grille, liste, arborescence) : le compteur d'un dossier
+  additionne ses nouveautés et celles de ses sous-dossiers.
+
+Compte comme nouveauté : un **fichier** ou un **dossier** ajouté (envoi, copie, rangement automatique), ou une
+**nouvelle version** d'un fichier, **par quelqu'un d'autre** (ses propres ajouts ne comptent jamais), après la
+dernière visite de **son dossier** par l'utilisateur. Seul ce que l'utilisateur **peut voir** compte (dossier
+restreint, dépôt des joueurs : rien pour qui n'y a pas accès). Ouvrir un dossier le **marque comme vu** (ses
+sous-dossiers gardent leurs pastilles jusqu'à leur ouverture) ; **Tout marquer comme vu** (barre du Drive) remet tout
+à zéro. Au tout premier passage, rien n'est « nouveau ».
+
+L'état « vu » est gardé **par le serveur**, par compte et par dossier (`cm_drive_vus`) : jamais dans le navigateur ;
+il suit le compte d'un appareil à l'autre. Les pastilles se relisent à l'ouverture, toutes les 2 minutes et au retour
+sur l'onglet du navigateur.
+
+**Événement de bus `drive.ajout`** (pour le centre de notifications) : une ligne de la table `evenements` à chaque
+ajout, dans le même lot que l'écriture. Il ne va **pas** au journal d'activité (les `cm.drive_*` y sont déjà).
+
+| Champ | Valeur |
+| --- | --- |
+| `type` | `drive.ajout` |
+| `team_id` | la team de la portée (NULL pour le Drive du club) |
+| `acteur_id` | l'auteur (NULL : rangement automatique sans auteur) |
+| `entite_type`, `entite_id` | `cm_drive` (fichier) ou `cm_drive_dossier` (dossier), et son identifiant |
+| `charge` | `{ portee, dossierId, element: 'fichier' \| 'dossier', genre: 'ajout' \| 'copie' \| 'version' \| 'rangement', nom, version }` |
+
+Le consommateur ne prévient que ceux qui **voient** l'élément : `drive.destinatairesAjout(ev)` (service du Drive)
+rend ces comptes, l'auteur exclu ; `drive.elementVisiblePour(compte, element, id)` répond pour un compte.
 
 ## Fichiers
 
@@ -135,22 +196,25 @@ Rien n'est copié : la pièce, l'image ou le sponsor pointe vers les mêmes octe
 | `cm_drive_fichiers` | fichiers (portée, dossier, nom, version actuelle, type, taille, infos, origine, corbeille) |
 | `cm_drive_versions` | versions (octets dans `cm_fichiers`) |
 | `cm_drive_tags`, `cm_drive_favoris` | étiquettes ; favoris par compte |
+| `cm_drive_vus` (migration 0038) | état « vu » par compte, portée et dossier (`racine`, l'identifiant d'un dossier, ou `*` : tout marqué vu) |
 
 `envois` est reconstruite (usage « drive »), comme en 0017 et 0023. Les rôles CM système reçoivent leurs permissions
 du Drive. Tout est dans l'**export / import de la base**. **RGPD** : l'export d'un compte liste ses fichiers du Drive
-et ses favoris ; la suppression du compte efface ses favoris, ses fichiers restent au club sans auteur.
+et ses favoris (et ses dossiers vus) ; la suppression du compte efface ses favoris et son état « vu », ses fichiers
+restent au club sans auteur.
 
 ## API (préfixe facultatif `/api/esport`)
 
 | Route | Droit |
 | --- | --- |
-| `GET /cm/drive/portees` ; `GET /cm/drive?portee&dossier` ; `GET /cm/drive/arbre?portee` ; `GET /cm/drive/filtres?portee` | voir (ou dépôt) |
+| `GET /cm/drive/nouveautes?portee` (sans portée : un total par Drive) ; `POST /cm/drive/vu { portee, dossierId }` ; `POST /cm/drive/tout-vu { portee? }` | voir (ou dépôt) |
+| `GET /cm/drive/portees` ; `GET /cm/drive?portee&dossier&vu` (`vu=1` : marqué vu, réponse avec `nouveautes`) ; `GET /cm/drive/arbre?portee` ; `GET /cm/drive/filtres?portee` | voir (ou dépôt) |
 | `GET /cm/drive/recherche?portee&q&genre&tag&auteur&du&au&favoris&dossier` ; `GET /cm/drive/elements/:id` | voir |
 | `/cm/drive/portees/:p/envois…` ; `POST /cm/drive/fichiers { portee, dossierId, envoi, nom?, tags? }` | envoyer (ou dépôt) |
 | `GET\|PATCH\|DELETE /cm/drive/fichiers/:id` ; `POST …/(copier\|lien\|versions)` ; `POST …/versions/:v/restaurer` ; `DELETE …/versions/:v` | voir ; auteur ou gérer ; gérer |
 | `POST /cm/drive/dossiers` ; `PATCH\|DELETE /cm/drive/dossiers/:id` ; `POST …/zip` | envoyer ; auteur ou gérer ; voir |
 | `GET /cm/drive/corbeille?portee` ; `POST /cm/drive/corbeille/:id/restaurer` ; `DELETE /cm/drive/corbeille/:id` ; `POST /cm/drive/corbeille/vider` | voir ; auteur ou gérer ; gérer |
-| `POST /cm/drive/lot { action, elements, dossierId?, portee? }` ; `POST /cm/drive/favoris` | selon l'action |
+| `POST /cm/drive/lot { action, elements, dossierId?, portee? }` (déplacer : rend aussi `avant`, l'emplacement d'avant de chaque élément déplacé) ; `POST /cm/drive/favoris` | selon l'action |
 | `PATCH /cm/drive/tags { portee, tag, nom }` ; `DELETE /cm/drive/tags?portee&tag` (étiquette de tous les fichiers de la portée) | gérer |
 | `GET\|PUT /cm/drive/reglages` | gérer (club) |
 | `GET /cm/drive/contenu/<élément>.<version>?c&exp&sig` ; `GET /cm/drive/zip/<dossier>?c&exp&sig` | lien signé (accès revérifié) |
@@ -163,11 +227,15 @@ Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 
 - Serveur : `esport/noyau/cm/drive/regles.mjs` (règles pures : noms, extensions, étiquettes, réglages),
   `zip.mjs` (ZIP en flux), `service.mjs`, `routes.mjs` ; `esport/noyau/cm/utilisations.mjs` (octets partagés) ;
   formats étendus dans `esport/noyau/medias/formats.mjs` (`reconnaitreEtendu`).
-- App : `src/esport/cm/drive.ts`, `src/esport/ui/cm/drive/` (Drive, DetailFichier, ChoixDrive, ApercuDrive et
-  ZoneDepot — versions web et native).
+- App : `src/esport/cm/drive.ts` (dont `refusDeplacement`, `groupesAnnulation`), `src/esport/cm/nouveautesDrive.ts`
+  (pastilles), `src/esport/ui/cm/drive/` (Drive, DetailFichier, ChoixDrive, ApercuDrive et ZoneDepot — versions web
+  et native ; `glisser.web.ts` / `glisser.ts` : glisser-déposer, cadre, Ctrl / Maj-clic ; `explorateur.tsx` : fil
+  d'Ariane, arborescence latérale, choix d'un dossier, aussi utilisés par les dossiers des visuels).
 - Tests : `esport/test/drive.test.mjs` (SQLite et PostgreSQL : règles, formats, ZIP, migration, permissions,
   fichiers, versions, corbeille et purge, quota, sécurité, intégrations, RGPD, export / import),
-  `src/esport/Drive.test.tsx`.
+  `esport/test/drive-deplacer-nouveautes.test.mjs` (SQLite et PostgreSQL : déplacements — cycles, permissions,
+  groupé, annulation, POST + X-Methode —, nouveautés — par compte, permissions, ses propres ajouts exclus, versions,
+  vu, tout vu, `drive.ajout` —, dossiers des visuels, RGPD), `src/esport/Drive.test.tsx`.
 
 ## Pour le Fondateur
 

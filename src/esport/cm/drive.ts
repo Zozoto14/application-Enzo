@@ -91,8 +91,16 @@ export interface MaillonDrive {
   nom: string | null;
   cle: CleDossier | null;
 }
+/** Nouveautés d'un Drive pour le compte (migration 0038) : total, éléments à la racine, compteur par dossier (sous-dossiers compris). */
+export interface NouveautesDrive {
+  total: number;
+  racine: number;
+  dossiers: Record<string, number>;
+}
 export interface ContenuDrive {
   portee: string;
+  /** Présent quand le dossier est ouvert avec `vu` (il est alors marqué vu). */
+  nouveautes?: NouveautesDrive | null;
   team: { id: string; nom: string } | null;
   droits: DroitsDrive;
   dossier: DossierDrive | null;
@@ -165,7 +173,12 @@ export function apiDrive(client: ClientEsport) {
   return {
     client,
     portees: () => r<{ portees: PorteeDrive[]; quota: QuotaDrive | null; reglages: ReglagesDrive | null }>('/cm/drive/portees'),
-    lister: (portee: string, dossier?: string | null) => r<ContenuDrive>(`/cm/drive${requeteUrl({ portee, dossier: dossier ?? undefined })}`),
+    /** `vu` : ouverture par l'écran du Drive (le dossier est marqué vu ; la réponse porte les nouveautés). */
+    lister: (portee: string, dossier?: string | null, o: { vu?: boolean } = {}) => r<ContenuDrive>(`/cm/drive${requeteUrl({ portee, dossier: dossier ?? undefined, vu: o.vu ? 1 : undefined })}`),
+    nouveautes: (portee: string) => r<NouveautesDrive & { portee: string }>(`/cm/drive/nouveautes${requeteUrl({ portee })}`),
+    nouveautesGlobales: () => r<{ total: number; portees: Array<{ portee: string; total: number }> }>('/cm/drive/nouveautes'),
+    vu: (portee: string, dossierId: string | null) => r<NouveautesDrive & { portee: string }>('/cm/drive/vu', 'POST', { portee, dossierId }),
+    toutVu: (portee?: string) => r<{ ok: true; portees: string[] }>('/cm/drive/tout-vu', 'POST', portee ? { portee } : {}),
     arbre: (portee: string) => r<{ portee: string; dossiers: Array<{ id: string; parentId: string | null; nom: string | null; cle: CleDossier | null; restreint: boolean }> }>(`/cm/drive/arbre${requeteUrl({ portee })}`),
     filtres: (portee: string) => r<{ tags: Array<{ tag: string; n: number }>; auteurs: Array<{ compte: string; pseudo: string | null }>; genres: GenreDrive[] }>(`/cm/drive/filtres${requeteUrl({ portee })}`),
     renommerTag: (c: { portee: string; tag: string; nom: string }) => r<{ ok: true; fichiers: number }>('/cm/drive/tags', 'PATCH', c),
@@ -190,7 +203,7 @@ export function apiDrive(client: ClientEsport) {
     supprimerDefinitivement: (id: string) => r<{ ok: true }>(`/cm/drive/corbeille/${e(id)}`, 'DELETE'),
     viderCorbeille: (portee: string) => r<{ ok: true; elements: number }>('/cm/drive/corbeille/vider', 'POST', { portee }),
     lot: (c: { action: 'deplacer' | 'copier' | 'corbeille'; elements: ElementDrive[]; dossierId?: string | null; portee?: string }) =>
-      r<{ faits: string[]; erreurs: Array<{ id: string | null; code: string; erreur: string }> }>('/cm/drive/lot', 'POST', c),
+      r<{ faits: string[]; erreurs: Array<{ id: string | null; code: string; erreur: string }>; avant?: Record<string, string | null> }>('/cm/drive/lot', 'POST', c),
     favori: (genre: 'fichier' | 'dossier', id: string, favori: boolean) => r<{ ok: true }>('/cm/drive/favoris', 'POST', { genre, id, favori }),
     reglages: () => r<ReglagesDrive>('/cm/drive/reglages'),
     changerReglages: (c: Partial<ReglagesDrive>) => r<ReglagesDrive>('/cm/drive/reglages', 'PUT', c),
@@ -240,3 +253,58 @@ export const GLYPHES_DRIVE: Record<GenreDrive | 'dossier', string> = {
   creation: '🎨',
   texte: '📝',
 };
+
+// ------------------------------------------------------------------ Déplacer (glisser-déposer, menu)
+
+/** Élément à déplacer, tel que l'écran le connaît (emplacement actuel, droits rendus par le serveur). */
+export interface ElementDeplacable {
+  genre: 'fichier' | 'dossier';
+  id: string;
+  /** Dossier actuel (null : racine). */
+  parentId: string | null;
+  modifiable: boolean;
+  /** Dossier par défaut (reste à la racine). */
+  systeme?: boolean;
+}
+export type RefusDeplacement = 'permission' | 'systeme' | 'boucle' | 'meme';
+
+/** Descendants d'un dossier (lui compris) dans un arbre `{ id, parentId }`. */
+export function descendantsDe(arbre: ReadonlyArray<{ id: string; parentId: string | null }>, id: string): Set<string> {
+  const sortie = new Set([id]);
+  let ajout = true;
+  while (ajout) {
+    ajout = false;
+    for (const d of arbre) {
+      if (d.parentId && sortie.has(d.parentId) && !sortie.has(d.id)) {
+        sortie.add(d.id);
+        ajout = true;
+      }
+    }
+  }
+  return sortie;
+}
+
+/**
+ * Le déplacement est-il permis ? (vérifié aussi par le serveur ; ici pour refuser clairement pendant le glisser).
+ * `cible` : dossier de destination (null : racine). Rend la raison du refus, ou null.
+ */
+export function refusDeplacement(elements: readonly ElementDeplacable[], cible: string | null, arbre: ReadonlyArray<{ id: string; parentId: string | null }>): RefusDeplacement | null {
+  if (!elements.length) return 'meme';
+  if (elements.some(e => !e.modifiable)) return 'permission';
+  if (elements.some(e => e.genre === 'dossier' && e.systeme && cible !== null)) return 'systeme';
+  if (cible !== null && elements.some(e => e.genre === 'dossier' && descendantsDe(arbre, e.id).has(cible))) return 'boucle';
+  if (elements.every(e => e.parentId === cible)) return 'meme';
+  return null;
+}
+
+/** « Annuler » un déplacement : les éléments regroupés par emplacement d'origine (un appel par groupe). */
+export function groupesAnnulation<E extends { id: string }>(elements: readonly E[], avant: Record<string, string | null>): Array<{ dossierId: string | null; elements: E[] }> {
+  const groupes = new Map<string | null, E[]>();
+  for (const e of elements) {
+    if (!(e.id in avant)) continue;
+    const o = avant[e.id] ?? null;
+    if (!groupes.has(o)) groupes.set(o, []);
+    groupes.get(o)?.push(e);
+  }
+  return [...groupes].map(([dossierId, els]) => ({ dossierId, elements: els }));
+}

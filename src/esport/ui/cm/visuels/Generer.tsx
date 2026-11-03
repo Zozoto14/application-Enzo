@@ -11,7 +11,7 @@ import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../../hub/themes';
 import type { ApiCm, MatchsTeam, Personne, TeamCm } from '../../../cm/api';
-import { refDefaut, type ApiVisuels, type ModeleResume, type Visuel } from '../../../cm/visuels/api';
+import { refDefaut, type ApiVisuels, type DossierVisuel, type ModeleResume, type Visuel } from '../../../cm/visuels/api';
 import { renduDisponible } from '../../../cm/visuels/generateur';
 import { genererVisuel } from '../../../cm/visuels/generation';
 import { SOURCE_DU_TYPE } from '../../../cm/visuels/modeles';
@@ -20,6 +20,7 @@ import { trVi, type CleVi } from '../../../i18n/visuels';
 import { Choix, Retours, styles, useAgir } from '../../commun';
 import { ESP, Volet, attenue, texte } from '../../design';
 import { Pastilles } from './controles';
+import { optionsDossiers } from './Dossiers';
 
 const GENRES: readonly GenreSource[] = ['resultat', 'annonce', 'tournoi', 'membre', 'equipe', 'semaine', 'libre'];
 
@@ -32,6 +33,8 @@ export function GenererVisuel({
   proposition,
   teams,
   charte,
+  dossiers: dossiersFournis,
+  dossierInitial,
   onFermer,
   onCree,
 }: {
@@ -43,6 +46,10 @@ export function GenererVisuel({
   proposition?: { type: TypeVisuel; source: SourceVisuel } | null;
   teams: TeamCm[];
   charte: Charte | undefined;
+  /** Dossiers des visuels de la portée (migration 0038) ; lus ici s'ils ne sont pas fournis. */
+  dossiers?: DossierVisuel[];
+  /** Dossier proposé (dossier ouvert dans la galerie) ; sans : selon le genre. */
+  dossierInitial?: string | null;
   onFermer(): void;
   onCree(visuels: Visuel[]): void;
 }) {
@@ -59,6 +66,16 @@ export function GenererVisuel({
   const [matchs, setMatchs] = useState<MatchsTeam | undefined>();
   const [membres, setMembres] = useState<Personne[] | undefined>();
   const [progression, setProgression] = useState<string | undefined>();
+  const [dossiers, setDossiers] = useState<DossierVisuel[] | undefined>(dossiersFournis);
+  // Dossier où ranger les visuels : « auto » (celui du genre), « racine », ou un dossier.
+  const [dossier, setDossier] = useState<string>(dossierInitial ?? 'auto');
+  useEffect(() => {
+    if (dossiersFournis) return;
+    void api
+      .dossiers(portee)
+      .then(r => setDossiers(r.dossiers))
+      .catch(() => setDossiers([]));
+  }, [api, portee, dossiersFournis]);
   const { erreur, avis, agir, enCours } = useAgir();
 
   useEffect(() => {
@@ -103,7 +120,8 @@ export function GenererVisuel({
     agir('creer', async () => {
       const source: Partial<SourceVisuel> = { genre, teamId: besoinTeam || (genre === 'semaine' && teamFixe) ? teamId || null : null, id: besoinElement ? element : null, date: genre === 'semaine' ? date : null };
       const crees: Visuel[] = [];
-      for (const format of formats) for (const langue of langues) crees.push((await api.creerVisuel({ portee, carteId, modele, format, langue, source })).visuel);
+      const dossierId = dossier === 'auto' ? undefined : dossier === 'racine' ? null : dossier;
+      for (const format of formats) for (const langue of langues) crees.push((await api.creerVisuel({ portee, carteId, modele, format, langue, source, dossierId })).visuel);
       // Rendu sur le site et le PC (un à la fois) ; sur mobile, seulement créés.
       if (renduDisponible && charte) {
         const modeleComplet = modele.startsWith('defaut:') ? null : (await api.modele(modele)).modele;
@@ -160,6 +178,7 @@ export function GenererVisuel({
         )
       ) : null}
       {genre === 'semaine' ? <Champ theme={theme} libelle={trVi('generer.date')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-vi-generer-date" /> : null}
+      {dossiers?.length ? <Choix theme={theme} libelle={trVi('dossiers.dossier')} valeur={dossier} options={optionsDossiers(dossiers)} onChoisir={setDossier} testID="esport-vi-generer-dossier" /> : null}
       {progression ? <Text style={attenue(theme)}>{progression}</Text> : null}
       {!renduDisponible ? <Text style={attenue(theme)}>{trVi('generer.pc_requis')}</Text> : null}
       <BoutonHub theme={theme} titre={n > 1 ? trVi('generer.creer_tous', { n }) : trVi('carte.generer')} variante="plein" desactive={!pret || Boolean(enCours)} onPress={() => void creer()} testID="esport-vi-generer-ok" />

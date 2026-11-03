@@ -23,6 +23,7 @@ import { Aide, BadgeStatut, nomGenreDepot, nomListe, quand, useEtatCm } from './
 import { ProposerClip, GalerieClips } from './Clips';
 import { Tableau } from './Tableau';
 import { Drive } from './drive/Drive';
+import { useNouveautesDrive } from '../../cm/nouveautesDrive';
 
 type Section = 'deposer' | 'tableau' | 'clips' | 'drive';
 
@@ -37,12 +38,14 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
     void agir('', charger);
   }, [agir, charger]);
   const peut = (p: string) => Boolean(page?.permissions.includes(p as never));
-  const sections: Array<{ id: Section; libelle: string }> = [
+  // Pastille du Drive de la team : nouveautés depuis la dernière visite (migration 0038).
+  const nouveautesDrive = useNouveautesDrive(client, teamId, Boolean(page && voitDrive(page.permissions)));
+  const sections: Array<{ id: Section; libelle: string; pastille?: number }> = [
     ...(peut('cm.deposer') ? [{ id: 'deposer' as const, libelle: trCm('team.deposer') }] : []),
     ...(peut('cm.voir') && page?.tableaux.length ? [{ id: 'tableau' as const, libelle: trCm('team.tableau') }] : []),
     ...(peut('cm.clips.proposer') || peut('cm.voir') ? [{ id: 'clips' as const, libelle: trCm('team.clips') }] : []),
     // Drive (migration 0027) : celui de la team, ou son seul dossier « Dépôt joueurs ».
-    ...(page && (voitDrive(page.permissions) || peut('cm.clips.proposer') || peut('cm.deposer')) ? [{ id: 'drive' as const, libelle: trCm('team.drive') }] : []),
+    ...(page && (voitDrive(page.permissions) || peut('cm.clips.proposer') || peut('cm.deposer')) ? [{ id: 'drive' as const, libelle: trCm('team.drive'), pastille: nouveautesDrive }] : []),
   ];
   const actif = section && sections.some(s => s.id === section) ? section : sections[0]?.id;
   const { etat } = useEtatCm(api, actif === 'tableau');

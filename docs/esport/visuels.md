@@ -6,7 +6,8 @@ cyberpunk), un **éditeur complet** pour les retoucher ou en créer, et la **gé
 exacte de chaque réseau, jointes directement à la carte post.
 
 Entrée : **Esport › Teams › CM du club › Visuels** (onglets Modèles, Visuels générés, Charte graphique) et, sur une carte post, le
-panneau **Visuels** (bouton **Générer le visuel**). Migration : `esport/migrations/0025_cm_visuels.sql`.
+panneau **Visuels** (bouton **Générer le visuel**). Migrations : `esport/migrations/0025_cm_visuels.sql`,
+`0038_cm_drive_nouveautes_visuels_dossiers.sql` (dossiers).
 Code : `esport/noyau/cm/visuels/`, `src/esport/cm/visuels/`, `src/esport/ui/cm/visuels/`, textes
 `src/esport/i18n/visuels.ts`.
 
@@ -51,6 +52,37 @@ et anglais** :
 Les modèles par défaut sont **dans le code de l'app** (`src/esport/cm/visuels/modeles.ts`) : ils évoluent avec
 l'app et suivent toujours la charte. Pour en changer un : **Dupliquer** (il devient un **modèle du club**, éditable,
 avec ses 4 formats) ou **Ouvrir** puis **Enregistrer comme modèle du club**.
+
+## Dossiers
+
+Les **modèles du club** et les **visuels générés** se rangent dans des **dossiers**, dans le style du Drive (mêmes
+briques : fil d'Ariane, arborescence latérale, glisser-déposer, toast « Annuler » ; voir [drive.md](drive.md),
+« Déplacer à la souris ») :
+
+- une arborescence par **espace** (club, ou une team : choix **Espace** en haut des onglets Modèles et Visuels
+  générés), commune aux modèles et aux visuels ; chaque dossier dit combien il contient de modèles et de visuels ;
+- **dossiers par défaut**, créés à la première ouverture : **Annonces**, **Résultats**, **Recrues**, **Programmes**,
+  **Sponsors**, **Divers** (noms traduits tant qu'on ne les renomme pas ; ils restent à la racine et ne se suppriment
+  pas) ;
+- un modèle ou un visuel créé **sans dossier** va dans celui de **son genre** : annonce, jour de match, lineup,
+  bannière → Annonces ; résultat, classement, MVP → Résultats ; recrue, départ → Recrues ; programme → Programmes ;
+  annonce libre → Divers. Une copie de modèle reste dans le dossier de l'original ;
+- **créer**, **renommer** (« Rétablir le nom par défaut »), **déplacer** (jamais dans lui-même ni un sous-dossier ;
+  8 niveaux, 500 dossiers par espace), **supprimer** (le contenu **remonte** dans le dossier parent : rien n'est
+  perdu) ; glisser-déposer des modèles, visuels et dossiers (sélection multiple, cadre, Ctrl / Maj-clic, appui long
+  sur écran tactile) ou menu **« ⋯ » › Déplacer vers…** ;
+- **vue grille ou liste**, **recherche** par nom (dossiers, modèles, visuels de l'espace) ; les 11 modèles par défaut
+  restent en tête de la racine de l'onglet Modèles ;
+- **Générer le visuel** (depuis une carte post ou la galerie) propose le **dossier** où ranger les visuels : « Selon
+  le genre », la racine, ou n'importe quel dossier de l'espace (« Résultats › Playoffs ») ; depuis la galerie, le
+  dossier ouvert est proposé.
+
+Droits : voir les dossiers avec `cm.voir` (club : qui voit la section) ; créer, renommer, déplacer, supprimer et
+ranger avec `cm.editer` de l'espace. API : `GET|POST /cm/visuels/dossiers` (`?portee` ; `{ portee, parentId, nom }`),
+`PATCH|DELETE /cm/visuels/dossiers/:id` (`{ nom?, parentId? }`), `POST /cm/visuels/deplacer { elements: [{ genre:
+modele | visuel | dossier, id }], dossierId }` (rend `faits`, `erreurs`, `avant` pour « Annuler ») ;
+`POST /cm/modeles` et `POST /cm/visuels` acceptent `dossierId` (null : racine). Code :
+`esport/noyau/cm/visuels/dossiers.mjs`, `src/esport/ui/cm/visuels/Dossiers.tsx`.
 
 ## Données et champs dynamiques
 
@@ -149,9 +181,10 @@ de sa team et du club, sans les modifier s'il n'a pas `cm.editer`.
 | `cm_modeles`, `cm_modele_versions` | modèles du club (un document par format), anciennes versions (30) |
 | `cm_visuels` | visuels générés : modèle, format, langue, source, retouche, rendu (fichier, pièce jointe), état au dernier rendu |
 | `cm_visuel_images` | images importées dans l'éditeur et logos |
+| `cm_visuels_dossiers` (migration 0038) | dossiers des modèles et visuels (portée, parent, nom ou clé du dossier par défaut) ; `dossier_id` sur `cm_modeles` et `cm_visuels` |
 
 Les fichiers (images, rendus) sont des `cm_fichiers` (stockage privé de la section CM). Tout est dans l'**export /
-import de la base**. **RGPD** : l'export d'un compte liste ses modèles et visuels ; à la suppression, ils restent sans
+import de la base**. **RGPD** : l'export d'un compte liste ses modèles et visuels (et les dossiers qu'il a créés) ; à la suppression, ils restent sans
 auteur, et un visuel dont la source était ce membre (recrue, départ) perd cette source (le rendu reste).
 
 ## API (préfixe facultatif `/api/esport`)
@@ -172,6 +205,8 @@ Journal : `cm.charte_modifiee`, `cm.modele_cree`, `cm.modele_modifie`, `cm.model
 `esport/test/visuels.test.mjs` (SQLite et PostgreSQL : validation des documents et entrées hostiles, charte,
 dimensions des images, données Valorant BO3 et multi-équipes, annonce avec fuseau, roster, programme, permissions,
 versions, rendu à la taille exacte joint à la carte, invalidation, données changées, RGPD, export / import) ;
+`esport/test/drive-deplacer-nouveautes.test.mjs` (dossiers : par défaut, rangement par genre, dossier choisi, déplacer,
+cycles, suppression, permissions) ;
 `src/esport/Visuels.test.tsx` (plan de rendu selon le profil, 11 × 4 modèles, sérialisation, éditeur, écrans).
 
 ## Pour le Fondateur
