@@ -41,7 +41,7 @@ import { PERMISSIONS_GLOBALES, aGlobale, permissionsGlobalesDe } from './roles/g
 import { modeleRolesTeam } from './roles/modele.mjs';
 import { effacementRoles, exportRoles } from './roles/rgpd.mjs';
 import { effacementDevblog, exportDevblog } from './devblog/rgpd.mjs';
-import { effacementCentre, exportCentre } from './notifications/centre.mjs';
+import { effacementCentre, exportCentre, personnellesVisibles } from './notifications/centre.mjs';
 import { PERMISSION_DEVBLOG } from './devblog/regles.mjs';
 
 /**
@@ -813,14 +813,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   // -------------------------------------------------------------- Notifications
 
   async function notifications(acteur) {
-    const lignes = await base.tous(
-      'SELECT n.*, t.nom AS team_nom FROM notifications n LEFT JOIN teams t ON t.id = n.team_id WHERE n.compte_id = ? ORDER BY n.cree_le DESC LIMIT 50',
-      [acteur.compte],
-    );
-    const nonLues = await base.premier('SELECT COUNT(*) AS n FROM notifications WHERE compte_id = ? AND lue_le IS NULL', [acteur.compte]);
+    // Même contrôle « à la lecture » que le centre (appartenance, Sponsors, CM actuels) : voir notifications/centre.mjs.
+    const { lignes, nonLues } = await personnellesVisibles(base, acteur);
     const noms = await pseudosDe(base, lignes.map(l => jsonOu(l.charge, {}).membre));
     return {
-      nonLues: Number(nonLues?.n ?? 0),
+      nonLues,
       noms,
       liste: lignes.map(l => ({ id: l.id, type: l.type, team: l.team_id ? { id: l.team_id, nom: l.team_nom ?? null } : null, charge: jsonOu(l.charge, {}), lue: Boolean(l.lue_le), date: l.cree_le })),
     };

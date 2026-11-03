@@ -88,7 +88,7 @@ function selonPreferences(prefs, categorie, teamId, { annonce = false } = {}) {
 // ------------------------------------------------------------------ Abonné du bus
 
 /** Catégorie et événement d'origine des notifications personnelles d'un compte qui n'en ont pas encore. */
-async function classerPersonnelles(base, compte) {
+export async function classerPersonnelles(base, compte) {
   const lignes = await base.tous('SELECT id, type FROM notifications WHERE compte_id = ? AND categorie IS NULL LIMIT 1000', [compte]);
   for (const l of lignes) {
     const suffixe = `:${compte}`;
@@ -191,6 +191,44 @@ function lireFiltres(q = {}) {
   };
 }
 
+/** Personnelles : toujours à leur destinataire, mais seulement tant qu'il a accès à leur domaine. */
+export function filtrePerso(droits) {
+  // Pas encore classée (écrite à l'instant) : au prochain passage, une fois sa catégorie connue.
+  if (droits.tout) return { sql: 'p.categorie IS NOT NULL', params: [] };
+  const conditions = ['p.categorie IS NOT NULL'];
+  const params = [];
+  const teams = [...teamsDuLecteur(droits)];
+  // CM / Drive d'une team : aussi pour qui y a un accès CM sans en être membre (CM du club, affectation).
+  const teamsCm = [...droits.cmTeams].filter(([, perms]) => perms.size > 0).map(([id]) => id);
+  conditions.push(
+    `(p.team_id IS NULL OR p.type IN (${PERSO_HORS_TEAM.map(() => '?').join(', ')})${teams.length ? ` OR p.team_id IN (${teams.map(() => '?').join(', ')})` : ''}${teamsCm.length ? ` OR (p.categorie IN ('cm', 'drive') AND p.team_id IN (${teamsCm.map(() => '?').join(', ')}))` : ''})`,
+  );
+  params.push(...PERSO_HORS_TEAM, ...teams, ...teamsCm);
+  if (!droits.club.has('sponsors.voir')) conditions.push("COALESCE(p.categorie, '') <> 'sponsors'");
+  if (!aCm(droits)) conditions.push("COALESCE(p.categorie, '') NOT IN ('cm', 'drive')");
+  return { sql: conditions.join(' AND '), params };
+}
+
+/** Condition SQL (alias `p`) des personnelles que `acteur` voit aujourd'hui (classe d'abord celles qui ne le sont pas). */
+export async function filtreVisibilite(base, acteur) {
+  await classerPersonnelles(base, acteur.compte);
+  return filtrePerso(await droitsLecteur(base, acteur));
+}
+
+/**
+ * Personnelles visibles du lecteur, pour l'ancienne route `GET /notifications` (carte de la page Teams) : mêmes
+ * droits, calculés à la lecture, que le centre (appartenance actuelle, Sponsors, CM). `nonLues` compte la même chose.
+ */
+export async function personnellesVisibles(base, acteur) {
+  const perso = await filtreVisibilite(base, acteur);
+  const lignes = await base.tous(
+    `SELECT p.*, t.nom AS team_nom FROM notifications p LEFT JOIN teams t ON t.id = p.team_id WHERE p.compte_id = ? AND ${perso.sql} ORDER BY p.cree_le DESC LIMIT 50`,
+    [acteur.compte, ...perso.params],
+  );
+  const nonLues = await base.premier(`SELECT COUNT(*) AS n FROM notifications p WHERE p.compte_id = ? AND p.lue_le IS NULL AND ${perso.sql}`, [acteur.compte, ...perso.params]);
+  return { lignes, nonLues: Number(nonLues?.n ?? 0) };
+}
+
 export function servicesCentre({ base, maintenant = () => Date.now() }) {
   /**
    * Clés d'accès (et team) du fil que le lecteur voit, aujourd'hui : condition sur l'alias `c` (le fil) et sur
@@ -203,20 +241,6 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     if (!visibles.length) return { c: '1 = 0', e: '1 = 0', params: [] };
     const marques = visibles.map(() => '?').join(', ');
     return { c: `c.portee_cle IN (${marques})`, e: `e.portee_cle IN (${marques})`, params: visibles };
-  }
-
-  /** Personnelles : toujours à leur destinataire, mais seulement tant qu'il a accès à leur domaine. */
-  function filtrePerso(droits) {
-    // Pas encore classée (écrite à l'instant) : au prochain passage, une fois sa catégorie connue.
-    if (droits.tout) return { sql: 'p.categorie IS NOT NULL', params: [] };
-    const conditions = ['p.categorie IS NOT NULL'];
-    const params = [];
-    const teams = [...teamsDuLecteur(droits)];
-    conditions.push(`(p.team_id IS NULL OR p.type IN (${PERSO_HORS_TEAM.map(() => '?').join(', ')})${teams.length ? ` OR p.team_id IN (${teams.map(() => '?').join(', ')})` : ''})`);
-    params.push(...PERSO_HORS_TEAM, ...teams);
-    if (!droits.club.has('sponsors.voir')) conditions.push("COALESCE(p.categorie, '') <> 'sponsors'");
-    if (!aCm(droits)) conditions.push("COALESCE(p.categorie, '') NOT IN ('cm', 'drive')");
-    return { sql: conditions.join(' AND '), params };
   }
 
   /** Requête unifiée (fil + personnelles) d'un lecteur, avant filtres. */

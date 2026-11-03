@@ -341,3 +341,67 @@ test('RGPD et export : préférences et lectures exportées puis effacées ; tab
   const exp2 = await ok('/admin/comptes/lea12345/export', s.fondateur).catch(() => null);
   assert.ok(!exp2 || exp2.centreNotifications.preferences === null);
 });
+
+// ------------------------------------------------------------------ Ancienne route GET /notifications (carte de la page Teams)
+
+async function insererPerso(b, compte, type, { teamId = null, id = `${type}-${compte}-${Math.random().toString(36).slice(2)}` } = {}) {
+  await b.base.executer('INSERT INTO notifications (id, compte_id, type, team_id, charge, cree_le) VALUES (?, ?, ?, ?, ?, ?)', [id, compte, type, teamId, '{}', new Date().toISOString()]);
+  return id;
+}
+
+test('ancienne route /notifications : perte d’appartenance (suspension, retrait) = plus rien de la team, liste ET compteur', async () => {
+  const { b, A, s, ok, api } = await preparer();
+  await ok(`/teams/${A.teamId}/planning`, s.coach123, { methode: 'POST', corps: SCRIM });
+  const avant = await ok('/notifications', s.lea12345);
+  assert.ok(avant.liste.some(n => n.team?.id === A.teamId), 'membre : voit les notifications de sa team');
+  assert.ok(avant.nonLues > 0);
+  const lea = A.membres.lea12345;
+  await ok(`/teams/${A.teamId}/membres/${lea.id}`, s.fondateur, { methode: 'PATCH', corps: { statut: 'suspendu' } });
+  const apres = (await api('/notifications', s.lea12345)).corps;
+  assert.ok(!apres.liste.some(n => n.team?.id === A.teamId && n.type !== 'retire'), 'suspendue : plus rien de la team');
+  assert.equal(apres.nonLues, apres.liste.filter(n => !n.lue).length, 'compteur cohérent avec la liste');
+  // « Tout marquer comme lu » (ancienne route) ne ressort rien non plus.
+  const lues = await ok('/notifications/lues', s.lea12345, { methode: 'POST', corps: { tout: true } });
+  assert.ok(!lues.liste.some(n => n.team?.id === A.teamId && n.type !== 'retire'));
+  // Même résultat que le centre.
+  const centre = (await ok('/notifications/centre', s.lea12345)).liste.filter(n => n.source === 'perso').map(n => n.id).sort();
+  assert.deepEqual(apres.liste.map(n => n.id).sort(), centre);
+  void b;
+});
+
+test('ancienne route /notifications : perte de droits Sponsors / CM = les anciennes notifications personnelles disparaissent', async () => {
+  const { b, A, s, ok } = await preparer();
+  const vue = await ok('/roles-permissions', s.fondateur);
+  const sc = vue.globaux.roles.find(r => r.cle === 'second_ceo');
+  await ok(`/roles-permissions/globaux/${sc.id}/comptes`, s.fondateur, { methode: 'POST', corps: { compte: 'grimm123' } });
+  await insererPerso(b, 'grimm123', 'sp-action');
+  await insererPerso(b, 'grimm123', 'tache-assignee', { teamId: A.teamId });
+  assert.deepEqual((await ok('/notifications', s.grimm123)).liste.map(n => n.type).sort(), ['sp-action', 'tache-assignee']);
+  await ok(`/roles-permissions/globaux/${sc.id}`, s.fondateur, { methode: 'PATCH', corps: { permissions: sc.permissions.filter(p => !p.startsWith('sponsors.')) } });
+  const apres = await ok('/notifications', s.grimm123);
+  assert.ok(!apres.liste.some(n => n.type === 'sp-action'), 'Sponsors retiré : disparaît');
+  assert.ok(apres.liste.some(n => n.type === 'tache-assignee'), 'accès à la team conservé');
+  assert.equal(apres.nonLues, 1);
+  // CM : un compte sans accès CM ne voit pas l’ancienne notification, Clara (Responsable CM) oui.
+  const zoe = await b.session('zoe12345', 'Zoé');
+  await insererPerso(b, 'zoe12345', 'cm-a-valider');
+  await insererPerso(b, 'cm123456', 'cm-a-valider');
+  assert.ok(!(await ok('/notifications', zoe)).liste.some(n => n.type === 'cm-a-valider'));
+  assert.ok((await ok('/notifications', s.cm123456)).liste.some(n => n.type === 'cm-a-valider'));
+});
+
+test('ancienne route /notifications : élément devenu privé = jamais l’élément du fil ; récapitulatif courriel soumis au même contrôle', async () => {
+  const { b, A, s, ok } = await preparer();
+  const strat = await ok(`/teams/${A.teamId}/strats`, s.coach123, { methode: 'POST', corps: { titre: 'Exec Haven', visibilite: 'privee' } }).catch(() => null);
+  const lea = await ok('/notifications', s.lea12345);
+  assert.ok(!JSON.stringify(lea).includes('Exec Haven'), 'strat privée jamais révélée');
+  void strat;
+  // Récapitulatif : une personnelle Sponsors n’entre plus dans le courriel d’un compte sans droit Sponsors.
+  await insererPerso(b, 'lea12345', 'sp-action');
+  await insererPerso(b, 'lea12345', 'tache-assignee', { teamId: A.teamId });
+  const { filtreVisibilite } = await import('../noyau/notifications/centre.mjs');
+  const f = await filtreVisibilite(b.base, { compte: 'lea12345' });
+  const types = (await b.base.tous(`SELECT p.type FROM notifications p WHERE p.compte_id = ? AND ${f.sql}`, ['lea12345', ...f.params])).map(r => r.type);
+  assert.ok(types.includes('tache-assignee'));
+  assert.ok(!types.includes('sp-action'));
+});

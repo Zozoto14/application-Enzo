@@ -571,6 +571,8 @@ test('injection SQL : aucune valeur interpolée dans le SQL (seulement des noms 
     /^[a-z]+\.map\(\(\) => '\?'\)\.join\(', '\)$/i,
     /^(def\.table|table|ordre|extra|avant|apres|sql|prefixes\.map\(\(\) => 'action LIKE \?'\)\.join\(' OR '\)|colonnes\.join\(', '\))$/,
     /^p\.map\(\(\) => '\?'\)\.join\(', '\)$/,
+    // Condition de visibilité des notifications personnelles (centre.mjs, recap.mjs), construite par le code.
+    /^(perso|visible)\.sql$/,
     // Fragment constant choisi par le code (ternaire entre deux textes fixes).
     /^[a-zA-Z]+ \? '[^'$`]*' : '[^'$`]*'$/,
   ];

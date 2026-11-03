@@ -14,6 +14,7 @@
  */
 
 import { rendreCourriel, adresseValide, masquerAdresse } from '../../relais/courriel-modeles.mjs';
+import { filtreVisibilite } from './notifications/centre.mjs';
 import { base64url, depuisBase64url, echec, iso } from './outils.mjs';
 
 const encodeur = new TextEncoder();
@@ -113,11 +114,13 @@ export async function tacheRecap(base, { cle, envoyer, maintenant = Date.now(), 
     const depuis = r.dernier_envoi_le ?? r.cree_le;
     if (r.dernier_envoi_le && maintenant - Date.parse(r.dernier_envoi_le) < FREQUENCES[r.frequence]) continue;
     const types = TYPES_IMPORTANTS;
+    // Même visibilité « à la lecture » que le centre : plus d'accès à la team / aux Sponsors / au CM, plus de courriel.
+    const visible = await filtreVisibilite(base, { compte: r.compte_id });
     const notifs = await base.tous(
-      `SELECT n.type, n.charge, n.cree_le, t.nom AS team FROM notifications n LEFT JOIN teams t ON t.id = n.team_id
-        WHERE n.compte_id = ? AND n.lue_le IS NULL AND n.cree_le >= ? AND n.type IN (${types.map(() => '?').join(', ')})
-        ORDER BY n.cree_le DESC LIMIT 50`,
-      [r.compte_id, depuis, ...types],
+      `SELECT p.type, p.charge, p.cree_le, t.nom AS team FROM notifications p LEFT JOIN teams t ON t.id = p.team_id
+        WHERE p.compte_id = ? AND p.lue_le IS NULL AND p.cree_le >= ? AND p.type IN (${types.map(() => '?').join(', ')}) AND ${visible.sql}
+        ORDER BY p.cree_le DESC LIMIT 50`,
+      [r.compte_id, depuis, ...types, ...visible.params],
     );
     const date = iso(maintenant);
     if (notifs.length === 0) {
