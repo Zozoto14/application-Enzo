@@ -158,6 +158,19 @@ Le groupe **DATA** (ex-« Médias ») garde **Clips | Visuels | Drive** et ajout
   défile près des bords) ; au clavier et au lecteur d'écran par le menu **⋯** de la carte (Monter, Descendre, Liste
   précédente / suivante, Déplacer vers…). Le serveur range la carte entre ses voisines (positions décimales,
   renumérotées si besoin).
+- **Créer des cartes en chaîne** (comme Trello) : « + Ajouter une carte » ouvre un champ en bas de la colonne ; **Entrée**
+  (ou le bouton « Carte » / « Ajouter ») crée la carte, **vide le champ et le garde ouvert avec le focus**, prêt pour la
+  suivante. La carte apparaît **tout de suite** en bas de la colonne (affichage optimiste ; les créations partent au
+  serveur dans l'ordre, une erreur retire la carte et s'affiche) et la colonne défile pour garder le champ visible.
+  **Échap** ou un clic ailleurs ferme le champ ; **Maj+Entrée** fait un retour à la ligne (le serveur le range en espace
+  dans le titre) ; **coller plusieurs lignes** propose **« Créer N cartes »** (une par ligne non vide, 200 caractères
+  au plus). Téléphone : le bouton garde aussi le champ ouvert.
+- **Déplacer une colonne** : à la souris, on saisit l'**en-tête** (nom) et on le dépose entre deux colonnes (un trait
+  vertical montre l'emplacement, le tableau défile tout seul près des bords) ; au toucher, **appui long** sur l'en-tête ;
+  au clavier et au lecteur d'écran, menu **⋯** de la colonne › **Déplacer la colonne à gauche / à droite** (annoncé).
+  L'ordre est **persisté côté serveur** (`POST /cm/listes/:id/deplacer { index }`, permission `cm.editer`, tableau
+  restreint respecté ; le serveur compte parmi les colonnes non archivées) et change aussitôt à l'écran ; les autres
+  utilisateurs le reçoivent par le temps réel (version du tableau) en moins d'une seconde.
 - **Étiquettes** : propres à chaque tableau (pas d'étiquettes globales) ; couleur parmi 10 teintes ou **couleur libre**
   `#RRGGBB`, nom de 40 caractères au plus (peut rester vide, comme sur Trello). **Gérer les étiquettes** : menu **⋯**
   du tableau, ou **Modifier les étiquettes…** dans la fiche d'une carte (même panneau). On peut **créer, renommer,
@@ -532,6 +545,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
   restreint : rien par chaque route — liste, carte, commentaires, calendrier, recherche, à valider, état, journal,
   notifications, temps réel, lien signé —, « peut voir » sans écriture, retrait immédiat, Fondateur, garde-fous, rôles,
   export / import, RGPD), `src/esport/CmAcces.test.tsx` (menu, cadenas, réglage envoyé), `src/esport/Cm.test.tsx`,
+  `src/esport/CmTableauxSaisie.test.tsx` (création en chaîne, collage multi-lignes, ordre des colonnes, clavier, temps réel),
   `src/esport/CmTableaux.test.tsx` (brouillons gardés, conflit, défilement par colonne, colonne réduite, cartes
   compactes, fond, calendriers superposés) et le bout en bout `scripts/e2e-esport-cm-tableaux.mjs` (site construit,
   faux frontal o2switch qui refuse PATCH / PUT / DELETE, captures 1440 × 900 et 390 × 844).

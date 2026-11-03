@@ -24,7 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
+import { Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { PORTEE_CLUB, type ApiCm, type CarteResume, type DetailTableau, type FondTableau, type ListeCm, type SaisieFond, type StatutPost, type TeamCm, type Urgence } from '../../cm/api';
@@ -65,6 +65,16 @@ interface Rect {
   l: number;
   h: number;
 }
+/** Colonne saisie par son en-tête : mesures des colonnes au début du geste, position du pointeur. */
+interface GlisseListe {
+  id: string;
+  pret: boolean;
+  conteneur: Rect;
+  rects: Array<Rect & { id: string }>;
+  scrollDepart: number;
+  decalage: number;
+  px: number;
+}
 interface Glisse {
   carteId: string;
   pret: boolean;
@@ -86,6 +96,20 @@ const RESERVE_BARRE_BASSE = 76;
 /** Distance au bord (px) qui déclenche le défilement automatique pendant un glisser-déposer, et pas par image. */
 const BORD_DEFILEMENT = 56;
 const PAS_DEFILEMENT = 24;
+
+/**
+ * Où la colonne glissée sera déposée : son rang parmi les AUTRES colonnes (celles dont le centre est à gauche du
+ * pointeur). `rects` : mesures des colonnes au début du geste ; `decalage` : défilement horizontal depuis.
+ */
+export function indexColonneCible(rects: Array<{ id: string; x: number; l: number }>, glissee: string, px: number, decalage = 0): number {
+  return rects.filter(r => r.id !== glissee && r.x - decalage + r.l / 2 < px).length;
+}
+
+/** Titres à créer depuis le champ : une carte, ou une carte par ligne non vide en cas de collage de plusieurs lignes. */
+export function titresAjout(saisie: string, collage: boolean): string[] {
+  const lignes = collage ? saisie.split(/\r?\n/) : [saisie];
+  return lignes.map(x => x.trim()).filter(Boolean).map(x => x.slice(0, 200));
+}
 
 /** La carte a-t-elle quelque chose à montrer sous son titre (sinon : une ligne de titre, compacte) ? */
 export function carteAInfos(c: CarteResume): boolean {
@@ -162,6 +186,20 @@ export function Tableau({
   const [ouverte, setOuverte] = useState<string | undefined>();
   const [ajout, setAjout] = useState<string | undefined>();
   const [titreAjout, setTitreAjout] = useState('');
+  // Création en chaîne (comme Trello) : le champ reste ouvert ; les cartes créées apparaissent tout de suite (optimiste).
+  const [collage, setCollage] = useState(false);
+  const maj = useRef(false);
+  const champAjout = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const fermeture = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendants = useRef(new Map<string, CarteResume>());
+  const fileCreation = useRef<Promise<unknown>>(Promise.resolve());
+  const compteurTemp = useRef(0);
+  // Glisser-déposer d'une colonne par son en-tête.
+  const glisseListe = useRef<GlisseListe | null>(null);
+  const cibleListeRef = useRef<number | undefined>(undefined);
+  const minuterieBord = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const [fantomeListe, setFantomeListe] = useState<{ x: number; l: number; liste: ListeCm } | undefined>();
+  const [cibleListe, setCibleListe] = useState<number | undefined>();
   const [nouvelleListe, setNouvelleListe] = useState<string | undefined>();
   const [renommer, setRenommer] = useState<{ id: string; nom: string } | undefined>();
   const [deplacer, setDeplacer] = useState<CarteResume | undefined>();
@@ -191,13 +229,17 @@ export function Tableau({
   // Téléphone : la barre de navigation du bas recouvre le bas de la fenêtre (sa hauteur est réservée).
   const hauteurTableau = zoneHaut === undefined ? undefined : Math.max(HAUTEUR_MIN, Math.floor(height - zoneHaut - (large ? ESP.s : RESERVE_BARRE_BASSE)));
 
-  const recharger = useCallback(async () => setD(await api.tableau(id, archives)), [api, id, archives]);
+  // Cartes en cours de création (affichées tout de suite) : gardées quand le tableau est relu avant la réponse du serveur.
+  const recharger = useCallback(async () => {
+    const nouveau = await api.tableau(id, archives);
+    setD(pendants.current.size ? { ...nouveau, cartes: [...nouveau.cartes, ...pendants.current.values()] } : nouveau);
+  }, [api, id, archives]);
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
   // Changement ailleurs (autre utilisateur, suggestion automatique…) : rechargé, sauf pendant un glisser-déposer.
   useEffect(() => {
-    if (d && versionServeur !== undefined && versionServeur > d.tableau.version && !glisse.current) void recharger().catch(() => undefined);
+    if (d && versionServeur !== undefined && versionServeur > d.tableau.version && !glisse.current && !glisseListe.current) void recharger().catch(() => undefined);
   }, [versionServeur, d, recharger]);
   // Colonnes réduites : choix du compte, mémorisé en base (cm_preferences).
   const clePreference = `tableau.${id}.reduites`;
@@ -373,15 +415,186 @@ export function Tableau({
 
   // ---------------------------------------------------------------- Actions
 
-  const creerCarte = (listeId: string, post: boolean) =>
-    agir('carte', async () => {
-      if (!titreAjout.trim()) return;
-      await api.creerCarte(id, { listeId, titre: titreAjout.trim(), post });
-      setTitreAjout('');
-      await recharger();
-      // La nouvelle carte est en bas de la colonne : on y descend.
-      setTimeout(() => refsColonnes.current.get(listeId)?.scrollToEnd?.({ animated: true }), 50);
-    });
+  const annulerFermeture = () => {
+    if (fermeture.current) clearTimeout(fermeture.current);
+    fermeture.current = undefined;
+  };
+  const fermerAjout = () => {
+    annulerFermeture();
+    setAjout(undefined);
+    setTitreAjout('');
+    setCollage(false);
+  };
+  useEffect(() => annulerFermeture, []);
+  useEffect(() => {
+    if (ajout) setTimeout(() => champAjout.current?.focus?.(), 0);
+  }, [ajout]);
+
+  /** Crée les cartes en bas de la colonne : elles apparaissent aussitôt, le serveur les reçoit dans l'ordre. */
+  const creerCartes = (listeId: string, titres: string[], post: boolean) => {
+    if (!d || !titres.length) return;
+    const fin = Math.max(0, ...(parListe.get(listeId) ?? []).map(c => c.position));
+    const temps: CarteResume[] = titres.map((titre, i) => ({
+      id: `tmp-${++compteurTemp.current}`,
+      listeId,
+      teamId: null,
+      titre,
+      description: false,
+      position: fin + 1024 * (i + 1),
+      couverture: null,
+      echeance: null,
+      echeanceFaite: false,
+      datePublication: null,
+      post,
+      statut: post ? 'brouillon' : null,
+      reseaux: [],
+      origine: 'manuel',
+      depotGenre: null,
+      etiquettes: [],
+      membres: [],
+      commentaires: 0,
+      checklist: { total: 0, faits: 0 },
+      pieces: 0,
+      archive: false,
+      version: 1,
+      modifiable: false,
+    }));
+    for (const c of temps) pendants.current.set(c.id, c);
+    setD(cur => (cur ? { ...cur, cartes: [...cur.cartes, ...temps] } : cur));
+    setTimeout(() => refsColonnes.current.get(listeId)?.scrollToEnd?.({ animated: true }), 50);
+    for (const c of temps) {
+      fileCreation.current = fileCreation.current.then(() =>
+        agir('carte', async () => {
+          try {
+            await api.creerCarte(id, { listeId, titre: c.titre, post });
+          } catch (e) {
+            setD(cur => (cur ? { ...cur, cartes: cur.cartes.filter(x => x.id !== c.id) } : cur));
+            throw e;
+          } finally {
+            pendants.current.delete(c.id);
+            if (!pendants.current.size) await recharger().catch(() => undefined);
+          }
+        }),
+      );
+    }
+  };
+
+  /** Entrée (ou le bouton) : crée la carte, vide le champ et le garde ouvert, prêt pour la suivante. */
+  const validerAjout = (post: boolean) => {
+    if (!ajout) return;
+    const titres = titresAjout(titreAjout, collage);
+    if (!titres.length) return;
+    annulerFermeture();
+    setTitreAjout('');
+    setCollage(false);
+    creerCartes(ajout, titres, post);
+    setTimeout(() => champAjout.current?.focus?.(), 0);
+  };
+  const changerTitreAjout = (v: string) => {
+    setTitreAjout(v);
+    if (!v.includes('\n')) setCollage(false);
+    // Un retour à la ligne qui ne vient pas de Maj+Entrée : texte collé sur plusieurs lignes.
+    else if (!maj.current && v.split(/\r?\n/).filter(x => x.trim()).length > 1) setCollage(true);
+    maj.current = false;
+  };
+  const toucheAjout = (e: { nativeEvent: { key?: string; shiftKey?: boolean }; preventDefault?: () => void }) => {
+    const { key, shiftKey } = e.nativeEvent;
+    if (key === 'Escape') fermerAjout();
+    else if (key === 'Enter') {
+      if (shiftKey) maj.current = true;
+      else {
+        e.preventDefault?.();
+        validerAjout(false);
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------- Déplacer une colonne
+
+  const actifs = useMemo(() => listes.filter(l => !l.archive), [listes]);
+  /** Déplace une colonne au rang `index` parmi les autres colonnes : local d'abord, puis le serveur. */
+  const deplacerColonne = useCallback(
+    (liste: ListeCm, index: number) => {
+      if (!d) return;
+      const autres = actifs.filter(l => l.id !== liste.id);
+      const rang = Math.max(0, Math.min(autres.length, index));
+      if (actifs.findIndex(l => l.id === liste.id) === rang) return;
+      const ordre = [...autres.slice(0, rang), liste, ...autres.slice(rang)];
+      const positions = new Map(ordre.map((l, i) => [l.id, (i + 1) * 1024]));
+      setD({ ...d, listes: d.listes.map(l => (positions.has(l.id) ? { ...l, position: positions.get(l.id)! } : l)).sort((a, b) => a.position - b.position) });
+      setAnnonce(trCm('liste.annonce_deplacee', { nom: nomListe(liste), position: rang + 1, total: actifs.length }));
+      void agir('liste', async () => {
+        await api.deplacerListe(liste.id, rang);
+        await recharger();
+      });
+    },
+    [d, actifs, agir, api, recharger],
+  );
+
+  const debutListe = useCallback(
+    async (liste: ListeCm, px: number) => {
+      const conteneurRect = await mesurer(conteneur.current);
+      const propre = await mesurer(refsListes.current.get(liste.id));
+      if (!conteneurRect || !propre) return;
+      const g: GlisseListe = { id: liste.id, pret: false, conteneur: conteneurRect, rects: [], scrollDepart: scrollX.current, decalage: px - propre.x, px };
+      glisseListe.current = g;
+      for (const l of actifs) {
+        const r = l.id === liste.id ? propre : await mesurer(refsListes.current.get(l.id));
+        if (r) g.rects.push({ ...r, id: l.id });
+      }
+      if (glisseListe.current !== g) return;
+      g.pret = true;
+      cibleListeRef.current = actifs.findIndex(l => l.id === liste.id);
+      setCibleListe(cibleListeRef.current);
+      setFantomeListe({ x: propre.x - conteneurRect.x, l: propre.l, liste });
+      // Défilement horizontal automatique tant que le pointeur reste près d'un bord.
+      minuterieBord.current = setInterval(() => {
+        if (g.px < g.conteneur.x + BORD_DEFILEMENT) defilement.current?.scrollTo({ x: Math.max(0, scrollX.current - PAS_DEFILEMENT), animated: false });
+        else if (g.px > g.conteneur.x + g.conteneur.l - BORD_DEFILEMENT) defilement.current?.scrollTo({ x: scrollX.current + PAS_DEFILEMENT, animated: false });
+        else return;
+        const index = indexColonneCible(g.rects, g.id, g.px, scrollX.current - g.scrollDepart);
+        if (cibleListeRef.current !== index) {
+          cibleListeRef.current = index;
+          setCibleListe(index);
+        }
+      }, 40);
+    },
+    [actifs],
+  );
+
+  const bougeListe = useCallback((px: number) => {
+    const g = glisseListe.current;
+    if (!g?.pret) return;
+    g.px = px;
+    setFantomeListe(f => (f ? { ...f, x: px - g.conteneur.x - g.decalage } : f));
+    const index = indexColonneCible(g.rects, g.id, px, scrollX.current - g.scrollDepart);
+    if (cibleListeRef.current === index) return;
+    cibleListeRef.current = index;
+    setCibleListe(index);
+  }, []);
+
+  const finListe = useCallback(
+    (annuler: boolean) => {
+      const g = glisseListe.current;
+      const index = cibleListeRef.current;
+      glisseListe.current = null;
+      cibleListeRef.current = undefined;
+      if (minuterieBord.current) clearInterval(minuterieBord.current);
+      minuterieBord.current = undefined;
+      setFantomeListe(undefined);
+      setCibleListe(undefined);
+      if (annuler || !g?.pret || index === undefined) return;
+      const liste = listes.find(l => l.id === g.id);
+      if (liste) deplacerColonne(liste, index);
+    },
+    [listes, deplacerColonne],
+  );
+  useEffect(
+    () => () => {
+      if (minuterieBord.current) clearInterval(minuterieBord.current);
+    },
+    [],
+  );
 
   const changerFond = (fond: SaisieFond) =>
     agir('fond', async () => {
@@ -413,14 +626,16 @@ export function Tableau({
     ];
   };
 
-  const actionsListe = (l: ListeCm, i: number): ActionSecondaire[] => [
+  const actionsListe = (l: ListeCm): ActionSecondaire[] => {
+  const rang = actifs.findIndex(x => x.id === l.id);
+  return [
     { titre: reduites.includes(l.id) ? trCm('liste.agrandir') : trCm('liste.reduire'), onPress: () => basculerReduite(l.id), testID: `esport-cm-liste-${l.id}-reduire-menu` },
     { titre: triees.includes(l.id) ? trCm('urgence.tri_annuler') : trCm('urgence.tri'), onPress: () => basculerTri(l.id), testID: `esport-cm-liste-${l.id}-tri-urgence` },
     ...(d?.droits.editer
       ? [
           { titre: trCm('liste.renommer'), onPress: () => setRenommer({ id: l.id, nom: nomListe(l) }), testID: `esport-cm-liste-${l.id}-renommer` },
-          ...(i > 0 ? [{ titre: trCm('liste.gauche'), onPress: () => void agir('liste', async () => { await api.deplacerListe(l.id, i - 1); await recharger(); }), testID: `esport-cm-liste-${l.id}-gauche` }] : []),
-          ...(i < listes.length - 1 ? [{ titre: trCm('liste.droite'), onPress: () => void agir('liste', async () => { await api.deplacerListe(l.id, i + 1); await recharger(); }), testID: `esport-cm-liste-${l.id}-droite` }] : []),
+          ...(rang > 0 ? [{ titre: trCm('liste.gauche'), onPress: () => deplacerColonne(l, rang - 1), testID: `esport-cm-liste-${l.id}-gauche` }] : []),
+          ...(rang >= 0 && rang < actifs.length - 1 ? [{ titre: trCm('liste.droite'), onPress: () => deplacerColonne(l, rang + 1), testID: `esport-cm-liste-${l.id}-droite` }] : []),
           {
             titre: l.archive ? trCm('liste.restaurer') : trCm('liste.archiver'),
             onPress: () =>
@@ -433,6 +648,7 @@ export function Tableau({
         ]
       : []),
   ];
+  };
 
   if (!d) {
     return (
@@ -442,6 +658,211 @@ export function Tableau({
       </View>
     );
   }
+
+  const colonneDe = (l: ListeCm) => {
+            const vues = visibles(l.id);
+            const limite = limites[l.id] ?? PAR_LISTE;
+            if (reduites.includes(l.id)) {
+              return (
+                <Pressable
+                  key={l.id}
+                  ref={r => {
+                    if (r) refsListes.current.set(l.id, r as unknown as Vue);
+                    else refsListes.current.delete(l.id);
+                  }}
+                  testID={`esport-cm-liste-${l.cle ?? l.id}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={trCm('liste.agrandir_libelle', { nom: nomListe(l), n: vues.length })}
+                  onPress={() => basculerReduite(l.id)}
+                  style={(e: EtatPresse) => ({ width: LARGEUR_REDUITE, height: Math.min(hauteurColonne ?? 260, 260), borderRadius: rayonCarte(theme), backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.2) : fondColonne, alignItems: 'center', paddingTop: ESP.xs, gap: ESP.xs, overflow: 'hidden', opacity: l.archive ? 0.6 : 1 })}>
+                  <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>↔︎</Text>
+                  <Text style={{ ...attenue(theme, 12), fontWeight: '700' }} testID={`esport-cm-liste-${l.id}-compteur`}>
+                    {String(vues.length)}
+                  </Text>
+                  <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
+                  {/* Nom à la verticale : écriture verticale sur le web, texte tourné sur iPhone / Android. */}
+                  {Platform.OS === 'web' ? (
+                    <Text numberOfLines={1} style={{ ...texte(theme, 14), fontWeight: '700', writingMode: 'vertical-rl', maxHeight: 190, overflow: 'hidden' } as unknown as TextStyle}>
+                      {nomListe(l)}
+                    </Text>
+                  ) : (
+                    <View style={{ flex: 1, width: LARGEUR_REDUITE }}>
+                      <Text numberOfLines={1} style={{ ...texte(theme, 14), fontWeight: '700', position: 'absolute', width: 180, left: LARGEUR_REDUITE / 2 - 90, top: 80, textAlign: 'center', transform: [{ rotate: '90deg' }] }}>
+                        {nomListe(l)}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            }
+            return (
+              <View
+                key={l.id}
+                ref={r => {
+                  if (r) refsListes.current.set(l.id, r);
+                  else refsListes.current.delete(l.id);
+                }}
+                testID={`esport-cm-liste-${l.cle ?? l.id}`}
+                accessibilityLabel={trCm('liste.libelle', { nom: nomListe(l), n: vues.length })}
+                style={[
+                  {
+                    width: largeurListe,
+                    backgroundColor: fondColonne,
+                    borderRadius: rayonCarte(theme),
+                    opacity: l.archive ? 0.6 : fantomeListe?.liste.id === l.id ? 0.35 : 1,
+                    borderWidth: 2,
+                    borderColor: cible?.listeId === l.id ? theme.accent : 'transparent',
+                    overflow: 'hidden',
+                  },
+                  hauteurColonne !== undefined ? { maxHeight: hauteurColonne } : null,
+                ]}>
+                {/* En-tête fixe : nom, nombre de cartes, réduire, menu ⋯. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: ESP.s, paddingRight: 4, paddingTop: 6, paddingBottom: 2 }} testID={`esport-cm-liste-${l.id}-entete`}>
+                  <EnteteGlissable
+                    actif={Boolean(d.droits.editer) && !l.archive && actifs.length > 1}
+                    libelle={trCm('liste.poignee', { nom: nomListe(l) })}
+                    aide={trCm('liste.poignee_aide')}
+                    glisser={{ debut: x => void debutListe(l, x), bouge: bougeListe, fin: finListe }}
+                    testID={`esport-cm-liste-${l.id}-poignee`}>
+                    <Text accessibilityRole="header" style={{ ...texte(theme, 14), fontWeight: '700' }} numberOfLines={1}>
+                      {nomListe(l)}
+                    </Text>
+                  </EnteteGlissable>
+                  <Text style={{ ...attenue(theme, 12), fontWeight: '700', paddingHorizontal: 4 }} accessibilityLabel={trnCm('liste.cartes_n', vues.length)} testID={`esport-cm-liste-${l.id}-compteur`}>
+                    {String(vues.length)}
+                  </Text>
+                  {triees.includes(l.id) ? (
+                    <Text accessibilityLabel={trCm('urgence.tri_actif')} style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }} testID={`esport-cm-liste-${l.id}-tri-actif`}>
+                      ⇅
+                    </Text>
+                  ) : null}
+                  {urgencesListe(l.id).critique ? (
+                    <CompteurUrgence theme={theme} niveau="critique" n={urgencesListe(l.id).critique} testID={`esport-cm-liste-${l.id}-critiques`} />
+                  ) : null}
+                  {urgencesListe(l.id).urgent ? (
+                    <CompteurUrgence theme={theme} niveau="urgent" n={urgencesListe(l.id).urgent} testID={`esport-cm-liste-${l.id}-urgentes`} />
+                  ) : null}
+                  {nonLusListe(l.id) ? (
+                    <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLusListe(l.id))}>
+                      <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
+                    </View>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={trCm('liste.reduire_libelle', { nom: nomListe(l) })}
+                    onPress={() => basculerReduite(l.id)}
+                    testID={`esport-cm-liste-${l.id}-reduire`}
+                    style={(e: EtatPresse) => ({ minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.attenue, 0.2) : 'transparent' })}>
+                    <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>→←</Text>
+                  </Pressable>
+                  <MenuActions theme={theme} compact testID={`esport-cm-liste-${l.cle ?? l.id}-menu`} libelle={trCm('liste.actions', { nom: nomListe(l) })} actions={actionsListe(l)} />
+                </View>
+                {/* Cartes : la COLONNE défile (sa propre barre), pas la page. */}
+                <ScrollView
+                  ref={r => {
+                    if (r) refsColonnes.current.set(l.id, r);
+                    else refsColonnes.current.delete(l.id);
+                  }}
+                  onScroll={e => {
+                    scrollColonnes.current.set(l.id, e.nativeEvent.contentOffset.y);
+                  }}
+                  scrollEventThrottle={16}
+                  scrollEnabled={!fantome}
+                  nestedScrollEnabled
+                  style={{ flexGrow: 0, flexShrink: 1 }}
+                  contentContainerStyle={{ paddingHorizontal: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}
+                  testID={`esport-cm-liste-${l.id}-cartes`}>
+                  {vues.slice(0, limite).map((c, i) => (
+                    <React.Fragment key={c.id}>
+                      {cible?.listeId === l.id && cible.index === i ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
+                      <View
+                        ref={r => {
+                          if (r) refsCartes.current.set(c.id, r);
+                          else refsCartes.current.delete(c.id);
+                        }}
+                        style={{ opacity: fantome?.carte.id === c.id ? 0.35 : 1 }}>
+                        <TuileCarte
+                          theme={theme}
+                          carte={c}
+                          d={d}
+                          etiquettes={etiquettes}
+                          maintenant={maintenant}
+                          onOuvrir={() => (pendants.current.has(c.id) ? undefined : setOuverte(c.id))}
+                          actions={pendants.current.has(c.id) ? [] : actionsCarte(c, l, i, vues)}
+                          glisser={d.droits.editer && !triees.includes(l.id) && !pendants.current.has(c.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
+                        />
+                      </View>
+                    </React.Fragment>
+                  ))}
+                  {cible?.listeId === l.id && cible.index >= Math.min(vues.length, limite) ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
+                  {vues.length > limite ? (
+                    <BoutonHub theme={theme} titre={trCm('liste.plus', { n: vues.length - limite })} onPress={() => setLimites(x => ({ ...x, [l.id]: limite + PAR_LISTE }))} testID={`esport-cm-liste-${l.id}-plus`} />
+                  ) : null}
+                  {d.droits.editer && !l.archive && ajout === l.id ? (
+                    <View style={{ gap: ESP.xs, paddingVertical: 4 }}>
+                      <TextInput
+                        ref={champAjout}
+                        testID={`esport-cm-ajout-${l.cle ?? l.id}-titre`}
+                        accessibilityLabel={trCm('carte.titre')}
+                        accessibilityHint={trCm('carte.ajout_aide')}
+                        placeholder={trCm('carte.titre_ajout')}
+                        placeholderTextColor={theme.attenue}
+                        value={titreAjout}
+                        onChangeText={changerTitreAjout}
+                        onKeyPress={toucheAjout}
+                        onFocus={annulerFermeture}
+                        onBlur={() => {
+                          annulerFermeture();
+                          fermeture.current = setTimeout(fermerAjout, 200);
+                        }}
+                        multiline
+                        numberOfLines={collage ? Math.min(6, titresAjout(titreAjout, true).length + 1) : 2}
+                        maxLength={collage ? 4000 : 200}
+                        autoFocus
+                        autoCorrect={false}
+                        style={{ color: theme.texte, backgroundColor: theme.fond, borderColor: theme.accent, borderWidth: 1, borderRadius: 8, paddingHorizontal: ESP.s, paddingVertical: 8, minHeight: collage ? 88 : 56, fontSize: 14, textAlignVertical: 'top' }}
+                      />
+                      {collage ? (
+                        <Text style={attenue(theme, 12)} testID={`esport-cm-ajout-${l.cle ?? l.id}-collage`}>
+                          {trCm('carte.ajout_collage', { n: titresAjout(titreAjout, true).length })}
+                        </Text>
+                      ) : null}
+                      <View style={[styles.ligne, { gap: ESP.xs }]} onStartShouldSetResponderCapture={() => (annulerFermeture(), false)}>
+                        <BoutonHub
+                          theme={theme}
+                          titre={collage ? trCm('carte.ajouter_n', { n: titresAjout(titreAjout, true).length }) : trCm('carte.ajouter_carte')}
+                          variante="plein"
+                          desactive={!titresAjout(titreAjout, collage).length}
+                          onPress={() => validerAjout(false)}
+                          testID={`esport-cm-ajout-${l.cle ?? l.id}-carte`}
+                        />
+                        <BoutonHub theme={theme} titre={trCm('carte.ajouter_post')} desactive={!titresAjout(titreAjout, collage).length} onPress={() => validerAjout(true)} testID={`esport-cm-ajout-${l.cle ?? l.id}-post`} />
+                        <BoutonHub theme={theme} titre={trCm('c.annuler')} onPress={fermerAjout} testID={`esport-cm-ajout-${l.cle ?? l.id}-annuler`} />
+                      </View>
+                    </View>
+                  ) : null}
+                </ScrollView>
+                {/* « + Ajouter une carte » : fixé en bas de la colonne. */}
+                {d.droits.editer && !l.archive && ajout !== l.id ? (
+                  <Pressable
+                    testID={`esport-cm-ajout-${l.cle ?? l.id}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={trCm('carte.ajouter_dans', { liste: nomListe(l) })}
+                    onPress={() => {
+                      setTitreAjout('');
+                      setAjout(l.id);
+                      setTimeout(() => refsColonnes.current.get(l.id)?.scrollToEnd?.({ animated: true }), 50);
+                    }}
+                    style={(e: EtatPresse) => ({ minHeight: 40, justifyContent: 'center', paddingHorizontal: ESP.s, marginHorizontal: 4, marginBottom: 4, borderRadius: 8, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.attenue, 0.18) : 'transparent' })}>
+                    <Text style={{ ...texte(theme, 14), color: theme.attenue, fontWeight: '600' }}>{trCm('carte.ajouter')}</Text>
+                  </Pressable>
+                ) : (
+                  <View style={{ height: 6 }} />
+                )}
+              </View>
+            );
+  };
+
 
   const t = d.tableau;
   const fond = t.fond ?? null;
@@ -623,166 +1044,28 @@ export function Tableau({
           style={hauteurTableau !== undefined ? { height: hauteurTableau } : undefined}
           contentContainerStyle={{ gap: ESP.s, alignItems: 'flex-start', padding: ESP.s }}
           testID="esport-cm-listes">
-          {listes.map((l, li) => {
-            const vues = visibles(l.id);
-            const limite = limites[l.id] ?? PAR_LISTE;
-            if (reduites.includes(l.id)) {
-              return (
-                <Pressable
-                  key={l.id}
-                  testID={`esport-cm-liste-${l.cle ?? l.id}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={trCm('liste.agrandir_libelle', { nom: nomListe(l), n: vues.length })}
-                  onPress={() => basculerReduite(l.id)}
-                  style={(e: EtatPresse) => ({ width: LARGEUR_REDUITE, height: Math.min(hauteurColonne ?? 260, 260), borderRadius: rayonCarte(theme), backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.2) : fondColonne, alignItems: 'center', paddingTop: ESP.xs, gap: ESP.xs, overflow: 'hidden', opacity: l.archive ? 0.6 : 1 })}>
-                  <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>↔︎</Text>
-                  <Text style={{ ...attenue(theme, 12), fontWeight: '700' }} testID={`esport-cm-liste-${l.id}-compteur`}>
-                    {String(vues.length)}
-                  </Text>
-                  <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
-                  {/* Nom à la verticale : écriture verticale sur le web, texte tourné sur iPhone / Android. */}
-                  {Platform.OS === 'web' ? (
-                    <Text numberOfLines={1} style={{ ...texte(theme, 14), fontWeight: '700', writingMode: 'vertical-rl', maxHeight: 190, overflow: 'hidden' } as unknown as TextStyle}>
-                      {nomListe(l)}
-                    </Text>
-                  ) : (
-                    <View style={{ flex: 1, width: LARGEUR_REDUITE }}>
-                      <Text numberOfLines={1} style={{ ...texte(theme, 14), fontWeight: '700', position: 'absolute', width: 180, left: LARGEUR_REDUITE / 2 - 90, top: 80, textAlign: 'center', transform: [{ rotate: '90deg' }] }}>
-                        {nomListe(l)}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
-              );
-            }
+          {listes.map(l => {
+            // Trait d'insertion : avant la colonne qui deviendra la suivante de la colonne glissée.
+            const rangAutre = fantomeListe && !l.archive && l.id !== fantomeListe.liste.id ? actifs.filter(x => x.id !== fantomeListe.liste.id).findIndex(x => x.id === l.id) : -1;
             return (
-              <View
-                key={l.id}
-                ref={r => {
-                  if (r) refsListes.current.set(l.id, r);
-                  else refsListes.current.delete(l.id);
-                }}
-                testID={`esport-cm-liste-${l.cle ?? l.id}`}
-                accessibilityLabel={trCm('liste.libelle', { nom: nomListe(l), n: vues.length })}
-                style={[
-                  {
-                    width: largeurListe,
-                    backgroundColor: fondColonne,
-                    borderRadius: rayonCarte(theme),
-                    opacity: l.archive ? 0.6 : 1,
-                    borderWidth: 2,
-                    borderColor: cible?.listeId === l.id ? theme.accent : 'transparent',
-                    overflow: 'hidden',
-                  },
-                  hauteurColonne !== undefined ? { maxHeight: hauteurColonne } : null,
-                ]}>
-                {/* En-tête fixe : nom, nombre de cartes, réduire, menu ⋯. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: ESP.s, paddingRight: 4, paddingTop: 6, paddingBottom: 2 }} testID={`esport-cm-liste-${l.id}-entete`}>
-                  <Text accessibilityRole="header" style={{ ...texte(theme, 14), fontWeight: '700', flex: 1 }} numberOfLines={1}>
-                    {nomListe(l)}
-                  </Text>
-                  <Text style={{ ...attenue(theme, 12), fontWeight: '700', paddingHorizontal: 4 }} accessibilityLabel={trnCm('liste.cartes_n', vues.length)} testID={`esport-cm-liste-${l.id}-compteur`}>
-                    {String(vues.length)}
-                  </Text>
-                  {triees.includes(l.id) ? (
-                    <Text accessibilityLabel={trCm('urgence.tri_actif')} style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }} testID={`esport-cm-liste-${l.id}-tri-actif`}>
-                      ⇅
-                    </Text>
-                  ) : null}
-                  {urgencesListe(l.id).critique ? (
-                    <CompteurUrgence theme={theme} niveau="critique" n={urgencesListe(l.id).critique} testID={`esport-cm-liste-${l.id}-critiques`} />
-                  ) : null}
-                  {urgencesListe(l.id).urgent ? (
-                    <CompteurUrgence theme={theme} niveau="urgent" n={urgencesListe(l.id).urgent} testID={`esport-cm-liste-${l.id}-urgentes`} />
-                  ) : null}
-                  {nonLusListe(l.id) ? (
-                    <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLusListe(l.id))}>
-                      <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
-                    </View>
-                  ) : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={trCm('liste.reduire_libelle', { nom: nomListe(l) })}
-                    onPress={() => basculerReduite(l.id)}
-                    testID={`esport-cm-liste-${l.id}-reduire`}
-                    style={(e: EtatPresse) => ({ minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.attenue, 0.2) : 'transparent' })}>
-                    <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>→←</Text>
-                  </Pressable>
-                  <MenuActions theme={theme} compact testID={`esport-cm-liste-${l.cle ?? l.id}-menu`} libelle={trCm('liste.actions', { nom: nomListe(l) })} actions={actionsListe(l, li)} />
-                </View>
-                {/* Cartes : la COLONNE défile (sa propre barre), pas la page. */}
-                <ScrollView
-                  ref={r => {
-                    if (r) refsColonnes.current.set(l.id, r);
-                    else refsColonnes.current.delete(l.id);
-                  }}
-                  onScroll={e => {
-                    scrollColonnes.current.set(l.id, e.nativeEvent.contentOffset.y);
-                  }}
-                  scrollEventThrottle={16}
-                  scrollEnabled={!fantome}
-                  nestedScrollEnabled
-                  style={{ flexGrow: 0, flexShrink: 1 }}
-                  contentContainerStyle={{ paddingHorizontal: 6, paddingTop: 2, paddingBottom: 4, gap: 6 }}
-                  testID={`esport-cm-liste-${l.id}-cartes`}>
-                  {vues.slice(0, limite).map((c, i) => (
-                    <React.Fragment key={c.id}>
-                      {cible?.listeId === l.id && cible.index === i ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
-                      <View
-                        ref={r => {
-                          if (r) refsCartes.current.set(c.id, r);
-                          else refsCartes.current.delete(c.id);
-                        }}
-                        style={{ opacity: fantome?.carte.id === c.id ? 0.35 : 1 }}>
-                        <TuileCarte
-                          theme={theme}
-                          carte={c}
-                          d={d}
-                          etiquettes={etiquettes}
-                          maintenant={maintenant}
-                          onOuvrir={() => setOuverte(c.id)}
-                          actions={actionsCarte(c, l, i, vues)}
-                          glisser={d.droits.editer && !triees.includes(l.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
-                        />
-                      </View>
-                    </React.Fragment>
-                  ))}
-                  {cible?.listeId === l.id && cible.index >= Math.min(vues.length, limite) ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
-                  {vues.length > limite ? (
-                    <BoutonHub theme={theme} titre={trCm('liste.plus', { n: vues.length - limite })} onPress={() => setLimites(x => ({ ...x, [l.id]: limite + PAR_LISTE }))} testID={`esport-cm-liste-${l.id}-plus`} />
-                  ) : null}
-                  {d.droits.editer && !l.archive && ajout === l.id ? (
-                    <View style={{ gap: ESP.xs, paddingVertical: 4 }}>
-                      <Champ theme={theme} libelle={trCm('carte.titre')} valeur={titreAjout} onChanger={setTitreAjout} maxLength={200} testID={`esport-cm-ajout-${l.cle ?? l.id}-titre`} />
-                      <View style={[styles.ligne, { gap: ESP.xs }]}>
-                        <BoutonHub theme={theme} titre={trCm('carte.ajouter_carte')} variante="plein" desactive={!titreAjout.trim()} onPress={() => void creerCarte(l.id, false)} testID={`esport-cm-ajout-${l.cle ?? l.id}-carte`} />
-                        <BoutonHub theme={theme} titre={trCm('carte.ajouter_post')} desactive={!titreAjout.trim()} onPress={() => void creerCarte(l.id, true)} testID={`esport-cm-ajout-${l.cle ?? l.id}-post`} />
-                        <BoutonHub theme={theme} titre={trCm('c.annuler')} onPress={() => setAjout(undefined)} testID={`esport-cm-ajout-${l.cle ?? l.id}-annuler`} />
-                      </View>
-                    </View>
-                  ) : null}
-                </ScrollView>
-                {/* « + Ajouter une carte » : fixé en bas de la colonne. */}
-                {d.droits.editer && !l.archive && ajout !== l.id ? (
-                  <Pressable
-                    testID={`esport-cm-ajout-${l.cle ?? l.id}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={trCm('carte.ajouter_dans', { liste: nomListe(l) })}
-                    onPress={() => {
-                      setTitreAjout('');
-                      setAjout(l.id);
-                      setTimeout(() => refsColonnes.current.get(l.id)?.scrollToEnd?.({ animated: true }), 50);
-                    }}
-                    style={(e: EtatPresse) => ({ minHeight: 40, justifyContent: 'center', paddingHorizontal: ESP.s, marginHorizontal: 4, marginBottom: 4, borderRadius: 8, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.attenue, 0.18) : 'transparent' })}>
-                    <Text style={{ ...texte(theme, 14), color: theme.attenue, fontWeight: '600' }}>{trCm('carte.ajouter')}</Text>
-                  </Pressable>
-                ) : (
-                  <View style={{ height: 6 }} />
-                )}
-              </View>
+              <React.Fragment key={l.id}>
+                {cibleListe !== undefined && rangAutre >= 0 && rangAutre === cibleListe ? <TraitColonne theme={theme} /> : null}
+                {colonneDe(l)}
+              </React.Fragment>
             );
           })}
+          {fantomeListe && cibleListe !== undefined && cibleListe >= actifs.filter(x => x.id !== fantomeListe.liste.id).length ? <TraitColonne theme={theme} /> : null}
         </ScrollView>
+        {fantomeListe ? (
+          <View
+            pointerEvents="none"
+            style={{ position: 'absolute', left: fantomeListe.x, top: ESP.s, width: fantomeListe.l, borderRadius: rayonCarte(theme), backgroundColor: fondColonne, borderWidth: 2, borderColor: theme.accent, paddingHorizontal: ESP.s, paddingVertical: 8, transform: [{ rotate: '2deg' }], opacity: 0.95 }}
+            testID="esport-cm-fantome-liste">
+            <Text style={{ ...texte(theme, 14), fontWeight: '700' }} numberOfLines={1}>
+              {nomListe(fantomeListe.liste)}
+            </Text>
+          </View>
+        ) : null}
         {fantome ? (
           <View pointerEvents="none" style={{ position: 'absolute', left: fantome.x, top: fantome.y, width: fantome.l, transform: [{ rotate: '2deg' }], opacity: 0.95 }} testID="esport-cm-fantome">
             <TuileCarte theme={theme} carte={fantome.carte} d={d} etiquettes={etiquettes} maintenant={maintenant} onOuvrir={() => undefined} actions={[]} />
@@ -1123,6 +1406,104 @@ function CompteurUrgence({ theme, niveau, n, testID }: { theme: ThemeHub; niveau
     <View accessible accessibilityLabel={trnCm(niveau === 'critique' ? 'urgence.critiques_n' : 'urgence.urgentes_n', n)} style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }} testID={testID}>
       <Drapeau theme={theme} niveau={niveau} taille={14} />
       <Text style={{ color: couleurUrgence(niveau, theme.sombre), fontSize: 12, fontWeight: '800' }}>{String(n)}</Text>
+    </View>
+  );
+}
+
+/** Trait vertical qui montre où la colonne glissée sera déposée. */
+function TraitColonne({ theme }: { theme: ThemeHub }) {
+  return <View style={{ width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-colonne" />;
+}
+
+const POINTEUR_FIN = (): boolean => {
+  try {
+    const g = globalThis as { matchMedia?: (q: string) => { matches: boolean } };
+    return Platform.OS === 'web' && typeof g.matchMedia === 'function' && g.matchMedia('(pointer: fine)').matches;
+  } catch {
+    return false;
+  }
+};
+const SEUIL_SOURIS = 6;
+const SEUIL_TACTILE = 10;
+const APPUI_LONG_MS = 450;
+
+/**
+ * En-tête d'une colonne qui se saisit pour la déplacer : à la souris, le glisser commence après quelques pixels ;
+ * au doigt, après un appui long (sinon le geste fait défiler le tableau).
+ */
+function EnteteGlissable({
+  actif,
+  libelle,
+  aide,
+  glisser,
+  testID,
+  children,
+}: {
+  actif: boolean;
+  libelle: string;
+  aide: string;
+  glisser: { debut(x: number): void; bouge(x: number): void; fin(annuler: boolean): void };
+  testID: string;
+  children: React.ReactNode;
+}) {
+  const rappel = useRef(glisser);
+  rappel.current = glisser;
+  const etat = useRef<{ x: number; y: number; en: boolean; minuterie?: ReturnType<typeof setTimeout>; souris: boolean }>({ x: 0, y: 0, en: false, souris: false });
+  const annuler = () => {
+    if (etat.current.minuterie) clearTimeout(etat.current.minuterie);
+    etat.current.minuterie = undefined;
+  };
+  const demarrer = (x: number) => {
+    annuler();
+    etat.current.en = true;
+    rappel.current.debut(x);
+  };
+  const geste = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => !etat.current.en,
+      onPanResponderGrant: (e: GestureResponderEvent) => {
+        const ev = etat.current;
+        ev.x = e.nativeEvent.pageX;
+        ev.y = e.nativeEvent.pageY;
+        ev.en = false;
+        ev.souris = POINTEUR_FIN();
+        annuler();
+        if (!ev.souris) ev.minuterie = setTimeout(() => demarrer(ev.x), APPUI_LONG_MS);
+      },
+      onPanResponderMove: (_e: GestureResponderEvent, g: PanResponderGestureState) => {
+        const ev = etat.current;
+        if (!ev.en) {
+          const loin = Math.hypot(g.moveX - ev.x, g.moveY - ev.y);
+          if (ev.souris && loin >= SEUIL_SOURIS) demarrer(ev.x);
+          else if (!ev.souris && loin >= SEUIL_TACTILE) annuler();
+          return;
+        }
+        rappel.current.bouge(g.moveX);
+      },
+      onPanResponderRelease: () => {
+        annuler();
+        if (etat.current.en) rappel.current.fin(false);
+        etat.current.en = false;
+      },
+      onPanResponderTerminate: () => {
+        annuler();
+        if (etat.current.en) rappel.current.fin(true);
+        etat.current.en = false;
+      },
+    }),
+  ).current;
+  useEffect(() => annuler, []);
+  if (!actif) return <View style={{ flex: 1 }}>{children}</View>;
+  return (
+    <View
+      {...geste.panHandlers}
+      testID={testID}
+      accessibilityHint={aide}
+      accessibilityLabel={libelle}
+      style={{ flex: 1, justifyContent: 'center', minHeight: 32, cursor: 'grab', userSelect: 'none' } as unknown as ViewStyle}>
+      {children}
     </View>
   );
 }
