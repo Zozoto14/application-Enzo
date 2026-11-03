@@ -471,8 +471,14 @@ export class CanalEsport {
   private demarre = false;
   private arreterVisibilite: (() => void) | undefined;
 
+  private readonly appareil: string | undefined;
+
   constructor(private readonly o: OptionsCanal) {
-    this.meneur = new MeneurOnglets({ nom: `esport-tr:${o.cle}`, surMessage: () => undefined, verrous: o.verrous === undefined ? verrousDuNavigateur() : o.verrous, creerCanal: null });
+    const verrous = o.verrous === undefined ? verrousDuNavigateur() : o.verrous;
+    this.meneur = new MeneurOnglets({ nom: `esport-tr:${o.cle}`, surMessage: () => undefined, verrous, creerCanal: null });
+    // Sans Web Locks, chaque onglet mène : un identifiant par onglet, sinon ils se remplaceraient l'un l'autre côté
+    // serveur en boucle (la limite par compte et adresse reste la garde).
+    this.appareil = o.appareil && !verrous ? `${o.appareil}-${Math.random().toString(36).slice(2, 6)}` : o.appareil;
     this.canal = o.creerCanal === null ? undefined : (o.creerCanal ?? canalDuNavigateur)(`appdashboard-esport-tr:${o.cle}`);
     if (this.canal) this.canal.onmessage = e => this.surMessageOnglet(e.data as MessageCanal);
   }
@@ -556,7 +562,7 @@ export class CanalEsport {
       source: this.o.source,
       requete: this.o.requete,
       minuteries: this.o.minuteries,
-      appareil: this.o.appareil,
+      appareil: this.appareil,
       ...this.o.ecouteur,
       curseur: () => this.dernierId,
       surLot: (lot, dernierId) => {
