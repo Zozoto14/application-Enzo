@@ -23,9 +23,9 @@ import { DisposCm } from './Dispos';
 import { RendezVous } from './RendezVous';
 
 type Section = 'agenda' | 'dispos' | 'rdv';
-const DEBUT_GRILLE = 7 * 60;
+const DEBUT_GRILLE = 8 * 60;
 const FIN_GRILLE = 23 * 60;
-const PX_MIN = 0.8;
+const PX_MIN = 0.66;
 
 export function Reunions({ theme, client, large, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
   const api = useMemo(() => apiReunions(client), [client]);
@@ -248,16 +248,23 @@ function Agenda({ theme, api, client, large, moi, fuseau, onExporter, onRelireMo
   return (
     <View style={large ? { flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' } : { gap: ESP.m }}>
       <View style={{ flex: 1, gap: ESP.m, minWidth: 0 }}>
+        {!large ? (
+          <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800' }} testID="esport-cm-reunions-titre">
+            {titre}
+          </Text>
+        ) : null}
         <View style={[styles.ligne, { justifyContent: 'space-between', gap: ESP.xs }]}>
-          <View style={[styles.ligne, { gap: ESP.xs }]}>
+          <View style={[styles.ligne, { gap: ESP.xs, flexShrink: 1, maxWidth: '100%' }]}>
             <BoutonHub theme={theme} titre="‹" libelle={trRe('agenda.precedent')} onPress={() => setReference(decaler(vue, reference, -1))} testID="esport-cm-reunions-precedent" />
             <BoutonHub theme={theme} titre={trRe('agenda.aujourdhui')} onPress={() => setReference(aujourdhui)} testID="esport-cm-reunions-aujourdhui" />
             <BoutonHub theme={theme} titre="›" libelle={trRe('agenda.suivant')} onPress={() => setReference(decaler(vue, reference, 1))} testID="esport-cm-reunions-suivant" />
-            <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800' }} testID="esport-cm-reunions-titre">
-              {titre}
-            </Text>
+            {large ? (
+              <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800' }} testID="esport-cm-reunions-titre">
+                {titre}
+              </Text>
+            ) : null}
           </View>
-          <View style={[styles.ligne, { gap: ESP.xs }]}>
+          <View style={[styles.ligne, { gap: ESP.xs, flexShrink: 1, maxWidth: '100%' }]}>
             <Segments theme={theme} libelle={trRe('agenda.vue')} valeur={vue} options={[['jour', trRe('agenda.jour')], ['semaine', trRe('agenda.semaine')], ['mois', trRe('agenda.mois')]]} onChoisir={v => setVue(v as VueAgenda)} testID="esport-cm-reunions-vue" />
             {moi.droits.voir ? <BoutonHub theme={theme} titre={trRe('agenda.nouvelle')} variante="plein" onPress={() => setFormulaire({})} testID="esport-cm-reunions-nouvelle" /> : null}
             <MenuActions
