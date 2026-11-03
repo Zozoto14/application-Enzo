@@ -10,7 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Avis, BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ContexteHub } from '../../hub/types';
@@ -431,7 +431,9 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
         </View>
       ) : null}
       {/* Matrice : modules en lignes, actions en colonnes. En édition, les cases changées sont surlignées. */}
-      <View accessibilityRole="none" testID="esport-matrice" style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: 8, overflow: 'hidden' }}>
+      {/* Sur téléphone la matrice (6 colonnes) défile en largeur dans son cadre : la page, elle, ne déborde pas. */}
+      <ScrollView horizontal accessibilityRole="none" testID="esport-matrice" style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: 8, flexGrow: 0 }} contentContainerStyle={{ minWidth: '100%' }}>
+      <View style={{ minWidth: 440, flexGrow: 1 }}>
         <View style={[styles.ligne, { flexWrap: 'nowrap', gap: 0, backgroundColor: theme.fond, paddingHorizontal: 8 }]}>
           <Text style={[attenue, { flex: 2, minWidth: 90, fontWeight: '700' }]}>{tr('journal.module')}</Text>
           {COLONNES.map(c => (
@@ -485,6 +487,7 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
           </View>
         ))}
       </View>
+      </ScrollView>
       <Text style={attenue}>{tr('membresRoles.seuls_les_modules_actives')}</Text>
       {edition?.id ? (
         <Text style={{ color: changements ? theme.alerte : theme.attenue, fontSize: 12, fontWeight: '700' }} testID="esport-role-changements">

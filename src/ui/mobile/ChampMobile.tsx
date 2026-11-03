@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   champ: { gap: ESPACE.xxs + 2 },
   etiquette: { fontSize: TEXTE.legende, fontWeight: '600' },
   cadre: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, minHeight: CONTROLE.hauteur },
-  saisie: { flex: 1, minHeight: CONTROLE.hauteur, fontSize: TEXTE.champ, paddingHorizontal: ESPACE.s + 2, paddingVertical: ESPACE.xs },
+  saisie: { flex: 1, minWidth: 0, minHeight: CONTROLE.hauteur, fontSize: TEXTE.champ, paddingHorizontal: ESPACE.s + 2, paddingVertical: ESPACE.xs },
   multiligne: { minHeight: 120, paddingTop: ESPACE.s },
   voir: { minHeight: CONTROLE.cible, minWidth: 72, alignItems: 'center', justifyContent: 'center', paddingHorizontal: ESPACE.xs },
   aide: { fontSize: TEXTE.legende, lineHeight: 21 },

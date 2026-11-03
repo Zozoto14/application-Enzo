@@ -308,6 +308,7 @@ export function Esport(props: PropsRacineApp) {
         theme={theme}
         onRetour={onRetour}
         titre="Esport"
+        margeLaterale={8}
         droite={etat.e === 'pret' && etat.moi.profil ? <ClocheNotifications theme={theme} n={notifs.nonLues} actif={vue.v === 'notifications'} onPress={() => setVue({ v: 'notifications' })} /> : undefined}
       />
       <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>

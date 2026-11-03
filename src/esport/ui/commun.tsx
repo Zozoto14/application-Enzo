@@ -183,7 +183,7 @@ export function Choix<T extends string>({
 }
 
 export const styles = StyleSheet.create({
-  ligne: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  ligne: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center', maxWidth: '100%' },
   pastille: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start' },
   point: { width: 8, height: 8, borderRadius: 4 },
   // Cible tactile de 44 px (pastilles de choix, utilisées aussi sur téléphone).

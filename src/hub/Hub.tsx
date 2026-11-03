@@ -1129,9 +1129,12 @@ export function RetourHub({
   onRetour,
   titre,
   droite,
+  margeLaterale = -8,
 }: {
   theme: ThemeHub;
   onRetour(): void;
+  /** Marge latérale de la barre du téléphone : -8 par défaut (déborde du remplissage de 16 px de la page) ; 8 pour une app sans remplissage (Esport), sinon la barre sort de l'écran. */
+  margeLaterale?: number;
   /** Nom de l'app (en-tête du téléphone). */
   titre?: string;
   /** Action propre à l'app, à droite de l'en-tête (cloche des notifications de l'Esport…). */
@@ -1143,7 +1146,7 @@ export function RetourHub({
   if (useMobile()) {
     // Téléphone : une ligne compacte, « ‹ Accueil » à gauche, synchro condensée et Réglages à droite.
     return (
-      <View style={styles.retourMobile} testID="retour-hub-mobile">
+      <View style={[styles.retourMobile, { marginHorizontal: margeLaterale }]} testID="retour-hub-mobile">
         <Pressable testID="retour-hub" accessibilityRole="button" accessibilityLabel="Retour à l’accueil" onPress={onRetour} style={styles.retourBouton}>
           <Text style={{ color: theme.accent, fontSize: 26, lineHeight: 28, marginTop: -2 }}>‹</Text>
           <Text style={{ color: theme.accent, fontSize: 17, fontWeight: '500', ...police(theme.policeTexte) }}>Accueil</Text>
@@ -1229,8 +1232,8 @@ const styles = StyleSheet.create({
   },
   menuTitre: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, fontSize: 11, fontWeight: '600', letterSpacing: 1.1 },
   menuLigne: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 10 },
-  bouton: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  boutonContenu: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bouton: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
+  boutonContenu: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
   boutonMobile: { minHeight: 44, minWidth: 44, paddingHorizontal: 16 },
   tuileListe: { minHeight: 0 },
   ligneListe: { flexDirection: 'row', alignItems: 'center', gap: 16 },

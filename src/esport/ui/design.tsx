@@ -274,7 +274,7 @@ export function EnTetePage({
           {sous ? <Text style={attenue(theme, TYPO.sousTitre)}>{sous}</Text> : null}
         </View>
         {action || secondaires.length ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs, flexWrap: 'wrap', maxWidth: '100%', minWidth: 0 }}>
             {action}
             {secondaires.length ? <MenuActions theme={theme} actions={secondaires} /> : null}
           </View>

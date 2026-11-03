@@ -195,11 +195,11 @@ export function Calendrier({
   return (
     <View style={{ gap: ESP.m }} testID="esport-cm-calendrier">
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-        <View style={[styles.ligne, { gap: ESP.xs }]}>
+        <View style={[styles.ligne, { gap: ESP.xs, maxWidth: '100%' }]}>
           <BoutonHub theme={theme} titre="‹" libelle={trCm('calendrier.precedent')} onPress={() => decaler(-1)} testID="esport-cm-calendrier-precedent" />
           <BoutonHub theme={theme} titre={trCm('calendrier.aujourdhui')} onPress={() => setReference(Date.now())} testID="esport-cm-calendrier-aujourdhui" />
           <BoutonHub theme={theme} titre="›" libelle={trCm('calendrier.suivant')} onPress={() => decaler(1)} testID="esport-cm-calendrier-suivant" />
-          <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800' }} testID="esport-cm-calendrier-titre">
+          <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800', flexShrink: 1 }} testID="esport-cm-calendrier-titre">
             {titre}
           </Text>
         </View>
