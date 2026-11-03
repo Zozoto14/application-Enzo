@@ -21,6 +21,7 @@ import { CATEGORIES_NOTIFICATIONS, apiNotifications, signalerNotifications, surN
 import { ICONES, bornesPeriode, dateRelative, grouperParJour, libelleCategorie, pastille, phraseCentre, titreJour, type Periode } from '../../notifications/logique';
 import { Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Squelette, attenue, rayonControle, texte } from '../design';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 const RAFRAICHISSEMENT_MS = 60_000;
 const PAR_PAGE = 30;
@@ -56,6 +57,8 @@ export function useCompteurNotifications(client: ClientEsport | undefined): { no
       fin();
     };
   }, [api, relire]);
+  // Temps réel (docs/esport/temps-reel.md) : notification créée ou lue ailleurs → compteur relu aussitôt.
+  useTempsReel(client, 'compte', relire);
   return { nonLues, relire };
 }
 

@@ -13,6 +13,7 @@ import { RESEAUX } from '../../cm/reseaux';
 import { formaterDate } from '../../i18n';
 import { trCm, type CleCm } from '../../i18n/cm';
 import { Badge, ESP, rayonControle, texte, type EtatPresse, type Ton } from '../design';
+import { SECOURS_MS, useTempsReel } from '../../tempsReel/hooks';
 
 export const FUSEAU_CLUB = 'Europe/Paris';
 /** Intervalle du rafraîchissement léger (GET /cm/etat : quelques octets). */
@@ -197,7 +198,8 @@ export const PALETTE: ReadonlyArray<readonly [string, CleCm]> = [
 const pageVisible = () => Platform.OS !== 'web' || (globalThis as { document?: { visibilityState?: string } }).document?.visibilityState !== 'hidden';
 
 /**
- * Rafraîchissement léger de la section : relit `GET /cm/etat` toutes les 12 s quand la page est visible
+ * Rafraîchissement léger de la section : relit `GET /cm/etat` dès qu'un autre change quelque chose (temps
+ * réel), sinon toutes les 60 s (12 s face à un serveur sans temps réel) quand la page est visible
  * (et tout de suite au retour sur l'onglet). Les écrans comparent la version d'un tableau à celle qu'ils ont
  * chargée et ne rechargent que s'il a changé. Une seule requête courte : compatible avec l'hébergement
  * mutualisé (pas de connexion ouverte en permanence).
@@ -205,8 +207,14 @@ const pageVisible = () => Platform.OS !== 'web' || (globalThis as { document?: {
 export function useEtatCm(api: ApiCm, actif = true): { etat: EtatCm | undefined; relire(): void } {
   const [etat, setEtat] = useState<EtatCm | undefined>();
   const enCours = useRef(false);
+  const encore = useRef(false);
   const relire = useCallback(() => {
-    if (enCours.current || !pageVisible()) return;
+    if (!pageVisible()) return;
+    // Un changement arrivé pendant une lecture : une lecture de plus juste après (jamais perdu, jamais en double).
+    if (enCours.current) {
+      encore.current = true;
+      return;
+    }
     enCours.current = true;
     api
       .etat()
@@ -214,19 +222,27 @@ export function useEtatCm(api: ApiCm, actif = true): { etat: EtatCm | undefined;
       .catch(() => undefined)
       .finally(() => {
         enCours.current = false;
+        if (encore.current) {
+          encore.current = false;
+          relire();
+        }
       });
   }, [api]);
+  // Temps réel (docs/esport/temps-reel.md) : tout changement de la section CM fait relire l'état aussitôt ; la
+  // relecture périodique ne sert plus que de secours (60 s hors direct ; 12 s face à un serveur sans temps réel).
+  const direct = useTempsReel(api.client, 'cm', relire, { actif });
+  const pas = direct === 'direct' ? 0 : direct === 'indisponible' ? RAFRAICHISSEMENT_MS : SECOURS_MS;
   useEffect(() => {
     if (!actif) return undefined;
     relire();
-    const minuterie = setInterval(relire, RAFRAICHISSEMENT_MS);
+    const minuterie = pas ? setInterval(relire, pas) : undefined;
     const doc = (globalThis as { document?: { addEventListener?(t: string, f: () => void): void; removeEventListener?(t: string, f: () => void): void } }).document;
     doc?.addEventListener?.('visibilitychange', relire);
     return () => {
-      clearInterval(minuterie);
+      if (minuterie) clearInterval(minuterie);
       doc?.removeEventListener?.('visibilitychange', relire);
     };
-  }, [actif, relire]);
+  }, [actif, relire, pas]);
   return { etat, relire };
 }
 

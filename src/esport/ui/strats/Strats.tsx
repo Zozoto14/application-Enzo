@@ -28,6 +28,7 @@ import { cartesDuPool } from '../../jeux/profil';
 import { tr } from '../../i18n';
 import { trSs, trnSs } from '../../i18n/stratsSuppr';
 import { BoutonPoubelle, ConfirmationSuppression, CorbeilleStrats, ToastAnnuler } from './Suppression';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
@@ -53,6 +54,8 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   useEffect(() => {
     if (!ouverte) void agir('', recharger);
   }, [agir, recharger, ouverte]);
+  // Temps réel : liste relue quand un autre crée, renomme ou supprime une strat (éditeur fermé seulement).
+  useTempsReel(client, [`team:${teamId}:strat_editor`, `team:${teamId}:playbook`], () => void recharger().catch(() => undefined), { actif: !ouverte });
 
   const annoncerSuppression = (supprimees: Array<{ id: string; titre: string }>) => {
     if (supprimees.length === 0) return;

@@ -659,6 +659,7 @@ export function servicesTempsReel({ base, maintenant = () => Date.now(), socle, 
     const l = await base.premier('SELECT version, maj_par, maj_le FROM temps_reel_versions WHERE cle = ?', [objet.cle]);
     return {
       cle: objet.cle,
+      moi: acteur.compte,
       version: Number(l?.version ?? 0),
       par: l?.maj_par ? { compte: l.maj_par, pseudo: await pseudoDe(l.maj_par) } : null,
       le: l?.maj_le ?? null,

@@ -20,6 +20,7 @@ import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_CONTENU, Pliab
 import { FicheTrombi } from './FicheTrombi';
 import { GestionBadges } from './GestionBadges';
 import { PastilleReseau, PhotoJoueur, PucesBadges } from './commun';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 const FILTRES_VIDES: FiltresTrombi = { recherche: '', team: 'toutes', jeu: 'tous', poste: 'tous', badge: 'tous' };
 
@@ -38,6 +39,8 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  // Temps réel : fiche, photo ou badge changé par un autre.
+  useTempsReel(client, 'trombi', () => void recharger().catch(() => undefined));
 
   const visibles = useMemo(() => (donnees ? filtrerCartes(donnees.fiches, filtres) : []), [donnees, filtres]);
   const postes = useMemo(() => {

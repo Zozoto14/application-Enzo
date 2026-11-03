@@ -33,6 +33,8 @@ import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copie
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
+import { useVerrouOptimiste } from '../../tempsReel/hooks';
+import { BandeauConflit, PastillePresence } from '../../tempsReel/ui';
 
 const vide = { fr: '', en: '' };
 
@@ -63,10 +65,19 @@ export function FicheCarte({
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // « Le premier qui enregistre a la main » : version lue envoyée avec chaque modification, bandeau si un autre
+  // a enregistré, pastille « X est en train de modifier » (docs/esport/temps-reel.md).
+  const verrou = useVerrouOptimiste(api.client, `/cm/cartes/${id}`);
   /** Écrit, garde la nouvelle carte, prévient le tableau. */
   const faire = (cle: string, action: () => Promise<ReponseCarte | unknown>, message?: string) =>
     agir(cle, async () => {
-      const res = await action();
+      let res: ReponseCarte | unknown;
+      try {
+        res = await action();
+      } catch (e) {
+        if (verrou.signalerConflit(e)) return undefined;
+        throw e;
+      }
       if (res && typeof res === 'object' && 'carte' in res) setR(res as ReponseCarte);
       else await charger();
       onChange();
@@ -82,6 +93,8 @@ export function FicheCarte({
   return (
     <View style={{ gap: ESP.m }} testID="esport-cm-fiche-contenu">
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-fiche" />
+      <PastillePresence theme={theme} presences={verrou.presences} testID="esport-cm-fiche-presence" />
+      <BandeauConflit theme={theme} verrou={verrou} onRecharger={charger} testID="esport-cm-fiche-conflit" />
       <Entete theme={theme} c={c} modifier={dr.modifier} liste={liste ? nomListe(liste) : ''} nom={nom} onTitre={titre => faire('titre', () => api.modifierCarte(c.id, { titre }), trCm('c.enregistre'))} />
       {c.post ? (
         <Circuit theme={theme} api={api} r={r} nom={nom} faire={faire} />

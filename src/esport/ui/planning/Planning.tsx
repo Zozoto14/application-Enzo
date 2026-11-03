@@ -36,6 +36,7 @@ import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurConvocation, SelecteurFuseau, useFuseau } from './commun';
 import { FeuilleAppel } from './FeuilleAppel';
 import { tr, trn } from '../../i18n';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 type Vue = 'mois' | 'semaine' | 'liste';
 type Formulaire = { mode: 'creer' } | { mode: 'serie'; id: string } | { mode: 'occurrence'; id: string; cle: string };
@@ -94,6 +95,8 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Temps réel : un autre a changé le planning ou une présence → relu en moins d'une seconde.
+  useTempsReel(client, [`team:${teamId}:planning`, `team:${teamId}:attendance`], () => void charger().catch(() => undefined));
   useEffect(() => {
     if (detail.moi.permissions.includes('members.view')) client.membres(teamId).then(m => setMembres(m.filter(x => x.statut === 'actif')), () => undefined);
   }, [client, teamId, detail.moi.permissions]);

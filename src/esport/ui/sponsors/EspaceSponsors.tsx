@@ -24,6 +24,7 @@ import { FichePartenaire } from './FichePartenaire';
 import { FicheProspect } from './FicheProspect';
 import { Pipeline } from './Pipeline';
 import { nomCompte } from './commun';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 type OngletSp = 'tableau' | 'pipeline' | 'partenaires' | 'outils' | 'reglages';
 type Ouvert = { genre: 'prospect' | 'partenaire'; id: string } | undefined;
@@ -62,6 +63,8 @@ export function EspaceSponsors({
       .catch(() => setComptes([]));
   }, [api]);
   const relire = useCallback(() => setVersion(v => v + 1), []);
+  // Temps réel : prospect, partenaire ou étape changé par un autre → tableau, pipeline et partenaires relus.
+  useTempsReel(client, 'sponsors', relire);
   const entrees = [
     { id: 'tableau', libelle: trSp('espace.tableau') },
     { id: 'pipeline', libelle: trSp('espace.pipeline') },

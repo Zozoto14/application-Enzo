@@ -21,6 +21,7 @@ import { BoutonConfirme, Choix, Panneau, Retours, styles, useAgir } from '../com
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, Onglets, SqueletteCartes, TitreCarte, Volet, attenue, texte, type Ton } from '../design';
 import type { PropsModule } from '../modules';
 import { BadgeResultat, ChoixAdversaires, Info, LogoAdversaire, Pastille, instantSaisi, montant, murale, nomsAdversaires } from './commun';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 type Filtre = 'actifs' | 'termines' | 'tous';
 const TON_STATUT: Record<StatutTournoi, Ton> = { a_venir: 'neutre', inscrit: 'accent', en_cours: 'alerte', termine: 'ok', annule: 'critique' };
@@ -43,6 +44,7 @@ export function Tournois({ theme, client, detail, large, onAller }: PropsModule)
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  useTempsReel(client, `team:${teamId}:tournois`, () => void recharger().catch(() => undefined));
   const tournois = (liste?.tournois ?? []).filter(t => (filtre === 'tous' ? true : filtre === 'termines' ? t.statut === 'termine' || t.statut === 'annule' : t.statut !== 'termine' && t.statut !== 'annule'));
   const gerer = Boolean(liste?.droits.gerer);
   return (

@@ -23,6 +23,7 @@ import { Aide, quand } from '../commun';
 import { Comptes } from './Comptes';
 import { Publications } from './Publications';
 import { Filtres, LigneInterrupteur, jourCourt, jourLong, nb, nomReseau, nomType, pct } from './commun';
+import { useTempsReel } from '../../../tempsReel/hooks';
 
 type OngletRs = 'tableau' | 'publications' | 'comptes' | 'outils' | 'bot';
 
@@ -39,6 +40,8 @@ export function EspaceReseaux({ theme, client, large, onExporter }: { theme: The
   useEffect(() => {
     void agir('', async () => setEtat(await api.etat()));
   }, [agir, api]);
+  // Temps réel : compte, publication ou relevé changé par un autre.
+  useTempsReel(client, 'cm:reseaux', relire);
   if (!etat) return erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-rs" /> : <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} />;
   const entrees = [
     { id: 'tableau', libelle: trRs('espace.tableau') },

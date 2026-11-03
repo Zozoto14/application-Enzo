@@ -182,7 +182,8 @@ export function objetDe(chemin) {
 export function publicationsDe(methode, chemin, acteur) {
   if (methode === 'GET' || methode === 'HEAD' || methode === 'OPTIONS') return [];
   if (IGNORES.some(m => m.test(chemin)) && !/\/envois\/[^/]+\/fin$/.test(chemin)) return [];
-  if (chemin === '/notifications/lues') return acteur?.compte ? [{ sujet: `compte:${acteur.compte}` }] : [];
+  // Notifications lues, préférences du centre : les autres appareils du compte suivent.
+  if (chemin === '/notifications' || chemin.startsWith('/notifications/')) return acteur?.compte ? [{ sujet: `compte:${acteur.compte}` }] : [];
   const objet = objetDe(chemin);
   const bump = Boolean(objet?.exact && ['PATCH', 'PUT', 'DELETE'].includes(methode));
   const action = methode === 'DELETE' && objet?.exact ? 'supprime' : methode === 'POST' && !objet ? 'cree' : 'modifie';

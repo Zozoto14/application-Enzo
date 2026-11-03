@@ -197,6 +197,8 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # ESPORT_DRIVE_FICHIER_MAX=2G
 # ESPORT_DRIVE_ZIP_MAX=2G
 # Transcription des réunions sur le serveur (facultatif, partie H) : calcul dans Node (ONNX).
+# Temps réel de l'Esport (partie K) : sse (défaut), attente, ou sondage pour revenir en arrière.
+# TEMPS_REEL=sse
 # TRANSCRIPTION_THREADS=4
 # TRANSCRIPTION_RAM_MAX=8G
 # IA de l'Esport (facultatif, partie I, docs/esport/ia-api.md) : sans ces lignes, tout se fait à la main.
@@ -890,6 +892,52 @@ rm -f ~/logs/esport-ia-locale.log
 
 Retirez `IA_FOURNISSEUR=local` et les lignes `IA_LOCALE_*` de `~/.appdashboard/esport.env`, puis redémarrez l'app
 (`touch ~/application-enzo/esport/tmp/restart.txt`).
+
+---
+
+## Partie K — Esport en temps réel (moins d'une seconde)
+
+Détails : [esport/temps-reel.md](esport/temps-reel.md). Le cron installe la migration 0039 ; `/sante` de l'Esport
+annonce `"tempsReel":"sse"` et la fonction `temps-reel`. Rien d'obligatoire à faire.
+
+**Ce que ça change pour l'hébergement** : chaque navigateur ouvert sur l'Esport (page visible) garde **une**
+requête longue vers `esport.appdashboard.fr` (5 min au plus, puis une nouvelle), quel que soit le nombre d'onglets.
+Garde-fous du serveur : 2 par compte et par adresse IP, 4 par compte, 30 par processus (`TEMPS_REEL_MAX`), 60
+appels par minute et par adresse ; au-delà, l'app passe d'elle-même au sondage (15 s).
+
+**À vérifier la première semaine**
+
+1. Mode annoncé : `curl -s https://esport.appdashboard.fr/sante` → `"tempsReel":"sse"`.
+2. Le flux passe sans être retenu : dans l'app, la pastille en bas à droite de l'Esport dit **En direct** (vert).
+   « Mise à jour régulière » = l'app est descendue au sondage (intermédiaire qui retient le flux, ou 429) ;
+   « Reconnexion… » qui reste = le flux est coupé. Deux navigateurs ouverts sur le même tableau CM : une carte
+   déplacée d'un côté bouge de l'autre en moins d'une seconde.
+3. Mesures (Fondateur) : dans la console du navigateur de l'app, ou avec la session, `GET /temps-reel/etat`
+   (connexions, refus, latence du serveur au navigateur).
+4. cPanel › **Statistiques de ressources** : la colonne **EP** (entry processes) monte d'environ une unité par
+   navigateur ouvert. Si elle approche la limite (souvent 20 à 30) ou montre des « faults » : `TEMPS_REEL_MAX=10`,
+   ou repli (ci-dessous).
+5. Si le flux arrive par paquets (pastille « Mise à jour régulière » alors que le serveur répond) : dans le
+   `.htaccess` du sous-domaine `esport.`, au-dessus des lignes de Passenger :
+
+   ```apache
+   <IfModule LiteSpeed>
+     SetEnvIf Request_URI "/temps-reel/" no-gzip=1 dont-vary=1
+   </IfModule>
+   ```
+
+**Revenir en arrière si le pare-feu réagit mal** (adresse bannie, partie H bis, ou EP pleins) : dans
+`~/.appdashboard/esport.env`, la ligne `TEMPS_REEL=sondage` (aucune connexion tenue : une requête courte toutes les
+15 s par navigateur), puis « Setup Node.js App » › app Esport › **Restart**. Les onglets déjà ouverts reçoivent
+« utilise le sondage » (429) à leur prochaine requête et s'y tiennent. Étape intermédiaire possible :
+`TEMPS_REEL=attente` (attentes longues de 50 s, une par navigateur). Le reste (verrou « le premier qui enregistre a
+la main », présence) marche dans tous les modes.
+
+**Plusieurs processus Node** : les messages passent par PostgreSQL (`LISTEN/NOTIFY`), un processus de plus ne
+change rien ; chaque processus qui a des navigateurs connectés tient **une** connexion PostgreSQL de plus.
+
+**Hub** : pour la même vitesse sur la synchro du hub, `SYNCHRO_TEMPS_REEL=attente` dans `relais.env` (partie H),
+seulement après une semaine sans souci ici.
 
 ---
 

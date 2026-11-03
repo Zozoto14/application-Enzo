@@ -19,6 +19,7 @@ import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertit
 import { NoteMarkdown } from './review/Note';
 import { EnTetePage, EtatVide, Volet } from './design';
 import { tr, trn } from '../i18n';
+import { useTempsReel } from '../tempsReel/hooks';
 
 const STATUTS: StatutTache[] = ['a_faire', 'en_cours', 'fait'];
 const PRIORITES: Priorite[] = ['basse', 'normale', 'haute', 'urgente'];
@@ -75,6 +76,7 @@ export function SectionObjectifs({
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  useTempsReel(client, `team:${teamId}:goals_tasks`, () => void recharger().catch(() => undefined));
   useEffect(() => {
     if (detail.moi.permissions.includes('members.view')) client.membres(teamId).then(m => setMembres(m.filter(x => x.statut === 'actif')), () => undefined);
   }, [client, teamId, detail]);

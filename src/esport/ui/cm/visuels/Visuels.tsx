@@ -23,6 +23,7 @@ import { CharteClub } from './Charte';
 import { EditeurDiffere } from './EditeurDiffere';
 import { GenererVisuel } from './Generer';
 import type { CibleEditeur } from './typesEditeur';
+import { useTempsReel } from '../../../tempsReel/hooks';
 
 type SousOnglet = 'modeles' | 'visuels' | 'charte';
 
@@ -47,6 +48,10 @@ export function Visuels({ theme, apiCm, large, moi }: { theme: ThemeHub; apiCm: 
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Temps réel : charte, modèle ou visuel changé par un autre.
+  useTempsReel(api.client, 'cm', ms => {
+    if (ms.length === 0 || ms.some(m => !m.cle || /^cm-(?:modele|visuel):/.test(m.cle))) void charger().catch(() => undefined);
+  });
 
   const exemple = useMemo(() => donneesExemple('serie'), []);
   const apercusDefaut = useMemo(() => Object.fromEntries(TYPES_VISUEL.map(t => [t, modeleDefaut(t, 'portrait')])) as Record<TypeVisuel, DocumentVisuel>, []);

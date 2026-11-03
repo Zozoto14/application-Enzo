@@ -44,6 +44,7 @@ import { BarreQuota, ChoixDestination, Vignette, infosFichier, nomDossier, nomGe
 import { DetailFichier } from './DetailFichier';
 import { GestionTags } from './GestionTags';
 import { ZoneDepot } from './ZoneDepot';
+import { useTempsReel } from '../../../tempsReel/hooks';
 
 type Dialogue =
   | { genre: 'dossier'; nom: string; restreint: boolean }
@@ -106,6 +107,8 @@ export function Drive({
     setSelection(new Map());
     void agir('', charger);
   }, [agir, charger]);
+  // Temps réel : fichier ou dossier ajouté, renommé, déplacé par un autre → relu (la sélection est gardée).
+  useTempsReel(client, 'cm:drive', () => void charger().catch(() => undefined));
 
   const infoPortee = portees?.find(p => p.portee === portee);
   const droits = contenu?.droits ?? infoPortee?.droits;

@@ -51,6 +51,7 @@ import { noterPage, pageDeSection } from '../usage';
 import { MaFicheTrombi } from './differe';
 import { apiTrombi } from '../trombi/api';
 import { trTb } from '../i18n/trombi';
+import { useTempsReel } from '../tempsReel/hooks';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
@@ -398,6 +399,7 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
   useEffect(() => {
     client.notifications().then(setNotifs, () => undefined);
   }, [client]);
+  useTempsReel(client, 'compte', () => void client.notifications().then(setNotifs, () => undefined));
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
   const miennes = notifs?.liste.filter(n => n.team?.id === detail.team.id).slice(0, 5) ?? [];
   const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);

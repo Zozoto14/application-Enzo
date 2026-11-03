@@ -42,6 +42,8 @@ import { trDv } from '../i18n/devblog';
 import { trNf } from '../i18n/notifications';
 import { ClocheNotifications, PageNotifications, useCompteurNotifications } from './notifications/CentreNotifications';
 import type { LienNotification } from '../notifications/api';
+import { useTempsReel } from '../tempsReel/hooks';
+import { IndicateurDirect } from '../tempsReel/ui';
 
 type Etat =
   | { e: 'chargement' }
@@ -304,7 +306,15 @@ export function Esport(props: PropsRacineApp) {
         titre="Esport"
         droite={etat.e === 'pret' && etat.moi.profil ? <ClocheNotifications theme={theme} n={notifs.nonLues} actif={vue.v === 'notifications'} onPress={() => setVue({ v: 'notifications' })} /> : undefined}
       />
-      <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>{contenu}</View>
+      <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>
+        {contenu}
+        {/* Temps réel : pastille discrète « En direct » / « Reconnexion… » (docs/esport/temps-reel.md). */}
+        {etat.e === 'pret' ? (
+          <View pointerEvents="none" style={{ position: 'absolute', right: 12, bottom: 12 }}>
+            <IndicateurDirect theme={theme} client={etat.client} />
+          </View>
+        ) : null}
+      </View>
       {nouveautes.entree && etat.e === 'pret' && etat.moi.profil ? (
         <FenetreNouveautes
           theme={theme}
@@ -440,6 +450,8 @@ function MesTeams({
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  // Temps réel : notifications du compte, teams (ajout, retrait, rôle) relues dès qu'elles changent.
+  useTempsReel(client, (sujet: string) => sujet === 'compte' || sujet === 'club' || /^team:[^:]+$/.test(sujet), () => void recharger().catch(() => undefined));
 
   const nonLues = useMemo(() => notifs?.liste.filter(n => !n.lue) ?? [], [notifs]);
 

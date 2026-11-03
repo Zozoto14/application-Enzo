@@ -19,6 +19,7 @@ import { Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Onglets, Pliable, 
 import type { PropsModule } from '../modules';
 import { BadgeResultat, LogoAdversaire, nomsAdversaires } from './commun';
 import { FormulaireResultat } from './FormulaireResultat';
+import { useTempsReel } from '../../tempsReel/hooks';
 
 type Onglet = 'historique' | 'bilans';
 const quand = (iso: string, fuseau: string): string => formaterDate(iso, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: fuseau });
@@ -43,6 +44,7 @@ export function Resultats({ theme, client, detail, large, onAller }: PropsModule
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  useTempsReel(client, `team:${teamId}:resultats`, () => void recharger().catch(() => undefined));
   const b = liste?.bilan;
   const saisir = Boolean(liste?.droits.saisir);
   const resume = [

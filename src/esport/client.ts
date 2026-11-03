@@ -720,7 +720,35 @@ export interface ConfigEsport {
  * Sessions déjà obtenues, par adresse et jeton du relais (rien n'est écrit sur le disque).
  * `surcharge` : le serveur annonce « surcharge-methode » (réponse de /session).
  */
-const sessions = new Map<string, { session: string; expire: number; surcharge: boolean }>();
+const sessions = new Map<string, { session: string; expire: number; surcharge: boolean; fonctions?: string[] }>();
+
+/**
+ * « Le premier qui enregistre a la main » (docs/esport/temps-reel.md) : version d'un objet lue par un écran
+ * d'édition ouvert (`useVerrouOptimiste`), par adresse du serveur et route de l'objet. Tant qu'elle est notée,
+ * chaque PATCH, PUT ou DELETE de CETTE route part avec `X-Version-Lue` ; le serveur refuse (409
+ * `conflit-version`) si quelqu'un a enregistré entre-temps. La réponse donne la nouvelle version
+ * (`X-Version-Objet`), notée aussitôt : ses propres enregistrements successifs ne font jamais de conflit.
+ */
+const versionsLues = new Map<string, number>();
+const suiveursVersions = new Set<(cle: string, version: number) => void>();
+const cleVersion = (adresse: string, chemin: string) => `${adresse}${chemin.split('?')[0]}`;
+export function noterVersionLue(adresse: string, chemin: string, version: number | undefined): void {
+  const cle = cleVersion(adresse, chemin);
+  if (version === undefined) versionsLues.delete(cle);
+  else versionsLues.set(cle, version);
+}
+export function versionLue(adresse: string, chemin: string): number | undefined {
+  return versionsLues.get(cleVersion(adresse, chemin));
+}
+/** Nouvelle version d'un objet après SON propre enregistrement (`X-Version-Objet`). */
+export function suivreVersions(f: (cle: string, version: number) => void): () => void {
+  suiveursVersions.add(f);
+  return () => {
+    suiveursVersions.delete(f);
+  };
+}
+/** Fonction « temps réel » annoncée par le serveur (réponse de /session). */
+export const FONCTION_TEMPS_REEL = 'temps-reel';
 
 /**
  * Surcharge de méthode : le frontal mutualisé d'o2switch (LiteSpeed / ModSecurity) bloque ou perd
@@ -861,6 +889,10 @@ export interface ClientEsport {
   envoyerUsage?(lot: unknown, keepalive?: boolean): Promise<{ actif?: boolean } | undefined>;
   /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
   requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
+  /** Temps réel (src/esport/tempsReel) : session courante (`forcer` : une nouvelle, après un 401). */
+  jetonSession?(forcer?: boolean): Promise<string>;
+  /** Temps réel : le serveur l'annonce-t-il (fonction « temps-reel » de /session) ? */
+  tempsReelDisponible?(): Promise<boolean>;
   /** Envoi binaire avec la session (morceau d'une vidéo) : réponse JSON. */
   binaire<T>(chemin: string, methode: string, octets: Uint8Array, entetes?: Record<string, string>, options?: { delai?: number; signal?: unknown }): Promise<T>;
 }
@@ -896,6 +928,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
   ): Promise<T> {
     let r: Awaited<ReturnType<Fetch>>;
     const surcharge = surcharger && METHODES_SURCHARGEES.includes(methode);
+    const cleObjet = METHODES_SURCHARGEES.includes(methode) ? cleVersion(config.adresse, chemin) : undefined;
+    const lue = cleObjet === undefined ? undefined : versionsLues.get(cleObjet);
     try {
       r = await auPlus(
         requete(`${config.adresse}${chemin}`, {
@@ -906,6 +940,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
             ...(binaire?.entetes ?? {}),
             ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}),
             ...(surcharge ? { 'X-Methode': methode } : {}),
+            ...(lue !== undefined ? { 'X-Version-Lue': String(lue) } : {}),
           },
           body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
           ...(binaire?.signal ? { signal: binaire.signal } : {}),
@@ -935,6 +970,13 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       }
       throw new ErreurEsport(o.erreur ? traduireServeur(o.erreur) : tr('client.erreur', { status: r.status }), r.status, o.code, o.details);
     }
+    if (cleObjet !== undefined && versionsLues.has(cleObjet)) {
+      const v = Number((r as { headers?: { get?(n: string): string | null } }).headers?.get?.('X-Version-Objet') ?? NaN);
+      if (Number.isSafeInteger(v) && v > 0) {
+        versionsLues.set(cleObjet, v);
+        for (const f of [...suiveursVersions]) f(cleObjet, v);
+      }
+    }
     return lu as T;
   }
 
@@ -942,7 +984,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     const connue = sessions.get(cle);
     if (!forcer && connue && connue.expire - 60_000 > maintenant()) return connue.session;
     const r = await brut<Moi & { session: string; expire: string; fonctions?: unknown }>('/session', 'POST', {}, config.jetonRelais);
-    sessions.set(cle, { session: r.session, expire: Date.parse(r.expire), surcharge: Array.isArray(r.fonctions) && r.fonctions.includes(FONCTION_SURCHARGE) });
+    const fonctions = Array.isArray(r.fonctions) ? r.fonctions.filter((f): f is string => typeof f === 'string') : [];
+    sessions.set(cle, { session: r.session, expire: Date.parse(r.expire), surcharge: fonctions.includes(FONCTION_SURCHARGE), fonctions });
     return r.session;
   }
 
@@ -966,6 +1009,11 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
   const t = (id: string) => `/teams/${encodeURIComponent(id)}`;
   return {
     config,
+    jetonSession: forcer => session(forcer),
+    tempsReelDisponible: async () => {
+      await session();
+      return sessions.get(cle)?.fonctions?.includes(FONCTION_TEMPS_REEL) ?? false;
+    },
     sante: () => brut('/sante'),
     ouvrir: async () => {
       await session();

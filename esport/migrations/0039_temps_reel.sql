@@ -1,4 +1,4 @@
--- Esport, migration 0038 : synchronisation en temps réel et « le premier qui enregistre a la main »
+-- Esport, migration 0039 : synchronisation en temps réel et « le premier qui enregistre a la main »
 -- (docs/esport/temps-reel.md).
 --
 -- 1. `temps_reel_flux` : journal court des changements diffusés (« l'objet T id I version V a changé »), SANS
