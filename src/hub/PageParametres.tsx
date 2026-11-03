@@ -23,6 +23,7 @@ import { police, teinteTransparente, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
 import { PageParametresMobile } from './PageParametresMobile';
 import { useMobile } from '../ui/mobile/useMobile';
+import { Glyphe } from '../ui/icones';
 
 export interface PageParametresProps {
   theme: ThemeHub;
@@ -207,7 +208,7 @@ function PageParametresBureau({ theme, section, n, disponibles, rendu, synchro, 
                 opacity: compte === 0 ? 0.45 : 1,
               },
             ]}>
-            <Text style={{ color: actif ? theme.surAccent : theme.texte, fontSize: 15 }}>{s.icone}</Text>
+            <Glyphe valeur={s.icone} style={{ color: actif ? theme.surAccent : theme.texte, fontSize: 15 }} />
             <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 14, ...police(theme.policeTexte) }} numberOfLines={1}>
               {s.titre}
             </Text>

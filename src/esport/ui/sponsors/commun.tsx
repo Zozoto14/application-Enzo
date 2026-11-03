@@ -26,7 +26,7 @@ export type Faire = (cle: string, action: () => Promise<unknown>, message?: stri
 
 export const TON_ISSUE: Record<IssueEtape, Ton> = { ouverte: 'neutre', gagnee: 'ok', perdue: 'critique' };
 export const TON_PRIORITE: Record<Priorite, Ton> = { basse: 'neutre', normale: 'accent', haute: 'alerte' };
-export const GLYPHE_ECHANGE: Record<GenreEchange, string> = { appel: '☎', email: '✉', reunion: '◷', note: '✎' };
+export const GLYPHE_ECHANGE: Record<GenreEchange, string> = { appel: '☎︎', email: '✉︎', reunion: '◷', note: '✎' };
 
 export function BadgePriorite({ theme, priorite }: { theme: ThemeHub; priorite: Priorite }) {
   return <Badge theme={theme} ton={TON_PRIORITE[priorite]} texte={trSp(`priorite.${priorite}` as CleSp)} />;

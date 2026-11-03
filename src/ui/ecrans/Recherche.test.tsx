@@ -60,8 +60,8 @@ describe('écran Recherche', () => {
     expect(await screen.findByText('Nvidia : la puce n’est que le début')).toBeTruthy();
     expect(charger).toHaveBeenCalledWith({ nom: 'NVIDIA Corporation', symbole: 'NVDA' });
     expect(screen.getByText('Julien M.')).toBeTruthy();
-    expect(screen.getByText('↗ plutôt optimiste')).toBeTruthy();
-    expect(screen.getByText('↘ plutôt prudent')).toBeTruthy();
+    expect(screen.getByText('↗︎ plutôt optimiste')).toBeTruthy();
+    expect(screen.getByText('↘︎ plutôt prudent')).toBeTruthy();
     expect(screen.getByText(/1 source sur 5 n’a pas répondu/)).toBeTruthy();
 
     // Filtre : seulement les avis de particuliers.

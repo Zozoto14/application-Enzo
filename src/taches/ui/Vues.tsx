@@ -26,6 +26,7 @@ import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, CaseRonde, couleurPriorite, EtatVide, PastillePriorite, Puce, T, texteDe, titreDe } from './atomes';
 import { CaseSelection } from './Deplacer';
 import { useGlissable, useZoneDepot } from './glisser';
+import { Icone } from '../../ui/icones';
 
 // ------------------------------------------------------------------ Morceaux communs
 
@@ -68,10 +69,14 @@ function Compteurs({ a, t }: { a: Actions; t: Tache }) {
   const com = Object.values(t.commentaires).filter(c => !c.supprime).length;
   const morceaux: string[] = [];
   if (st.length) morceaux.push(`↳ ${st.filter(s => estTerminee(d, s)).length}/${st.length}`);
-  if (cl.length) morceaux.push(`☑ ${cl.filter(e => e.fait).length}/${cl.length}`);
-  if (com) morceaux.push(`💬 ${com}`);
-  if (!morceaux.length) return null;
-  return <Text style={attenueDe(a.theme)}>{morceaux.join('   ')}</Text>;
+  if (cl.length) morceaux.push(`☑︎ ${cl.filter(e => e.fait).length}/${cl.length}`);
+  if (!morceaux.length && !com) return null;
+  return (
+    <Text style={attenueDe(a.theme)}>
+      {morceaux.join('   ')}
+      {com ? <>{morceaux.length ? '   ' : ''}<Icone nom="bulle" libelle="commentaires" /> {com}</> : null}
+    </Text>
+  );
 }
 
 /** Titre modifiable en place (Entrée ou sortie du champ valident, Échap annule). */

@@ -450,7 +450,7 @@ function Avertissement({
       ]}
     >
       <Text style={{ color: theme.alerte, fontSize: 17, fontWeight: '800' }}>
-        ⚠
+        ⚠︎
       </Text>
       <Text style={[texteDe(theme), { flex: 1 }]}>{texte}</Text>
     </View>
@@ -491,7 +491,7 @@ export function elementsMenuTache(
     ...(o.onSelectionner
       ? [
           {
-            texte: '☑ Sélectionner (plusieurs tâches)',
+            texte: '☑︎ Sélectionner (plusieurs tâches)',
             testID: 'menu-tache-selectionner',
             action: o.onSelectionner,
           },

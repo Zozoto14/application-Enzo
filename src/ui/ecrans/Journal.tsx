@@ -9,6 +9,7 @@ import { Bouton, SousTitre, usePalette } from '../composants';
 import { CarteSection, Metrique, Segments, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import type { LigneJournal, VueJournal } from '../vues/journal';
+import { Icone } from '../icones';
 
 export interface JournalProps {
   vue: VueJournal;
@@ -87,7 +88,7 @@ function Decision({ ligne, onNoter }: { ligne: LigneJournal; onNoter(transaction
         {ligne.coursActuel !== undefined ? ` · cours actuel ${nombre(ligne.coursActuel)}` : ''}
       </Text>
       <Text style={{ color: couleur, fontWeight: '600' }}>
-        {ligne.verdict === 'bon' ? '✅ ' : ligne.verdict === 'mauvais' ? '❌ ' : ''}
+        {ligne.verdict === 'bon' ? <><Icone nom="valide" libelle="Bonne décision" /> </> : ligne.verdict === 'mauvais' ? <><Icone nom="erreur" libelle="Mauvaise décision" /> </> : null}
         {ligne.phrase}
       </Text>
 

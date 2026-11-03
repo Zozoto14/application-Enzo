@@ -552,7 +552,7 @@ export function Tableau({
                   accessibilityLabel={trCm('liste.agrandir_libelle', { nom: nomListe(l), n: vues.length })}
                   onPress={() => basculerReduite(l.id)}
                   style={(e: EtatPresse) => ({ width: LARGEUR_REDUITE, height: Math.min(hauteurColonne ?? 260, 260), borderRadius: rayonCarte(theme), backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.2) : fondColonne, alignItems: 'center', paddingTop: ESP.xs, gap: ESP.xs, overflow: 'hidden', opacity: l.archive ? 0.6 : 1 })}>
-                  <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>↔</Text>
+                  <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }}>↔︎</Text>
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700' }} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
@@ -939,7 +939,7 @@ function TuileCarte({
               {c.commentaires ? <Text style={attenue(theme, 12)} accessibilityLabel={trnCm('carte.commentaires_n', c.commentaires)}>{`❝ ${c.commentaires}`}</Text> : null}
               {c.checklist.total ? (
                 <Text style={{ ...attenue(theme, 12), color: c.checklist.faits === c.checklist.total ? theme.ok : theme.attenue }} accessibilityLabel={trCm('carte.checklist_n', { faits: c.checklist.faits, total: c.checklist.total })}>
-                  {`☑ ${c.checklist.faits}/${c.checklist.total}`}
+                  {`☑︎ ${c.checklist.faits}/${c.checklist.total}`}
                 </Text>
               ) : null}
               {c.pieces ? <Text style={attenue(theme, 12)} accessibilityLabel={trnCm('carte.pieces_n', c.pieces)}>{`⎘ ${c.pieces}`}</Text> : null}

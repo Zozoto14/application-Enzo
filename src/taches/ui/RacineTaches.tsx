@@ -82,6 +82,7 @@ import { VueEquipe } from './Equipe';
 import { useEtatTaches } from './etat';
 import { ContexteZones, RegistreZones, useZoneDepot } from './glisser';
 import { VueCalendrier, VueJournee, VueKanban, VueListe } from './Vues';
+import { Glyphe, Icone, type NomIcone } from '../../ui/icones';
 
 type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'equipe' } | { g: 'semaine' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
 
@@ -469,8 +470,8 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
       // Membre admin d'un projet : ses paramètres (listes, statuts), et le journal.
       return genre === 'projet' && droits(id).gerer
         ? [
-            { texte: '⚙︎ Paramètres du projet (listes, statuts…)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
-            { texte: '📓 Journal et débriefing', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
+            { texte: 'Paramètres du projet (listes, statuts…)', icone: 'reglages', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+            { texte: 'Journal et débriefing', icone: 'journal', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
           ]
         : [];
     }
@@ -485,9 +486,9 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     if (genre === 'projet') {
       const p = d.projets[id];
       return [
-        { texte: '⚙︎ Paramètres du projet (nom, icône, statuts, dates, partage…)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
-        { texte: '📓 Journal et débriefing', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
-        ...(aides?.secrets.ia.actif ? [{ texte: '✨ Résumer le projet (IA)', testID: 'menu-ia-resumer', action: () => setFenetre({ g: 'ia', cible: { genre: 'resumer', projetId: id } }) }] : []),
+        { texte: 'Paramètres du projet (nom, icône, statuts, dates, partage…)', icone: 'reglages', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+        { texte: 'Journal et débriefing', icone: 'journal', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
+        ...(aides?.secrets.ia.actif ? [{ texte: 'Résumer le projet (IA)', icone: 'etincelles' as const, testID: 'menu-ia-resumer', action: () => setFenetre({ g: 'ia', cible: { genre: 'resumer', projetId: id } }) }] : []),
         { texte: `Supprimer le projet « ${p?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-projet', action: () => actions.demanderSuppression('projet', id) },
       ];
     }
@@ -681,7 +682,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
       </EtatVide>
     ) : (
       <EtatVide theme={theme} testID="taches-rien-partage" titre="Aucun projet partagé avec toi" texte={`Quand ${etat.parFondateur === 'le Fondateur' ? 'le Fondateur' : noms.fondateur} partagera un projet avec toi, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).${etat.persoPermis ? ' En attendant, tu peux créer tes propres projets : ils restent à toi seul.' : ''}`}>
-        {etat.persoPermis ? <Bouton theme={theme} variante="plein" titre="🔒 Créer mes propres projets" onPress={() => etat.changerSource('perso')} testID="taches-perso" /> : null}
+        {etat.persoPermis ? <Bouton theme={theme} variante="plein" titre="Créer mes propres projets" icone="cadenas" onPress={() => etat.changerSource('perso')} testID="taches-perso" /> : null}
       </EtatVide>
     )
   ) : objectifs ? (
@@ -749,7 +750,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
       {lu && lu.reconnus.length ? (
         <View style={styles.rangee} testID="ajout-rapide-apercu">
           <Text style={attenueDe(theme)}>Compris :</Text>
-          {lu.echeance ? <Puce theme={theme} texte={`📅 ${jourLisible(lu.echeance.jour, etat.aujourdhui)}${lu.echeance.heure ? ` ${lu.echeance.heure}` : ''}`} couleur={theme.accent} /> : null}
+          {lu.echeance ? <Puce theme={theme} icone="calendrier-jour" texte={`${jourLisible(lu.echeance.jour, etat.aujourdhui)}${lu.echeance.heure ? ` ${lu.echeance.heure}` : ''}`} couleur={theme.accent} /> : null}
           {lu.priorite ? <Puce theme={theme} texte={`⚑ ${LIBELLES_PRIORITE[lu.priorite]}`} couleur={couleurPriorite(lu.priorite, theme)} /> : null}
           {(lu.assignes ?? []).map(x => (
             <Puce key={x} theme={theme} texte={`@ ${noms[x] ?? 'Membre'}`} couleur={theme.teintes.admin} />
@@ -812,11 +813,11 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
       {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
       {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
-      <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
-      <Bouton theme={theme} compact={!mobile} titre="⏱" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
-      <Bouton theme={theme} compact={!mobile} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
-      {aides?.secrets.ia.actif ? <Bouton theme={theme} compact={!mobile} titre="✨" libelle="Aide de l’IA (planning de la semaine, résumé du projet)" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
-      <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : membres, partage, IA, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
+      <Bouton theme={theme} compact={!mobile} icone="cloche" titre={etat.rappels.length ? String(etat.rappels.length) : ''} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
+      <Bouton theme={theme} compact={!mobile} icone="chrono" titre="" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
+      <Bouton theme={theme} compact={!mobile} icone="journal" titre="" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
+      {aides?.secrets.ia.actif ? <Bouton theme={theme} compact={!mobile} icone="etincelles" titre="" libelle="Aide de l’IA (planning de la semaine, résumé du projet)" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
+      <Bouton theme={theme} compact={!mobile} icone="membres" titre={role === 'fondateur' ? 'Partage' : 'Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : membres, partage, IA, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
     </View>
   );
 
@@ -956,10 +957,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
             <Text numberOfLines={1} style={[titreDe(theme, 19), { flex: 1 }]} testID="taches-titre">
               {titreSelection}
             </Text>
-            <Bouton theme={theme} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
-            <Bouton theme={theme} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
-            {aides?.secrets.ia.actif ? <Bouton theme={theme} titre="✨" libelle="Aide de l’IA" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
-            <Bouton theme={theme} titre="👥" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
+            <Bouton theme={theme} icone="cloche" titre={etat.rappels.length ? String(etat.rappels.length) : ''} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
+            <Bouton theme={theme} icone="journal" titre="" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
+            {aides?.secrets.ia.actif ? <Bouton theme={theme} icone="etincelles" titre="" libelle="Aide de l’IA" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
+            <Bouton theme={theme} icone="membres" titre="" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
           </View>
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
             {pastilleMinuteur}
@@ -1040,15 +1041,20 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
 
 // ------------------------------------------------------------------ Navigation (barre latérale)
 
-function LigneNav({ a, texte, actif, onPress, onLongPress, testID, couleur, gauche, droite, niveau = 0, compte }: { a: Actions; texte: string; actif: boolean; onPress(): void; onLongPress?(): void; testID: string; couleur?: string; gauche?: string; droite?: React.ReactNode; niveau?: number; compte?: number }) {
+function LigneNav({ a, texte, actif, onPress, onLongPress, testID, couleur, gauche, droite, niveau = 0, compte, marques }: { a: Actions; texte: string; actif: boolean; onPress(): void; onLongPress?(): void; testID: string; couleur?: string; /** Nom d'icône (« membres »…) ou symbole texte. */ gauche?: string; droite?: React.ReactNode; niveau?: number; compte?: number; /** Petites icônes après le texte (partagé, lecture seule), lues par les lecteurs d'écran. */ marques?: readonly { icone: NomIcone; libelle: string }[] }) {
   const theme = a.theme;
   return (
     <View style={[styles.ligneNav, { paddingLeft: 6 + niveau * 16, backgroundColor: actif ? teinteTransparente(theme.accent, 0.16) : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
       <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ selected: actif }} accessibilityHint={onLongPress ? 'Appui long ou touche Suppr : actions' : undefined} onPress={onPress} onLongPress={onLongPress} delayLongPress={550} style={styles.ligneNavBouton}>
-        {couleur ? <View style={[styles.point, { backgroundColor: couleur }]} /> : gauche ? <Text style={{ color: actif ? theme.accent : theme.attenue, fontSize: 16, width: 18, textAlign: 'center' }}>{gauche}</Text> : null}
-        <Text numberOfLines={1} style={[texteDe(theme), { flex: 1, fontWeight: actif ? '700' : '500', color: actif ? theme.texte : theme.texte }]}>
+        {couleur ? <View style={[styles.point, { backgroundColor: couleur }]} /> : gauche ? <View style={{ width: 18, alignItems: 'center' }}><Glyphe valeur={gauche} style={{ color: actif ? theme.accent : theme.attenue, fontSize: 16, textAlign: 'center' }} /></View> : null}
+        <Text numberOfLines={1} style={[texteDe(theme), { flex: marques?.length ? undefined : 1, flexShrink: 1, fontWeight: actif ? '700' : '500', color: actif ? theme.texte : theme.texte }]}>
           {texte}
         </Text>
+        {marques?.length ? (
+          <View style={{ flex: 1, flexDirection: 'row', gap: 4 }}>
+            {marques.map(m => <Icone key={m.icone} nom={m.icone} taille={14} couleur={theme.attenue} libelle={m.libelle} />)}
+          </View>
+        ) : null}
         {compte ? <Text style={attenueDe(theme)}>{compte}</Text> : null}
       </Pressable>
       {droite}
@@ -1104,15 +1110,15 @@ function Navigation({
     <ScrollView contentContainerStyle={{ padding: 10, gap: 2 }} testID="taches-navigation-liste">
       {a.etat.persoPermis || a.etat.perso ? (
         <View style={{ gap: 2, marginBottom: 8 }}>
-          <LigneNav a={a} texte="Partagés avec moi" gauche="👥" actif={!a.etat.perso} onPress={() => a.etat.changerSource('partage')} testID="nav-source-partage" />
-          <LigneNav a={a} texte="Mes projets (rien que pour moi)" gauche="🔒" actif={a.etat.perso} onPress={() => a.etat.changerSource('perso')} testID="nav-source-perso" />
+          <LigneNav a={a} texte="Partagés avec moi" gauche="membres" actif={!a.etat.perso} onPress={() => a.etat.changerSource('partage')} testID="nav-source-partage" />
+          <LigneNav a={a} texte="Mes projets (rien que pour moi)" gauche="cadenas" actif={a.etat.perso} onPress={() => a.etat.changerSource('perso')} testID="nav-source-perso" />
         </View>
       ) : null}
       <LigneNav a={a} texte="Ma journée" gauche="☀︎" actif={selection.g === 'journee'} onPress={() => onChoisir({ g: 'journee' })} testID="nav-journee" compte={j} />
       <LigneNav a={a} texte="Toutes les tâches" gauche="▤" actif={selection.g === 'tout'} onPress={() => onChoisir({ g: 'tout' })} testID="nav-tout" />
       {fondateur ? <LigneNav a={a} texte="Objectifs" gauche="◎" actif={selection.g === 'objectifs'} onPress={() => onChoisir({ g: 'objectifs' })} testID="nav-objectifs" compte={Object.values(d.objectifs ?? {}).filter(vivant).length || undefined} /> : null}
-      <LigneNav a={a} texte="Ta semaine" gauche="🗓" actif={selection.g === 'semaine'} onPress={() => onChoisir({ g: 'semaine' })} testID="nav-semaine" />
-      {!a.etat.perso ? <LigneNav a={a} texte="Équipe" gauche="👥" actif={selection.g === 'equipe'} onPress={() => onChoisir({ g: 'equipe' })} testID="nav-equipe" compte={a.etat.role === 'fondateur' ? listeMembres(d).length || undefined : undefined} /> : null}
+      <LigneNav a={a} texte="Ta semaine" gauche="calendrier" actif={selection.g === 'semaine'} onPress={() => onChoisir({ g: 'semaine' })} testID="nav-semaine" />
+      {!a.etat.perso ? <LigneNav a={a} texte="Équipe" gauche="membres" actif={selection.g === 'equipe'} onPress={() => onChoisir({ g: 'equipe' })} testID="nav-equipe" compte={a.etat.role === 'fondateur' ? listeMembres(d).length || undefined : undefined} /> : null}
       {vues.length ? <Text style={[attenueDe(theme), styles.intertitre]}>VUES ENREGISTRÉES</Text> : null}
       {vues.map(v => (
         <LigneNav key={v.id} a={a} texte={v.nom} gauche="★" actif={selection.g === 'vue' && selection.id === v.id} onPress={() => onChoisir({ g: 'vue', id: v.id })} testID={`nav-vue-${v.id}`} droite={fondateur ? petitBouton('✕', `Supprimer la vue ${v.nom}`, () => onSupprimerVue(v.id), `nav-vue-supprimer-${v.id}`) : undefined} />
@@ -1155,7 +1161,8 @@ function Navigation({
                     <LigneNav
                     a={a}
                     niveau={1}
-                    texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}${fondateur && projetPartage(d, p) ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
+                    texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}`}
+                    marques={[...(fondateur && projetPartage(d, p) ? [{ icone: 'membres' as const, libelle: 'partagé' }] : []), ...(!fondateur && p.partage === 'lecture' ? [{ icone: 'oeil' as const, libelle: 'lecture seule' }] : [])]}
                     couleur={p.couleur}
                     actif={actif && !selection.liste}
                     onPress={() => onChoisir({ g: 'projet', id: p.id })}
@@ -1191,7 +1198,7 @@ function Navigation({
       {fondateur && espacesVivants(d).length === 0 ? <Text style={[attenueDe(theme), { padding: 8 }]}>Aucun espace : créez-en un avec ＋.</Text> : null}
       {fondateur || nbCorbeille > 0 ? (
         <View style={{ marginTop: 12 }}>
-          <LigneNav a={a} texte="Corbeille" gauche="🗑" actif={false} onPress={onCorbeille} testID="nav-corbeille" compte={nbCorbeille} />
+          <LigneNav a={a} texte="Corbeille" gauche="corbeille" actif={false} onPress={onCorbeille} testID="nav-corbeille" compte={nbCorbeille} />
         </View>
       ) : null}
     </ScrollView>
@@ -1414,7 +1421,7 @@ function Fenetres({
             const r = testerNotification(contexte, Date.now());
             a.etat.relire();
             onAvis(
-              `${r.systeme ? 'Notification du système envoyée' : 'Pas de notification du système ici (application du PC, ou navigateur autorisé) : la pastille 🔔 la montre'}.${r.calme ? ' Heures calmes en cours : les vraies notifications attendront.' : ''}${r.autreAppareil ? ' Un autre appareil est choisi pour les notifications du système.' : ''}`,
+              `${r.systeme ? 'Notification du système envoyée' : 'Pas de notification du système ici (application du PC, ou navigateur autorisé) : la pastille de la cloche la montre'}.${r.calme ? ' Heures calmes en cours : les vraies notifications attendront.' : ''}${r.autreAppareil ? ' Un autre appareil est choisi pour les notifications du système.' : ''}`,
             );
           }}
           onFermer={onFermer}
@@ -1544,11 +1551,11 @@ function Fenetres({
       return (
         <DialogueMenu
           a={a}
-          titre="✨ Aide de l’IA"
+          titre="Aide de l’IA"
           elements={[
-            { texte: '🗓 Proposer un planning de la semaine', testID: 'menu-ia-planning', action: () => onAller({ g: 'ia', cible: { genre: 'planning' } }) },
-            ...(projetId ? [{ texte: '📝 Résumer ce projet', testID: 'menu-ia-resumer', action: () => onAller({ g: 'ia', cible: { genre: 'resumer', projetId } }) }] : []),
-            { texte: '⚙︎ Réglages de l’IA et de GitHub', testID: 'menu-ia-reglages', action: () => onAller({ g: 'aides' }) },
+            { texte: 'Proposer un planning de la semaine', icone: 'calendrier', testID: 'menu-ia-planning', action: () => onAller({ g: 'ia', cible: { genre: 'planning' } }) },
+            ...(projetId ? [{ texte: 'Résumer ce projet', icone: 'note' as const, testID: 'menu-ia-resumer', action: () => onAller({ g: 'ia', cible: { genre: 'resumer', projetId } }) }] : []),
+            { texte: 'Réglages de l’IA et de GitHub', icone: 'reglages', testID: 'menu-ia-reglages', action: () => onAller({ g: 'aides' }) },
           ]}
           onFermer={onFermer}
           testID="dialogue-menu-ia"

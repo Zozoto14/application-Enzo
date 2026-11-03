@@ -16,7 +16,7 @@ import { attenueDe, Bouton, Champ, Dialogue, EtatVide, Libelle, Puce, texteDe, t
 function couleurEtat(a: Actions, e: EtatObjectif): string {
   return e === 'atteint' ? a.theme.ok : e === 'retard' ? a.theme.critique : e === 'risque' ? a.theme.alerte : a.theme.accent;
 }
-const ICONES: Record<EtatObjectif, string> = { atteint: '✓', retard: '⚠', risque: '!', 'en-cours': '→' };
+const ICONES: Record<EtatObjectif, string> = { atteint: '✓', retard: '⚠︎', risque: '!', 'en-cours': '→' };
 
 export function VueObjectifs({ a, onModifier, onNouveau }: { a: Actions; onModifier(id: string): void; onNouveau(): void }) {
   const theme = a.theme;

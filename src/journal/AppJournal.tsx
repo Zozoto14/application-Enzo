@@ -16,6 +16,7 @@ import { police, teinteTransparente } from '../hub/themes';
 import type { PropsRacineApp } from '../hub/types';
 import { masquerMontants } from '../ui/discretion';
 import { useMobile } from '../ui/mobile/useMobile';
+import { Icone } from '../ui/icones';
 import { controlerJournal } from './automatique';
 import { Basculeur, Onglets, BoutonRond, LigneJour, SelecteurHumeur, TextePage, taille } from './briques';
 import { ajouterJours, ajouterMois, debutSemaine, finSemaine, grilleDuMois, jourCourt, jourDe, jourLongMaj, JOURS_SEMAINE, moisDe, moisLong, semaineLongue } from './dates';
@@ -28,7 +29,8 @@ import {
   HEURE_MIN,
   bornerHeure,
   ecrireReglages,
-  emojiHumeur,
+  iconeHumeur,
+  libelleHumeur,
   lirePage,
   modifierPage,
   pagesEntre,
@@ -361,7 +363,7 @@ function VueJour(p: PropsJour) {
           />
           <View style={styles.actions}>
             <BoutonHub theme={theme} variante="plein" titre="Enregistrer la note" onPress={p.onNote} desactive={p.brouillon === (page?.note ?? '')} testID="journal-note-enregistrer" />
-            <BoutonHub theme={theme} titre={page?.epingle ? '📌 Journée épinglée' : '📌 Épingler cette journée'} onPress={p.onEpingle} testID="journal-epingler" />
+            <BoutonHub theme={theme} icone="epingle" titre={page?.epingle ? 'Journée épinglée' : 'Épingler cette journée'} onPress={p.onEpingle} testID="journal-epingler" />
             {redigee ? <BoutonHub theme={theme} titre="Réécrire la page" onPress={p.onEcrire} desactive={p.enCours} testID="journal-reecrire" /> : null}
           </View>
         </View>
@@ -428,7 +430,7 @@ function VueSemaine({ theme, mobile, jour, recap, base, masquer, aller }: { them
               mobile={mobile}
               jour={j}
               texte={`${JOURS_SEMAINE[(new Date(`${j}T12:00:00`).getDay() + 6) % 7]} · ${redigee ? masquer(p!.auto.marquant?.texte ?? p!.auto.accroche) : p?.note ? 'Note sans page automatique' : 'Pas de page'}`}
-              humeur={emojiHumeur(p?.humeur)}
+              humeur={iconeHumeur(p?.humeur)}
               epingle={p?.epingle}
               onPress={() => aller(j)}
               testID={`journal-semaine-${j}`}
@@ -449,7 +451,7 @@ function VueMois({ theme, mobile, recap, base, masquer, aller }: { theme: PropsR
         <View style={{ gap: 8 }} testID="journal-mois-epinglees">
           <Text accessibilityRole="header" style={{ color: theme.accent, fontSize: taille(13, mobile), fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', ...police(theme.policeTexte) }}>Journées épinglées</Text>
           {pages.map(p => (
-            <LigneJour key={p.jour} theme={theme} mobile={mobile} jour={p.jour} texte={masquer(p.auto.marquant?.texte ?? p.auto.accroche)} humeur={emojiHumeur(p.humeur)} epingle onPress={() => aller(p.jour)} testID={`journal-epinglee-${p.jour}`} />
+            <LigneJour key={p.jour} theme={theme} mobile={mobile} jour={p.jour} texte={masquer(p.auto.marquant?.texte ?? p.auto.accroche)} humeur={iconeHumeur(p.humeur)} epingle onPress={() => aller(p.jour)} testID={`journal-epinglee-${p.jour}`} />
           ))}
         </View>
       ) : null}
@@ -499,13 +501,16 @@ function VueCalendrier({ theme, mobile, jour, aujourdhui, base, rev, aller }: { 
                   },
                 ]}>
                 <Text style={{ color: theme.texte, fontSize: taille(14, mobile), fontWeight: j === aujourdhui ? '800' : '500', ...police(theme.policeChiffres) }}>{Number(j.slice(8))}</Text>
-                <Text style={{ fontSize: taille(12, mobile), minHeight: 16 }}>{`${p?.epingle ? '📌' : ''}${emojiHumeur(p?.humeur) || (redigee ? '•' : '')}`}</Text>
+                <View style={{ flexDirection: 'row', gap: 2, minHeight: 16, alignItems: 'center' }} accessibilityLabel={[p?.epingle ? 'épinglée' : '', p?.humeur ? `humeur ${libelleHumeur(p.humeur).toLowerCase()}` : ''].filter(Boolean).join(', ') || undefined}>
+                  {p?.epingle ? <Icone nom="epingle" taille={taille(13, mobile)} couleur={theme.accent} /> : null}
+                  {iconeHumeur(p?.humeur) ? <Icone nom={iconeHumeur(p?.humeur)!} taille={taille(13, mobile)} couleur={theme.texte} /> : redigee ? <Text style={{ color: theme.texte, fontSize: taille(12, mobile) }}>•</Text> : null}
+                </View>
               </Pressable>
             );
           })}
         </View>
       ))}
-      <Text style={{ color: theme.attenue, fontSize: taille(13, mobile), ...police(theme.policeTexte) }}>• page écrite · 📌 épinglée · l’émoji est l’humeur choisie.</Text>
+      <Text style={{ color: theme.attenue, fontSize: taille(13, mobile), ...police(theme.policeTexte) }}>• page écrite · <Icone nom="epingle" /> épinglée · le visage est l’humeur choisie.</Text>
     </Panneau>
   );
 }
@@ -551,7 +556,7 @@ function VueRecherche({ theme, mobile, base, requete, setRequete, aller }: { the
             <Text style={{ color: theme.attenue, fontSize: taille(15, mobile), ...police(theme.policeTexte) }}>Aucune journée épinglée pour l’instant.</Text>
           ) : (
             epinglees.map(p => (
-              <LigneJour key={p.jour} theme={theme} mobile={mobile} jour={p.jour} texte={masquerMontants(p.auto.marquant?.texte ?? p.auto.accroche)} humeur={emojiHumeur(p.humeur)} epingle onPress={() => aller(p.jour)} testID={`journal-epinglee-${p.jour}`} />
+              <LigneJour key={p.jour} theme={theme} mobile={mobile} jour={p.jour} texte={masquerMontants(p.auto.marquant?.texte ?? p.auto.accroche)} humeur={iconeHumeur(p.humeur)} epingle onPress={() => aller(p.jour)} testID={`journal-epinglee-${p.jour}`} />
             ))
           )}
         </View>

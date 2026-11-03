@@ -34,7 +34,7 @@ export function useAidesV3(base: BasePrefs, etat: EtatApp, ouvrirIA: (c: CibleIA
       const { etat: e, secrets: s, github: g } = courant.current;
       if (e.role !== 'fondateur' || !s.github.actif) return;
       const essai = s.github.mode === 'essai';
-      if (!essai && !s.github.jeton) throw new Error('Ajoutez un jeton GitHub en lecture (👥 › IA et GitHub).');
+      if (!essai && !s.github.jeton) throw new Error('Ajoutez un jeton GitHub en lecture (Partage › IA et GitHub).');
       const r = await rafraichir(e.donnees, g, essai ? clientGithubSimule : clientGithub, s.github.jeton ?? '', e.maintenant(), force ? 0 : INTERVALLE_GITHUB_MS);
       base.ecrire(CLES_TACHES.github, JSON.stringify(r.cache));
       setGithub(r.cache);

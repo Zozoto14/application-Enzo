@@ -55,6 +55,7 @@ import { basculerCase, COULEURS, type Couleur } from '../review/markdown';
 import { ESP, rayonControle, type EtatPresse } from './design';
 import { NoteMarkdown, teinteCouleur } from './review/Note';
 import { tr } from '../i18n';
+import { Glyphe } from '../../ui/icones';
 
 type NoeudTexte = {
   selectionStart?: number;
@@ -77,7 +78,7 @@ interface Outil {
   actif?: boolean;
 }
 
-const EMOJIS = ['👍', '👎', '🔥', '💯', '✅', '❌', '⚠️', '❓', '💡', '🎯', '👀', '🧠', '💪', '👏', '🙏', '😅', '😂', '😬', '😎', '🤝', '🏆', '📌', '📈', '📉', '⏱️', '🛡️', '⚔️', '💣', '🔫', '🗺️', '⭐', '🚀'];
+const EMOJIS = ['👍', '👎', '🔥', '💯', '✅', '❌', '⚠️', '❓', '💡', '🎯', '👀', '🧠', '💪', '👏', '🙏', '😅', '😂', '😬', '😎', '🤝', '🏆', '📌', '📈', '📉', '⏱️', '🛡️', '⚔️', '💣', '🔫', '🗺️', '⭐', '🚀']; // emoji-autorise : emojis proposés à l'utilisateur pour son texte (contenu)
 
 const NOM_COULEUR: Record<Couleur, () => string> = {
   rouge: () => tr('champNote.couleur_rouge'),
@@ -279,8 +280,8 @@ export function ChampNote({
     { id: 'italique', glyphe: 'I', nom: () => tr('champNote.italique_ctrl_i'), style: { fontStyle: 'italic', fontWeight: '700' }, base: true, agir: () => appliquer('italique') },
     { id: 'barre', glyphe: 'S', nom: () => tr('champNote.barre'), style: { textDecorationLine: 'line-through', fontWeight: '700' }, base: true, agir: () => appliquer('barre') },
     { id: 'liste', glyphe: '•≡', nom: () => tr('champNote.liste_a_puces'), base: true, agir: () => appliquer('liste') },
-    { id: 'case', glyphe: '☑', nom: () => tr('champNote.case'), base: true, agir: () => appliquer('case') },
-    { id: 'lien', glyphe: '🔗', nom: () => tr('champNote.lien_ctrl_k'), base: true, agir: () => appliquer('lien') },
+    { id: 'case', glyphe: '☑︎', nom: () => tr('champNote.case'), base: true, agir: () => appliquer('case') },
+    { id: 'lien', glyphe: 'lien', nom: () => tr('champNote.lien_ctrl_k'), base: true, agir: () => appliquer('lien') },
     { id: 'surligne', glyphe: 'ab', nom: () => tr('champNote.surligne'), style: { backgroundColor: 'rgba(250, 204, 21, 0.45)', paddingHorizontal: 3 }, agir: () => appliquer('surligne') },
     { id: 'couleur', glyphe: 'A', nom: () => tr('champNote.couleur'), style: { color: teinteCouleur('rouge'), fontWeight: '800' }, actif: panneau === 'couleurs', agir: () => basculerPanneau('couleurs') },
     { id: 'titre1', glyphe: 'H1', nom: () => tr('champNote.titre1'), style: { fontWeight: '800' }, agir: () => appliquer('titre1') },
@@ -291,7 +292,7 @@ export function ChampNote({
     { id: 'code', glyphe: '`', nom: () => tr('champNote.code_en_ligne'), style: { fontWeight: '900' }, agir: () => appliquer('code') },
     { id: 'bloc', glyphe: '</>', nom: () => tr('champNote.bloc'), agir: () => appliquer('bloc') },
     { id: 'separateur', glyphe: '—', nom: () => tr('champNote.separateur'), agir: () => appliquer('separateur') },
-    { id: 'emoji', glyphe: '😊', nom: () => tr('champNote.emoji'), actif: panneau === 'emoji', agir: () => basculerPanneau('emoji') },
+    { id: 'emoji', glyphe: 'content', nom: () => tr('champNote.emoji'), actif: panneau === 'emoji', agir: () => basculerPanneau('emoji') },
     ...(joueurs && joueurs.length > 0
       ? [{ id: 'mention', glyphe: '@', nom: () => tr('champNote.mention'), style: { fontWeight: '800' }, agir: () => appliquerEdition(inserer(valeur, lire(), '@')) } as Outil]
       : []),
@@ -328,7 +329,7 @@ export function ChampNote({
           if (!desactive) o.agir();
         }}
         style={(etat: EtatPresse) => bouton(etat, o.actif, desactive)}>
-        <Text style={{ color: theme.texte, fontSize: 16, ...police(theme.policeTexte), ...o.style }}>{o.glyphe}</Text>
+        <Glyphe valeur={o.glyphe} style={{ color: theme.texte, fontSize: 16, ...police(theme.policeTexte), ...o.style }} />
       </Pressable>
     );
   };
@@ -343,7 +344,7 @@ export function ChampNote({
       {...gardeFocus}
       onPress={agir}
       style={(etat: EtatPresse) => ({ ...bouton(etat, actif), paddingHorizontal: ESP.s })}>
-      <Text style={{ color: theme.texte, fontSize: 13, fontWeight: '600', ...police(theme.policeTexte) }}>{glyphe}</Text>
+      <Glyphe valeur={glyphe} style={{ color: theme.texte, fontSize: 13, fontWeight: '600', ...police(theme.policeTexte) }} />
     </Pressable>
   );
 

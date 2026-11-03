@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { TAILLE_MAX_PIECE, TYPES_PIECE, type PieceJointe } from './tickets';
+import { Icone } from '../ui/icones';
 
 function versBase64(octets: Uint8Array): string {
   let binaire = '';
@@ -76,7 +77,7 @@ export function SelecteurCapture({ onChoisir, onErreur, couleur, grand = false, 
         cursor: 'pointer',
       },
     },
-    React.createElement('span', { 'aria-hidden': true }, '📎 Choisir une image…'),
+    React.createElement('span', { 'aria-hidden': true }, React.createElement(Icone, { nom: 'trombone' }), ' Choisir une image…'),
     champ,
   );
 }

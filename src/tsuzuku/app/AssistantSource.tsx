@@ -59,8 +59,8 @@ export const typeDe = (src: DefinitionSource) => [supporteAnimes(src) ? 'animés
 
 /** Liens vers deux assistants d'IA grand public (liens externes simples, rien n'est envoyé). */
 export const LIENS_IA = [
-  { cle: 'chatgpt', titre: 'Ouvrir ChatGPT ↗', url: 'https://chatgpt.com/' },
-  { cle: 'claude', titre: 'Ouvrir Claude ↗', url: 'https://claude.ai/new' },
+  { cle: 'chatgpt', titre: 'Ouvrir ChatGPT ↗︎', url: 'https://chatgpt.com/' },
+  { cle: 'claude', titre: 'Ouvrir Claude ↗︎', url: 'https://claude.ai/new' },
 ] as const;
 
 /** Copie dans le presse-papiers quand la plateforme le permet (site, PC). */
@@ -324,7 +324,7 @@ export function AssistantSource({
           <View style={rangee}>
             <Bouton titre="Copier le prompt" variante="plein" onPress={() => void copier(analyse.prompt).then(ok => setCopie(ok ? 'Prompt copié.' : 'Sélectionnez le texte du prompt pour le copier.'))} testID="assistant-copier" />
             {LIENS_IA.map(l => (
-              <Bouton key={l.cle} titre={l.titre} libelle={`${l.titre.replace(' ↗', '')} dans le navigateur`} onPress={() => void ouvrirExterne(l.url)} testID={`assistant-ouvrir-${l.cle}`} />
+              <Bouton key={l.cle} titre={l.titre} libelle={`${l.titre.replace(' ↗︎', '')} dans le navigateur`} onPress={() => void ouvrirExterne(l.url)} testID={`assistant-ouvrir-${l.cle}`} />
             ))}
           </View>
           {copie ? <Text style={styleAttenue(theme, 13)} testID="assistant-copie">{copie}</Text> : null}

@@ -24,13 +24,13 @@ export interface SectionParametres {
 
 /** Ordre d'affichage de la page. */
 export const SECTIONS: readonly SectionParametres[] = [
-  { id: 'general', titre: 'Général', icone: '⚙︎', description: 'Thème unique, disposition, langue, compte.' },
-  { id: 'securite', titre: 'Sécurité', icone: '🔒', description: 'Mot de passe, code d’authentification, récupération, sauvegardes.' },
-  { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
-  { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage, Tsuzuku (sources, clés).' },
-  { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Doublage, lecture, déjà vus, sources partagées avec vous.' },
-  { id: 'taches', titre: 'Tâches', icone: '☑︎', description: 'Vue d’ouverture, notifications, membres et partage, liens, IA, GitHub, corbeille.' },
-  { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
+  { id: 'general', titre: 'Général', icone: 'reglages', description: 'Thème unique, disposition, langue, compte.' },
+  { id: 'securite', titre: 'Sécurité', icone: 'cadenas', description: 'Mot de passe, code d’authentification, récupération, sauvegardes.' },
+  { id: 'portefeuille', titre: 'Portefeuille', icone: 'tendance-haut', description: 'Cours, alertes, podcast, affichage des montants.' },
+  { id: 'administration', titre: 'Administration', icone: 'bouclier', description: 'Panneau, comptes, journal, verrouillage, Tsuzuku (sources, clés).' },
+  { id: 'tsuzuku', titre: 'Tsuzuku', icone: 'tele', description: 'Doublage, lecture, déjà vus, sources partagées avec vous.' },
+  { id: 'taches', titre: 'Tâches', icone: 'taches', description: 'Vue d’ouverture, notifications, membres et partage, liens, IA, GitHub, corbeille.' },
+  { id: 'nouveautes', titre: 'Nouveautés', icone: 'etincelles', description: 'Historique des versions.' },
   { id: 'support', titre: 'Support', icone: '?', description: 'Écrire à l’équipe : bug, question, demande.' },
   { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
 ];
@@ -343,7 +343,7 @@ export const REGLAGES: readonly Reglage[] = [
     titre: 'Mes réglages de Tâches',
     description: 'Vue d’ouverture de cet appareil, notifications (types, canal, heures calmes, sourdine, récap), relevé du temps.',
     mots: ['taches', 'tache', 'notifications', 'rappels', 'ouverture', 'calendrier', 'semaine', 'heures calmes', 'mention', 'releve', 'temps'],
-    ancienEmplacement: ['Tâches › 👥 › Notifications', 'Tâches › 👥 › Vue d’ouverture'],
+    ancienEmplacement: ['Tâches › Partage › Notifications', 'Tâches › Partage › Vue d’ouverture'],
   },
   {
     id: 'taches-fondateur',
@@ -351,7 +351,7 @@ export const REGLAGES: readonly Reglage[] = [
     titre: 'Tâches · Membres, liens, IA, GitHub, corbeille',
     description: 'Inviter et retirer des membres, leurs droits projet par projet ; liens avec les autres apps ; aide de l’IA et GitHub (clé et jeton de cet appareil) ; corbeille.',
     mots: ['taches', 'membres', 'partage', 'droits', 'inviter', 'retirer', 'liens', 'ia', 'claude', 'github', 'jeton', 'cle', 'corbeille'],
-    ancienEmplacement: ['Tâches › 👥 Partage'],
+    ancienEmplacement: ['Tâches › Partage'],
   },
   // --- Nouveautés
   {

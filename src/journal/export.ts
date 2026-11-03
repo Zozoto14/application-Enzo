@@ -5,7 +5,7 @@
  */
 
 import { jourLongMaj } from './dates';
-import { emojiHumeur, libelleHumeur, type PageJournal } from './modele';
+import { libelleHumeur, type PageJournal } from './modele';
 import type { Recap } from './recap';
 
 export type Masqueur = (texte: string) => string;
@@ -18,7 +18,7 @@ export interface OptionsExport {
 export function pageEnMarkdown(p: PageJournal, o: OptionsExport = {}): string {
   const m = o.masquer ?? identite;
   const l: string[] = [`# ${jourLongMaj(p.jour)}`];
-  const meta = [p.auto.accroche, p.humeur ? `Humeur : ${emojiHumeur(p.humeur)} ${libelleHumeur(p.humeur)}` : '', p.epingle ? 'Journée épinglée' : ''].filter(Boolean);
+  const meta = [p.auto.accroche, p.humeur ? `Humeur : ${libelleHumeur(p.humeur)}` : '', p.epingle ? 'Journée épinglée' : ''].filter(Boolean);
   if (meta.length) l.push('', `*${meta.join(' · ')}*`);
   if (p.auto.intro) l.push('', m(p.auto.intro));
   if (p.auto.marquant) l.push('', `> **Fait marquant** : ${m(p.auto.marquant.texte)}`);
@@ -75,7 +75,7 @@ section.page{page-break-after:always}section.page:last-child{page-break-after:au
 @page{margin:18mm}`;
 
 function pageEnHtml(p: PageJournal, m: Masqueur): string {
-  const meta = [p.auto.accroche, p.humeur ? `Humeur : ${emojiHumeur(p.humeur)} ${libelleHumeur(p.humeur)}` : '', p.epingle ? 'Journée épinglée' : ''].filter(Boolean);
+  const meta = [p.auto.accroche, p.humeur ? `Humeur : ${libelleHumeur(p.humeur)}` : '', p.epingle ? 'Journée épinglée' : ''].filter(Boolean);
   return [
     '<section class="page">',
     `<h1>${echapper(jourLongMaj(p.jour))}</h1>`,

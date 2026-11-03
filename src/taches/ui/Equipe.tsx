@@ -80,6 +80,7 @@ import {
 } from './atomes';
 import { ChoixDroit } from './Membres';
 import { couleurAuteur } from './Vues';
+import { Glyphe } from '../../ui/icones';
 
 const DROITS: readonly DroitOuAucun[] = [
   'aucun',
@@ -298,7 +299,7 @@ function EquipeFondateur({
           ]}
         >
           <Text style={[texteDe(theme), { flex: 1, minWidth: 200 }]}>
-            ⚠{' '}
+            ⚠︎{' '}
             {supprimes.length > 1
               ? `${supprimes.length} profils supprimés du hub sont encore membres`
               : 'Un profil supprimé du hub est encore membre'}{' '}
@@ -352,7 +353,7 @@ function EquipeFondateur({
                   fontWeight: '600',
                 }}
               >
-                {o === 'membres' ? '👥 Membres' : '▦ Droits par projet'}
+                <Glyphe valeur={o === 'membres' ? 'membres' : 'grille'} /> {o === 'membres' ? 'Membres' : 'Droits par projet'}
               </Text>
             </Pressable>
           ))}
@@ -715,7 +716,7 @@ function CarteMembre({
             theme={theme}
             compact={!a.mobile}
             variante="discret"
-            titre={`${m.perso ? '☑' : '☐'} Ses propres projets`}
+            titre={`${m.perso ? '☑︎' : '☐'} Ses propres projets`}
             libelle={`Peut créer ses propres projets : ${
               m.perso ? 'oui' : 'non'
             }`}

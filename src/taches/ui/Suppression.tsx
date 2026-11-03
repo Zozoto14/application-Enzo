@@ -13,6 +13,7 @@ import { COLLECTION } from '../corbeille';
 import { membresDuProjet } from '../membres';
 import { listesDe, vivant, type Entite } from '../modele';
 import type { Actions } from './actions';
+import type { NomIcone } from '../../ui/icones';
 import { attenueDe, Bouton, Dialogue, Libelle, Options, texteDe } from './atomes';
 
 type Fermer = () => void;
@@ -28,6 +29,8 @@ function nomDe(a: Actions, genre: Genre, id: string): string {
 
 export interface ElementMenu {
   texte: string;
+  /** Icône monochrome avant le texte (décorative). */
+  icone?: NomIcone;
   detail?: string;
   danger?: boolean;
   testID: string;
@@ -43,6 +46,7 @@ export function DialogueMenu({ a, titre, elements, onFermer, testID }: { a: Acti
             key={e.testID}
             theme={a.theme}
             titre={e.texte}
+            icone={e.icone}
             variante={e.danger ? 'danger' : 'normal'}
             libelle={e.detail ? `${e.texte} — ${e.detail}` : e.texte}
             onPress={() => {

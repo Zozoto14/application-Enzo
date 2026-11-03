@@ -19,7 +19,7 @@ export const APP_TSUZUKU: AppHub = {
   categorie: 'Animés · Films',
   page: 'publique',
   description: 'Animés et films : catalogue, lecture, bibliothèque, sans serveur.',
-  icone: '▶',
+  icone: 'tele',
   teinte: 'anime',
   info: contexte => infoTsuzuku(contexte.tsuzuku),
   Racine: Tsuzuku,

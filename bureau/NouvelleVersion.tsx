@@ -16,6 +16,7 @@ import { ESPACEMENT, type Palette } from '../src/ui/theme';
 import { useLangue } from '../src/esport/i18n';
 import { majAutoActive, surveillanceSite, type EtatSurveillance } from '../src/hub/maj/version';
 import { tm } from '../src/hub/maj/textes';
+import { Icone } from '../src/ui/icones';
 
 const VIDE: EtatSurveillance = { rechargement: false };
 const sansAbonnement = () => () => undefined;
@@ -85,7 +86,7 @@ export function BandeauNouvelleVersion({ palette }: { palette: Palette }) {
   return (
     <View accessibilityRole="alert" accessibilityLiveRegion="polite" testID="bandeau-nouvelle-version" style={[styles.bandeau, { backgroundColor: palette.accentFond, borderColor: palette.accent }]}>
       <View style={styles.texte}>
-        <Text style={{ color: palette.texte, fontSize: 14, fontWeight: '700' }}>✨ {tm('bandeau.texte')}</Text>
+        <Text style={{ color: palette.texte, fontSize: 14, fontWeight: '700' }}><Icone nom="etincelles" /> {tm('bandeau.texte')}</Text>
         {site && majAutoActive() ? <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{tm('bandeau.auto')}</Text> : null}
       </View>
       <Pressable

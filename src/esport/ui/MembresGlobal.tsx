@@ -271,7 +271,7 @@ export function MembresGlobal({
         </Panneau>
       ) : null}
       <View style={{ gap: 8 }} testID="esport-membres-liste">
-        {annuaire && visibles.length === 0 && tous.length > 0 ? <EtatVide theme={theme} glyphe="☺" titre={tr('membresGlobal.aucun_membre_ne_correspond')} texte={tr('membresGlobal.changez_la_recherche_ou')} /> : null}
+        {annuaire && visibles.length === 0 && tous.length > 0 ? <EtatVide theme={theme} glyphe="membres" titre={tr('membresGlobal.aucun_membre_ne_correspond')} texte={tr('membresGlobal.changez_la_recherche_ou')} /> : null}
         {annuaire
           ? visibles.map(c => (
               <LigneCompte

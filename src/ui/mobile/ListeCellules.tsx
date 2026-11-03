@@ -12,6 +12,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { CONTROLE, ESPACE, TEXTE, rayonCarte, themeActif } from './jetons';
+import { Glyphe } from '../icones';
 
 export function GroupeCellules({
   theme: themeDonne,
@@ -83,7 +84,7 @@ export function Cellule({ theme: themeDonne, titre, sousTitre, glyphe, teinte, v
     <>
       {glyphe ? (
         <View style={[styles.glyphe, { backgroundColor: teinteTransparente(teinte ?? theme.accent, 0.16), borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-          <Text style={{ color: teinte ?? theme.accent, fontSize: 17, fontWeight: '700' }}>{glyphe}</Text>
+          <Glyphe valeur={glyphe} style={{ color: teinte ?? theme.accent, fontSize: 17, fontWeight: '700' }} />
         </View>
       ) : null}
       <View style={styles.textes}>

@@ -22,7 +22,7 @@ export const APP_CLAUDE_OFFICE: AppHub = {
   categorie: 'Admin',
   page: 'administration',
   description: 'Le bureau des agents Claude Code, en direct sur le PC, partout ailleurs par copie chiffrée.',
-  icone: '▣',
+  icone: 'immeuble',
   teinte: 'quatre',
   adminSeulement: true,
   // Avec `adminSeulement`, laisse passer un Fondateur promu ; `disponible` écarte les autres rangs.

@@ -46,14 +46,15 @@ import type { PropsEditeur } from './types';
 import { ConfirmationSuppression } from './Suppression';
 import { trSs } from '../../i18n/stratsSuppr';
 import { tr } from '../../i18n';
+import { Glyphe } from '../../../ui/icones';
 
 export type { PropsEditeur };
 
 const Canevas = React.lazy(() => import('./CanevasStrat.web'));
 
 const outilsEditeur = (): ReadonlyArray<readonly [Outil, string, string]> => [
-  ['selection', '↖', tr('strats.editeur.selection_et_deplacement_v')],
-  ['main', '✋', tr('strats.editeur.deplacer_la_vue_h')],
+  ['selection', 'selection', tr('strats.editeur.selection_et_deplacement_v')],
+  ['main', 'main', tr('strats.editeur.deplacer_la_vue_h')],
   ['agent', '◉', tr('strats.editeur.agent_a')],
   ['capacite', '✦', tr('strats.editeur.capacite_c')],
   ['fleche', '➜', tr('strats.editeur.fleche_f')],
@@ -274,7 +275,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     <View style={[styles.ligne, { gap: 6 }]} accessibilityRole="toolbar" accessibilityLabel={tr('strats.editeur.outils')} testID="esport-editeur-outils">
       {outilsEditeur().map(([id, icone, libelle]) => (
         <Pastille key={id} theme={theme} actif={outil === id} onPress={() => setOutil(id)} libelle={libelle} testID={`esport-outil-${id}`}>
-          <Text style={{ color: theme.texte, fontSize: 17 }}>{icone}</Text>
+          <Glyphe valeur={icone} style={{ color: theme.texte, fontSize: 17 }} />
         </Pastille>
       ))}
       <View style={{ width: 8 }} />
@@ -385,9 +386,9 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         {CALQUES.map(c => (
           <View key={c} style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={{ color: theme.texte, fontSize: 13, flex: 1 }}>{NOMS_CALQUES[c]}</Text>
-            <BoutonHub theme={theme} titre={doc.calques[c].visible ? '👁' : '—'} libelle={`${doc.calques[c].visible ? tr('strats.editeur.masquer') : tr('strats.editeur.afficher')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { visible: !doc.calques[c].visible } })} testID={`esport-calque-${c}-visible`} />
+            <BoutonHub theme={theme} icone={doc.calques[c].visible ? 'oeil' : 'oeil-barre'} titre="" libelle={`${doc.calques[c].visible ? tr('strats.editeur.masquer') : tr('strats.editeur.afficher')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { visible: !doc.calques[c].visible } })} testID={`esport-calque-${c}-visible`} />
             {c !== 'fond' ? (
-              <BoutonHub theme={theme} titre={doc.calques[c].verrou ? '🔒' : '🔓'} libelle={`${doc.calques[c].verrou ? tr('strats.editeur.deverrouiller') : tr('strats.editeur.verrouiller')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { verrou: !doc.calques[c].verrou } })} testID={`esport-calque-${c}-verrou`} />
+              <BoutonHub theme={theme} icone={doc.calques[c].verrou ? 'cadenas' : 'cadenas-ouvert'} titre="" libelle={`${doc.calques[c].verrou ? tr('strats.editeur.deverrouiller') : tr('strats.editeur.verrouiller')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { verrou: !doc.calques[c].verrou } })} testID={`esport-calque-${c}-verrou`} />
             ) : null}
           </View>
         ))}
@@ -398,10 +399,10 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const etapes = (
     <Panneau theme={theme} testID="esport-editeur-etapes">
       <View style={[styles.ligne, { gap: 6 }]}>
-        <BoutonHub theme={theme} titre="◀" libelle={tr('strats.editeur.etape_precedente')} onPress={() => setEtape(Math.max(0, iEtape - 1))} desactive={iEtape === 0} testID="esport-etape-precedente" />
+        <BoutonHub theme={theme} titre="◀︎" libelle={tr('strats.editeur.etape_precedente')} onPress={() => setEtape(Math.max(0, iEtape - 1))} desactive={iEtape === 0} testID="esport-etape-precedente" />
         <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }} testID="esport-etape-position">
           {tr('strats.editeur.etape', { v: iEtape + 1, length: doc.etapes.length })}</Text>
-        <BoutonHub theme={theme} titre="▶" libelle={tr('strats.editeur.etape_suivante')} onPress={() => setEtape(Math.min(doc.etapes.length - 1, iEtape + 1))} desactive={iEtape >= doc.etapes.length - 1} testID="esport-etape-suivante" />
+        <BoutonHub theme={theme} titre="▶︎" libelle={tr('strats.editeur.etape_suivante')} onPress={() => setEtape(Math.min(doc.etapes.length - 1, iEtape + 1))} desactive={iEtape >= doc.etapes.length - 1} testID="esport-etape-suivante" />
         <BoutonHub
           theme={theme}
           titre={tr('strats.editeur.etape_2')}
@@ -473,7 +474,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
             />
           ) : null}
           {strat.moi.supprimer ? (
-            <BoutonHub theme={theme} titre={`🗑 ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmerSuppression(c => !c)} testID="esport-editeur-supprimer" />
+            <BoutonHub theme={theme} titre={`🗑︎ ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmerSuppression(c => !c)} testID="esport-editeur-supprimer" />
           ) : null}
         </View>
       </View>

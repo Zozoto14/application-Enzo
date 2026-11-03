@@ -175,7 +175,7 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
               {gerer ? (
                 <BoutonConfirme
                   theme={theme}
-                  titre={`🗑 ${tr('resumes.retirer')}`}
+                  titre={`🗑︎ ${tr('resumes.retirer')}`}
                   confirmation={tr('planning.disponibilites.oui_retirer')}
                   onConfirme={() =>
                     void agir('suppression', async () => {

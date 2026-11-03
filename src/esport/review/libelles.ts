@@ -29,7 +29,7 @@ export const CATEGORIES: readonly InfoCategorie[] = [
     }, couleur: '#F5A524', glyphe: '⌖' },
   { cle: 'comms', get nom() {
       return tr('review.libelles.comms');
-    }, couleur: '#AB4ABA', glyphe: '✉' },
+    }, couleur: '#AB4ABA', glyphe: '✉︎' },
 ];
 
 export const categorie = (cle: string): InfoCategorie => CATEGORIES.find(c => c.cle === cle) ?? CATEGORIES[0];

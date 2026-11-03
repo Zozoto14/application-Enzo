@@ -49,6 +49,8 @@ import { etatApp } from '../politique';
 import { ID_ESPORT, aAccesEsport, perimetreEsportSeul } from '../../../esport/acces';
 import { pousserLangueEsport, retirerCompteEsport } from '../../../esport/synchroAdmin';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
+import { Glyphe } from '../../../ui/icones';
+import { Icone } from '../../../ui/icones';
 
 type Filtre = StatutCompte | 'tous';
 
@@ -971,7 +973,7 @@ function Fiche({
         return (
           <View key={a.id} style={[commun.ligne, { flexWrap: 'wrap' }]}>
             <View style={[commun.carre, { backgroundColor: theme.teintes[a.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-              <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{a.icone}</Text>
+              <Glyphe valeur={a.icone} style={{ color: theme.surAccent, fontWeight: '700' }} />
             </View>
             <View style={{ flex: 1, minWidth: 140 }}>
               <Text style={[texte, { fontWeight: '600' }]}>{a.nom}</Text>
@@ -1078,7 +1080,7 @@ function Fiche({
             <View style={{ gap: 4 }} testID="admin-fiche-appareils">
               {profil.appareils.map((a, index) => (
                 <Text key={`${a.nom}-${index}`} style={[texte, { fontSize: 13 }]}>
-                  💻 {a.nom} · vu {relatif(a.vu, maintenant)}
+                  <Icone nom="ordinateur" /> {a.nom} · vu {relatif(a.vu, maintenant)}
                 </Text>
               ))}
               <Text style={[attenue, { fontSize: 12 }]}>
@@ -1202,7 +1204,7 @@ function Fiche({
           </View>
         ) : (
           <View style={commun.actions}>
-            <BoutonHub theme={theme} titre={`🗝 Ouvrir le compte de ${profil.nom}…`} onPress={() => setOuverture(true)} testID="admin-ouvrir-compte" />
+            <BoutonHub theme={theme} titre={`🗝︎ Ouvrir le compte de ${profil.nom}…`} onPress={() => setOuverture(true)} testID="admin-ouvrir-compte" />
           </View>
         )
       ) : null}
@@ -1413,7 +1415,7 @@ function FormulaireCreation({
       {apps.map(a => (
         <View key={a.id} style={[commun.ligne, { flexWrap: 'wrap' }]}>
           <Text style={[texte, { flex: 1, minWidth: 120 }]}>
-            {a.icone} {a.nom}
+            <Glyphe valeur={a.icone} /> {a.nom}
           </Text>
           <Segments
             theme={theme}
@@ -1430,7 +1432,7 @@ function FormulaireCreation({
         <Champ theme={theme} libelle="Fin d’accès (AAAA-MM-JJ, facultatif)" valeur={expiration} onChanger={setExpiration} maxLength={10} testID="admin-nouveau-expiration" style={{ flexBasis: 200, flexGrow: 1 }} />
       </View>
       <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 6 }]} testID="admin-avertissement-transparence">
-        <Text style={[texte, { fontWeight: '700' }]}>⚠️ Les administrateurs et fondateurs peuvent accéder à ce compte.</Text>
+        <Text style={[texte, { fontWeight: '700' }]}>⚠︎ Les administrateurs et fondateurs peuvent accéder à ce compte.</Text>
         <Text style={[texte, { fontSize: 13 }]}>
           Une copie de la clé du compte est mise sous séquestre pour chaque Administrateur et Fondateur : avec SON code d’accès, chacun pourra
           l’ouvrir sans son mot de passe. L’ami en est averti dans ses Paramètres, et chaque accès est inscrit au journal. Dites-le lui en lui

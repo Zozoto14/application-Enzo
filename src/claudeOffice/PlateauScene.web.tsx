@@ -152,7 +152,7 @@ function BarreRelecture({ c, theme }: { c: CommandesRelecture; theme: ThemeHub }
   const pct = ((r.t - r.debut) / Math.max(1, r.fin - r.debut)) * 100;
   return (
     <div className="co-relecture" data-testid="scene-relecture" role="group" aria-label="Relecture de la journée">
-      <button type="button" className="co-btn co-btn-plein" onClick={() => c.onLecture(!r.lecture)} aria-label={r.lecture ? 'Pause' : 'Lecture'} data-testid="scene-relecture-lecture">{r.lecture ? '❚❚' : '▶'}</button>
+      <button type="button" className="co-btn co-btn-plein" onClick={() => c.onLecture(!r.lecture)} aria-label={r.lecture ? 'Pause' : 'Lecture'} data-testid="scene-relecture-lecture">{r.lecture ? '❚❚' : '▶︎'}</button>
       <div className="co-segments" role="radiogroup" aria-label="Vitesse">
         {VITESSES_RELECTURE.map(v => (
           <button key={v} type="button" role="radio" aria-checked={r.vitesse === v} className={`co-btn${r.vitesse === v ? ' co-btn-actif' : ''}`} onClick={() => c.onVitesse(v)} data-testid={`scene-relecture-x${v}`}>{`×${v}`}</button>
@@ -998,13 +998,13 @@ export function PlateauScene({
       {controles ? (
         <>
           <div className="co-ctl co-hg">
-            {relecture ? <span className="co-puce" data-testid="scene-puce-relecture">{`⏱ Relecture · ${heureRelecture(relecture.r.t)}`}</span> : null}
+            {relecture ? <span className="co-puce" data-testid="scene-puce-relecture">{`⏱︎ Relecture · ${heureRelecture(relecture.r.t)}`}</span> : null}
             {agentSuivi ? (
               <button type="button" className="co-btn" onClick={() => setSuivi(undefined)} data-testid="scene-suivi">{`◎ Suivi : ${nomScene(agentSuivi)} · Arrêter`}</button>
             ) : null}
             {immersif && !ambiance && attendent?.length ? (
               <button type="button" className="co-btn co-btn-plein" style={{ background: lisible(TEINTES_ACTIVITE.attend, false), borderColor: 'transparent', color: '#FFFFFF' }} onClick={() => setApercu({ genre: 'agent', cle: attendent[0].cle, epingle: true })} data-testid="scene-puce-attend">
-                {`✋ ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`}
+                {`! ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`}
               </button>
             ) : null}
           </div>
@@ -1013,7 +1013,7 @@ export function PlateauScene({
               <button type="button" className="co-btn co-btn-plein" onClick={quitterPleinEcran} data-testid="scene-ambiance-quitter">Quitter l’écran d’ambiance</button>
             ) : (
               <>
-                {onRelecture && !relecture ? <button type="button" className="co-btn co-ico" title="Relecture de la journée" aria-label="Relecture de la journée" onClick={onRelecture} data-testid="scene-relecture-ouvrir">⏱</button> : null}
+                {onRelecture && !relecture ? <button type="button" className="co-btn co-ico" title="Relecture de la journée" aria-label="Relecture de la journée" onClick={onRelecture} data-testid="scene-relecture-ouvrir">⏱︎</button> : null}
                 <button type="button" className="co-btn co-ico" title={miniCarte ? 'Replier la mini-carte' : 'Mini-carte'} aria-label={miniCarte ? 'Replier la mini-carte' : 'Afficher la mini-carte'} aria-pressed={miniCarte} onClick={basculerMiniCarte} data-testid="scene-minicarte-basculer">▣</button>
                 <button type="button" className="co-btn co-ico" title="Écran d’ambiance (plein écran sans interface)" aria-label="Écran d’ambiance : plein écran sans interface, pour un deuxième écran ou une tablette posée" onClick={() => entrerPleinEcran(true)} data-testid="scene-ambiance">◐</button>
                 <button type="button" className="co-btn co-ico" title={immersif ? 'Quitter le plein écran' : 'Plein écran'} aria-label={immersif ? 'Quitter le plein écran' : 'Plein écran'} aria-pressed={immersif} onClick={() => (immersif ? quitterPleinEcran() : entrerPleinEcran(false))} data-testid="scene-plein-ecran">{immersif ? '✕' : '⛶'}</button>

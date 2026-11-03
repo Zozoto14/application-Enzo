@@ -35,6 +35,7 @@ import { trDr } from '../../../i18n/drive';
 import { IMAGES_DRIVE } from '../../../cm/drive';
 import { trVi, trViLangue, type CleVi } from '../../../i18n/visuels';
 import { langueCourante } from '../../../i18n';
+import { Glyphe } from '../../../../ui/icones';
 import { obtenirAssets } from '../../strats/commun';
 import { Retours, styles, useAgir } from '../../commun';
 import { ESP, Volet, attenue, texte, type EtatPresse } from '../../design';
@@ -190,7 +191,7 @@ function ListeCalques({ theme, doc, selection, langue, onSelection, onAction }: 
   const ordre = [...doc.calques].reverse();
   const bouton = (glyphe: string, libelle: string, action: () => void, testID: string, actif = false) => (
     <Pressable accessibilityRole="button" accessibilityLabel={libelle} onPress={action} testID={testID} style={(e: EtatPresse) => ({ minWidth: 30, minHeight: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 6, backgroundColor: e.hovered ? theme.surface : 'transparent', opacity: actif ? 1 : 0.7 })}>
-      <Text style={texte(theme, 13)}>{glyphe}</Text>
+      <Glyphe valeur={glyphe} style={texte(theme, 13)} />
     </Pressable>
   );
   return (
@@ -205,7 +206,7 @@ function ListeCalques({ theme, doc, selection, langue, onSelection, onAction }: 
               </Text>
             </Pressable>
             {bouton(c.masque ? '◌' : '●', c.masque ? trVi('editeur.afficher') : trVi('editeur.masquer'), () => onAction({ type: 'modifier', id: c.id, valeurs: { masque: !c.masque } }), `esport-vi-calque-${c.id}-masque`, !c.masque)}
-            {bouton(c.verrouille ? '🔒' : '🔓', c.verrouille ? trVi('editeur.deverrouiller') : trVi('editeur.verrouiller'), () => onAction({ type: 'modifier', id: c.id, valeurs: { verrouille: !c.verrouille } }), `esport-vi-calque-${c.id}-verrou`, c.verrouille)}
+            {bouton(c.verrouille ? 'cadenas' : 'cadenas-ouvert', c.verrouille ? trVi('editeur.deverrouiller') : trVi('editeur.verrouiller'), () => onAction({ type: 'modifier', id: c.id, valeurs: { verrouille: !c.verrouille } }), `esport-vi-calque-${c.id}-verrou`, c.verrouille)}
             {bouton('↑', trVi('editeur.monter'), () => onAction({ type: 'ordre', id: c.id, sens: 'monter' }), `esport-vi-calque-${c.id}-monter`)}
             {bouton('↓', trVi('editeur.descendre'), () => onAction({ type: 'ordre', id: c.id, sens: 'descendre' }), `esport-vi-calque-${c.id}-descendre`)}
           </View>

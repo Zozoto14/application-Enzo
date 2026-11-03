@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { Icone } from '../../ui/icones';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub } from '../Hub';
 import { useMobile } from '../../ui/mobile/useMobile';
@@ -125,9 +126,7 @@ export function BandeauAbonnement({
         testID="hub-abonnements-admin"
         accessibilityRole="alert"
         style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: 12, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: couleur, borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: teinteTransparente(couleur, 0.14) }}>
-        <Text style={{ fontSize: 18 }} accessibilityLabel="Cloche">
-          🔔
-        </Text>
+        <Icone nom="cloche" taille={20} couleur={couleur} libelle="Rappel" />
         <Text style={[texte, { flex: 1, minWidth: 200, fontWeight: '600' }]} testID="hub-abonnements-texte">
           {admin.resume.texte}
         </Text>
@@ -150,7 +149,7 @@ export function BandeauAbonnement({
         testID="hub-abonnement-rappel"
         accessibilityRole="alert"
         style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: 12, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: couleur, borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: teinteTransparente(couleur, 0.14) }}>
-        <Text style={{ fontSize: 18 }}>💳</Text>
+        <Icone nom="carte-bancaire" taille={20} couleur={couleur} />
         <Text style={[texte, { flex: 1, minWidth: 200 }]} testID="hub-abonnement-rappel-texte">
           {rappel.message}
         </Text>

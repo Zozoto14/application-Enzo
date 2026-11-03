@@ -20,6 +20,7 @@ import { FeuilleBasse } from '../src/ui/mobile/FeuilleBasse';
 import { Cellule, GroupeCellules } from '../src/ui/mobile/ListeCellules';
 import { useMobile } from '../src/ui/mobile/useMobile';
 import { BlocConnexion } from './Invitation';
+import { Icone } from '../src/ui/icones';
 
 /** Connexion (identifiant + mot de passe, pour tous), mot de passe oublié, invitation collée. */
 export interface OptionsConnexionAccueil {
@@ -63,14 +64,14 @@ function CarteLiaisonTemporaire({ codeConnu, onRelier }: OptionsLiaisonTemporair
   }
   return (
     <View style={[styles.cadre, { borderColor: palette.bordure }]} testID="accueil-ab1">
-      <Text style={{ color: palette.texte, fontWeight: '700' }}>🔗 Administrateur : relier avec un code de liaison (temporaire)</Text>
+      <Text style={{ color: palette.texte, fontWeight: '700' }}><Icone nom="lien" /> Administrateur : relier avec un code de liaison (temporaire)</Text>
       <Text style={{ color: palette.texteSecondaire }}>
         Seulement pour activer ta connexion par identifiant loin de ton PC : colle ton code AB1, déverrouille avec ton mot de passe et ton code à six chiffres,
         puis choisis ton identifiant (Paramètres › Sécurité).
       </Text>
       {codeConnu ? (
         <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="accueil-code-connu">
-          ✅ Code de liaison reçu par le lien : rien à recopier.
+          <Icone nom="valide" /> Code de liaison reçu par le lien : rien à recopier.
         </Text>
       ) : (
         <Champ etiquette="Code de liaison" placeholder="AB1.…" value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} onSubmitEditing={relier} testID="champ-code-accueil" />
@@ -97,7 +98,7 @@ export function AccueilSite({
   const mobile = useMobile();
   const avertissement = (
     <Text style={{ color: palette.danger, fontSize: mobile ? 16 : undefined, lineHeight: mobile ? 23 : undefined }} testID="accueil-avertissement">
-      ⚠️ Ce coffre sera NEUF et indépendant : il ne contiendra aucune de vos données, et il ne s’ouvrira pas avec votre identifiant. Si vous avez déjà un
+      ⚠︎ Ce coffre sera NEUF et indépendant : il ne contiendra aucune de vos données, et il ne s’ouvrira pas avec votre identifiant. Si vous avez déjà un
       compte, connectez-vous plutôt.
     </Text>
   );
@@ -201,7 +202,7 @@ export function RemplacerDonnees({
           Un fichier avec l’ancien coffre et ses données chiffrées, tels quels : il ne s’ouvre qu’avec l’ancien mot de passe.
         </Text>
         <Bouton
-          titre={exporte ? '✅ Sauvegarde téléchargée' : 'Télécharger une sauvegarde de l’ancien coffre'}
+          titre={exporte ? '✓ Sauvegarde téléchargée' : 'Télécharger une sauvegarde de l’ancien coffre'}
           variante="discret"
           desactive={enCours}
           onPress={() => agir(async () => setExporte(await onExporter()))}

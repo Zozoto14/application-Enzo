@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Icone } from '../ui/icones';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ChampNote } from '../esport/ui/ChampNote';
 import { NoteMarkdown } from '../esport/ui/review/Note';
@@ -127,7 +128,7 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
               onPress={() => setChoix(c.id)}
               style={[styles.segment, mobile && styles.segmentMobile, { backgroundColor: actif ? c.couleur : 'transparent' }]}>
               <Text style={{ color: actif ? '#ffffff' : theme.texte, fontWeight: '600', fontSize: mobile ? 15 : 13, ...police(theme.policeTexte) }}>
-                {c.emoji} {c.libelle}
+                <Icone nom={c.icone} /> {c.libelle}
               </Text>
             </Pressable>
           );
@@ -247,11 +248,11 @@ function CarteTicket({ theme, t, service }: { theme: ThemeHub; t: Ticket; servic
     <View testID={`support-ticket-${t.numero}`} style={[styles.ticket, { borderColor: t.nonLus ? theme.accent : theme.ligne, borderRadius: rayon, borderLeftWidth: 4, borderLeftColor: c.couleur }]}>
       <Pressable onPress={() => setOuvert(v => !v)} accessibilityRole="button" accessibilityLabel={`Demande n° ${n} : ${t.titre}`} testID={`support-ticket-${t.numero}-ouvrir`} style={styles.enteteTicket}>
         <Text style={{ color: theme.texte, fontWeight: '700', fontSize: t15(14), flex: 1, ...police(theme.policeTexte) }} numberOfLines={2}>
-          n° {n} · {c.emoji} {t.titre}
+          n° {n} · <Icone nom={c.icone} /> {t.titre}
         </Text>
         {t.nonLus ? (
           <Text testID={`support-ticket-${t.numero}-nouveau`} style={[styles.pastille, { backgroundColor: theme.accent, color: theme.surAccent }]}>
-            🔔 Nouvelle réponse
+            <Icone nom="cloche" /> Nouvelle réponse
           </Text>
         ) : null}
         <Text style={{ color: couleurStatut, fontWeight: '700', fontSize: t15(12) }} testID={`support-ticket-${t.numero}-statut`}>

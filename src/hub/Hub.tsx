@@ -46,6 +46,7 @@ import { ecouterTouche, mouvementReduit, surLeWeb } from './web';
 import { useMobile } from '../ui/mobile/useMobile';
 import { HubMobile } from './HubMobile';
 import { BoutonIcone } from '../ui/mobile/EnTeteMobile';
+import { Glyphe, Icone, type NomIcone } from '../ui/icones';
 import { useNavigationMobile } from '../ui/mobile/NavigationMobile';
 import { SelecteurOngletsMobile } from './multi/BarreOngletsApps';
 import type { AppHub, CategorieApp, ContexteHub, InfoLive } from './types';
@@ -240,7 +241,8 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOngle
               {onSupport ? (
                 <BoutonHub
                   theme={theme}
-                  titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` 🔔 ${supportNonLus}` : ''}`}
+                  icone={supportNonLus > 0 ? 'cloche' : undefined}
+          titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` ${supportNonLus}` : ''}`}
                   testID="hub-support-ouvrir"
                   libelle={supportNonLus > 0 ? `Support : ${supportNonLus} réponse(s) non lue(s)` : 'Support : écrire à l’équipe'}
                   onPress={() => {
@@ -691,8 +693,8 @@ function BarreTuile({
   );
   return (
     <View style={[styles.barreTuile, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: rayon }]} accessibilityLabel={`Réglages de ${app.nom}`}>
-      {puce(`edit-${app.id}-avant`, liste ? '▲' : '◀', `Déplacer ${app.nom} avant`, () => onDeplacer(-1), { desactive: premier })}
-      {puce(`edit-${app.id}-apres`, liste ? '▼' : '▶', `Déplacer ${app.nom} après`, () => onDeplacer(1), { desactive: dernier })}
+      {puce(`edit-${app.id}-avant`, liste ? '▲' : '◀︎', `Déplacer ${app.nom} avant`, () => onDeplacer(-1), { desactive: premier })}
+      {puce(`edit-${app.id}-apres`, liste ? '▼' : '▶︎', `Déplacer ${app.nom} après`, () => onDeplacer(1), { desactive: dernier })}
       <View style={styles.separateur} />
       {TAILLES.map(t => puce(`edit-${app.id}-${t}`, t === 'petite' ? 'P' : t === 'moyenne' ? 'M' : 'G', `Taille ${LIBELLES_TAILLE[t].toLowerCase()} pour ${app.nom}`, () => onTaille(t), { actif: t === taille }))}
       <View style={styles.separateur} />
@@ -781,7 +783,7 @@ function Tuile({
           backgroundColor: blocs ? 'rgba(255,255,255,0.18)' : teinteTransparente(couleur, 0.14),
         },
       ]}>
-      <Text style={{ color: blocs ? '#FFFFFF' : couleur, fontSize: petite || liste || compact ? 22 : 28, fontWeight: '700' }}>{app.icone}</Text>
+      <Glyphe valeur={app.icone} style={{ color: blocs ? '#FFFFFF' : couleur, fontSize: petite || liste || compact ? 22 : 28, fontWeight: '700' }} />
     </View>
   );
   const valeurs = (
@@ -821,7 +823,7 @@ function Tuile({
           ...police(theme.policeTexte),
         },
       ]}>
-      {etatApp.maintenance ? `🛠 ${etatApp.maintenance}` : 'Désactivée pour les autres utilisateurs'}
+      {etatApp.maintenance ? `🛠︎ ${etatApp.maintenance}` : 'Désactivée pour les autres utilisateurs'}
       {etatApp.maintenance && ouvrable ? ' (visible par vous seul·e : vous pouvez l’ouvrir)' : ''}
     </Text>
   ) : null;
@@ -1062,13 +1064,17 @@ export function BoutonHub({
   desactive = false,
   couleur,
   libelle,
+  icone,
 }: {
   theme: ThemeHub;
+  /** Texte du bouton ; vide avec `icone` : bouton pictogramme (donner alors `libelle`). */
   titre: string;
   onPress(): void;
   testID?: string;
   /** Nom accessible, quand le titre visible est abrégé (pictogramme). */
   libelle?: string;
+  /** Icône monochrome avant le titre (décorative : le titre ou `libelle` la nomme). */
+  icone?: NomIcone;
   variante?: 'normal' | 'plein' | 'danger';
   desactive?: boolean;
   /** Accent du bouton plein ; celui du thème à défaut. */
@@ -1095,15 +1101,24 @@ export function BoutonHub({
           opacity: desactive ? 0.45 : 1,
         },
       ]}>
-      <Text
-        style={{
-          color: variante === 'plein' ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte,
-          fontWeight: '600',
-          fontSize: mobile ? 15 : 14,
-          ...police(theme.policeTexte),
-        }}>
-        {titre}
-      </Text>
+      {icone ? (
+        <View style={styles.boutonContenu}>
+          <Icone nom={icone} taille={mobile ? 17 : 16} couleur={variante === 'plein' ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte} />
+          {titre ? (
+            <Text style={{ color: variante === 'plein' ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte, fontWeight: '600', fontSize: mobile ? 15 : 14, ...police(theme.policeTexte) }}>{titre}</Text>
+          ) : null}
+        </View>
+      ) : (
+        <Text
+          style={{
+            color: variante === 'plein' ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte,
+            fontWeight: '600',
+            fontSize: mobile ? 15 : 14,
+            ...police(theme.policeTexte),
+          }}>
+          {titre}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -1215,6 +1230,7 @@ const styles = StyleSheet.create({
   menuTitre: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, fontSize: 11, fontWeight: '600', letterSpacing: 1.1 },
   menuLigne: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 10 },
   bouton: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  boutonContenu: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   boutonMobile: { minHeight: 44, minWidth: 44, paddingHorizontal: 16 },
   tuileListe: { minHeight: 0 },
   ligneListe: { flexDirection: 'row', alignItems: 'center', gap: 16 },

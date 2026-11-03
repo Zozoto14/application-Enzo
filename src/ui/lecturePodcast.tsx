@@ -41,7 +41,7 @@ export function LecteurFlottant({ onOuvrir }: { onOuvrir(): void }) {
         accessibilityLabel={etat === 'lecture' ? 'Pause' : 'Reprendre'}
         onPress={() => lecture.basculer()}
         style={[styles.rond, { backgroundColor: palette.accentPlein }]}>
-        <Text style={{ color: palette.surAccent, fontWeight: '900', fontSize: 14 }}>{etat === 'lecture' ? '❚❚' : '▶'}</Text>
+        <Text style={{ color: palette.surAccent, fontWeight: '900', fontSize: 14 }}>{etat === 'lecture' ? '❚❚' : '▶︎'}</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Ouvrir le podcast" onPress={onOuvrir} style={styles.texte}>
         <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
@@ -60,7 +60,7 @@ export function LecteurFlottant({ onOuvrir }: { onOuvrir(): void }) {
         accessibilityLabel="Chapitre suivant"
         onPress={() => lecture.chapitreSuivant(1)}
         style={[styles.petit, { borderColor: palette.bordure }]}>
-        <Text style={{ color: palette.texte, fontSize: 14 }}>⏭</Text>
+        <Text style={{ color: palette.texte, fontSize: 14 }}>⏭︎</Text>
       </Pressable>
       <Pressable
         accessibilityRole="button"

@@ -118,7 +118,7 @@ export function TestMpDiscord({ theme, client, teamId, actif = true }: { theme: 
                   onPress={() => bascule(m.compte)}
                   style={[styles.choix, { borderColor: coche ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
                   <Text style={{ color: theme.texte, fontSize: 13, fontWeight: coche ? '700' : '500', ...police(theme.policeTexte) }}>
-                    {coche ? '☑ ' : '☐ '}
+                    {coche ? '☑︎ ' : '☐ '}
                     {m.compte === etat.moi ? tr('discord.testmp.moi', { pseudo: m.pseudo }) : m.pseudo}
                   </Text>
                 </Pressable>

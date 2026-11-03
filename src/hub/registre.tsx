@@ -33,7 +33,7 @@ export const REGISTRE: readonly AppHub[] = [
     categorie: 'Finance',
     page: 'publique',
     description: 'Positions, performance, alertes et podcast du jour.',
-    icone: '↗',
+    icone: 'tendance-haut',
     teinte: 'portefeuille',
     info: contexte => infoPortefeuille(contexte.portefeuille),
     // Pas de Racine : l'arbre du portefeuille est celui d'App, déjà monté.
@@ -48,7 +48,7 @@ export const REGISTRE: readonly AppHub[] = [
     categorie: 'Admin',
     page: 'administration',
     description: 'Comptes des amis, identifiants et accès aux apps.',
-    icone: '⚙︎',
+    icone: 'reglages',
     teinte: 'admin',
     adminSeulement: true,
     // Les gestionnaires (amis promus) l'ouvrent en version limitée : voir `admin/roles.ts`.

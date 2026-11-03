@@ -43,6 +43,7 @@ import { choisirFichiers, choixFichierDisponible, type FichierNavigateur } from 
 import { signalerNouveautesDrive } from '../../../cm/nouveautesDrive';
 import { tr } from '../../../i18n';
 import { trDr, trnDr, type CleDr } from '../../../i18n/drive';
+import { Glyphe, Icone } from '../../../../ui/icones';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
 import { Badge, Carte, Compteur, ESP, EtatVide, Grille, MenuActions, Pliable, SqueletteCartes, Volet, attenue, texte, type EtatPresse } from '../../design';
 import { ToastAnnuler } from '../../strats/Suppression';
@@ -419,7 +420,11 @@ export function Drive({
           <View style={{ gap: 6 }}>
             <Vignette theme={theme} f={null} cote={64} />
             <View style={[styles.ligne, { gap: 6, flexWrap: 'nowrap' }]}>
-              <Text style={{ ...texte(theme, 14), fontWeight: '700', flex: 1 }} numberOfLines={2}>{`${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`}</Text>
+              <Text style={{ ...texte(theme, 14), fontWeight: '700', flex: 1 }} numberOfLines={2}>
+                {nomDossier(d)}
+                {d.restreint ? <> <Icone nom="cadenas" libelle={trDr('element.restreint')} /></> : null}
+                {d.favori ? ' ★' : ''}
+              </Text>
               <Compteur theme={theme} n={nouveautes?.dossiers[d.id] ?? 0} testID={`esport-drive-dossier-${d.id}-nouveautes`} />
             </View>
             <Text style={attenue(theme, 12)} numberOfLines={1}>{cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers)}</Text>
@@ -447,7 +452,7 @@ export function Drive({
     </Grille>
   );
 
-  const ligneListe = (e: ElementDrive, glyphe: string, nom: string, sous: string, onOuvrir: () => void, menu: React.ReactNode, extra?: React.ReactNode) => (
+  const ligneListe = (e: ElementDrive, glyphe: string, nom: string, sous: string, onOuvrir: () => void, menu: React.ReactNode, extra?: React.ReactNode, restreint = false) => (
     <View
       key={cle(e)}
       {...glisser.marque({ source: cle(e), cible: e.genre === 'dossier' ? e.id : undefined })}
@@ -461,10 +466,11 @@ export function Drive({
         onLongPress={glisser.disponible ? undefined : () => { setEnSelection(true); basculer(e); }}
         testID={`esport-drive-${e.genre}-${e.id}-ouvrir`}
         style={(p: EtatPresse) => ({ flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: ESP.s, borderRadius: 8, paddingHorizontal: 4, backgroundColor: selection.has(cle(e)) ? teinteTransparente(theme.accent, 0.16) : p.hovered ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
-        <Text style={{ fontSize: 22 }}>{glyphe}</Text>
+        <Glyphe valeur={glyphe} style={{ fontSize: 22, color: theme.attenue }} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ ...texte(theme, 14), fontWeight: '600' }} numberOfLines={1}>
             {nom}
+            {restreint ? <> <Icone nom="cadenas" libelle={trDr('element.restreint')} /></> : null}
           </Text>
           <Text style={attenue(theme, 12)} numberOfLines={1}>
             {sous}
@@ -477,7 +483,7 @@ export function Drive({
   );
   const vueListe = (
     <View testID="esport-drive-liste">
-      {dossiersTries.map(d => ligneListe({ genre: 'dossier', id: d.id }, GLYPHES_DRIVE.dossier, `${nomDossier(d)}${d.restreint ? ' 🔒' : ''}${d.favori ? ' ★' : ''}`, cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers), () => ouvrirDossier(d.id), menuDossier(d), <Compteur theme={theme} n={nouveautes?.dossiers[d.id] ?? 0} testID={`esport-drive-dossier-${d.id}-nouveautes`} />))}
+      {dossiersTries.map(d => ligneListe({ genre: 'dossier', id: d.id }, GLYPHES_DRIVE.dossier, `${nomDossier(d)}${d.favori ? ' ★' : ''}`, cheminResultat(d.parentId) || trnDr('element.fichiers', d.fichiers), () => ouvrirDossier(d.id), menuDossier(d), <Compteur theme={theme} n={nouveautes?.dossiers[d.id] ?? 0} testID={`esport-drive-dossier-${d.id}-nouveautes`} />, d.restreint))}
       {fichiers.map(f =>
         ligneListe({ genre: 'fichier', id: f.id }, GLYPHES_DRIVE[f.genre], `${f.nom}${f.favori ? ' ★' : ''}`, cheminResultat(f.dossierId) || sousTitreFichier(f), () => setDetail(f.id), menuFichier(f), f.tags.length && large ? <Text style={attenue(theme, 12)}>{f.tags.map(t => `#${t}`).join(' ')}</Text> : null),
       )}
@@ -800,7 +806,9 @@ function Corbeille({ theme, api, portee, onChange }: { theme: ThemeHub; api: Ret
       {c?.elements.map(e => (
         <View key={e.id} style={[styles.ligne, { gap: ESP.xs, justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }]} testID={`esport-drive-corbeille-${e.id}`}>
           <View style={{ flex: 1, minWidth: 200 }}>
-            <Text style={{ ...texte(theme, 14), fontWeight: '600' }} numberOfLines={1}>{`${e.element === 'dossier' ? GLYPHES_DRIVE.dossier : GLYPHES_DRIVE[e.genre]} ${e.element === 'dossier' ? nomDossier(e) : e.nom}`}</Text>
+            <Text style={{ ...texte(theme, 14), fontWeight: '600' }} numberOfLines={1}>
+              <Icone nom={e.element === 'dossier' ? GLYPHES_DRIVE.dossier : GLYPHES_DRIVE[e.genre]} /> {e.element === 'dossier' ? nomDossier(e) : e.nom}
+            </Text>
             <Text style={attenue(theme, 12)}>
               {[e.element === 'dossier' ? trnDr('corbeille.contenu', e.contenu.n) : taille(e.taille), trDr('corbeille.par', { qui: nomDe(e.supprimePar) }), trDr('corbeille.expire', { date: quand(e.expireLe) })].join(' · ')}
             </Text>

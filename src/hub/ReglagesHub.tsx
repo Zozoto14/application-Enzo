@@ -63,7 +63,7 @@ export function ReglageTheme({
           aria-checked={Boolean(pourCetAppareil)}
           onPress={() => onPourCetAppareil(!pourCetAppareil)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
-          <Text style={{ fontSize: tt(18), color: theme.texte }}>{pourCetAppareil ? '☑' : '☐'}</Text>
+          <Text style={{ fontSize: tt(18), color: theme.texte }}>{pourCetAppareil ? '☑︎' : '☐'}</Text>
           <Text style={{ color: theme.texte, fontSize: tt(14), flexShrink: 1 }}>
             Pour cet appareil uniquement (le style choisi ici reste sur cet appareil et y prend le dessus ; vos autres appareils gardent le style du compte)
           </Text>
@@ -189,7 +189,7 @@ export function ReglageNouveautes({ theme, onOuvrir }: { theme: ThemeHub; onOuvr
     <View style={{ gap: 10 }}>
       <Texte theme={theme}>Ce qu’apporte chaque version, avec « Essayer » pour ouvrir la fonctionnalité.</Texte>
       <View style={styles.actions}>
-        <BoutonHub theme={theme} titre="✨ Voir les nouveautés" onPress={onOuvrir} testID="parametres-nouveautes" />
+        <BoutonHub theme={theme} icone="etincelles" titre="Voir les nouveautés" onPress={onOuvrir} testID="parametres-nouveautes" />
       </View>
     </View>
   );

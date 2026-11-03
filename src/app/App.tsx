@@ -939,7 +939,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       definirLiaisonEnAttente(encoderLiaison(liaison));
       setErreur(undefined);
       setMessageDeverrouillage(
-        '✅ Compte du PC trouvé. Entrez le mot de passe et le code à six chiffres de votre PC : le portefeuille arrivera ensuite tout seul.',
+        '✓ Compte du PC trouvé. Entrez le mot de passe et le code à six chiffres de votre PC : le portefeuille arrivera ensuite tout seul.',
       );
       rafraichir();
     },
@@ -1885,7 +1885,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       .then(({ episode, manques }) => {
         if (automatique) {
           void pontNotifications
-            ?.notifier('🎙️ Votre podcast est prêt', `${episode.titre} · environ ${episode.duree} minutes.`, 'podcast')
+            ?.notifier('🎙︎ Votre podcast est prêt', `${episode.titre} · environ ${episode.duree} minutes.`, 'podcast')
             .catch(() => undefined);
         }
         setPodcast({
@@ -1926,12 +1926,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
     { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
-    { cle: 'projection', libelle: 'Projection', glyphe: '↗' },
+    { cle: 'projection', libelle: 'Projection', glyphe: '↗︎' },
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
     { cle: 'reglages', libelle: 'Paramètres', glyphe: '⚙\uFE0E' },
     { cle: 'diagnostic', libelle: 'Diagnostic', glyphe: '✚', sous: true },
     // Baggr s'ouvre dans le navigateur : ce n'est pas un écran de l'application.
-    { cle: 'baggr', libelle: 'Baggr ↗', glyphe: '◆' },
+    { cle: 'baggr', libelle: 'Baggr ↗︎', glyphe: '◆' },
   ];
   const destinationActive =
     ecran === 'symboles' ? 'reglages' : ecran === 'titre' ? 'saisie' : ecran === 'compte' ? 'tableau' : ecran;
@@ -2635,7 +2635,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                   });
                   pontNotifications
                     .notifier(
-                      essai?.titre ?? '✅ AppDashboard',
+                      essai?.titre ?? 'AppDashboard',
                       essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
                       'tableau',
                     )
@@ -2835,7 +2835,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                 cours: new DepotCours(session.base()).derniersCours(),
               });
               pontEnregistrerSous(`AppDashboard ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
-                .then(enregistre => setMessageExport(enregistre ? '✅ Fichier Excel enregistré.' : 'Export annulé.'))
+                .then(enregistre => setMessageExport(enregistre ? '✓ Fichier Excel enregistré.' : 'Export annulé.'))
                 .catch((e: unknown) => setMessageExport(`L’export a échoué : ${e instanceof Error ? e.message : String(e)}`));
             }}
           />

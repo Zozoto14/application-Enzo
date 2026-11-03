@@ -60,7 +60,7 @@ export function resumerSynchro(vue: VueSynchroHub, maintenant: number): ResumeSy
   if (horsLigne) {
     return {
       niveau: 'attente',
-      icone: '⏳',
+      icone: 'sablier',
       libelle: attente > 0 ? `${elements(attente)} en attente (hors ligne)` : 'Hors ligne',
       detail: 'Hors ligne : vous travaillez sur la copie de cet appareil. Vos modifications partiront toutes seules vers le serveur au retour de la connexion.',
     };
@@ -69,13 +69,13 @@ export function resumerSynchro(vue: VueSynchroHub, maintenant: number): ResumeSy
     const motif = vue.erreur ?? vue.enAttente?.motif;
     return {
       niveau: 'erreur',
-      icone: '⚠',
+      icone: '⚠︎',
       libelle: attente > 0 ? `${elements(attente)} en attente · serveur injoignable` : 'Serveur injoignable',
       detail: `${motif ?? 'Le serveur ne répond pas.'} Nouvel essai automatique ; vous pouvez aussi réessayer maintenant.`,
     };
   }
   if (attente > 0) {
-    return { niveau: 'attente', icone: '⏳', libelle: `${elements(attente)} à envoyer`, detail: 'Envoi dans quelques secondes.' };
+    return { niveau: 'attente', icone: 'sablier', libelle: `${elements(attente)} à envoyer`, detail: 'Envoi dans quelques secondes.' };
   }
   return {
     niveau: 'ok',

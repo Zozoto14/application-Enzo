@@ -19,8 +19,9 @@ import { filtrerComptes, niveauProfil, statutCompte, LIBELLES_STATUT } from '../
 import { LIBELLES_NIVEAU, niveauxDe, type NiveauAcces } from '../niveaux';
 import { autorise } from '../roles';
 import { Champ, Intertitre, Panneau, commun, styleTitre, type OutilsAdmin } from './commun';
+import { Glyphe } from '../../../ui/icones';
 
-const SYMBOLE: Record<NiveauAcces, string> = { aucun: '—', lecture: '👁', complet: '✓' };
+const SYMBOLE: Record<NiveauAcces, string> = { aucun: '—', lecture: '👁︎', complet: '✓' };
 
 /** Niveau suivant d'une case (cycle aucun → lecture → complet, selon ce que l'app propose). */
 export function niveauSuivant(app: Pick<AppHub, 'niveaux'>, actuel: NiveauAcces): NiveauAcces {
@@ -55,7 +56,7 @@ export function Matrice({ outils }: { outils: OutilsAdmin }) {
       <Panneau theme={theme}>
         <Text style={[styleTitre(theme), { fontSize: 20 }]}>Accès par app</Text>
         <Text style={[attenue, { fontSize: 13 }]}>
-          Touchez une case pour passer au niveau suivant : — aucun accès, 👁 lecture seule, ✓ complet. Chaque changement est enregistré et inscrit au journal.
+          Touchez une case pour passer au niveau suivant : — aucun accès, 👁︎ lecture seule, ✓ complet. Chaque changement est enregistré et inscrit au journal.
           {gereesAilleurs.length > 0 ? ` ${gereesAilleurs.map(a => a.nom).join(', ')} s’ouvre par ses équipes : ses accès se règlent dans l’app elle-même (même source de vérité).` : ''}
         </Text>
         <Champ theme={theme} libelle="Rechercher un prénom" valeur={recherche} onChanger={setRecherche} placeholder="ex. Lucas" testID="admin-matrice-recherche" />
@@ -68,7 +69,7 @@ export function Matrice({ outils }: { outils: OutilsAdmin }) {
               {apps.map(app => (
                 <View key={app.id} style={{ width: 84, alignItems: 'center', gap: 2 }}>
                   <View style={[commun.carre, { backgroundColor: theme.teintes[app.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-                    <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{app.icone}</Text>
+                    <Glyphe valeur={app.icone} style={{ color: theme.surAccent, fontWeight: '700' }} />
                   </View>
                   <Text style={[texte, { fontSize: 11, textAlign: 'center' }]} numberOfLines={1}>
                     {app.nom}
@@ -127,7 +128,7 @@ export function Matrice({ outils }: { outils: OutilsAdmin }) {
       </Panneau>
       <Panneau theme={theme}>
         <Intertitre theme={theme}>Légende</Intertitre>
-        <Text style={[attenue, { fontSize: 12 }]}>— aucun accès · 👁 lecture seule · ✓ accès complet. Grisé : compte de même rang ou plus haut (lecture seule).</Text>
+        <Text style={[attenue, { fontSize: 12 }]}>— aucun accès · 👁︎ lecture seule · ✓ accès complet. Grisé : compte de même rang ou plus haut (lecture seule).</Text>
       </Panneau>
     </View>
   );

@@ -55,7 +55,7 @@ export function messageVersement(
 ): { titre: string; corps: string } {
   const utiles = achats.filter(achat => achat.montant >= 1).sort((a, b) => b.montant - a.montant).slice(0, 3);
   return {
-    titre: `💰 C’est le ${reglage.jour} : vous versez vos ${euros(reglage.montant)} ?`,
+    titre: `C’est le ${reglage.jour} : vous versez vos ${euros(reglage.montant)} ?`,
     corps: utiles.length
       ? `Pour rester sur votre cible : ${utiles.map(achat => `${achat.nom} +${euros(achat.montant)}`).join(' · ')}.`
       : 'Ouvrez AppDashboard pour saisir le versement du mois.',

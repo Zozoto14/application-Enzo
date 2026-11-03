@@ -20,6 +20,7 @@ import { texteEcran, type LangueSaisie } from '../src/ui/motDePasse/textes';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
 import { evaluerMotDePasse, formeCanonique, type PolitiqueMdp } from '../src/profils/invitation';
 import { useMobile } from '../src/ui/mobile/useMobile';
+import { Icone } from '../src/ui/icones';
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
@@ -122,7 +123,7 @@ export function EcranInvitation({
                 onPress={() => setRemplacer(v => !v)}
                 testID="invitation-remplacer"
                 style={{ flexDirection: 'row', gap: ESPACEMENT.s, alignItems: 'center', minHeight: 44 }}>
-                <Text style={{ fontSize: 20 }}>{remplacer ? '☑' : '☐'}</Text>
+                <Text style={{ fontSize: 20 }}>{remplacer ? '☑︎' : '☐'}</Text>
                 <Text style={{ color: palette.texte, flex: 1 }}>
                   {texteEcran(l, 'inv.remplacer')}
                 </Text>
@@ -235,7 +236,7 @@ export function BlocConnexion({
   return (
     <>
       <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]} testID="connexion-identifiant">
-        <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>🔑 Se connecter</Text>
+        <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}><Icone nom="cle" /> Se connecter</Text>
         <Text style={secondaire}>
           Ton identifiant (ton prénom) et le mot de passe que tu as choisi.{relaisConnu ? '' : ' Première fois ? Ouvre plutôt le lien d’invitation reçu.'}
         </Text>
@@ -347,7 +348,7 @@ export function BlocConnexion({
         ) : null}
       </View>
       <View style={[styles.cadre, { borderColor: palette.bordure }]} testID="invitation-saisie-bloc">
-        <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 16 }}>✉️ J’ai reçu une invitation</Text>
+        <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 16 }}>✉︎ J’ai reçu une invitation</Text>
         <Text style={secondaire}>Colle le lien reçu (ou tape le code court, par exemple K7M2Q-9XH4T).</Text>
         <Champ
           etiquette="Lien ou code d’invitation"

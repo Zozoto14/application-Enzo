@@ -132,7 +132,7 @@ export function SectionChronologie({ a, t, onAjouterDependance, onErreur, onAvis
         const viole = dependanceViolee(d, id, t.id);
         return (
           <View key={id} style={[styles.rangee, { flexWrap: 'nowrap' }]} testID={`dependance-${id}`}>
-            <Text style={{ color: viole ? theme.critique : theme.attenue, fontSize: 15 }}>{viole ? '⚠' : p && estTerminee(d, p) ? '✓' : '→'}</Text>
+            <Text style={{ color: viole ? theme.critique : theme.attenue, fontSize: 15 }}>{viole ? '⚠︎' : p && estTerminee(d, p) ? '✓' : '→'}</Text>
             <Pressable accessibilityRole="link" onPress={() => p && a.ouvrir(id)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
               <Text style={[texteDe(theme), { color: p ? theme.texte : theme.attenue }]} numberOfLines={2}>
                 {p?.titre ?? 'Tâche introuvable'}
@@ -147,7 +147,7 @@ export function SectionChronologie({ a, t, onAjouterDependance, onErreur, onAvis
       {violees.length ? (
         <View style={[styles.alerte, { borderColor: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.08), borderRadius: 10 }]} testID="detail-dependance-violee" accessibilityRole="alert">
           <Text style={[texteDe(theme), { color: theme.critique }]}>
-            ⚠ Commence avant la fin de {violees.map(x => `« ${d.taches[x]?.titre ?? '?'} »`).join(', ')}.
+            ⚠︎ Commence avant la fin de {violees.map(x => `« ${d.taches[x]?.titre ?? '?'} »`).join(', ')}.
           </Text>
           {m ? (
             <Bouton
@@ -208,7 +208,7 @@ export function SectionGithub({ a, t, onErreur }: { a: Actions; t: Tache; onErre
         <View style={styles.rangee}>
           {etat ? <Puce theme={theme} texte={`${LIBELLES_ETAT_GITHUB[etat.etat]}${etat.numero ? ` #${etat.numero}` : ''}`} couleur={etat.etat === 'fusionnee' ? theme.teintes.admin : etat.etat === 'ouverte' ? theme.ok : theme.attenue} testID="detail-github-etat" /> : <Text style={attenueDe(theme)}>État pas encore lu</Text>}
           {etat?.ci ? <Puce theme={theme} texte={LIBELLES_CI[etat.ci]} couleur={etat.ci === 'succes' ? theme.ok : etat.ci === 'echec' ? theme.critique : theme.alerte} testID="detail-github-ci" /> : null}
-          <Bouton theme={theme} compact variante="discret" titre="↗ Ouvrir" libelle="Ouvrir sur GitHub" onPress={() => void Linking.openURL(etat?.url || urlLien(t.github!))} />
+          <Bouton theme={theme} compact variante="discret" icone="externe" titre="Ouvrir" libelle="Ouvrir sur GitHub" onPress={() => void Linking.openURL(etat?.url || urlLien(t.github!))} />
           <Bouton theme={theme} compact titre="↻" libelle="Relire l’état sur GitHub" onPress={() => void aides.rafraichirGithub(true).catch(onErreur)} testID="detail-github-relire" />
         </View>
       ) : null}
@@ -226,7 +226,7 @@ export function BoutonsIA({ a, t }: { a: Actions; t: Tache }) {
   if (!aides || a.etat.role !== 'fondateur' || !aides.secrets.ia.actif || !a.droits(t.projetId).modifier) return null;
   return (
     <View style={styles.rangee}>
-      <Bouton theme={a.theme} compact titre="✨ Découper en sous-tâches (IA)" onPress={() => aides.ouvrirIA({ genre: 'decouper', tacheId: t.id })} testID="detail-ia-decouper" />
+      <Bouton theme={a.theme} compact icone="etincelles" titre="Découper en sous-tâches (IA)" onPress={() => aides.ouvrirIA({ genre: 'decouper', tacheId: t.id })} testID="detail-ia-decouper" />
     </View>
   );
 }

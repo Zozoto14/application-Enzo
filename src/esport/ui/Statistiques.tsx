@@ -276,7 +276,7 @@ function Apercu({ theme, d, large }: { theme: ThemeHub; d: StatistiquesUsage; la
     { cle: 'jour', libelle: trStats('statistiques.actifs_jour'), valeur: formaterNombre(a.actifsJour), glyphe: '●' },
     { cle: 'semaine', libelle: trStats('statistiques.actifs_semaine'), valeur: formaterNombre(a.actifsSemaine), glyphe: '◐' },
     { cle: 'mois', libelle: trStats('statistiques.actifs_mois'), valeur: formaterNombre(a.actifsMois), glyphe: '◯' },
-    { cle: 'periode', libelle: trStats('statistiques.actifs_periode'), valeur: formaterNombre(p.actifs), detail: tendance(p.actifs, q.actifs), glyphe: '☺' },
+    { cle: 'periode', libelle: trStats('statistiques.actifs_periode'), valeur: formaterNombre(p.actifs), detail: tendance(p.actifs, q.actifs), glyphe: 'membres' },
     { cle: 'sessions', libelle: trStats('statistiques.sessions'), valeur: formaterNombre(p.sessions), detail: tendance(p.sessions, q.sessions), glyphe: '⇄' },
     { cle: 'duree', libelle: trStats('statistiques.duree_moyenne'), valeur: duree(p.dureeMoyenneMs), detail: tendance(p.dureeMoyenneMs, q.dureeMoyenneMs), glyphe: '◷' },
     { cle: 'vues', libelle: trStats('statistiques.vues'), valeur: formaterNombre(p.vues), detail: tendance(p.vues, q.vues), glyphe: '▤' },

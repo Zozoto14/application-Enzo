@@ -11,6 +11,7 @@ import { BoutonHub } from './Hub';
 import { useMobile } from '../ui/mobile/useMobile';
 import { resumerSynchro, type NiveauSynchro, type VueSynchroHub } from './etatSynchro';
 import { police, type ThemeHub } from './themes';
+import { Glyphe } from '../ui/icones';
 
 export interface SynchroHub {
   vue: VueSynchroHub;
@@ -79,7 +80,7 @@ export function IndicateurSynchro({
           condense && styles.condense,
         ]}>
         <View style={[styles.point, { backgroundColor: teinte }]} />
-        {condense ? null : <Text style={{ color: teinte, fontWeight: '800', fontSize: taille }}>{resume.icone}</Text>}
+        {condense ? null : <Glyphe valeur={resume.icone} style={{ color: teinte, fontWeight: '800', fontSize: taille }} />}
         <Text testID="synchro-libelle" style={{ color: theme.texte, fontSize: taille, fontWeight: '600', flexShrink: 1, ...police(theme.policeTexte) }} numberOfLines={detaille ? 3 : 1}>
           {condense ? libelleCondense(resume) : resume.libelle}
         </Text>

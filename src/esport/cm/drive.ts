@@ -4,6 +4,7 @@
  * l'hébergement mutualisé les bloque.
  */
 
+import type { NomIcone } from '../../ui/icones/traces';
 import { requeteUrl, type ClientEsport } from '../client';
 import { PORTEE_CLUB, type TeamCm } from './api';
 
@@ -241,17 +242,17 @@ export function dureeLisible(s: number | null | undefined): string {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
-/** Glyphe d'un genre de fichier (grille, liste). */
-export const GLYPHES_DRIVE: Record<GenreDrive | 'dossier', string> = {
-  dossier: '📁',
-  image: '🖼',
-  video: '🎬',
-  audio: '🎵',
-  document: '📄',
-  archive: '🗜',
-  police: '🔤',
-  creation: '🎨',
-  texte: '📝',
+/** Icône monochrome d'un genre de fichier (grille, liste : src/ui/icones). */
+export const GLYPHES_DRIVE: Record<GenreDrive | 'dossier', NomIcone> = {
+  dossier: 'dossier',
+  image: 'image',
+  video: 'video',
+  audio: 'musique',
+  document: 'document',
+  archive: 'archive',
+  police: 'police',
+  creation: 'palette',
+  texte: 'note',
 };
 
 // ------------------------------------------------------------------ Déplacer (glisser-déposer, menu)

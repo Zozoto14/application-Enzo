@@ -38,7 +38,7 @@ export function BoutonPoubelle({ theme, libelle, onPress, testID }: { theme: The
         borderRadius: rayonControle(theme),
       })}>
       <Text style={{ fontSize: 18, color: theme.critique }} accessible={false}>
-        🗑
+        🗑︎
       </Text>
     </Pressable>
   );
@@ -156,7 +156,7 @@ export function CorbeilleStrats({ theme, api, teamId, large, onRestauree }: { th
       <Text style={{ ...attenue, fontSize: 13 }}>{trSs('corbeille.aide')}</Text>
       {strats && strats.length === 0 ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="🗑" titre={trSs('corbeille.vide')} />
+          <EtatVide theme={theme} glyphe="🗑︎" titre={trSs('corbeille.vide')} />
         </Carte>
       ) : null}
       <Grille min={large ? 260 : 280}>

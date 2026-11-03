@@ -54,7 +54,7 @@ export function Securite({ outils, onVerrouiller }: { outils: OutilsAdmin; onVer
           Aucun secret existant n’est jamais réaffiché : un identifiant perdu se régénère.
         </Text>
         <View style={commun.actions}>
-          <BoutonHub theme={theme} titre="🔒 Verrouiller le panneau" onPress={onVerrouiller} testID="admin-verrouiller-panneau" desactive={!outils.services} />
+          <BoutonHub theme={theme} icone="cadenas" titre="Verrouiller le panneau" onPress={onVerrouiller} testID="admin-verrouiller-panneau" desactive={!outils.services} />
           <BoutonHub
             theme={theme}
             titre="Vérifier mon identité"

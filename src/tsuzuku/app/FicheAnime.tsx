@@ -90,7 +90,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
                 </Text>
               ) : null}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <Bouton titre={suivant === 1 && (entree?.currentEpisode ?? 0) > 0 ? '▶ Revoir depuis l’épisode 1' : entree?.currentEpisode ? `▶ Reprendre l’épisode ${suivant}` : `▶ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
+                <Bouton titre={suivant === 1 && (entree?.currentEpisode ?? 0) > 0 ? '▶︎ Revoir depuis l’épisode 1' : entree?.currentEpisode ? `▶︎ Reprendre l’épisode ${suivant}` : `▶︎ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
               </View>
             </BandeauFiche>
             <BlocBibliotheque fiche={min} entree={entree} />
@@ -130,7 +130,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
                             <Text style={styleAttenue(theme, 11)}>filler</Text>
                           </View>
                         ) : null}
-                        <Text style={{ color: vu ? theme.accent : theme.attenue, fontWeight: '800' }}>{vu ? '✓' : '▶'}</Text>
+                        <Text style={{ color: vu ? theme.accent : theme.attenue, fontWeight: '800' }}>{vu ? '✓' : '▶︎'}</Text>
                       </Pressable>
                     );
                   })}

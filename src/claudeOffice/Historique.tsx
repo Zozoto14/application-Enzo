@@ -345,7 +345,7 @@ export function Historique({ theme, contexte, office, filtreInitial, debutDemo }
               {s.entrees.map(e => (
                 <Pressable key={e.id} onPress={() => setSelection(e.id)} testID={`historique-entree-${e.id}`} style={[styles.entree, sm.entree]}>
                   <Text style={[styles.heure, sm.texte, attenue]}>{heure(e.ts)}</Text>
-                  <Text style={[styles.type, sm.texte, { color: e.type === 'demande' ? theme.accent : e.echec ? theme.critique : theme.attenue }]}>{e.type === 'demande' ? '›' : e.type === 'outil' ? '⚙' : '·'}</Text>
+                  <Text style={[styles.type, sm.texte, { color: e.type === 'demande' ? theme.accent : e.echec ? theme.critique : theme.attenue }]}>{e.type === 'demande' ? '›' : e.type === 'outil' ? '⚙︎' : '·'}</Text>
                   <Text numberOfLines={2} style={[styles.texteEntree, sm.texte, { color: e.type === 'demande' ? theme.texte : theme.attenue }]}>{titreEntree(e)}</Text>
                 </Pressable>
               ))}

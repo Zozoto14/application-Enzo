@@ -37,7 +37,7 @@ export const APP_ABONNEMENTS: AppHub = {
   categorie: 'Admin',
   page: 'administration',
   description: 'Qui a payé, échéances et rappels (suivi manuel).',
-  icone: '💳',
+  icone: 'carte-bancaire',
   teinte: 'quatre',
   adminSeulement: true,
   rangs: ['fondateur'],

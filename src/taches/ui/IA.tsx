@@ -94,7 +94,7 @@ export function DialogueIA({ a, cible, onFermer, onAvis, onErreur, client }: { a
         </View>
         {!possible ? (
           <Text style={[texteDe(theme), { color: theme.alerte }]} testID="ia-indisponible">
-            {iaDisponible() ? 'Ajoutez votre clé de l’API Claude (👥 › IA et GitHub).' : 'L’aide de l’IA passe par l’application du PC : sur le site, il faudrait exposer votre clé au navigateur. Passez en mode essai pour découvrir.'}
+            {iaDisponible() ? 'Ajoutez votre clé de l’API Claude (Partage › IA et GitHub).' : 'L’aide de l’IA passe par l’application du PC : sur le site, il faudrait exposer votre clé au navigateur. Passez en mode essai pour découvrir.'}
           </Text>
         ) : null}
       </>
@@ -150,7 +150,7 @@ export function DialogueIA({ a, cible, onFermer, onAvis, onErreur, client }: { a
           ))}
           {ap.risques.length ? <Libelle theme={theme}>RISQUES</Libelle> : null}
           {ap.risques.map((p, i) => (
-            <Text key={i} style={[texteDe(theme), { color: theme.alerte }]}>⚠ {p}</Text>
+            <Text key={i} style={[texteDe(theme), { color: theme.alerte }]}>⚠︎ {p}</Text>
           ))}
         </View>
       );
@@ -201,7 +201,7 @@ export function DialogueIA({ a, cible, onFermer, onAvis, onErreur, client }: { a
     }
   }
   return (
-    <Dialogue theme={theme} mobile={a.mobile} visible large titre={`✨ ${TITRES[cible.genre]}`} onFermer={onFermer} testID="dialogue-ia" pied={pied}>
+    <Dialogue theme={theme} mobile={a.mobile} visible large titre={TITRES[cible.genre]} onFermer={onFermer} testID="dialogue-ia" pied={pied}>
       {corps}
     </Dialogue>
   );

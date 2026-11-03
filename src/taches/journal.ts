@@ -213,8 +213,8 @@ export function debriefingTexte(b: Debriefing, format: 'markdown' | 'texte' = 'm
   const r = b.reste;
   if (r.retard.length || r.attente.length || r.aVenir.length) {
     l.push(titre('Ce qui reste'));
-    for (const t of r.retard) l.push(`- ⚠ En retard : ${t.titre} (échéance ${aujourdhui ? jourLisible(t.echeance!.jour, aujourdhui) : fr(t.echeance!.jour)})`);
-    for (const t of r.attente) l.push(`- ⏸ En attente : ${t.titre}`);
+    for (const t of r.retard) l.push(`- ⚠︎ En retard : ${t.titre} (échéance ${aujourdhui ? jourLisible(t.echeance!.jour, aujourdhui) : fr(t.echeance!.jour)})`);
+    for (const t of r.attente) l.push(`- ⏸︎ En attente : ${t.titre}`);
     for (const t of r.aVenir) l.push(`- À venir : ${t.titre} (${fr(t.echeance!.jour)})`);
     l.push('');
   }

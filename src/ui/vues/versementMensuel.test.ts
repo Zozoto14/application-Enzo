@@ -18,7 +18,7 @@ describe('rappel de versement mensuel', () => {
       { titreId: 'b', nom: 'MSCI World', montant: 80, poidsAvant: 70, poidsApres: 68, cible: 65 },
       { titreId: 'c', nom: 'Stellantis', montant: 0, poidsAvant: 0, poidsApres: 0, cible: 0 },
     ]);
-    expect(message.titre).toBe('💰 C’est le 5 : vous versez vos 200 € ?');
+    expect(message.titre).toBe('C’est le 5 : vous versez vos 200 € ?');
     expect(message.corps).toBe('Pour rester sur votre cible : Air Liquide +120 € · MSCI World +80 €.');
   });
 

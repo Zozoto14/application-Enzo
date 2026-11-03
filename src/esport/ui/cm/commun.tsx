@@ -14,6 +14,7 @@ import { formaterDate } from '../../i18n';
 import { trCm, type CleCm } from '../../i18n/cm';
 import { Badge, ESP, rayonControle, texte, type EtatPresse, type Ton } from '../design';
 import { SECOURS_MS, useTempsReel } from '../../tempsReel/hooks';
+import { Glyphe } from '../../../ui/icones';
 
 export const FUSEAU_CLUB = 'Europe/Paris';
 /** Intervalle du rafraîchissement léger (GET /cm/etat : quelques octets). */
@@ -40,7 +41,7 @@ export function PastilleReseau({ theme, reseau, actif = true, onPress, testID, c
   const r = RESEAUX[reseau];
   const contenu = (
     <>
-      <Text style={{ fontSize: compact ? 12 : 14, color: theme.texte }}>{r.glyphe}</Text>
+      <Glyphe valeur={r.glyphe} style={{ fontSize: compact ? 12 : 14, color: theme.texte }} />
       {compact ? null : <Text style={{ ...texte(theme, 13), fontWeight: actif ? '700' : '500' }}>{r.nom}</Text>}
     </>
   );

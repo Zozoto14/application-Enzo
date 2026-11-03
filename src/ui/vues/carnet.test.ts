@@ -21,7 +21,7 @@ describe('carnet de thèses', () => {
   it('rappelle la thèse à l’objectif et sous le seuil, une seule fois', () => {
     const atteint = construireCarnet([{ titreId: 'ai', nom: 'Air Liquide' }], { ai: these }, new Map([['ai', d('205')]]));
     const [rappel] = rappelsCarnet(atteint, new Set());
-    expect(rappel.titre).toBe('🎯 Air Liquide a atteint votre objectif de 200');
+    expect(rappel.titre).toBe('Air Liquide a atteint votre objectif de 200');
     expect(rappel.corps).toContain('Leader mondial des gaz industriels');
     expect(rappelsCarnet(atteint, new Set([rappel.identifiant]))).toEqual([]);
 

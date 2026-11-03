@@ -110,7 +110,7 @@ function Creation({
             <Cellule
               titre="Déjà un compte ailleurs ?"
               sousTitre="Relier cet appareil avec un code de liaison (AB1.…)."
-              glyphe="🔗"
+              glyphe="lien"
               chevron
               onPress={() => setLierOuvert(true)}
               testID="ouvrir-lier-compte"

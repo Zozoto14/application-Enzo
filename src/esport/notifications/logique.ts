@@ -9,22 +9,23 @@ import { formaterDate } from '../i18n';
 import { trNf, trnNf, type CleNf } from '../i18n/notifications';
 import { trRp, type CleRp } from '../i18n/roles';
 import type { CategorieNotification, NotificationCentre } from './api';
+import type { NomIcone } from '../../ui/icones/traces';
 
-/** Icône (glyphe) par catégorie : la même dans la liste, les filtres et les préférences. */
-export const ICONES: Record<CategorieNotification, string> = {
-  planning: '◷',
-  competition: '♛',
-  resultats: '◉',
-  cm: '✎',
-  drive: '▤',
-  sponsors: '◆',
-  membres: '☺',
-  discord: '◍',
-  reunions: '❐',
-  objectifs: '✓',
-  jeu: '◎',
-  devblog: '★',
-  systeme: '⚙',
+/** Icône monochrome (src/ui/icones) par catégorie : la même dans la liste, les filtres et les préférences. */
+export const ICONES: Record<CategorieNotification, NomIcone> = {
+  planning: 'calendrier',
+  competition: 'trophee',
+  resultats: 'medaille',
+  cm: 'crayon',
+  drive: 'dossier',
+  sponsors: 'partenaires',
+  membres: 'membres',
+  discord: 'bulle',
+  reunions: 'reunion',
+  objectifs: 'cible',
+  jeu: 'manette',
+  devblog: 'etincelles',
+  systeme: 'reglages',
 };
 
 export const libelleCategorie = (c: CategorieNotification): string => trNf(`cat.${c}` as CleNf);

@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Glyphe } from '../../../ui/icones';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
@@ -82,14 +83,15 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
         <Champ theme={theme} libelle={trDv('champ_date')} valeur={b.date} onChanger={v => regler('date', v)} maxLength={10} testID="esport-devblog-date" style={{ minWidth: 160, flex: 1 }} />
         <Champ theme={theme} libelle={trDv('champ_version')} valeur={b.version} onChanger={v => regler('version', v)} maxLength={20} testID="esport-devblog-version" style={{ minWidth: 140, flex: 1 }} />
       </View>
-      <Segments<Langue> theme={theme} libelle={trDv('apercu_langue')} valeur={langue} options={[['fr', `🇫🇷 ${trDv('langue_fr')}`], ['en', `🇬🇧 ${trDv('langue_en')}`]]} onChoisir={setLangue} testID="esport-devblog-langue" />
+      <Segments<Langue> theme={theme} libelle={trDv('apercu_langue')} valeur={langue} options={[['fr', trDv('langue_fr')], ['en', trDv('langue_en')]]} onChoisir={setLangue} testID="esport-devblog-langue" />
       {langue === 'en' ? (
         <View style={{ gap: ESP.xs, padding: ESP.s, borderRadius: 10, backgroundColor: teinteTransparente(theme.accent, 0.08) }}>
           <Text style={attenue(theme, 13)}>{trDv('ia_aide')}</Text>
           <View style={{ alignSelf: 'flex-start' }}>
             <BoutonHub
               theme={theme}
-              titre={enCours === 'ia' ? trDv('ia_en_cours') : `✨ ${trDv('ia_preparer')}`}
+              icone={enCours === 'ia' ? undefined : 'etincelles'}
+              titre={enCours === 'ia' ? trDv('ia_en_cours') : trDv('ia_preparer')}
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('ia', async () => {
@@ -146,6 +148,7 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
         </View>
       ))}
       <View style={{ alignSelf: 'flex-start' }}>
+        {/* emoji-autorise : emoji de section proposé par défaut, que l'utilisateur choisit (devblog Discord) */}
         <BoutonHub theme={theme} titre={`+ ${trDv('section_ajouter')}`} onPress={() => changer(langue, x => ({ ...x, sections: [...x.sections, { emoji: '✨', titre: '', puces: [{ nom: '', description: '' }] }] }))} testID={`esport-devblog-${langue}-section-ajouter`} />
       </View>
       <Champ theme={theme} libelle={trDv('champ_conclusion')} placeholder={trDv('champ_conclusion_aide')} valeur={c.conclusion} onChanger={v => changer(langue, x => ({ ...x, conclusion: v }))} multiligne maxLength={600} testID={`esport-devblog-${langue}-conclusion`} />
@@ -192,11 +195,11 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs, alignItems: 'center' }}>
         <Badge theme={theme} texte={statut === 'publie' ? trDv('publie') : trDv('brouillon')} ton={statut === 'publie' ? 'ok' : 'alerte'} testID="esport-devblog-statut" />
         {modifie ? <Badge theme={theme} texte={trDv('modifications')} ton="accent" testID="esport-devblog-modifie" /> : null}
-        {entree?.origine === 'auto' ? <Badge theme={theme} texte={`✨ ${trDv('badge_auto')}`} testID="esport-devblog-origine-auto" /> : null}
-        {entree?.programmation && statut === 'brouillon' ? <Badge theme={theme} texte={`🗓️ ${trDv('badge_programme', { date: dateHeureClub(entree.programmation.le) })}`} ton="accent" testID="esport-devblog-badge-programme" /> : null}
+        {entree?.origine === 'auto' ? <Badge theme={theme} icone="etincelles" texte={trDv('badge_auto')} testID="esport-devblog-origine-auto" /> : null}
+        {entree?.programmation && statut === 'brouillon' ? <Badge theme={theme} icone="calendrier" texte={trDv('badge_programme', { date: dateHeureClub(entree.programmation.le) })} ton="accent" testID="esport-devblog-badge-programme" /> : null}
         <View style={{ flex: 1 }} />
         {statut === 'brouillon' ? (
-          <BoutonHub theme={theme} titre={`🚀 ${trDv('publier_app')}`} desactive={Boolean(enCours)} onPress={() =>
+          <BoutonHub theme={theme} icone="fusee" titre={trDv('publier_app')} desactive={Boolean(enCours)} onPress={() =>
               void agir('publier', async () => {
                 await enregistrer('publie');
                 return trDv('publie_app');
@@ -274,7 +277,7 @@ function PetitBouton({ theme, glyphe, cle, vars, onPress, desactive, testID }: {
       disabled={desactive}
       onPress={onPress}
       style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', opacity: desactive ? 0.35 : 1 }}>
-      <Text style={{ color: theme.texte, fontSize: 18 }}>{glyphe}</Text>
+      <Glyphe valeur={glyphe} style={{ color: theme.texte, fontSize: 18 }} />
     </Pressable>
   );
 }
@@ -307,7 +310,7 @@ function PublierDiscord({ theme, client, entree, modifie }: { theme: ThemeHub; c
   const resultat = (e: string) => trDv(`discord_resultat_${e}` as CleDv);
   return (
     <Carte theme={theme} testID="esport-devblog-discord">
-      <TitreCarte theme={theme} titre={`📣 ${trDv('discord_titre')}`} sous={trDv('discord_aide')} />
+      <TitreCarte theme={theme} icone="megaphone" titre={trDv('discord_titre')} sous={trDv('discord_aide')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-discord" />
       {!publie ? <Text style={attenue(theme, 14)} testID="esport-devblog-discord-brouillon">{trDv('discord_brouillon')}</Text> : null}
       <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{trDv('discord_salons')}</Text>

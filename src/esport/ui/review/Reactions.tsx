@@ -7,6 +7,7 @@
  */
 
 import React, { useState } from 'react';
+import { Icone, type NomIcone } from '../../../ui/icones';
 import { Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { SANS_REACTION, type Reactions, type ValeurReaction } from '../../review/api';
@@ -31,7 +32,7 @@ export function BoutonsReaction({
   compact?: boolean;
 }) {
   const [qui, setQui] = useState(false);
-  const bouton = (v: ValeurReaction, glyphe: string, nom: string) => {
+  const bouton = (v: ValeurReaction, glyphe: NomIcone, nom: string) => {
     const n = reactions[v];
     const moi = reactions.moi === v;
     const personnes = noms(reactions.qui[v]);
@@ -60,9 +61,7 @@ export function BoutonsReaction({
           backgroundColor: moi ? teinteTransparente(theme.accent, 0.18) : etat.pressed ? teinteTransparente(theme.attenue, 0.16) : theme.surface,
           justifyContent: 'center',
         })}>
-        <Text style={{ fontSize: 16 }} accessibilityElementsHidden importantForAccessibility="no">
-          {glyphe}
-        </Text>
+        <Icone nom={glyphe} taille={18} couleur={moi ? theme.accent : theme.texte} />
         <Text testID={`${testID}-${v}-n`} style={{ color: theme.texte, fontWeight: moi ? '800' : '600', fontSize: 14, ...police(theme.policeChiffres) }}>
           {n}
         </Text>
@@ -74,12 +73,12 @@ export function BoutonsReaction({
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={tr('review.reactions.reactions')}>
-        {bouton('like', '👍', tr('review.reactions.j_aime'))}
-        {bouton('dislike', '👎', tr('review.reactions.je_n_aime_pas'))}
+        {bouton('like', 'pouce-haut', tr('review.reactions.j_aime'))}
+        {bouton('dislike', 'pouce-bas', tr('review.reactions.je_n_aime_pas'))}
       </View>
       {qui && (listeLike || listeDislike) ? (
         <Text testID={`${testID}-qui`} style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-          {[listeLike ? `👍 ${listeLike}` : '', listeDislike ? `👎 ${listeDislike}` : ''].filter(Boolean).join(' · ')}
+          {[listeLike ? `${tr('review.reactions.j_aime')} : ${listeLike}` : '', listeDislike ? `${tr('review.reactions.je_n_aime_pas')} : ${listeDislike}` : ''].filter(Boolean).join(' · ')}
         </Text>
       ) : null}
     </View>

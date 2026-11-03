@@ -11,7 +11,7 @@ import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { CATEGORIES_DEFAUT, apiRessources, type GenreRessource, type TeamPublication, type VisibiliteRessource } from '../../ressources/api';
-import { GLYPHES_GENRE, nomCategorie, nomGenre } from '../../ressources/libelles';
+import { nomCategorie, nomGenre } from '../../ressources/libelles';
 import { extraireYoutube } from '../../review/youtube';
 import { lireTags } from '../../strats/libelles';
 import { tr, trn } from '../../i18n';
@@ -50,7 +50,7 @@ export function PublierMulti({ theme, client, onFermer }: { theme: ThemeHub; cli
     <Volet theme={theme} visible titre={tr('ressources.multi.titre')} onFermer={onFermer} testID="esport-ressources-multi">
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-ressources-multi" />
       <Text style={attenue(theme, TYPO.texte)}>{tr('ressources.multi.explication')}</Text>
-      {teams && teams.length === 0 ? <EtatVide theme={theme} glyphe="📚" titre={tr('ressources.multi.aucune_team')} texte={tr('ressources.multi.aucune_team_texte')} /> : null}
+      {teams && teams.length === 0 ? <EtatVide theme={theme} glyphe="bibliotheque" titre={tr('ressources.multi.aucune_team')} texte={tr('ressources.multi.aucune_team_texte')} /> : null}
       {teams?.length ? (
         <View style={{ gap: ESP.xs }}>
           <Text style={{ ...texte(theme), fontWeight: '700' }}>{trn('ressources.multi.teams', choisies.size)}</Text>
@@ -74,7 +74,7 @@ export function PublierMulti({ theme, client, onFermer }: { theme: ThemeHub; cli
                   borderColor: choisies.has(t.id) ? theme.accent : theme.ligne,
                   backgroundColor: choisies.has(t.id) ? teinteTransparente(theme.accent, 0.16) : theme.surface,
                 }}>
-                <Text style={{ ...texte(theme), fontWeight: '800', color: choisies.has(t.id) ? theme.accent : theme.attenue }}>{choisies.has(t.id) ? '☑' : '☐'}</Text>
+                <Text style={{ ...texte(theme), fontWeight: '800', color: choisies.has(t.id) ? theme.accent : theme.attenue }}>{choisies.has(t.id) ? '☑︎' : '☐'}</Text>
                 <Text style={texte(theme)}>{t.nom}</Text>
               </Pressable>
             ))}
@@ -84,7 +84,7 @@ export function PublierMulti({ theme, client, onFermer }: { theme: ThemeHub; cli
           </View>
         </View>
       ) : null}
-      <Choix<GenreRessource> theme={theme} libelle={tr('resumes.type')} valeur={genre} options={GENRES_MULTI.map(g => ({ id: g, nom: `${GLYPHES_GENRE[g]} ${nomGenre(g)}` }))} onChoisir={setGenre} testID="esport-ressources-multi-genre" />
+      <Choix<GenreRessource> theme={theme} libelle={tr('resumes.type')} valeur={genre} options={GENRES_MULTI.map(g => ({ id: g, nom: nomGenre(g) }))} onChoisir={setGenre} testID="esport-ressources-multi-genre" />
       {genre !== 'note' ? <Champ theme={theme} libelle={genre === 'youtube' ? tr('ressources.adresse_youtube') : tr('ressources.adresse')} valeur={url} onChanger={setUrl} placeholder="https://" maxLength={2048} testID="esport-ressources-multi-url" /> : null}
       <Champ theme={theme} libelle={genre === 'lien' ? tr('ressources.titre_facultatif') : tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-ressources-multi-titre" />
       <ChampNote theme={theme} libelle={genre === 'note' ? tr('ressources.texte_note') : tr('ressources.description')} valeur={description} onChanger={setDescription} maxLength={8000} testID="esport-ressources-multi-description" apercu="jamais" />

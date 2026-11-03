@@ -20,7 +20,7 @@ const ONGLETS: ReadonlyArray<readonly [Onglet, string]> = [
   ['a_reprendre', LIBELLE_STATUT.a_reprendre],
   ['vu', LIBELLE_STATUT.vu],
   ['vu_ailleurs', LIBELLE_STATUT.vu_ailleurs],
-  ['favoris', '♥ Favoris'],
+  ['favoris', '♥︎ Favoris'],
 ];
 
 export function Bibliotheque() {

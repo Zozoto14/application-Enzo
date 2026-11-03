@@ -94,7 +94,7 @@ export function rappelsCarnet(
       if (!dejaEnvoyes.has(identifiant)) {
         rappels.push({
           identifiant,
-          titre: `🎯 ${ligne.nom} a atteint votre objectif de ${ligne.these.objectif}`,
+          titre: `${ligne.nom} a atteint votre objectif de ${ligne.these.objectif}`,
           corps: `${rappelThese} Est-elle toujours valable, ou est-il temps d’agir ?`.trim(),
         });
       }
@@ -103,7 +103,7 @@ export function rappelsCarnet(
       if (!dejaEnvoyes.has(identifiant)) {
         rappels.push({
           identifiant,
-          titre: `⚠️ ${ligne.nom} passe sous ${ligne.these.revoirSous} : relisez votre thèse`,
+          titre: `${ligne.nom} passe sous ${ligne.these.revoirSous} : relisez votre thèse`,
           corps: `${rappelThese}${ligne.these.venteSi ? ` Vous vendriez si : ${ligne.these.venteSi}` : ''}`.trim(),
         });
       }

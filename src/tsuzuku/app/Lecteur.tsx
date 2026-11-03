@@ -312,7 +312,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
                     {texteDiagnosticLecteurs(lecture.diagnostic.lecteurs)}
                   </Text>
                 ) : null}
-                <Bouton titre="Ouvrir l’épisode sur le site ↗" variante="plein" onPress={() => void ouvrirExterne(lecture.diagnostic!.urlPage!)} testID="lecteur-ouvrir-site" style={{ alignSelf: 'flex-start' }} />
+                <Bouton titre="Ouvrir l’épisode sur le site ↗︎" variante="plein" onPress={() => void ouvrirExterne(lecture.diagnostic!.urlPage!)} testID="lecteur-ouvrir-site" style={{ alignSelf: 'flex-start' }} />
               </View>
             ) : null}
             {courant && lecture.mesure ? (
@@ -340,7 +340,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
             ) : (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {kind === 'movie' ? <Bouton titre="Marquer comme vu" onPress={() => void marquerFilmVu()} testID="lecteur-marquer-vu" /> : null}
-                <Bouton titre="Ouvrir dans le navigateur ↗" onPress={() => void ouvrirExterne(courant.url)} testID="lecteur-externe" />
+                <Bouton titre="Ouvrir dans le navigateur ↗︎" onPress={() => void ouvrirExterne(courant.url)} testID="lecteur-externe" />
               </View>
             )}
           </View>

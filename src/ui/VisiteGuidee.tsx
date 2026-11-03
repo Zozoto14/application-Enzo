@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Bouton, usePalette } from './composants';
 import { ESPACEMENT, RAYON, POLICE_TITRE } from './theme';
+import { Glyphe, Icone, estNomIcone } from './icones';
 
 /** Ancienne valeur enregistrée : elle voulait dire « toutes les étapes d'alors vues ». */
 export const VERSION_VISITE = '2026-09-27';
@@ -29,6 +30,7 @@ const ETAPES_DE_LA_VERSION_2026_09_27 = [
 export interface EtapeVisite {
   /** Identifiant stable : une étape vue n'est plus jamais reproposée. */
   id: string;
+  /** Nom d'icône (src/ui/icones) ou symbole texte ; l'emoji d'une entrée du devblog reste tel quel (contenu). */
   emoji: string;
   titre: string;
   texte: string;
@@ -71,7 +73,7 @@ export function marquerVues(brute: string | undefined | null, ids: readonly stri
 export const ETAPES_VISITE: readonly EtapeVisite[] = [
   {
     id: 'intro',
-    emoji: '👋',
+    emoji: 'main',
     titre: 'Quoi de neuf dans AppDashboard',
     texte: 'Un petit tour des nouveautés, en une minute. À chaque étape, « Ouvrir la page » vous y emmène pour voir à quoi ça ressemble, puis la visite reprend. Elle se relance depuis Paramètres.',
   },
@@ -98,7 +100,7 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   },
   {
     id: 'msci-world',
-    emoji: '🌍',
+    emoji: 'globe',
     titre: 'Et si tout était sur le MSCI World ?',
     texte: 'Dans Portefeuille › Performances : vos choix comparés, en euros, au même argent placé dans un ETF monde.',
     destination: 'tableau',
@@ -106,7 +108,7 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   },
   {
     id: 'simulateur-vente',
-    emoji: '🧾',
+    emoji: 'recu',
     titre: 'Le simulateur de vente',
     texte: 'Dans Portefeuille › Impôts : l’impôt d’une vente sur compte-titres, et pourquoi vendre dans un PEA ne coûte rien.',
     destination: 'tableau',
@@ -114,14 +116,14 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   },
   {
     id: 'podcast',
-    emoji: '🎙️',
+    emoji: 'micro',
     titre: 'Le podcast',
     texte: 'Un flash de deux minutes, la semaine en bref le vendredi, et chaque information dite avec sa vérification.',
     destination: 'podcast',
   },
   {
     id: 'alertes',
-    emoji: '🔔',
+    emoji: 'cloche',
     titre: 'Les alertes',
     texte: 'Résultats, dividendes, grosses actus recoupées. Fermer la fenêtre laisse AppDashboard près de l’horloge, pour qu’elles partent.',
     destination: 'notifications',
@@ -135,7 +137,7 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   },
   {
     id: 'synchro',
-    emoji: '🔄',
+    emoji: 'synchro',
     titre: 'Vos données sont sur le serveur',
     texte: 'Tout est enregistré, chiffré, sur appdashboard.fr : sur n’importe quel appareil, votre identifiant et votre mot de passe suffisent. La pastille en haut dit si vous êtes en ligne.',
     destination: 'reglages',
@@ -196,7 +198,7 @@ export function VisiteGuidee({
           style={[styles.bandeau, { backgroundColor: palette.surface, borderColor: palette.accent }]}
           testID="visite-bandeau">
           <Text style={{ color: palette.texte, fontWeight: '700', flexShrink: 1 }} numberOfLines={2}>
-            {etape.emoji} {etape.titre}
+            {estNomIcone(etape.emoji) ? <Icone nom={etape.emoji} /> : etape.emoji} {etape.titre}
             <Text style={{ color: palette.texteSecondaire, fontWeight: '400' }}>
               {'  '}· étape {rang + 1}/{etapes.length}
             </Text>
@@ -220,7 +222,7 @@ export function VisiteGuidee({
     <Modal visible transparent animationType="fade" onRequestClose={terminer}>
       <View style={styles.voile}>
         <View style={[styles.boite, { backgroundColor: palette.surface, borderColor: palette.bordure }]} testID="visite-guidee">
-          <Text style={styles.emoji}>{etape.emoji}</Text>
+          <Glyphe valeur={etape.emoji} style={[styles.emoji, { color: palette.accent }]} />
           <Text {...POLICE_TITRE} style={[styles.titre, { color: palette.texte }]}>
             {etape.titre}
           </Text>

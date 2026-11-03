@@ -19,7 +19,7 @@ describe('IndicateurSynchro', () => {
       />,
     );
     expect(screen.getByTestId('synchro-libelle').props.children).toBe('3 éléments en attente (hors ligne)');
-    expect(screen.getByText('⏳')).toBeTruthy();
+    expect(screen.getByText('⧗', { includeHiddenElements: true })).toBeTruthy();
     expect(screen.getByTestId('synchro-indicateur').props.accessibilityLabel).toContain('3 éléments en attente');
     await fireEvent.press(screen.getByTestId('synchro-maintenant'));
     expect(onSynchroniser).toHaveBeenCalledTimes(1);

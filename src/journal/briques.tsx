@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../hub/themes';
 import { jourCourt, jourLongMaj } from './dates';
 import { HUMEURS, type ChiffreCle, type Humeur, type PageJournal, type SectionPage } from './modele';
+import { Icone, type NomIcone } from '../ui/icones';
 import type { Masqueur } from './export';
 
 export interface StyleCommun {
@@ -99,7 +100,7 @@ export function SelecteurHumeur({ theme, mobile, valeur, onChoisir }: { theme: T
             accessibilityLabel={`Humeur : ${h.libelle}`}
             onPress={() => onChoisir(actif ? null : h.valeur)}
             style={[styles.humeur, { borderColor: actif ? theme.accent : theme.ligne, backgroundColor: actif ? teinteTransparente(theme.accent, 0.2) : theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
-            <Text style={{ fontSize: mobile ? 24 : 22 }}>{h.emoji}</Text>
+            <Icone nom={h.icone} taille={mobile ? 26 : 24} couleur={actif ? theme.accent : theme.texte} />
           </Pressable>
         );
       })}
@@ -164,7 +165,7 @@ export function TextePage({ theme, mobile, page, masquer }: StyleCommun & { page
 }
 
 /** Ligne d'une journée dans une liste (semaine, mois, épinglées, recherche). */
-export function LigneJour({ theme, mobile, jour, texte, humeur, epingle, onPress, testID }: { theme: ThemeHub; mobile: boolean; jour: string; texte: string; humeur?: string; epingle?: boolean; onPress(): void; testID?: string }) {
+export function LigneJour({ theme, mobile, jour, texte, humeur, epingle, onPress, testID }: { theme: ThemeHub; mobile: boolean; jour: string; texte: string; humeur?: NomIcone; epingle?: boolean; onPress(): void; testID?: string }) {
   return (
     <Pressable
       testID={testID}
@@ -176,7 +177,10 @@ export function LigneJour({ theme, mobile, jour, texte, humeur, epingle, onPress
       <Text numberOfLines={2} style={{ flex: 1, color: theme.texte, fontSize: taille(14, mobile), ...police(theme.policeTexte) }}>
         {texte}
       </Text>
-      <Text style={{ fontSize: taille(16, mobile) }}>{`${epingle ? '📌' : ''}${humeur ?? ''}`}</Text>
+      <View style={{ flexDirection: 'row', gap: 4 }}>
+        {epingle ? <Icone nom="epingle" taille={taille(16, mobile)} couleur={theme.accent} libelle="Épinglée" /> : null}
+        {humeur ? <Icone nom={humeur} taille={taille(16, mobile)} couleur={theme.texte} /> : null}
+      </View>
     </Pressable>
   );
 }

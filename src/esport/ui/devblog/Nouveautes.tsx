@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Icone } from '../../../ui/icones';
 import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { type ThemeHub } from '../../../hub/themes';
@@ -69,7 +70,7 @@ export function FenetreNouveautes({ theme, client, entree, onFermer, onVoirTous 
           }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, paddingHorizontal: telephone ? ESP.m : ESP.xl, paddingTop: ESP.m, paddingBottom: ESP.s, borderBottomWidth: 1, borderBottomColor: theme.ligne }}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ ...texte(theme, 13), color: theme.accent, fontWeight: '800', letterSpacing: 1 }}>{`✨ ${trDv('nouveautes_titre').toUpperCase()}`}</Text>
+              <Text style={{ ...texte(theme, 13), color: theme.accent, fontWeight: '800', letterSpacing: 1 }}><Icone nom="etincelles" /> {trDv('nouveautes_titre').toUpperCase()}</Text>
               <Text style={attenue(theme, 13)}>{trDv('nouveautes_sous')}</Text>
             </View>
             <Pressable testID="esport-nouveautes-fermer" accessibilityRole="button" accessibilityLabel={trDv('fermer')} onPress={onFermer} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>

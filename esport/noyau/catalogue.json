@@ -113,7 +113,7 @@
         { "cle": "video_review.view", "action": "voir", "libelle": "Voir" },
         { "cle": "video_review.create", "action": "creer", "libelle": "Créer" },
         { "cle": "video_review.annotate", "action": "modifier", "libelle": "Annoter, commenter et dessiner" },
-        { "cle": "video_review.react", "action": "special", "libelle": "Réagir (👍 / 👎)" },
+        { "cle": "video_review.react", "action": "special", "libelle": "Réagir (j’aime / je n’aime pas)" },
         { "cle": "video_review.delete", "action": "supprimer", "libelle": "Supprimer" }
       ]
     },
@@ -379,7 +379,7 @@
     "video_review.view": {"categorie":"jeu","fr":"Review vidéo : voir les reviews.","en":"Video review: see reviews."},
     "video_review.create": {"categorie":"jeu","fr":"Review vidéo : créer une review.","en":"Video review: create a review."},
     "video_review.annotate": {"categorie":"jeu","fr":"Review vidéo : annoter, commenter et dessiner.","en":"Video review: annotate, comment and draw."},
-    "video_review.react": {"categorie":"jeu","fr":"Review vidéo : réagir (👍 / 👎).","en":"Video review: react (👍 / 👎)."},
+    "video_review.react": {"categorie":"jeu","fr":"Review vidéo : réagir (j’aime / je n’aime pas).","en":"Video review: react (like / dislike)."},
     "video_review.delete": {"categorie":"jeu","fr":"Review vidéo : supprimer une review.","en":"Video review: delete a review.","sensible":true},
     "scouting.view": {"categorie":"jeu","fr":"Scouting : voir les fiches adversaires.","en":"Scouting: see opponent files."},
     "scouting.manage": {"categorie":"jeu","fr":"Scouting : créer et modifier les fiches.","en":"Scouting: create and edit files."},

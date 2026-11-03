@@ -54,6 +54,7 @@ import type { CommandeLecteur, EtatLecteur } from './typesLecteur';
 import { imprimerNotes, impressionDisponible } from './impression';
 import { TOUCHE_RACCOURCI, useRaccourciRepere } from './raccourci';
 import { tr, trn } from '../../i18n';
+import { Glyphe } from '../../../ui/icones';
 
 export function Review({ theme, client, detail, large, reviewId, onExporter }: PropsModule) {
   const teamId = detail.team.id;
@@ -206,7 +207,7 @@ function ListeReviews({
             style={{ flexDirection: 'row', gap: 12, padding: 10, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, alignItems: 'center' }}>
             {r.source === 'fichier' ? (
               <View testID={`esport-review-miniature-fichier-${r.id}`} style={{ width: 120, height: 68, borderRadius: 6, backgroundColor: theme.fond, alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                <Text style={{ color: theme.accent, fontSize: 22 }}>▶</Text>
+                <Text style={{ color: theme.accent, fontSize: 22 }}>▶︎</Text>
                 <Text style={{ color: theme.attenue, fontSize: 11, ...police(theme.policeTexte) }}>{r.video?.supprime ? tr('medias.video_supprimee') : (r.video?.media?.nomFormat ?? tr('medias.review.fichier'))}</Text>
               </View>
             ) : (
@@ -552,7 +553,7 @@ function DetailReviewEcran({
                   backgroundColor: coche ? teinteTransparente(c.couleur, 0.22) : theme.surface,
                   borderRadius: Math.min(theme.rayonMoyen, 10),
                 }}>
-                <Text style={{ color: c.couleur, fontWeight: '800' }}>{c.glyphe}</Text>
+                <Glyphe valeur={c.glyphe} style={{ color: c.couleur, fontWeight: '800' }} />
                 <Text style={{ color: theme.texte, fontSize: 13, fontWeight: coche ? '700' : '500', ...police(theme.policeTexte) }}>{c.nom}</Text>
               </Pressable>
             );
@@ -710,7 +711,7 @@ function CarteRepere({
         <Text style={{ color: theme.texte, fontWeight: '700', flex: 1, ...police(theme.policeTexte) }}>{r.titre}</Text>
         {r.dessin?.objets.length ? (
           <Text testID={`esport-repere-icone-dessin-${r.id}`} accessibilityLabel={tr('review.review.ce_repere_porte_un')} style={{ fontSize: 15 }}>
-            ✏️
+            ✏︎
           </Text>
         ) : null}
       </Pressable>

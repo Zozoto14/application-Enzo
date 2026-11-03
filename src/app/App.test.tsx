@@ -387,7 +387,7 @@ describe('parcours complet, session ouverte', () => {
       await laisserTravailler();
       expect(enregistres[0].nom).toBe('AppDashboard 2026-09-22.xlsx');
       expect([...enregistres[0].octets.slice(0, 2)]).toEqual([0x50, 0x4b]);
-      expect(screen.getByTestId('message-export').props.children).toBe('✅ Fichier Excel enregistré.');
+      expect(screen.getByTestId('message-export').props.children).toBe('✓ Fichier Excel enregistré.');
     } finally {
       delete global.applibourse;
     }
@@ -1222,7 +1222,7 @@ describe('écran de notifications', () => {
       const session = await ouvrirNotifications();
       await fireEvent.press(screen.getByTestId('bouton-tester-notification'));
       await laisserTravailler();
-      expect(envoyees).toEqual(['✅ AppDashboard']);
+      expect(envoyees).toEqual(['AppDashboard']);
       expect(screen.getByText('Notification de test envoyée.')).toBeTruthy();
 
       await fireEvent.changeText(screen.getByTestId('champ-seuil-variation'), '3,5');

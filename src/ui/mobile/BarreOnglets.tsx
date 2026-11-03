@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { police, type ThemeHub } from '../../hub/themes';
 import { CONTROLE, EXEMPTE_TEXTE, TEXTE, themeActif } from './jetons';
 import { margesSecurite } from './ZoneSecurite';
+import { Glyphe } from '../icones';
 
 export interface EntreeOnglet {
   cle: string;
@@ -63,7 +64,7 @@ export function BarreOnglets({
             onPress={() => onChoisir(entree.cle)}
             style={({ pressed }) => [styles.entree, { opacity: pressed ? 0.6 : 1 }]}>
             <View>
-              <Text style={[styles.glyphe, { color: couleur }]}>{entree.glyphe}</Text>
+              <Glyphe valeur={entree.glyphe} style={[styles.glyphe, { color: couleur }]} />
               {entree.pastille !== undefined ? (
                 <View style={[styles.pastille, entree.pastille && entree.pastille !== '•' ? styles.pastilleNombre : null, { backgroundColor: entree.couleurPastille ?? theme.accent, borderColor: theme.surface }]} {...EXEMPTE_TEXTE}>
                   {entree.pastille && entree.pastille !== '•' ? <Text style={{ color: theme.surAccent, fontSize: 11, fontWeight: '800' }}>{entree.pastille}</Text> : null}

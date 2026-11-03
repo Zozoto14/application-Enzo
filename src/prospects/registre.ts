@@ -19,7 +19,7 @@ export const APP_PROSPECTS: AppHub = {
   categorie: 'Admin',
   page: 'administration',
   description: 'Carnet de prospection : contacts, relances, modèles de messages.',
-  icone: '✉︎',
+  icone: 'contact',
   teinte: 'quatre',
   adminSeulement: true,
   disponible: accesProspects,

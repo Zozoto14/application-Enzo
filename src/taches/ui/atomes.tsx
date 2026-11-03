@@ -11,6 +11,7 @@ import { ecouterTouche } from '../../hub/web';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { FeuilleBasse, useMobile } from '../../ui/mobile';
 import { LIBELLES_PRIORITE, type Priorite } from '../modele';
+import { Icone, type NomIcone } from '../../ui/icones';
 
 export const T = { petit: 15, corps: 15, fort: 16, titre: 20, grand: 26 } as const;
 
@@ -47,12 +48,16 @@ export function Bouton({
   desactive,
   compact,
   style,
+  icone,
 }: {
   theme: ThemeHub;
+  /** Texte du bouton ; vide avec `icone` : bouton pictogramme (donner alors `libelle`). */
   titre: string;
   onPress(): void;
   testID?: string;
   libelle?: string;
+  /** Icône monochrome avant le titre (décorative : le titre ou `libelle` la nomme). */
+  icone?: NomIcone;
   variante?: 'plein' | 'normal' | 'discret' | 'danger';
   desactive?: boolean;
   compact?: boolean;
@@ -82,9 +87,20 @@ export function Bouton({
         },
         style,
       ]}>
-      <Text numberOfLines={1} style={{ color: couleur, fontSize: T.corps, fontWeight: '600', ...police(theme.policeTexte) }}>
-        {titre}
-      </Text>
+      {icone ? (
+        <View style={styles.contenuIcone}>
+          <Icone nom={icone} taille={T.corps + 2} couleur={couleur} />
+          {titre ? (
+            <Text numberOfLines={1} style={{ color: couleur, fontSize: T.corps, fontWeight: '600', flexShrink: 1, ...police(theme.policeTexte) }}>
+              {titre}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        <Text numberOfLines={1} style={{ color: couleur, fontSize: T.corps, fontWeight: '600', ...police(theme.policeTexte) }}>
+          {titre}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -100,9 +116,12 @@ export function Puce({
   actif,
   plein,
   grand,
+  icone,
 }: {
   theme: ThemeHub;
   texte: string;
+  /** Icône monochrome avant le texte (décorative). */
+  icone?: NomIcone;
   couleur?: string;
   onPress?(): void;
   testID?: string;
@@ -114,10 +133,19 @@ export function Puce({
   const c = couleur ?? theme.attenue;
   const mobile = useMobile();
   const large = grand || (mobile && Boolean(onPress));
-  const contenu = (
-    <Text numberOfLines={1} style={{ color: plein ? theme.surAccent : theme.sombre ? c : theme.texte, fontSize: T.petit, fontWeight: '600', ...police(theme.policeTexte) }}>
+  const encre = plein ? theme.surAccent : theme.sombre ? c : theme.texte;
+  const libre = (
+    <Text numberOfLines={1} style={{ color: encre, fontSize: T.petit, fontWeight: '600', ...police(theme.policeTexte) }}>
       {texte}
     </Text>
+  );
+  const contenu = icone ? (
+    <View style={styles.contenuIcone}>
+      <Icone nom={icone} taille={T.petit + 2} couleur={encre} />
+      {texte ? libre : null}
+    </View>
+  ) : (
+    libre
   );
   const style = [
     styles.puce,
@@ -324,6 +352,7 @@ export function EtatVide({ theme, titre, texte, children, testID }: { theme: The
 }
 
 const styles = StyleSheet.create({
+  contenuIcone: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   bouton: { minHeight: 44, minWidth: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   boutonCompact: { minHeight: 36, paddingHorizontal: 12 },
   puce: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, minHeight: 26, borderWidth: 1, maxWidth: 220 },

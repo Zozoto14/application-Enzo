@@ -13,6 +13,7 @@ import { CANAUX, champPrefs, DELAIS_DEFAUT, enHeuresCalmes, LIBELLES_CANAL, LIBE
 import { libelleDelai } from '../rappels';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Puce, texteDe } from './atomes';
+import { Icone } from '../../ui/icones';
 
 const TYPES_AMI: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'recap', 'journal'];
 const COURTS: Record<Canal, string> = { 'les-deux': 'Les deux', systeme: 'Système', pastille: 'Pastille', aucun: 'Aucune' };
@@ -53,12 +54,12 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
       onFermer={onFermer}
       testID="dialogue-notifications"
       pied={<Bouton theme={theme} variante="plein" titre="Tester une notification" onPress={onTester} testID="notif-tester" />}>
-      <Interrupteur a={a} texte="Notifications de Tâches" detail="Désactivées : ni notification du système, ni pastille 🔔." actif={p.actif} onPress={() => changer({ actif: !p.actif })} testID="notif-actif" />
+      <Interrupteur a={a} texte="Notifications de Tâches" detail="Désactivées : ni notification du système, ni pastille de la cloche." actif={p.actif} onPress={() => changer({ actif: !p.actif })} testID="notif-actif" />
       {p.actif ? (
         <>
           <Libelle theme={theme}>PAR TYPE : OÙ LES RECEVOIR</Libelle>
           <Text style={attenueDe(theme)}>
-            « Système » : la notification de l’ordinateur {systemeDisponible ? '(disponible ici)' : '(PC ou navigateur autorisé ; sinon la pastille seule)'} ; « Pastille » : 🔔 dans le hub et dans Tâches.
+            « Système » : la notification de l’ordinateur {systemeDisponible ? '(disponible ici)' : '(PC ou navigateur autorisé ; sinon la pastille seule)'} ; « Pastille » : <Icone nom="cloche" /> dans le hub et dans Tâches.
           </Text>
           {types.map(t => (
             <View key={t} style={[styles.type, a.mobile && styles.typeMobile]} testID={`notif-type-${t}`}>
@@ -90,7 +91,7 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
             </>
           ) : null}
           <Libelle theme={theme}>HEURES CALMES (NE PAS DÉRANGER)</Libelle>
-          <Interrupteur a={a} texte="Heures calmes" detail={`Rien ne sonne pendant la plage (la pastille 🔔 garde tout).${calmeMaintenant ? ' En cours maintenant.' : ''}`} actif={p.calme.actif} onPress={() => changer({ calme: { ...p.calme, actif: !p.calme.actif } })} testID="notif-calme" />
+          <Interrupteur a={a} texte="Heures calmes" detail={`Rien ne sonne pendant la plage (la pastille de la cloche garde tout).${calmeMaintenant ? ' En cours maintenant.' : ''}`} actif={p.calme.actif} onPress={() => changer({ calme: { ...p.calme, actif: !p.calme.actif } })} testID="notif-calme" />
           {p.calme.actif ? (
             <View style={styles.rangee}>
               <Text style={texteDe(theme)}>De</Text>
@@ -114,7 +115,7 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
           <View style={styles.rangee}>
             {projetsDe(d).map(pr => {
               const muet = p.muets.includes(pr.id);
-              return <Puce key={pr.id} theme={theme} grand={a.mobile} texte={`${muet ? '🔕' : '🔔'} ${pr.nom}`} couleur={muet ? theme.attenue : pr.couleur} actif={muet} onPress={() => changer({ muets: muet ? p.muets.filter(x => x !== pr.id) : [...p.muets, pr.id] })} testID={`notif-muet-${pr.id}`} libelle={`${pr.nom} : ${muet ? 'en sourdine' : 'notifié'}`} />;
+              return <Puce key={pr.id} theme={theme} grand={a.mobile} icone={muet ? 'cloche-barree' : 'cloche'} texte={pr.nom} couleur={muet ? theme.attenue : pr.couleur} actif={muet} onPress={() => changer({ muets: muet ? p.muets.filter(x => x !== pr.id) : [...p.muets, pr.id] })} testID={`notif-muet-${pr.id}`} libelle={`${pr.nom} : ${muet ? 'en sourdine' : 'notifié'}`} />;
             })}
           </View>
         </>

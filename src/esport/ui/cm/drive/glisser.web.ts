@@ -118,7 +118,7 @@ export function useGlisser(o: OptionsGlisser): Glisser {
         } else setSurvol(null);
       }
       const v = cible ? opts.current.verifier(sources, cible) : null;
-      majFantome(x, y, v ? (v.refus ? `⛔ ${v.refus}` : `${opts.current.texteSources(sources)} → ${v.libelle}${v.note ? ` · ${v.note}` : ''}`) : opts.current.texteSources(sources), Boolean(v?.refus));
+      majFantome(x, y, v ? (v.refus ? `⊘ ${v.refus}` : `${opts.current.texteSources(sources)} → ${v.libelle}${v.note ? ` · ${v.note}` : ''}`) : opts.current.texteSources(sources), Boolean(v?.refus));
     };
 
     const finirGlisse = (lacher: boolean) => {

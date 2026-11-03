@@ -50,7 +50,8 @@ export function BarreApp({ theme, synchro, onParametres, onSupport, supportNonLu
       {onSupport ? (
         <BoutonHub
           theme={theme}
-          titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` 🔔 ${supportNonLus}` : ''}`}
+          icone={supportNonLus > 0 ? 'cloche' : undefined}
+          titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` ${supportNonLus}` : ''}`}
           libelle={supportNonLus > 0 ? `Support : ${supportNonLus} réponse(s) non lue(s)` : 'Support : écrire à l’équipe'}
           testID="app-support-ouvrir"
           onPress={onSupport}

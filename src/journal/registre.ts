@@ -51,7 +51,7 @@ export const APP_JOURNAL: AppHub = {
   categorie: 'Organisation',
   page: 'publique',
   description: 'Chaque soir, une page de journal écrite pour vous à partir de vos apps : tâches, Claude, épisodes, bourse, abonnements.',
-  icone: '✎︎',
+  icone: 'carnet',
   teinte: 'quatre',
   disponible: accesJournal,
   info: infoJournal,

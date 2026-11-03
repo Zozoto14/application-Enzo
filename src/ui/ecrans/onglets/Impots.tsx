@@ -266,14 +266,14 @@ function SimulateurVente({ lignes, aujourdhui }: { lignes: readonly LigneVendabl
               Si vous retirez ces {eurosPrecis(resultat.produit)} du PEA : {eurosPrecis(resultat.retrait.partGain)} de gain
               retiré, {eurosPrecis(resultat.retrait.impot)} d’impôt ({Math.round(resultat.retrait.taux * 1000) / 10} %), il
               vous reste {eurosPrecis(resultat.retrait.net)}.
-              {resultat.retrait.clotureLePlan ? ' ⚠️ Et le PEA serait clôturé.' : ''}
+              {resultat.retrait.clotureLePlan ? ' ⚠︎ Et le PEA serait clôturé.' : ''}
             </Text>
           ) : null}
           {resultat.cinqAns ? (
             <Text style={{ color: resultat.cinqAns.atteint ? palette.hausse : palette.texteSecondaire }} testID="cinq-ans-pea">
               {resultat.cinqAns.atteint
-                ? `✅ Votre PEA a passé ses 5 ans le ${dateFr(resultat.cinqAns.date)}.`
-                : `⏳ Votre PEA aura 5 ans le ${dateFr(resultat.cinqAns.date)}, dans ${resultat.cinqAns.joursRestants} jours.`}
+                ? `✓ Votre PEA a passé ses 5 ans le ${dateFr(resultat.cinqAns.date)}.`
+                : `◷ Votre PEA aura 5 ans le ${dateFr(resultat.cinqAns.date)}, dans ${resultat.cinqAns.joursRestants} jours.`}
             </Text>
           ) : null}
           <SousTitre>Estimation au prélèvement forfaitaire unique, hors cas particuliers : ce n’est pas un avis fiscal.</SousTitre>

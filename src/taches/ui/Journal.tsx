@@ -68,7 +68,7 @@ function LigneEntree({ a, e, onOuvrir, onErreur }: { a: Actions; e: EntreeJourna
         <Text style={[attenueDe(theme), { flex: 1 }]}>
           {a.etat.noms[e.auteur]} · {new Date(e.creeLe).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        {t ? <Bouton theme={theme} compact variante="discret" titre={`↗ ${t.titre.slice(0, 28)}`} libelle={`Ouvrir la tâche ${t.titre}`} onPress={() => onOuvrir(t.id)} /> : null}
+        {t ? <Bouton theme={theme} compact variante="discret" icone="externe" titre={t.titre.slice(0, 28)} libelle={`Ouvrir la tâche ${t.titre}`} onPress={() => onOuvrir(t.id)} /> : null}
         {peut && edition === undefined ? <Bouton theme={theme} compact variante="discret" titre="✎" libelle="Modifier l’entrée" onPress={() => setEdition(e.texte)} testID={`journal-modifier-${e.id}`} /> : null}
         {peut ? <Bouton theme={theme} compact variante="discret" titre="✕" libelle="Retirer l’entrée" onPress={() => essayer(() => a.etat.maj((x, ctx) => supprimerEntree(x, e.id, ctx)))} testID={`journal-retirer-${e.id}`} /> : null}
       </View>
@@ -152,7 +152,7 @@ export function DialogueJournal({
       pied={
         onglet === 'debrief' && deb ? (
           <>
-            {a.aides?.secrets.ia.actif && a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="✨ Résumer (IA)" onPress={() => a.aides!.ouvrirIA({ genre: 'resumer', projetId: deb.projetId, debriefing: debriefingTexte(deb, 'texte', a.etat.aujourdhui) })} testID="debrief-ia" /> : null}
+            {a.aides?.secrets.ia.actif && a.etat.role === 'fondateur' ? <Bouton theme={theme} icone="etincelles" titre="Résumer (IA)" onPress={() => a.aides!.ouvrirIA({ genre: 'resumer', projetId: deb.projetId, debriefing: debriefingTexte(deb, 'texte', a.etat.aujourdhui) })} testID="debrief-ia" /> : null}
             <Bouton theme={theme} titre="Copier en texte" onPress={() => copier('texte')} testID="debrief-copier-texte" />
             <Bouton theme={theme} titre="Copier (Markdown)" onPress={() => copier('markdown')} testID="debrief-copier" />
             {onExporter ? <Bouton theme={theme} variante="plein" titre="Exporter .md" onPress={() => onExporter(`debriefing-${deb.projet.replace(/[^\p{L}\p{N}]+/gu, '-')}-${du}.md`, debriefingTexte(deb, 'markdown', a.etat.aujourdhui))} testID="debrief-exporter" /> : null}
@@ -160,7 +160,7 @@ export function DialogueJournal({
         ) : undefined
       }>
       <View style={styles.rangee}>
-        <Puce theme={theme} grand={a.mobile} texte="📓 Journal du jour" couleur={theme.accent} actif={onglet === 'journal'} onPress={() => setOnglet('journal')} testID="journal-onglet-journal" />
+        <Puce theme={theme} grand={a.mobile} icone="journal" texte="Journal du jour" couleur={theme.accent} actif={onglet === 'journal'} onPress={() => setOnglet('journal')} testID="journal-onglet-journal" />
         <Puce theme={theme} grand={a.mobile} texte="Débriefing" couleur={theme.accent} actif={onglet === 'debrief'} onPress={() => setOnglet('debrief')} testID="journal-onglet-debrief" />
       </View>
       {!projetDonne && lisibles.length > 1 ? (
@@ -252,7 +252,7 @@ export function DialogueJournal({
           ))}
           {!deb.parAuteur.length ? <Text style={attenueDe(theme)}>Rien de noté sur cette période.</Text> : null}
           <Libelle theme={theme}>CE QUI RESTE</Libelle>
-          {[...deb.reste.retard.map(t => ['⚠ En retard', t] as const), ...deb.reste.attente.map(t => ['⏸ En attente', t] as const), ...deb.reste.aVenir.map(t => ['À venir', t] as const)].map(([l, t]) => (
+          {[...deb.reste.retard.map(t => ['⚠︎ En retard', t] as const), ...deb.reste.attente.map(t => ['⏸︎ En attente', t] as const), ...deb.reste.aVenir.map(t => ['À venir', t] as const)].map(([l, t]) => (
             <Pressable key={`${l}-${t.id}`} accessibilityRole="link" onPress={() => onOuvrir(t.id)} style={styles.lien}>
               <Text style={texteDe(theme)}>
                 {l} : <Text style={{ color: theme.accent }}>{t.titre}</Text>

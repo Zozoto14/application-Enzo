@@ -80,7 +80,7 @@ export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: E
             ))}
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Bouton titre={entree.favorite ? '♥ Favori' : '♡ Favori'} onPress={() => void agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { favorite: !entree.favorite })))} testID="favori" />
+            <Bouton titre={entree.favorite ? '♥︎ Favori' : '♡ Favori'} onPress={() => void agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { favorite: !entree.favorite })))} testID="favori" />
             <Bouton titre="Retirer de la bibliothèque" variante="danger" onPress={() => void agir(() => s.depot.modifier(db => void supprimerEntree(db, fiche.kind, fiche.id)))} testID="retirer" />
           </View>
         </View>
@@ -156,7 +156,7 @@ export function LiensLegaux({ liens }: { liens?: LienStreaming[] }) {
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {liens.slice(0, 10).map(l => (
-          <Bouton key={`${l.site}-${l.url}`} titre={`${l.site} ↗`} libelle={`Ouvrir ${l.site} dans le navigateur`} onPress={() => void ouvrirExterne(l.url)} />
+          <Bouton key={`${l.site}-${l.url}`} titre={`${l.site} ↗︎`} libelle={`Ouvrir ${l.site} dans le navigateur`} onPress={() => void ouvrirExterne(l.url)} />
         ))}
       </View>
     </View>

@@ -16,6 +16,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Icone } from '../../../ui/icones';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
@@ -165,7 +166,7 @@ function FicheSuivi({ theme, api, client, detail, large, compte, onRetour }: { t
                 testIDValeur="esport-suivi-resume-presence"
               />
             ) : null}
-            {r.taches ? <ChiffreCle theme={theme} large={large} glyphe="☑" libelle={tr('suivi.taches_ouvertes')} valeur={String(r.taches.ouvertes)} detail={`${trn('suivi.n_en_retard', r.taches.enRetard)} · ${trn('suivi.n_faites', r.taches.faites)}`} ton={r.taches.enRetard ? 'alerte' : 'neutre'} testIDValeur="esport-suivi-resume-taches" /> : null}
+            {r.taches ? <ChiffreCle theme={theme} large={large} glyphe="☑︎" libelle={tr('suivi.taches_ouvertes')} valeur={String(r.taches.ouvertes)} detail={`${trn('suivi.n_en_retard', r.taches.enRetard)} · ${trn('suivi.n_faites', r.taches.faites)}`} ton={r.taches.enRetard ? 'alerte' : 'neutre'} testIDValeur="esport-suivi-resume-taches" /> : null}
             <ChiffreCle theme={theme} large={large} glyphe="✎" libelle={tr('suivi.notes')} valeur={String(r.total)} detail={trn('suivi.n_partagees', r.partagees)} />
           </Grille>
           {r.objectifs && r.objectifs.length ? (
@@ -253,7 +254,9 @@ function CarteNote({ theme, n, api, compte, onModifier, onChange, agir }: { them
   return (
     <Carte theme={theme} dense testID={id} accent={n.epinglee ? theme.accent : undefined} style={n.partagee ? { borderColor: teinteTransparente(theme.ok, 0.6) } : undefined}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs, flexWrap: 'wrap' }}>
-        {n.epinglee ? <Text style={{ ...styleTexte(theme), fontWeight: '800' }}>{`📌 ${tr('suivi.epinglee')}`}</Text> : null}
+        {n.epinglee ? <Text style={{ ...styleTexte(theme), fontWeight: '800' }}>
+            <Icone nom="epingle" /> {tr('suivi.epinglee')}
+          </Text> : null}
         <Text style={{ ...styleTexte(theme), fontWeight: '700' }}>{dateCourteJour(n.date)}</Text>
         <Badge theme={theme} texte={nomCategorie(n.categorie)} ton="accent" />
         <Badge theme={theme} texte={nomTon(n.ton)} ton={tonDeNote(n.ton)} />
@@ -276,7 +279,7 @@ function CarteNote({ theme, n, api, compte, onModifier, onChange, agir }: { them
       {n.tags.length ? <Text style={{ ...styleAttenue(theme), color: theme.accent }}>{n.tags.map(t => `#${t}`).join('  ')}</Text> : null}
       {n.lien ? (
         <Text style={styleAttenue(theme)} testID={`${id}-lien`}>
-          {`🔗 ${tr(`suivi.lien.${n.lien.type}`)} : ${n.lien.titre ?? tr('suivi.lien_inaccessible')}${n.lien.occurrence ? ` · ${dateCourteJour(n.lien.occurrence.slice(0, 10))}` : ''}`}
+          <Icone nom="lien" /> {`${tr(`suivi.lien.${n.lien.type}`)} : ${n.lien.titre ?? tr('suivi.lien_inaccessible')}${n.lien.occurrence ? ` · ${dateCourteJour(n.lien.occurrence.slice(0, 10))}` : ''}`}
         </Text>
       ) : null}
       <Text style={styleAttenue(theme)}>{n.auteur ? tr('suivi.par', { nom: n.auteur.pseudo ?? tr('resumes.compte_supprime') }) : tr('suivi.auteur_supprime')}</Text>

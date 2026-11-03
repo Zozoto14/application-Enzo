@@ -16,6 +16,7 @@ import { descendantsDe, groupesAnnulation } from '../../../cm/drive';
 import type { ApiVisuels, DossierVisuel, ElementVisuel } from '../../../cm/visuels/api';
 import { trDr, type CleDr } from '../../../i18n/drive';
 import { trVi, type CleVi } from '../../../i18n/visuels';
+import { Glyphe, Icone } from '../../../../ui/icones';
 import { BoutonConfirme, styles, useAgir } from '../../commun';
 import { Carte, ESP, EtatVide, Grille, MenuActions, Volet, attenue, texte, type EtatPresse } from '../../design';
 import { ToastAnnuler } from '../../strats/Suppression';
@@ -230,7 +231,7 @@ export function ExplorateurVisuels({
       { genre: 'dossier', id: d.id },
       <Carte theme={theme} dense onPress={() => clic({ genre: 'dossier', id: d.id }, () => onOuvrir(d.id))} libelle={nomDossierVisuel(d)} testID={`${testID}-dossier-${d.id}`}>
         <View style={[styles.ligne, { gap: 6, flexWrap: 'nowrap', paddingRight: 64 }]}>
-          <Text style={{ fontSize: 26 }}>📁</Text>
+          <Icone nom="dossier" taille={28} couleur={theme.attenue} />
           <Text style={{ ...texte(theme, 14), fontWeight: '700', flex: 1 }} numberOfLines={2}>
             {nomDossierVisuel(d)}
           </Text>
@@ -270,7 +271,7 @@ export function ExplorateurVisuels({
           onLongPress={glisser.disponible || !editer ? undefined : () => basculer(e)}
           testID={`${testID}-${e.genre}-${e.id}-ligne`}
           style={(p: EtatPresse) => ({ flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: ESP.s, borderRadius: 8, paddingHorizontal: 4, backgroundColor: selection.has(cle(e)) ? teinteTransparente(theme.accent, 0.16) : p.hovered ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
-          <Text style={{ fontSize: 20 }}>{glyphe}</Text>
+          <Glyphe valeur={glyphe} style={{ fontSize: 20, color: theme.attenue }} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ ...texte(theme, 14), fontWeight: '600' }} numberOfLines={1}>
               {nom}
@@ -328,7 +329,7 @@ export function ExplorateurVisuels({
       {!recherche && !courant ? avant : null}
       {vide ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="📁" titre={recherche ? trVi('dossiers.aucun_resultat') : nomCible(courant)} texte={recherche ? '' : trVi('dossiers.vide')} />
+          <EtatVide theme={theme} glyphe="dossier" titre={recherche ? trVi('dossiers.aucun_resultat') : nomCible(courant)} texte={recherche ? '' : trVi('dossiers.vide')} />
         </Carte>
       ) : vue === 'grille' ? (
         <Grille min={large ? 240 : 160} testID={`${testID}-grille`}>
@@ -336,8 +337,8 @@ export function ExplorateurVisuels({
         </Grille>
       ) : (
         <View testID={`${testID}-liste`}>
-          {sousDossiers.map(d => ligne({ genre: 'dossier', id: d.id }, '📁', nomDossierVisuel(d), trVi('dossiers.contenu', { m: d.modeles, v: d.visuels }), () => onOuvrir(d.id), menuDossier(d)))}
-          {visibles.map(e => ligne({ genre: e.genre, id: e.id }, e.genre === 'visuel' ? '🖼' : '◈', e.nom, e.sous ?? '', e.onOuvrir, menuElement(e), e.actions))}
+          {sousDossiers.map(d => ligne({ genre: 'dossier', id: d.id }, 'dossier', nomDossierVisuel(d), trVi('dossiers.contenu', { m: d.modeles, v: d.visuels }), () => onOuvrir(d.id), menuDossier(d)))}
+          {visibles.map(e => ligne({ genre: e.genre, id: e.id }, e.genre === 'visuel' ? 'image' : '◈', e.nom, e.sous ?? '', e.onOuvrir, menuElement(e), e.actions))}
         </View>
       )}
       {editer ? <Aide theme={theme}>{glisser.disponible ? trVi('dossiers.aide') : trVi('dossiers.aide_mobile')}</Aide> : null}

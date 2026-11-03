@@ -92,7 +92,7 @@ export function GalerieClips({ theme, api, large, teams = [], teamId }: { theme:
       <Retours theme={theme} erreur={erreur} prefixe="esport-cm-clips" />
       {liste && !liste.clips.length ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="▶" titre={trCm('clip.vide')} texte={trCm('clip.vide_texte')} />
+          <EtatVide theme={theme} glyphe="▶︎" titre={trCm('clip.vide')} texte={trCm('clip.vide_texte')} />
         </Carte>
       ) : null}
       <Grille min={large ? 340 : 260}>

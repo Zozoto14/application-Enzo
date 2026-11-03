@@ -851,7 +851,7 @@ export const fr = {
   'planning.commun.aucun_choix_les_joueurs': 'Aucun choix : les joueurs seront convoqués. ',
 
   // review.barreDessin
-  'review.barreDessin.dessin_a': '✏️ Dessin à {v}',
+  'review.barreDessin.dessin_a': '✏︎ Dessin à {v}',
   'review.barreDessin.rattache_au_repere': 'Rattaché au repère « {rattache} ».',
   'review.barreDessin.un_repere_sera_cree': 'Un repère sera créé à cet instant.',
   'review.barreDessin.outil_de_dessin': 'Outil de dessin',
@@ -901,7 +901,7 @@ export const fr = {
   'review.review.nouvelle_review': 'Nouvelle review',
   'review.review.aucune_review_pour_l': 'Aucune review pour l’instant.',
   'review.review.chargement_de_la_review': 'Chargement de la review…',
-  'review.review.en_cours_de_lecture': '▶ En cours de lecture',
+  'review.review.en_cours_de_lecture': '▶︎ En cours de lecture',
   'review.review.pas_encore_de_commentaire': 'Pas encore de commentaire.',
   'review.review.review_video': 'Review vidéo',
   'review.review.analysez_vos_matchs_et': 'Analysez vos matchs et scrims sur YouTube : repères horodatés, notes et commentaires.',
@@ -1458,7 +1458,7 @@ export const fr = {
   'cat.perm.video_review.view': 'Voir',
   'cat.perm.video_review.create': 'Créer',
   'cat.perm.video_review.annotate': 'Annoter, commenter et dessiner',
-  'cat.perm.video_review.react': 'Réagir (👍 / 👎)',
+  'cat.perm.video_review.react': 'Réagir (j’aime / je n’aime pas)',
   'cat.perm.video_review.delete': 'Supprimer',
   'cat.groupe.scouting': 'Scouting',
   'cat.perm.scouting.view': 'Voir',
@@ -1590,8 +1590,8 @@ export const fr = {
   'strats.editeur.version': 'version {n}',
   // review.libelles
   'review.libelles.par_instant': 'Par instant',
-  'review.libelles.plus_likes': 'Plus likés 👍',
-  'review.libelles.plus_dislikes': 'Plus dislikés 👎',
+  'review.libelles.plus_likes': 'Plus likés',
+  'review.libelles.plus_dislikes': 'Plus dislikés',
 
   // membresRoles
   'membresRoles.cyan': 'Cyan',
@@ -1617,7 +1617,7 @@ export const fr = {
   'planning.planning.semaine': 'Semaine',
 
   // review.dessinVideo
-  'review.dessinVideo.dessin_disponible_sur_le': '✏️ Dessin disponible sur le site ou le PC',
+  'review.dessinVideo.dessin_disponible_sur_le': '✏︎ Dessin disponible sur le site ou le PC',
 
   // strats.editeur
   'strats.editeur.selection_et_deplacement_v': 'Sélection et déplacement (V)',
@@ -1631,10 +1631,10 @@ export const fr = {
   'strats.editeur.gomme_e': 'Gomme (E)',
   'review.libelles.a_cree_la_review': '{qui} a créé la review « {titre} »{vod}',
   'review.libelles.a_ajoute_le_repere': '{qui} a ajouté le repère « {titre} » ({categorie}, {temps}) à « {review} »',
-  'review.libelles.reaction_like_repere': '{qui} aime 👍 le repère « {repere} » de « {review} »',
-  'review.libelles.reaction_like_commentaire': '{qui} aime 👍 un commentaire du repère « {repere} » de « {review} »',
-  'review.libelles.reaction_dislike_repere': '{qui} n’aime pas 👎 le repère « {repere} » de « {review} »',
-  'review.libelles.reaction_dislike_commentaire': '{qui} n’aime pas 👎 un commentaire du repère « {repere} » de « {review} »',
+  'review.libelles.reaction_like_repere': '{qui} aime le repère « {repere} » de « {review} »',
+  'review.libelles.reaction_like_commentaire': '{qui} aime un commentaire du repère « {repere} » de « {review} »',
+  'review.libelles.reaction_dislike_repere': '{qui} n’aime pas le repère « {repere} » de « {review} »',
+  'review.libelles.reaction_dislike_commentaire': '{qui} n’aime pas un commentaire du repère « {repere} » de « {review} »',
   'review.libelles.reaction_retrait_repere': '{qui} a retiré sa réaction au repère « {repere} » de « {review} »',
   'review.libelles.reaction_retrait_commentaire': '{qui} a retiré sa réaction à un commentaire du repère « {repere} » de « {review} »',
   'review.libelles.fiche_ajout': '{qui} a ajouté {partie} (« {nom} ») à la fiche « {adversaire} »',
@@ -1705,7 +1705,7 @@ export const fr = {
 
   // review.review
   'review.review.reviews': '← Reviews',
-  'review.review.dessiner': '✏️ Dessiner',
+  'review.review.dessiner': '✏︎ Dessiner',
 
   // scouting.scouting
   'scouting.scouting.adversaires': '← Adversaires',
@@ -1787,8 +1787,8 @@ export const fr = {
   'discord.testmp.quota': 'Tests restants : {restant} sur {max} (par tranche de 10 minutes et par team).',
   'discord.testmp.quota_plein': 'Limite atteinte : réessayez dans {s} s.',
   'discord.testmp.resultats': 'Résultat du test',
-  'discord.testmp.ok': '✅ {pseudo} : MP de test reçu (envoyé par le bot)',
-  'discord.testmp.ko': '❌ {pseudo} : {cause}',
+  'discord.testmp.ok': '✓ {pseudo} : MP de test reçu (envoyé par le bot)',
+  'discord.testmp.ko': '✕ {pseudo} : {cause}',
   'discord.testmp.action': 'À faire : {action}',
   'discord.testmp.envoye': 'Test terminé.',
   'discord.testmp.journal_ok': 'MP reçu',
@@ -1819,9 +1819,9 @@ export const fr = {
   'discord.testmp.simu.rien.reunion_staff': 'Réunion du staff : jamais annoncée ni relancée sur Discord.',
   'discord.testmp.simu.rien.presence_inactive': 'Le module Présence est désactivé : pas de relance.',
   'discord.testmp.simu.rien.tous_ont_repondu': 'Tout le monde a déjà répondu : aucune relance ne partirait.',
-  'discord.testmp.simu.mp': '✉️ {pseudo} : recevrait un MP',
-  'discord.testmp.simu.salon_mention': '💬 {pseudo} : cité dans le salon et mentionné ({raison})',
-  'discord.testmp.simu.salon': '💬 {pseudo} : cité dans le salon, sans mention ({raison})',
+  'discord.testmp.simu.mp': '✉︎ {pseudo} : recevrait un MP',
+  'discord.testmp.simu.salon_mention': '› {pseudo} : cité dans le salon et mentionné ({raison})',
+  'discord.testmp.simu.salon': '› {pseudo} : cité dans le salon, sans mention ({raison})',
   'discord.testmp.simu.deja': 'Déjà pingés pour cet événement : {liste}.',
   'discord.testmp.simu.personne_deja': 'Personne n’a encore été pingé pour cet événement.',
   'discord.testmp.simu.pings_marque': ' · déjà pingé',

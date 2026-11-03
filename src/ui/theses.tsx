@@ -223,7 +223,7 @@ export function FilTheses({
                       fontSize: 12,
                       fontWeight: '600',
                     }}>
-                    {element.ton === 'optimiste' ? '↗ plutôt optimiste' : '↘ plutôt prudent'}
+                    {element.ton === 'optimiste' ? '↗︎ plutôt optimiste' : '↘︎ plutôt prudent'}
                   </Text>
                 ) : null}
               </View>
@@ -233,7 +233,7 @@ export function FilTheses({
                 </Text>
               ) : null}
             </View>
-            {element.lien ? <Text style={{ color: palette.texteSecondaire }}>↗</Text> : null}
+            {element.lien ? <Text style={{ color: palette.texteSecondaire }}>↗︎</Text> : null}
           </Pressable>
         ))
       )}

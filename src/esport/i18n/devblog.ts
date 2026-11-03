@@ -39,7 +39,7 @@ const fr = {
   champ_intro: 'Phrase d’intro',
   champ_intro_aide: 'Salut à tous ! Une nouvelle mise à jour est en ligne…',
   champ_conclusion: 'Phrase de fin',
-  champ_conclusion_aide: 'Merci pour vos retours et bonne navigation ! 🚀',
+  champ_conclusion_aide: 'Merci pour vos retours et bonne navigation ! 🚀', // emoji-autorise : conclusion proposée pour le message Discord du devblog
   section: 'Section {n}',
   section_emoji: 'Emoji',
   section_titre: 'Titre de la section',
@@ -69,10 +69,10 @@ const fr = {
   apercu_app: 'Comme dans l’app',
   apercu_langue: 'Langue de l’aperçu',
   apercu_messages: '{n} message(s) · {c} caractères',
-  apercu_fil: '🇫🇷 Version française (fil)',
+  apercu_fil: '🇫🇷 Version française (fil)', // emoji-autorise : titre du fil Discord, dans l'aperçu « comme sur Discord »
   // Discord
   discord_titre: 'Publier sur Discord',
-  discord_aide: 'Message principal en anglais, puis un fil « 🇫🇷 Version française ». Au-delà de 2000 caractères, plusieurs messages à la suite.',
+  discord_aide: 'Message principal en anglais, puis un fil « Version française ». Au-delà de 2000 caractères, plusieurs messages à la suite.',
   discord_brouillon: 'Publiez d’abord le devblog dans l’app.',
   discord_salons: 'Salons',
   discord_salons_aucun: 'Aucun salon Discord : ajoutez le salon d’annonces du club ci-dessous (ou liez Discord à une team).',
@@ -216,7 +216,7 @@ const en: Record<keyof typeof fr, string> = {
   champ_intro: 'Intro sentence',
   champ_intro_aide: 'Hi everyone! A new update is live…',
   champ_conclusion: 'Closing sentence',
-  champ_conclusion_aide: 'Thanks for your feedback and enjoy! 🚀',
+  champ_conclusion_aide: 'Thanks for your feedback and enjoy! 🚀', // emoji-autorise : conclusion proposée pour le message Discord du devblog
   section: 'Section {n}',
   section_emoji: 'Emoji',
   section_titre: 'Section title',
@@ -246,9 +246,9 @@ const en: Record<keyof typeof fr, string> = {
   apercu_app: 'As in the app',
   apercu_langue: 'Preview language',
   apercu_messages: '{n} message(s) · {c} characters',
-  apercu_fil: '🇫🇷 French version (thread)',
+  apercu_fil: '🇫🇷 French version (thread)', // emoji-autorise : titre du fil Discord, dans l'aperçu « comme sur Discord »
   discord_titre: 'Post on Discord',
-  discord_aide: 'Main message in English, then a “🇫🇷 Version française” thread. Over 2000 characters, several messages in a row.',
+  discord_aide: 'Main message in English, then a “Version française” thread. Over 2000 characters, several messages in a row.',
   discord_brouillon: 'Publish the devblog in the app first.',
   discord_salons: 'Channels',
   discord_salons_aucun: 'No Discord channel: add the club announcement channel below (or connect Discord to a team).',

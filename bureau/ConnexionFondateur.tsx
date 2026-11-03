@@ -134,7 +134,7 @@ export function EcranConnexionFondateur({
           onPress={() => setChanger(c => !c)}
           style={{ flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingVertical: ESPACEMENT.xs }}
           testID="fondateur-changer-mdp">
-          <Text style={{ color: palette.texte, fontSize: 18 }}>{changer ? '☑' : '☐'}</Text>
+          <Text style={{ color: palette.texte, fontSize: 18 }}>{changer ? '☑︎' : '☐'}</Text>
           <Text style={{ color: palette.texte, flex: 1 }}>{texteEcran(l, 'fond.changer')}</Text>
         </Pressable>
         {changer ? (

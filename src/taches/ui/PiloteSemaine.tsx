@@ -18,15 +18,16 @@ import { usePilote, type ControleurPilote } from '../pilote/controleur';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, EtatVide, Libelle, Options, PastillePriorite, Puce, texteDe, titreDe } from './atomes';
 import { useGlissable, useZoneDepot } from './glisser';
+import { Icone } from '../../ui/icones';
 
 const GENRES: Record<GenreElement, { glyphe: string; nom: string }> = {
   tache: { glyphe: '☑︎', nom: 'Tâche' },
   repetition: { glyphe: '↻', nom: 'Récurrente' },
   relance: { glyphe: '✉︎', nom: 'Relance' },
   paiement: { glyphe: '€', nom: 'Paiement' },
-  versement: { glyphe: '↗', nom: 'Versement' },
+  versement: { glyphe: '↗︎', nom: 'Versement' },
   dividende: { glyphe: '¤', nom: 'Dividende' },
-  episode: { glyphe: '▶', nom: 'Récompense' },
+  episode: { glyphe: '▶︎', nom: 'Récompense' },
 };
 
 const horaire = (e: ElementSemaine) => (e.debut && e.fin ? `${e.debut} – ${e.fin}` : e.jourOff ? 'Sans créneau' : e.genre === 'episode' ? 'Ce soir' : e.surcharge ? 'Pas de place' : 'Toute la journée');
@@ -170,9 +171,9 @@ function Carte({ a, c, e, editable, onOuvrirApp }: { a: Actions; c: ControleurPi
       {rec ? (
         <View style={[styles.rangee, { alignItems: 'center' }]}>
           <Text style={[texteDe(theme), { color: rec.debloque ? theme.ok : theme.attenue, fontWeight: '700', flex: 1 }]} testID={`pilote-recompense-${e.id}`}>
-            {rec.debloque ? '✓ Débloqué : bon visionnage' : `🔒 Se débloque quand tes tâches du jour sont faites (${rec.restant} restante${rec.restant > 1 ? 's' : ''})`}
+            {rec.debloque ? '✓ Débloqué : bon visionnage' : <><Icone nom="cadenas" /> {`Se débloque quand tes tâches du jour sont faites (${rec.restant} restante${rec.restant > 1 ? 's' : ''})`}</>}
           </Text>
-          {onOuvrirApp ? <Bouton theme={theme} titre="▶ Tsuzuku" libelle={rec.debloque ? 'Ouvrir Tsuzuku' : 'Ouvrir Tsuzuku quand même (jamais bloqué)'} onPress={() => onOuvrirApp('tsuzuku')} testID={`pilote-tsuzuku-${e.id}`} /> : null}
+          {onOuvrirApp ? <Bouton theme={theme} titre="▶︎ Tsuzuku" libelle={rec.debloque ? 'Ouvrir Tsuzuku' : 'Ouvrir Tsuzuku quand même (jamais bloqué)'} onPress={() => onOuvrirApp('tsuzuku')} testID={`pilote-tsuzuku-${e.id}`} /> : null}
         </View>
       ) : null}
       {editable ? (

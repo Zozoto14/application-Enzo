@@ -6,6 +6,7 @@ import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { Entree, Statut } from '../moteur/bibliotheque';
 import { useTsuzuku } from './contexte';
 import { poigneesIntention } from './intention';
+import { Glyphe } from '../../ui/icones';
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 
@@ -232,7 +233,7 @@ export function EtatVide({ icone = '◌', titre, children, action, testID = 'eta
   return (
     <View testID={testID} style={{ alignSelf: 'center', width: '100%', maxWidth: 460, alignItems: 'center', gap: 10, padding: 26, borderRadius: Math.max(theme.rayonGrand, 12), borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }}>
       <View style={{ width: 48, height: 48, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.texte, 0.08) }}>
-        <Text style={{ color: theme.attenue, fontSize: 22 }}>{icone}</Text>
+        <Glyphe valeur={icone} style={{ color: theme.attenue, fontSize: 22 }} />
       </View>
       <Text style={[styleTitre(theme, 17), { textAlign: 'center' }]}>{titre}</Text>
       {children ? <Text style={[styleAttenue(theme, 14), { textAlign: 'center', lineHeight: 20 }]}>{children}</Text> : null}
@@ -500,7 +501,7 @@ export function RangeeReprendre({ titre, entrees, onLire, testID = 'rangee-repre
                 ) : null}
                 <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 8 }}>
                   <View style={{ width: 24, height: 24, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.accent }}>
-                    <Text style={{ color: theme.surAccent, fontSize: 10, fontWeight: '800' }}>▶</Text>
+                    <Text style={{ color: theme.surAccent, fontSize: 10, fontWeight: '800' }}>▶︎</Text>
                   </View>
                   <Text style={[styleTexte(theme, 12), { fontWeight: '800' }]}>{film ? 'Regarder' : 'Reprendre'}</Text>
                 </View>

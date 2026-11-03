@@ -180,7 +180,7 @@ export function PanneauInvitation({
     });
   return (
     <View style={[commun.avis, { borderLeftColor: theme.ok, backgroundColor: teinteTransparente(theme.ok, 0.1), gap: 8 }]} testID="admin-invitation">
-      <Text style={[texte, { fontWeight: '700' }]}>✉️ Invitation de {nom} — valable une fois, jusqu’au {jour}</Text>
+      <Text style={[texte, { fontWeight: '700' }]}>✉︎ Invitation de {nom} — valable une fois, jusqu’au {jour}</Text>
       <Text style={[attenue, { fontSize: 13 }]}>
         Envoyez-la à {nom} : par e-mail (votre messagerie s’ouvre, message prêt), ou copiez le message pour SMS, WhatsApp… {nom} ouvre le lien, choisit SON
         mot de passe, et c’est tout : vous n’avez aucun mot de passe à transmettre.
@@ -199,7 +199,7 @@ export function PanneauInvitation({
             <BoutonHub
               theme={theme}
               variante="plein"
-              titre={envoi === 'enCours' ? 'Envoi…' : envoi === 'ok' ? '✓ E-mail envoyé — renvoyer' : `✉️ Envoyer l’e-mail maintenant`}
+              titre={envoi === 'enCours' ? 'Envoi…' : envoi === 'ok' ? '✓ E-mail envoyé — renvoyer' : `✉︎ Envoyer l’e-mail maintenant`}
               desactive={envoi === 'enCours'}
               onPress={() => void envoyerDirect()}
               testID="admin-invitation-envoyer-direct"
@@ -214,7 +214,7 @@ export function PanneauInvitation({
         <LienEmail
           theme={theme}
           url={mailto.url}
-          titre={email && direct ? 'Ouvrir ma messagerie' : email ? `✉️ Envoyer l’invitation par e-mail` : '✉️ Écrire l’e-mail d’invitation'}
+          titre={email && direct ? 'Ouvrir ma messagerie' : email ? `✉︎ Envoyer l’invitation par e-mail` : '✉︎ Écrire l’e-mail d’invitation'}
           onOuvert={() => {
             setRetour(email ? `Votre messagerie s’ouvre, adressée à ${email} : vérifiez puis envoyez.` : 'Votre messagerie s’ouvre : ajoutez le destinataire, puis envoyez.');
             onEnvoye?.('email');

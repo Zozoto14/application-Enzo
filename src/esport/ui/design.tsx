@@ -23,6 +23,7 @@ import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { tt } from '../../ui/mobile/jetons';
 import { contraste, encreSur } from '../contraste';
 import { tr } from '../i18n';
+import { Glyphe, Icone, type NomIcone } from '../../ui/icones';
 import { HAUTEUR_ACTION, placerMenu, type Ancre } from './placementMenu';
 
 /** État d'un Pressable sur le web (survol et focus clavier en plus). */
@@ -207,13 +208,16 @@ export function Carte({
 }
 
 /** Titre d'une carte, avec une action discrète à droite. */
-export function TitreCarte({ theme, titre: t, sous, droite, testID }: { theme: ThemeHub; titre: string; sous?: string; droite?: React.ReactNode; testID?: string }) {
+export function TitreCarte({ theme, titre: t, sous, droite, testID, icone }: { theme: ThemeHub; titre: string; sous?: string; droite?: React.ReactNode; testID?: string; /** Icône monochrome avant le titre (décorative). */ icone?: NomIcone }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, flexWrap: 'wrap', justifyContent: 'space-between' }} testID={testID}>
       <View style={{ gap: 2, flexShrink: 1, minWidth: 0 }}>
-        <Text accessibilityRole="header" style={{ ...texte(theme, TYPO.titreCarte), fontWeight: '700' }}>
-          {t}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
+          {icone ? <Icone nom={icone} taille={TYPO.titreCarte + 2} couleur={theme.texte} /> : null}
+          <Text accessibilityRole="header" style={{ ...texte(theme, TYPO.titreCarte), fontWeight: '700', flexShrink: 1 }}>
+            {t}
+          </Text>
+        </View>
         {sous ? <Text style={attenue(theme)}>{sous}</Text> : null}
       </View>
       {droite}
@@ -441,7 +445,7 @@ const couleurTon = (theme: ThemeHub, ton: Ton): string =>
   ton === 'ok' ? theme.ok : ton === 'alerte' ? theme.alerte : ton === 'critique' ? theme.critique : ton === 'accent' ? theme.accent : theme.attenue;
 
 /** Pastille de statut : point de couleur + texte (jamais la couleur seule). */
-export function Badge({ theme, texte: t, ton = 'neutre', couleur, testID }: { theme: ThemeHub; texte: string; ton?: Ton; couleur?: string; testID?: string }) {
+export function Badge({ theme, texte: t, ton = 'neutre', couleur, testID, icone }: { theme: ThemeHub; texte: string; ton?: Ton; couleur?: string; testID?: string; /** Icône monochrome à la place du point (décorative). */ icone?: NomIcone }) {
   const c = couleur ?? couleurTon(theme, ton);
   return (
     <View
@@ -458,7 +462,7 @@ export function Badge({ theme, texte: t, ton = 'neutre', couleur, testID }: { th
         borderWidth: 1,
         borderColor: teinteTransparente(c, 0.45),
       }}>
-      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c }} />
+      {icone ? <Icone nom={icone} taille={TYPO.legende + 2} couleur={couleurLisible(c, theme)} /> : <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c }} />}
       <Text style={{ color: theme.texte, fontSize: TYPO.legende, fontWeight: '600', ...police(theme.policeTexte) }} numberOfLines={1}>
         {t}
       </Text>
@@ -514,7 +518,7 @@ export function ChiffreCle({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
         {glyphe ? (
           <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(c, 0.16) }}>
-            <Text style={{ color: couleurLisible(c, theme), fontSize: 15 }}>{glyphe}</Text>
+            <Glyphe valeur={glyphe} style={{ color: couleurLisible(c, theme), fontSize: 15 }} />
           </View>
         ) : null}
         <Text style={{ ...attenue(theme), flexShrink: 1 }} numberOfLines={2}>
@@ -547,7 +551,7 @@ export function EtatVide({
   return (
     <View testID={testID} style={{ alignItems: 'center', gap: ESP.s, paddingVertical: ESP.xxl, paddingHorizontal: ESP.m }}>
       <View style={{ width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.accent, 0.12) }}>
-        <Text style={{ color: couleurLisible(theme.accent, theme), fontSize: 24 }}>{glyphe}</Text>
+        <Glyphe valeur={glyphe} style={{ color: couleurLisible(theme.accent, theme), fontSize: 24 }} />
       </View>
       <Text style={{ ...texte(theme, TYPO.titreCarte), fontWeight: '700', textAlign: 'center' }}>{t}</Text>
       {phrase ? <Text style={{ ...attenue(theme, TYPO.texte), textAlign: 'center', maxWidth: 460 }}>{phrase}</Text> : null}

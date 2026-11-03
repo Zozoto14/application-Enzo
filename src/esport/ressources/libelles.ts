@@ -4,6 +4,7 @@
  */
 
 import { tr } from '../i18n';
+import type { NomIcone } from '../../ui/icones/traces';
 import type { CategorieRessource, GenreRessource, NiveauRessource } from './api';
 
 const CLES_CATEGORIES = new Set(['guides', 'videos_pros', 'lineups', 'aim', 'outils', 'mental', 'divers']);
@@ -14,7 +15,8 @@ export function nomCategorie(c: Pick<CategorieRessource, 'nom' | 'cleDefaut'> | 
   return c.cleDefaut && CLES_CATEGORIES.has(c.cleDefaut) ? tr(`ressources.cat.${c.cleDefaut}` as 'ressources.cat.guides') : c.nom;
 }
 
-export const GLYPHES_GENRE: Record<GenreRessource, string> = { lien: '🔗', youtube: '▶', fichier: '📎', note: '📝' };
+/** Icône monochrome de chaque genre de ressource (src/ui/icones). */
+export const GLYPHES_GENRE: Record<GenreRessource, NomIcone> = { lien: 'lien', youtube: 'lecture', fichier: 'trombone', note: 'note' };
 
 export const nomGenre = (g: GenreRessource): string => tr(`ressources.genre.${g}` as 'ressources.genre.lien');
 export const nomNiveau = (n: NiveauRessource): string => tr(`ressources.niveau.${n}` as 'ressources.niveau.debutant');

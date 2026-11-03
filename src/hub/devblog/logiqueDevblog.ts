@@ -74,7 +74,7 @@ export function decider(
 /** Étapes de la visite guidée des nouveautés, tirées d'une entrée. */
 export function etapesVisite(entree: EntreeDevblog, admin: boolean, gestionnaire = false, apps: readonly string[] = []): EtapeVisite[] {
   return [
-    { id: `devblog-${entree.version}-intro`, emoji: '✨', titre: entree.titre, texte: entree.resume },
+    { id: `devblog-${entree.version}-intro`, emoji: 'etincelles', titre: entree.titre, texte: entree.resume },
     ...fonctionnalitesPour(entree, admin, gestionnaire, apps).map(f => ({ id: `devblog-${entree.version}-${f.id}`, emoji: f.emoji, titre: f.titre, texte: f.texte })),
   ];
 }

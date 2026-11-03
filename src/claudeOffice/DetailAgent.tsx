@@ -19,9 +19,10 @@ import { NoteSession } from './NoteSession';
 import type { SousAgent } from './sousAgentsScene';
 import { Bouton, TAILLE } from './uiOffice';
 import { ZONES } from './zones';
+import { Glyphe } from '../ui/icones';
 
 const ICONES: Record<GenreEtape, [string, string]> = {
-  debut: ['⌂', ZONES.accueil.teinte], demande: ['›', '#5B8CFF'], outil: ['⚙', TEINTES_ACTIVITE.outil], reflexion: ['…', TEINTES_ACTIVITE.pense],
+  debut: ['⌂', ZONES.accueil.teinte], demande: ['›', '#5B8CFF'], outil: ['⚙︎', TEINTES_ACTIVITE.outil], reflexion: ['…', TEINTES_ACTIVITE.pense],
   attente: ['!', TEINTES_ACTIVITE.attend], reponse: ['✓', TEINTES_ACTIVITE.fini], 'sous-agent': ['✦', TEINTES_ACTIVITE.agent], fin: ['■', ZONES.salle.teinte],
 };
 
@@ -71,7 +72,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
       </Text>
       {agent.etat === 'attend' ? (
         <View style={[styles.encart, { borderColor: TEINTES_ACTIVITE.attend }]} testID="bureau-detail-attente">
-          <Text style={[t, { fontWeight: '700', color: TEINTES_ACTIVITE.attend }]}>✋ Claude attend ta réponse</Text>
+          <Text style={[t, { fontWeight: '700', color: TEINTES_ACTIVITE.attend }]}>! Claude attend ta réponse</Text>
           <Text selectable style={t}>{agent.attente ?? 'Une autorisation ou une question en attente.'}</Text>
           <Text style={a}>Réponds dans Claude Code, sur le PC : le personnage repartira travailler.</Text>
         </View>
@@ -106,7 +107,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
           return (
             <View key={e.id} style={styles.etape} accessibilityLabel={`${heure(new Date(e.ts).toISOString())} : ${e.titre}${e.detail ? `, ${e.detail}` : ''}${e.dureeMs !== undefined ? `, ${dureeCourte(e.dureeMs)}` : ''}${e.echec ? ', échec' : ''}`}>
               <Text style={[a, styles.heure]}>{new Date(e.ts).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
-              <View style={[styles.icone, { backgroundColor: e.echec ? theme.critique : couleur }]} aria-hidden><Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800' }}>{icone}</Text></View>
+              <View style={[styles.icone, { backgroundColor: e.echec ? theme.critique : couleur }]} aria-hidden><Glyphe valeur={icone} style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800' }} /></View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[t, { fontWeight: '600' }]}>
                   {e.titre}

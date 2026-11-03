@@ -85,7 +85,7 @@ export async function executerDiagnostic(
 
 /** Rapport en texte, à copier pour le transmettre. */
 export function rapportTexte(verifications: readonly Verification[], date: string): string {
-  const icone = { ok: '✅', echec: '❌', absent: '➖' } as const;
+  const icone = { ok: '✓', echec: '✕', absent: '–' } as const;
   return [
     `Diagnostic AppDashboard — ${date}`,
     ...verifications.map(

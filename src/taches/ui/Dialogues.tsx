@@ -44,6 +44,7 @@ import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Options, Puce, texteDe } from './atomes';
 import { droitDe, listeMembres, projetPartage } from '../membres';
 import { PartageProjet, ResumePartageMembre } from './Membres';
+import { Icone, type NomIcone } from '../../ui/icones';
 
 type Fermer = () => void;
 
@@ -408,11 +409,11 @@ export function DialogueReglages({
   const d = a.etat.donnees;
   const raccourcis = (
     <View style={styles.rangee}>
-      <Bouton theme={theme} titre="🔔 Notifications…" onPress={onNotifications} testID="reglages-notifications" />
-      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
-      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="✨ IA et GitHub…" onPress={onAides} testID="reglages-aides" /> : null}
+      <Bouton theme={theme} icone="cloche" titre="Notifications…" onPress={onNotifications} testID="reglages-notifications" />
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} icone="lien" titre="Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} icone="etincelles" titre="IA et GitHub…" onPress={onAides} testID="reglages-aides" /> : null}
       {onParametres ? <Bouton theme={theme} titre="⚙︎ Paramètres › Tâches" onPress={onParametres} testID="reglages-parametres-hub" /> : null}
-      <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
+      <Bouton theme={theme} icone="chrono" titre="Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
     </View>
   );
   const vueOuverture = (
@@ -454,7 +455,7 @@ export function DialogueReglages({
           ))}
         </View>
       ) : null}
-      <Bouton theme={theme} variante="plein" titre="👥 Gérer les membres et leurs droits…" onPress={onMembres} testID="reglages-membres" style={{ alignSelf: 'flex-start' }} />
+      <Bouton theme={theme} variante="plein" icone="membres" titre="Gérer les membres et leurs droits…" onPress={onMembres} testID="reglages-membres" style={{ alignSelf: 'flex-start' }} />
         </>
       )}
       <Libelle theme={theme}>DONNÉES D’EXEMPLE</Libelle>
@@ -544,6 +545,7 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur, o
       }>
       <Libelle theme={theme}>NOM ET ICÔNE</Libelle>
       <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
+        {/* emoji-autorise : exemple d'icône de projet, choisie par l'utilisateur */}
         <Champ theme={theme} mobile={a.mobile} value={icone} onChangeText={v => setIcone(v.slice(0, 8))} placeholder="🚀" style={{ width: 64, textAlign: 'center' }} testID="projet-icone" accessibilityLabel="Icône du projet (un emoji)" />
         <Champ theme={theme} mobile={a.mobile} value={nom} onChangeText={setNom} style={{ flex: 1 }} testID="projet-nom" accessibilityLabel="Nom du projet" />
       </View>
@@ -744,7 +746,7 @@ export function DialogueNom({ a, titre, description, placeholder, onValider, onF
 
 // ------------------------------------------------------------------ Rappels non lus
 
-const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅', journal: '📓', pilote: '🗓' };
+const ICONES_NOTIF: Record<string, NomIcone> = { retard: 'reveil', assignee: 'personne', ami: 'bulle', office: 'robot', recap: 'soleil', test: 'valide', journal: 'journal', pilote: 'calendrier' };
 
 export function DialogueRappelsRecus({ a, rappels, onOuvrir, onSemaine, onToutLu, onFermer }: { a: Actions; rappels: readonly AlerteRappel[]; onOuvrir(id: string): void; onSemaine?(): void; onToutLu(): void; onFermer: Fermer }) {
   const theme = a.theme;
@@ -760,7 +762,7 @@ export function DialogueRappelsRecus({ a, rappels, onOuvrir, onSemaine, onToutLu
       {rappels.length === 0 ? <Text style={attenueDe(theme)}>Aucun rappel en attente.</Text> : null}
       {[...rappels].reverse().map(r => (
         <Pressable key={r.cle} accessibilityRole="button" disabled={r.type === 'pilote' ? !onSemaine : !r.tacheId || !a.etat.donnees.taches[r.tacheId]} onPress={() => (r.type === 'pilote' ? onSemaine?.() : onOuvrir(r.tacheId))} style={[styles.ligneProjet, { borderColor: theme.ligne, borderWidth: 1, borderRadius: 10, padding: 10 }]} testID={`rappel-recu-${r.tacheId || r.type || 'info'}`}>
-          <Text style={{ fontSize: 18 }}>{ICONES_NOTIF[r.type ?? ''] ?? '🔔'}</Text>
+          <Icone nom={ICONES_NOTIF[r.type ?? ''] ?? 'cloche'} taille={20} couleur={theme.attenue} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[texteDe(theme), { fontWeight: '700' }]}>{r.titre}</Text>
             <Text style={attenueDe(theme)}>

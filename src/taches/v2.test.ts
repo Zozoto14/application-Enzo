@@ -514,7 +514,7 @@ describe('journal du jour et débriefing', () => {
     expect(md).toContain('**En bref** : 1 tâche terminée, 1 h 30 de travail suivi, 3 entrées au journal.');
     expect(md).toContain('- **Maquette** ✓\n  - Maquette validée par le client');
     expect(md).toContain('## Léa');
-    expect(md).toContain('- ⚠ En retard : Mettre en ligne (échéance 12/10/2026)');
+    expect(md).toContain('- ⚠︎ En retard : Mettre en ligne (échéance 12/10/2026)');
     expect(debriefingTexte(b, 'texte')).not.toContain('**');
     // Semaine.
     expect(debriefing(d, m.site, '2026-10-12', '2026-10-18', noms).nbEntrees).toBe(3);

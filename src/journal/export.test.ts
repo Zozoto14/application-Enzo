@@ -22,7 +22,7 @@ describe('export Markdown', () => {
   it('met en forme la page : titre, humeur, sections, chiffres, note', () => {
     const md = pageEnMarkdown(p);
     expect(md.startsWith('# Mardi 13 octobre 2026')).toBe(true);
-    expect(md).toContain('Humeur : 😄 Excellente');
+    expect(md).toContain('Humeur : Excellente');
     expect(md).toContain('Journée épinglée');
     expect(md).toContain('## Les tâches');
     expect(md).toContain('## Chiffres clés');

@@ -91,7 +91,7 @@ export function Dashboard({
         sous={tr('dashboard.toutes_vos_teams_en')}
         action={
           <>
-            {onNouveautes ? <BoutonHub theme={theme} titre={`✨ ${trDv('bouton_dashboard')}`} libelle={trDv('bouton_dashboard_libelle')} onPress={onNouveautes} testID="esport-dashboard-devblog" /> : null}
+            {onNouveautes ? <BoutonHub theme={theme} icone="etincelles" titre={trDv('bouton_dashboard')} libelle={trDv('bouton_dashboard_libelle')} onPress={onNouveautes} testID="esport-dashboard-devblog" /> : null}
             <BoutonHub theme={theme} titre={tr('dashboard.actualiser')} libelle={tr('dashboard.actualiser_le_dashboard')} onPress={() => void agir('', charger)} testID="esport-dashboard-actualiser" />
           </>
         }

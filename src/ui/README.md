@@ -76,3 +76,35 @@ frappe avant qu'elle ne crée un doublon silencieux de la même valeur.
 
 Les six avertissements `no-inline-styles` restants sont assumés : les couleurs
 viennent du thème et ne peuvent pas entrer dans une `StyleSheet` statique.
+
+## Icônes : monochromes, jamais d'emoji en couleur
+
+Toute l'interface (hub, apps, site, PC, téléphone) dessine ses pictogrammes avec
+**un seul jeu d'icônes** : `icones/` (`Icone`, `Glyphe`).
+
+- `Icone` : tracés « ligne » de Lucide (0.460.0, licence ISC), recopiés dans
+  `icones/traces.ts` (aucune dépendance ajoutée), renommés en français
+  (`cloche`, `membres`, `fusee`…). Le trait prend `currentColor` : posée dans un
+  texte, l'icône a la couleur de ce texte, donc du thème clair ou sombre. Sur le
+  site et le PC c'est un SVG en ligne (`Icone.web.tsx`) ; l'app native et les
+  tests affichent un repli en symbole texte (`Icone.tsx`).
+- `Glyphe` : pour les tables de pictogrammes (onglets, états vides, chiffres
+  clés, menus) : un nom d'icône se dessine, tout autre texte (`⌂`, `◆`, `?`)
+  reste un texte.
+- `BoutonHub`, `Bouton` et `Puce` de Tâches, `TitreCarte` et `Badge` de
+  l'Esport, les menus de Tâches prennent une prop `icone`.
+- Accessibilité : une icône seule (bouton pictogramme) reçoit `libelle` ; à côté
+  d'un texte, elle est décorative et masquée des lecteurs d'écran.
+- Les symboles texte (✓ ✕ ← → ↗ ▶ ⚠ ☑) suivent le sélecteur U+FE0E quand ils
+  ont une forme emoji.
+
+Garde-fou : `npm run emojis:verifier` (`icones/sansEmoji.test.ts`, lancé aussi
+avec Jest) échoue si un emoji en couleur réapparaît dans `src/`, `bureau/` ou
+`App.tsx`. Restent volontairement en emoji, car ce sont des **contenus** et non
+l'interface : les textes du devblog « Quoi de neuf » (`hub/devblog/entrees.ts`),
+le message et l'aperçu « comme sur Discord » du devblog Esport, l'emoji de
+section du devblog (choisi par l'utilisateur), la palette d'emojis de l'éditeur
+de notes, l'icône d'un projet de Tâches et l'icône d'un badge (choisies par
+l'utilisateur), les messages Discord du bot et du relais, les e-mails et les
+visuels générés. Les badges par défaut du Trombinoscope gardent leurs symboles
+monochromes (★ ☆ ©) : ce sont des données du club, modifiables, non migrées.

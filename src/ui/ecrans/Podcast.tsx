@@ -134,7 +134,7 @@ export function Podcast({
                     { backgroundColor: palette.accentPlein, opacity: !lecteur.disponible ? 0.4 : pressed ? 0.85 : 1 },
                   ]}>
                   <Text style={{ color: palette.surAccent, fontSize: 26, fontWeight: '900' }}>
-                    {etat === 'lecture' ? '❚❚' : '▶'}
+                    {etat === 'lecture' ? '❚❚' : '▶︎'}
                   </Text>
                 </Pressable>
                 <View style={{ flex: 1, minWidth: 220, gap: 4 }}>
@@ -162,14 +162,14 @@ export function Podcast({
                     accessibilityLabel="Chapitre précédent"
                     onPress={() => allerAuChapitre(Math.max(0, chapitreCourant - 1))}
                     style={[styles.petitBouton, { borderColor: palette.bordure }]}>
-                    <Text style={{ color: palette.texte, fontSize: 16 }}>⏮</Text>
+                    <Text style={{ color: palette.texte, fontSize: 16 }}>⏮︎</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Chapitre suivant"
                     onPress={() => allerAuChapitre(Math.min(episode.chapitres.length - 1, chapitreCourant + 1))}
                     style={[styles.petitBouton, { borderColor: palette.bordure }]}>
-                    <Text style={{ color: palette.texte, fontSize: 16 }}>⏭</Text>
+                    <Text style={{ color: palette.texte, fontSize: 16 }}>⏭︎</Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"

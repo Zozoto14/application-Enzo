@@ -10,6 +10,8 @@
  * garde l'esprit et sa description dit ce qui est réellement filtré.
  */
 
+import type { NomIcone } from '../ui/icones/traces';
+
 export type CleCategorie =
   | 'tout'
   | 'france'
@@ -25,7 +27,8 @@ export type Region = 'monde' | 'us' | 'france' | 'europe';
 export interface Categorie {
   cle: CleCategorie;
   nom: string;
-  emoji: string;
+  /** Icône monochrome de la catégorie (src/ui/icones). */
+  icone: NomIcone;
   description: string;
   /** Conditions propres à la catégorie. */
   conditions: Condition[];
@@ -49,14 +52,14 @@ export const CATEGORIES: readonly Categorie[] = [
   {
     cle: 'tout',
     nom: 'Tout',
-    emoji: '🌍',
+    icone: 'globe',
     description: 'Les plus grandes capitalisations de la région choisie.',
     conditions: [gt('intradaymarketcap', 2e9)],
   },
   {
     cle: 'france',
     nom: 'France',
-    emoji: '🇫🇷',
+    icone: 'drapeau',
     description: 'Actions françaises, des plus grosses aux plus petites.',
     conditions: [gt('intradaymarketcap', 1e8)],
     regionImposee: 'france',
@@ -64,7 +67,7 @@ export const CATEGORIES: readonly Categorie[] = [
   {
     cle: 'pea',
     nom: 'PEA',
-    emoji: '🇪🇺',
+    icone: 'portefeuille',
     description:
       'Sociétés de l’Union européenne et de l’EEE, en principe éligibles au PEA. À confirmer chez votre courtier avant d’acheter.',
     conditions: [gt('intradaymarketcap', 5e8)],
@@ -73,35 +76,35 @@ export const CATEGORIES: readonly Categorie[] = [
   {
     cle: 'qualite',
     nom: 'Qualité',
-    emoji: '✅',
+    icone: 'valide',
     description: 'Rentabilité des fonds propres (ROE) ≥ 20 % et marge nette ≥ 10 %.',
     conditions: [gt('returnonequity.lasttwelvemonths', 20), gt('netincomemargin.lasttwelvemonths', 10), gt('intradaymarketcap', 1e9)],
   },
   {
     cle: 'croissance',
     nom: 'Croissance',
-    emoji: '📈',
+    icone: 'tendance-haut',
     description: 'Chiffre d’affaires en hausse de 10 % ou plus sur un an, bénéfices positifs.',
     conditions: [gt('quarterlyrevenuegrowth.quarterly', 10), gt('epsgrowth.lasttwelvemonths', 0), gt('intradaymarketcap', 1e9)],
   },
   {
     cle: 'value',
     nom: 'Value',
-    emoji: '💰',
+    icone: 'billets',
     description: 'PER ≤ 15 et cours / valeur comptable ≤ 1,5 : des actions peu chères au regard de leurs chiffres.',
     conditions: [btwn('peratio.lasttwelvemonths', 0, 15), lt('pricebookratio.quarterly', 1.5), gt('intradaymarketcap', 5e8)],
   },
   {
     cle: 'dividendes',
     nom: 'Dividendes',
-    emoji: '🏛️',
+    icone: 'banque',
     description: 'Rendement du dividende ≥ 3 %, avec un bénéfice qui le couvre (PER positif).',
     conditions: [gt('forward_dividend_yield', 3), gt('peratio.lasttwelvemonths', 0), gt('intradaymarketcap', 1e9)],
   },
   {
     cle: 'petites',
     nom: 'Petites capitalisations',
-    emoji: '🧑‍🚀',
+    icone: 'fusee',
     description: 'Capitalisation inférieure à un milliard de dollars : plus de potentiel, plus de risque.',
     conditions: [btwn('intradaymarketcap', 5e7, 1e9)],
   },

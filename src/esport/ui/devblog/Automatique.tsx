@@ -89,12 +89,12 @@ export function ToutPublier({ theme, client, entree, modifie, onPublie }: { them
   const complet = etat ? etat.complet !== false : true;
   return (
     <Carte theme={theme} testID="esport-devblog-tout" accent={theme.accent}>
-      <TitreCarte theme={theme} titre={`🚀 ${trDv('tout_publier')}`} sous={trDv('tout_publier_aide')} />
+      <TitreCarte theme={theme} icone="fusee" titre={trDv('tout_publier')} sous={trDv('tout_publier_aide')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-tout" />
       {modifie ? <Text style={{ ...attenue(theme, 13), color: theme.alerte }}>{trDv('enregistrer_d_abord')}</Text> : null}
       {!ouvert ? (
         <View style={{ alignSelf: 'flex-start' }}>
-          <BoutonHub theme={theme} titre={`🚀 ${trDv('tout_publier')}`} variante="plein" desactive={modifie || Boolean(enCours)} onPress={ouvrir} testID="esport-devblog-tout-ouvrir" />
+          <BoutonHub theme={theme} icone="fusee" titre={trDv('tout_publier')} variante="plein" desactive={modifie || Boolean(enCours)} onPress={ouvrir} testID="esport-devblog-tout-ouvrir" />
         </View>
       ) : (
         <View style={{ gap: ESP.s }} testID="esport-devblog-tout-panneau">
@@ -108,7 +108,8 @@ export function ToutPublier({ theme, client, entree, modifie, onPublie }: { them
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
             <BoutonHub
               theme={theme}
-              titre={enCours === 'tout' ? '…' : `🚀 ${trDv('tout_publier_confirmer')}`}
+              icone={enCours === 'tout' ? undefined : 'fusee'}
+              titre={enCours === 'tout' ? '…' : trDv('tout_publier_confirmer')}
               variante="plein"
               desactive={modifie || !complet || Boolean(enCours)}
               onPress={() =>
@@ -151,7 +152,7 @@ export function Programmation({ theme, client, entree, modifie, onChange }: { th
   if (entree.statut !== 'brouillon') return null;
   return (
     <Carte theme={theme} testID="esport-devblog-programmation">
-      <TitreCarte theme={theme} titre={`🗓️ ${trDv('prog_titre')}`} sous={trDv('prog_aide')} />
+      <TitreCarte theme={theme} icone="calendrier" titre={trDv('prog_titre')} sous={trDv('prog_aide')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-programmation" />
       {prog ? <Badge theme={theme} texte={trDv('prog_le', { date: dateHeureClub(prog.le) })} ton="accent" testID="esport-devblog-programmation-etat" /> : null}
       {modifie ? <Text style={{ ...attenue(theme, 13), color: theme.alerte }}>{trDv('enregistrer_d_abord')}</Text> : null}
@@ -227,7 +228,7 @@ export function ReglagesAutomatiques({ theme, client, onOuvrir }: { theme: Theme
 
   return (
     <Carte theme={theme} testID="esport-devblog-auto">
-      <TitreCarte theme={theme} titre={`⚙️ ${trDv('auto_titre')}`} sous={trDv('auto_aide')} />
+      <TitreCarte theme={theme} icone="reglages" titre={trDv('auto_titre')} sous={trDv('auto_aide')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-auto" />
       {r && vue ? (
         <View style={{ gap: ESP.s }}>
@@ -268,7 +269,8 @@ export function ReglagesAutomatiques({ theme, client, onOuvrir }: { theme: Theme
             <BoutonHub theme={theme} titre={enCours === 'enregistrer' ? '…' : trDv('auto_enregistrer')} variante="plein" desactive={!modifie || Boolean(enCours)} onPress={() => enregistrer()} testID="esport-devblog-auto-enregistrer" />
             <BoutonHub
               theme={theme}
-              titre={enCours === 'generer' ? '…' : `✨ ${trDv('auto_generer')}`}
+              icone={enCours === 'generer' ? undefined : 'etincelles'}
+              titre={enCours === 'generer' ? '…' : trDv('auto_generer')}
               desactive={!vue.source || Boolean(enCours)}
               onPress={() =>
                 void agir('generer', async () => {

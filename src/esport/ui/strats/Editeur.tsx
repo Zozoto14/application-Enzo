@@ -32,7 +32,7 @@ export function Editeur({ theme, api, teamId, stratId, onRetour, onSupprimee }: 
     <View style={{ gap: 12 }} testID="esport-strat-lecture">
       <View style={styles.ligne}>
         <BoutonHub theme={theme} titre={tr('strats.editeur.strats')} onPress={onRetour} testID="esport-strat-retour" />
-        {strat?.moi.supprimer ? <BoutonHub theme={theme} titre={`🗑 ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmer(c => !c)} testID="esport-strat-lecture-supprimer" /> : null}
+        {strat?.moi.supprimer ? <BoutonHub theme={theme} titre={`🗑︎ ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmer(c => !c)} testID="esport-strat-lecture-supprimer" /> : null}
       </View>
       {confirmer && strat?.moi.supprimer ? (
         <ConfirmationSuppression

@@ -22,6 +22,7 @@ import { Tableau, type Colonne } from '../tableau';
 import { useEnEuros } from '../../cours/change';
 import { libellesEnEuros } from '../devises';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
+import { Icone } from '../icones';
 
 export interface ScreenerProps {
   chargerScreener?(categorie: CleCategorie, region: Region, page: number, tri: TriScreener): Promise<ResultatScreener>;
@@ -50,10 +51,6 @@ function compact(valeur: number | null, devise = ''): string {
   return `${nombreFr(valeur / diviseur, diviseur === 1 ? 0 : 1)}${suffixe}${devise ? ` ${devise}` : ''}`;
 }
 
-const DRAPEAUX: Record<string, string> = {
-  US: '🇺🇸', FR: '🇫🇷', DE: '🇩🇪', GB: '🇬🇧', NL: '🇳🇱', CH: '🇨🇭', JP: '🇯🇵', CA: '🇨🇦', IT: '🇮🇹', ES: '🇪🇸',
-  BE: '🇧🇪', IE: '🇮🇪', SE: '🇸🇪', DK: '🇩🇰', FI: '🇫🇮', NO: '🇳🇴', PT: '🇵🇹', AT: '🇦🇹', LU: '🇱🇺', TW: '🇹🇼',
-};
 
 export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFiche, erreurAjout }: ScreenerProps) {
   const palette = usePalette();
@@ -114,7 +111,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
               {action.nom}
             </Text>
             <Text numberOfLines={1} style={{ color: palette.accent, fontSize: 11 }}>
-              {action.pays ? `${DRAPEAUX[action.pays.toUpperCase()] ?? ''} ` : ''}
+              {action.pays ? `${action.pays.toUpperCase()} · ` : ''}
               {action.symbole}
               {action.place ? ` · ${action.place}` : ''}
             </Text>
@@ -217,7 +214,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
               <Text style={{ color: suivie ? palette.accent : palette.texte, fontSize: 17 }}>{suivie ? '★' : '☆'}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={`Fiche de ${action.nom}`} onPress={() => onOuvrirFiche(action.symbole)}>
-              <Text style={{ color: palette.texte, fontSize: 16 }}>↗</Text>
+              <Text style={{ color: palette.texte, fontSize: 16 }}>↗︎</Text>
             </Pressable>
           </View>
         );
@@ -250,7 +247,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
                   },
                 ]}>
                 <Text style={{ color: active ? palette.accent : palette.texte, fontWeight: '800', fontSize: 16 }}>
-                  {element.emoji} {element.nom}
+                  <Icone nom={element.icone} /> {element.nom}
                 </Text>
                 <Text style={{ color: palette.texteSecondaire, fontSize: 12, lineHeight: 17 }} numberOfLines={3}>
                   {element.description}
@@ -286,7 +283,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
         {erreurAjout ? <Alerte message={erreurAjout} /> : null}
 
         <CarteSection
-          titre={`${choisie.emoji} ${choisie.nom}`}
+          titre={choisie.nom}
           actions={
             etat.total > 0 ? (
               <Text style={{ color: palette.texteSecondaire }}>{etat.total.toLocaleString('fr-FR')} actions</Text>

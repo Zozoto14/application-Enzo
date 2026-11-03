@@ -20,6 +20,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Glyphe, Icone } from '../ui/icones';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { Profil } from '../profils/profils';
 import { RetourHub } from './Hub';
@@ -53,15 +54,15 @@ const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
 };
 
 const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
-  ['tableau', '◧', 'Tableau de bord'],
-  ['utilisateurs', '👥', 'Utilisateurs'],
+  ['tableau', 'tableau', 'Tableau de bord'],
+  ['utilisateurs', 'membres', 'Utilisateurs'],
   ['acces', '▤', 'Accès par app'],
   ['applications', '▦', 'Applications'],
-  ['securite', '🛡', 'Sécurité'],
+  ['securite', 'bouclier', 'Sécurité'],
   ['journal', '☰', 'Journal'],
-  ['reglages', '⚙', 'Réglages'],
-  ['support', '🛟', 'Support'],
-  ['messagerie', '✉', 'Messagerie'],
+  ['reglages', 'reglages', 'Réglages'],
+  ['support', 'bouee', 'Support'],
+  ['messagerie', 'enveloppe', 'Messagerie'],
 ];
 /** Support et Messagerie passent par le jeton maître du relais : le compte historique du Fondateur seulement. */
 const SECTIONS_JETON_MAITRE: readonly IdSection[] = ['support', 'messagerie'];
@@ -293,7 +294,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
         <ScrollView contentContainerStyle={styles.page}>
           <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
-          <Text style={[styleTitre(theme), styles.h1]}>🔒 Panneau verrouillé</Text>
+          <Text style={[styleTitre(theme), styles.h1]}><Icone nom="cadenas" /> Panneau verrouillé</Text>
           <Text style={[attenue, styles.lead]}>Aucune activité depuis un moment : confirmez votre identité pour continuer.</Text>
           {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
           <FormulaireIdentite theme={theme} raison="Déverrouiller le panneau d’administration" enCours={Boolean(enCours)} onValider={(m, c) => verifier(m, c, 'déverrouillage du panneau', () => undefined)} />
@@ -365,7 +366,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
                   },
                 ]}>
                 <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', ...police(theme.policeTexte) }}>
-                  {icone} {libelle}
+                  <Glyphe valeur={icone} /> {libelle}
                   {id === 'utilisateurs' ? ` ${tous.length}` : ''}
                 </Text>
               </Pressable>

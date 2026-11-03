@@ -72,7 +72,7 @@ export function alertesEvenements(
       if (ecart === 0 || ecart === 1) {
         ajouter({
           identifiant: `evt-resultats-${cle(valeur.nom)}-${valeur.prochainsResultats}-${ecart}`,
-          titre: `📊 ${valeur.nom} publie ses résultats ${ecart === 0 ? 'aujourd’hui' : 'demain'}`,
+          titre: `${valeur.nom} publie ses résultats ${ecart === 0 ? 'aujourd’hui' : 'demain'}`,
           corps: 'Le cours peut bouger fortement à l’annonce. Les chiffres attendus sont dans l’onglet Résultats de la fiche.',
         });
       }
@@ -82,7 +82,7 @@ export function alertesEvenements(
       if (ecart === 0 || ecart === 1) {
         ajouter({
           identifiant: `evt-dividende-${cle(valeur.nom)}-${valeur.detachement}-${ecart}`,
-          titre: `💶 Dividende ${de(valeur.nom)} détaché ${ecart === 0 ? 'aujourd’hui' : 'demain'}`,
+          titre: `Dividende ${de(valeur.nom)} détaché ${ecart === 0 ? 'aujourd’hui' : 'demain'}`,
           corps:
             ecart === 0
               ? 'Le cours baisse mécaniquement du montant du dividende ce matin : ce n’est pas une perte.'
@@ -104,8 +104,8 @@ export function alertesEvenements(
       const principal = groupe.find(article => article.resume) ?? groupe[0];
       ajouter({
         identifiant: `evt-actu-${cle(valeur.nom)}-${cle(principal.titre)}`,
-        titre: `📰 ${valeur.nom} : ${principal.titre}`,
-        corps: `✅ Information recoupée par ${listeParlee(sources.slice(0, 3))}${sources.length > 3 ? ` et ${sources.length - 3} autre(s)` : ''}.`,
+        titre: `${valeur.nom} : ${principal.titre}`,
+        corps: `✓ Information recoupée par ${listeParlee(sources.slice(0, 3))}${sources.length > 3 ? ` et ${sources.length - 3} autre(s)` : ''}.`,
       });
       break; // Une grosse actualité par valeur et par passage suffit.
     }

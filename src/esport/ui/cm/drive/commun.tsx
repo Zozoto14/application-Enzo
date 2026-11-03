@@ -11,6 +11,7 @@ import { GLYPHES_DRIVE, PORTEE_CLUB, dureeLisible, type ApiDrive, type CleDossie
 import { tailleMedia } from '../../../medias/envoi';
 import { langueCourante } from '../../../i18n';
 import { trDr, type CleDr } from '../../../i18n/drive';
+import { Icone } from '../../../../ui/icones';
 import { Choix, Retours, styles, useAgir } from '../../commun';
 import { ESP, attenue, texte, type EtatPresse } from '../../design';
 
@@ -44,7 +45,7 @@ export function Vignette({ theme, f, cote = 96 }: { theme: ThemeHub; f: FichierD
   }
   return (
     <View style={fond}>
-      <Text style={{ fontSize: Math.round(cote / 2.6) }}>{GLYPHES_DRIVE[f ? f.genre : 'dossier']}</Text>
+      <Icone nom={GLYPHES_DRIVE[f ? f.genre : 'dossier']} taille={Math.round(cote / 2.4)} couleur={theme.attenue} />
     </View>
   );
 }
@@ -125,7 +126,10 @@ export function ChoixDestination({
               onPress={() => setChoisi(l.id)}
               testID={`${testID}-${l.id ?? 'racine'}`}
               style={(e: EtatPresse) => ({ minHeight: 40, justifyContent: 'center', paddingLeft: ESP.s + l.niveau * 16, borderRadius: 8, backgroundColor: actif ? teinteTransparente(theme.accent, 0.18) : e.hovered ? teinteTransparente(theme.accent, 0.08) : 'transparent' })}>
-              <Text style={{ ...texte(theme, 14), fontWeight: actif ? '700' : '500' }} numberOfLines={1}>{`${l.id ? GLYPHES_DRIVE.dossier : '⌂'} ${l.nom}${l.restreint ? ' 🔒' : ''}`}</Text>
+              <Text style={{ ...texte(theme, 14), fontWeight: actif ? '700' : '500' }} numberOfLines={1}>
+                {l.id ? <Icone nom="dossier" /> : '⌂'} {l.nom}
+                {l.restreint ? <> <Icone nom="cadenas" libelle={trDr('element.restreint')} /></> : null}
+              </Text>
             </Pressable>
           );
         })}

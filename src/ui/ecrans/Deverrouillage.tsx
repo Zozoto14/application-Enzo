@@ -25,6 +25,7 @@ import { useMobile } from '../mobile/useMobile';
 import { TEXTE } from '../mobile/jetons';
 import { LierCompte, type OptionsLier } from './LierCompte';
 import { useLangueSaisie } from '../motDePasse/SaisieMotDePasse';
+import { Icone } from '../icones';
 
 export interface DeverrouillageProps {
   onDeverrouiller(motDePasse: string, codeTotp: string): void;
@@ -313,7 +314,7 @@ export function Deverrouillage({
           onPress={() => setVisible(v => !v)}
           testID="champ-mot-de-passe-voir"
           style={{ alignSelf: 'flex-end', color: palette.accent, fontWeight: '600', paddingVertical: 8, minHeight: 36 }}>
-          {visible ? '🙈 Masquer' : '👁 Afficher'}
+          <Icone nom={visible ? 'oeil-barre' : 'oeil'} /> {visible ? 'Masquer' : 'Afficher'}
         </Text>
       )}
 

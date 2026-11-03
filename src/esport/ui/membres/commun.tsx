@@ -6,6 +6,7 @@ import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { badgesVisibles, libelleBadge, type BadgeAffiche, type ReseauTrombi } from '../../trombi/api';
 import { trTb, trnTb } from '../../i18n/trombi';
 import { TYPO, initiales } from '../design';
+import { Glyphe } from '../../../ui/icones';
 
 /** Pastille d'un réseau (lettre ou glyphe, couleur du réseau). */
 export const RESEAUX_AFFICHES: Record<ReseauTrombi, { nom: string; glyphe: string; couleur: string }> = {
@@ -13,8 +14,8 @@ export const RESEAUX_AFFICHES: Record<ReseauTrombi, { nom: string; glyphe: strin
   instagram: { nom: 'Instagram', glyphe: '◎', couleur: '#d62976' },
   tiktok: { nom: 'TikTok', glyphe: '♪', couleur: '#111111' },
   twitch: { nom: 'Twitch', glyphe: '◆', couleur: '#9146ff' },
-  youtube: { nom: 'YouTube', glyphe: '▶', couleur: '#ff0000' },
-  autre: { nom: '', glyphe: '↗', couleur: '#5b6475' },
+  youtube: { nom: 'YouTube', glyphe: '▶︎', couleur: '#ff0000' },
+  autre: { nom: '', glyphe: '↗︎', couleur: '#5b6475' },
 };
 
 /** Photo carrée, ou initiales sur la couleur de la team. */
@@ -34,7 +35,7 @@ export function PastilleReseau({ theme, reseau, libelle, taille = 24 }: { theme:
     <View
       accessibilityLabel={reseau === 'autre' ? libelle || trTb('reseau.autre') : r.nom}
       style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: r.couleur, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.ligne }}>
-      <Text style={{ color: '#ffffff', fontSize: Math.round(taille * 0.5), fontWeight: '700' }}>{r.glyphe}</Text>
+      <Glyphe valeur={r.glyphe} style={{ color: '#ffffff', fontSize: Math.round(taille * 0.5), fontWeight: '700' }} />
     </View>
   );
 }

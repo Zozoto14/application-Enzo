@@ -17,11 +17,13 @@ import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { trNf, trnNf } from '../../i18n/notifications';
 import { trRp } from '../../i18n/roles';
+import { Icone } from '../../../ui/icones';
 import { CATEGORIES_NOTIFICATIONS, apiNotifications, signalerNotifications, surNotifications, type CategorieNotification, type LienNotification, type NotificationCentre, type PageNotifications as Page, type PreferencesNotifications } from '../../notifications/api';
 import { ICONES, bornesPeriode, dateRelative, grouperParJour, libelleCategorie, pastille, phraseCentre, titreJour, type Periode } from '../../notifications/logique';
 import { Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Squelette, attenue, rayonControle, texte } from '../design';
 import { useTempsReel } from '../../tempsReel/hooks';
+import { Glyphe } from '../../../ui/icones';
 
 const RAFRAICHISSEMENT_MS = 60_000;
 const PAR_PAGE = 30;
@@ -83,7 +85,7 @@ export function ClocheNotifications({ theme, n, actif, onPress }: { theme: Theme
         borderRadius: 22,
         backgroundColor: actif ? teinteTransparente(theme.accent, 0.16) : (etat as { hovered?: boolean }).hovered ? teinteTransparente(theme.attenue, 0.12) : 'transparent',
       })}>
-      <Text style={{ fontSize: 20, color: actif ? theme.accent : theme.texte }}>🔔</Text>
+      <Icone nom="cloche" taille={22} couleur={actif ? theme.accent : theme.texte} />
       {texteP ? (
         <View testID="esport-cloche-pastille" style={{ position: 'absolute', top: 4, right: 2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: theme.critique, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800', ...police(theme.policeChiffres) }}>{texteP}</Text>
@@ -113,7 +115,7 @@ function Puce({ theme, libelle, actif, onPress, testID, glyphe }: { theme: Theme
         borderColor: actif ? theme.accent : theme.ligne,
         backgroundColor: actif ? teinteTransparente(theme.accent, theme.sombre ? 0.22 : 0.14) : theme.surface,
       }}>
-      {glyphe ? <Text style={{ color: actif ? theme.accent : theme.attenue, fontSize: 14 }}>{glyphe}</Text> : null}
+      {glyphe ? <Glyphe valeur={glyphe} style={{ color: actif ? theme.accent : theme.attenue, fontSize: 14 }} /> : null}
       <Text style={{ ...texte(theme, 13), fontWeight: actif ? '700' : '500' }} numberOfLines={1}>
         {libelle}
       </Text>
@@ -151,7 +153,7 @@ function LigneNotification({ theme, n, noms, onOuvrir, onLue }: { theme: ThemeHu
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.accent, n.lue ? 0.06 : 0.16) }}>
-        <Text style={{ fontSize: 16, color: n.lue ? theme.attenue : theme.accent }}>{ICONES[n.categorie] ?? '•'}</Text>
+        <Icone nom={ICONES[n.categorie] ?? 'cloche'} taille={18} couleur={n.lue ? theme.attenue : theme.accent} />
       </View>
       <Pressable
         style={{ flex: 1, minWidth: 0, gap: 2, minHeight: 44, justifyContent: 'center' }}
@@ -192,7 +194,9 @@ function Preferences({ theme, prefs, teams, onChanger, enCours }: { theme: Theme
           const notifier = suivie && !prefs.silencieuses.includes(c);
           return (
             <View key={c} style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, minHeight: 44 }}>
-              <Text style={{ width: 22, textAlign: 'center', color: theme.attenue }}>{ICONES[c]}</Text>
+              <View style={{ width: 22, alignItems: 'center' }}>
+                <Icone nom={ICONES[c]} taille={16} couleur={theme.attenue} />
+              </View>
               <Text style={{ ...texte(theme, 14), flex: 1 }} numberOfLines={1}>
                 {libelleCategorie(c)}
               </Text>
@@ -428,7 +432,7 @@ export function PageNotifications({
         <Carte theme={theme}>
           <EtatVide
             theme={theme}
-            glyphe="🔔"
+            glyphe="cloche"
             titre={trNf('vide')}
             texte={filtresActifs ? trNf('vide_filtres') : trNf('vide_aide')}
             action={filtresActifs ? { titre: trNf('effacer_filtres'), onPress: () => setFiltres(FILTRES_VIDES), testID: 'esport-notifs-vide-effacer' } : undefined}

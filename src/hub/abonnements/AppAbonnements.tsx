@@ -13,6 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Glyphe, Icone } from '../../ui/icones';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Profil } from '../../profils/profils';
 import { FormulaireIdentite } from '../Administration';
@@ -33,8 +34,8 @@ import { SuiviAbonnements, type OutilsAbo } from './Suivi';
 type Onglet = 'suivi' | 'reglages';
 
 const ONGLETS: ReadonlyArray<readonly [Onglet, string, string]> = [
-  ['suivi', '💳', 'Suivi'],
-  ['reglages', '⚙', 'Réglages'],
+  ['suivi', 'carte-bancaire', 'Suivi'],
+  ['reglages', 'reglages', 'Réglages'],
 ];
 
 function message(erreur: unknown): string {
@@ -167,7 +168,7 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="abonnements-verrouille">
         <ScrollView contentContainerStyle={styles.page}>
           <RetourHub theme={theme} onRetour={onRetour} titre="Abonnements" />
-          <Text style={[styleTitre(theme), styles.h1]}>🔒 Abonnements verrouillés</Text>
+          <Text style={[styleTitre(theme), styles.h1]}><Icone nom="cadenas" /> Abonnements verrouillés</Text>
           <Text style={[attenue, styles.lead]}>Aucune activité depuis un moment : confirmez votre identité pour continuer.</Text>
           {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
           <FormulaireIdentite
@@ -225,7 +226,7 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
                   },
                 ]}>
                 <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', ...police(theme.policeTexte) }}>
-                  {icone} {libelle}
+                  <Glyphe valeur={icone} /> {libelle}
                 </Text>
               </Pressable>
             );

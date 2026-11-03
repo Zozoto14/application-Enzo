@@ -81,7 +81,7 @@ function Contenu({ theme, e }: { theme: ThemeHub; e: EtatDeploiement }) {
         ) : null}
         {wf?.url ? (
           <View style={styles.actions}>
-            <BoutonHub theme={theme} titre={`↗ ${tm('page.github.voir')}`} onPress={() => void Linking.openURL(wf.url!)} testID="maj-github-voir" />
+            <BoutonHub theme={theme} titre={`↗︎ ${tm('page.github.voir')}`} onPress={() => void Linking.openURL(wf.url!)} testID="maj-github-voir" />
           </View>
         ) : null}
       </View>

@@ -24,6 +24,7 @@ import { FeuilleBasse } from '../../ui/mobile/FeuilleBasse';
 import { Cellule, GroupeCellules } from '../../ui/mobile/ListeCellules';
 import { useOngletsHub } from './contexte';
 import { MAX_ONGLETS, type EtatOnglets } from './onglets';
+import { Glyphe } from '../../ui/icones';
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 
@@ -222,7 +223,7 @@ function Onglet({
         onPress={onActiver}
         onLongPress={ouvrirMenu}
         style={styles.ongletTitre}>
-        <Text style={{ color: couleur, fontSize: 15, fontWeight: '700' }}>{app.icone}</Text>
+        <Glyphe valeur={app.icone} style={{ color: couleur, fontSize: 15, fontWeight: '700' }} />
         <Text numberOfLines={1} style={[styles.ongletNom, { color: theme.texte, fontWeight: actif ? '700' : '500', ...police(theme.policeTexte) }]}>
           {app.nom}
         </Text>
@@ -304,7 +305,7 @@ function MenuOnglet({
       <Text style={[styles.menuTitre, { color: theme.attenue }]}>{app.nom.toUpperCase()}</Text>
       {peutACote ? ligne('onglets-menu-a-cote', '▐ Afficher à côté', onACote) : null}
       {ailleurs === 'fenetre' ? ligne('onglets-menu-ailleurs', '⧉ Ouvrir dans une nouvelle fenêtre', onAilleurs) : null}
-      {ailleurs === 'navigateur' ? ligne('onglets-menu-ailleurs', '↗ Ouvrir dans un nouvel onglet du navigateur', onAilleurs) : null}
+      {ailleurs === 'navigateur' ? ligne('onglets-menu-ailleurs', '↗︎ Ouvrir dans un nouvel onglet du navigateur', onAilleurs) : null}
       {ligne('onglets-menu-fermer', actif ? '× Fermer l’onglet' : '× Fermer cet onglet', onFermer)}
     </View>
   );

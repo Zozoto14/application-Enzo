@@ -17,7 +17,7 @@ describe('écran Diagnostic', () => {
     await fireEvent.press(screen.getByTestId('lancer-diagnostic'));
     expect(await screen.findByText('1 problème')).toBeTruthy();
     expect(screen.getByText('connexion refusée')).toBeTruthy();
-    expect(screen.getByTestId('rapport-diagnostic').props.value).toContain('✅ Cours : Air Liquide à 177 €');
+    expect(screen.getByTestId('rapport-diagnostic').props.value).toContain('✓ Cours : Air Liquide à 177 €');
   });
 
   it('hors du bureau, chaque service se dit indisponible', () => {

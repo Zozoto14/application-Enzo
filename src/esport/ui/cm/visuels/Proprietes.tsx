@@ -99,13 +99,13 @@ export function Proprietes({ theme, doc, calque: c, charte, onAction, onChoisirI
           <PoliceChoix theme={theme} valeur={c.police} charte={charte} onChanger={police => mod({ police })} testID={`${id}-police`} />
           <View style={[styles.ligne, { gap: ESP.xs }]}>
             <ChampNombre theme={theme} libelle={trVi('editeur.taille')} valeur={c.taille} min={4} max={800} onChanger={taille => mod({ taille }, true)} testID={`${id}-taille`} />
-            <ChampNombre theme={theme} libelle="↔" valeur={c.espacement} min={-20} max={100} onChanger={espacement => mod({ espacement }, true)} testID={`${id}-espacement`} />
-            <ChampNombre theme={theme} libelle="↕" valeur={c.interligne} min={0.5} max={3} onChanger={interligne => mod({ interligne }, true)} testID={`${id}-interligne`} />
+            <ChampNombre theme={theme} libelle="↔︎" valeur={c.espacement} min={-20} max={100} onChanger={espacement => mod({ espacement }, true)} testID={`${id}-espacement`} />
+            <ChampNombre theme={theme} libelle="↕︎" valeur={c.interligne} min={0.5} max={3} onChanger={interligne => mod({ interligne }, true)} testID={`${id}-interligne`} />
           </View>
           <Pastilles theme={theme} libelle={trVi('editeur.graisse')} valeur={c.graisse} options={GRAISSES.map(g => [g, String(g)] as const)} onChoisir={graisse => mod({ graisse })} testID={`${id}-graisse`} />
           <RemplissageChoix theme={theme} libelle={trVi('editeur.couleur')} valeur={c.couleur} charte={charte} onChanger={r => r && mod({ couleur: r })} testID={`${id}-couleur`} />
           <Pastilles theme={theme} libelle={trVi('editeur.alignement')} valeur={c.align} options={(['gauche', 'centre', 'droite'] as const).map(a => [a, trVi(`editeur.align.${a}`)] as const)} onChoisir={align => mod({ align })} testID={`${id}-align`} />
-          <Pastilles theme={theme} libelle="↕" valeur={c.valign} options={[['haut', '⤒'], ['milieu', '↕'], ['bas', '⤓']] as const} onChoisir={valign => mod({ valign })} testID={`${id}-valign`} />
+          <Pastilles theme={theme} libelle="↕︎" valeur={c.valign} options={[['haut', '⤒'], ['milieu', '↕︎'], ['bas', '⤓']] as const} onChoisir={valign => mod({ valign })} testID={`${id}-valign`} />
           <Interrupteur theme={theme} libelle={trVi('editeur.majuscules')} valeur={c.majuscules} onChanger={majuscules => mod({ majuscules })} testID={`${id}-majuscules`} />
           <Interrupteur theme={theme} libelle={trVi('editeur.ajuster')} valeur={c.ajuster} onChanger={ajuster => mod({ ajuster })} testID={`${id}-ajuster`} />
           <Interrupteur theme={theme} libelle={trVi('editeur.glitch')} valeur={c.glitch} onChanger={glitch => mod({ glitch })} testID={`${id}-glitch`} />

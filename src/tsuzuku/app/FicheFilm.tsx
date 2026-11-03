@@ -42,8 +42,8 @@ export function FicheFilmEcran({ id }: { id: string }) {
                 </Text>
               ) : null}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <Bouton titre="▶ Lire le film" variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'movie', id })} testID="fiche-lire" />
-                {f.trailer ? <Bouton titre="Bande-annonce ↗" onPress={() => void ouvrirExterne(f.trailer!)} /> : null}
+                <Bouton titre="▶︎ Lire le film" variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'movie', id })} testID="fiche-lire" />
+                {f.trailer ? <Bouton titre="Bande-annonce ↗︎" onPress={() => void ouvrirExterne(f.trailer!)} /> : null}
               </View>
             </BandeauFiche>
             <BlocBibliotheque fiche={min} entree={entree} />

@@ -51,8 +51,8 @@ export interface EntreesBriefing {
 }
 
 const SALUTATIONS: Record<MomentBriefing, string> = {
-  matin: '☀️ Avant ouverture',
-  soir: '🌙 Clôture',
+  matin: '☀︎ Avant ouverture',
+  soir: '☾ Clôture',
 };
 
 /** Meilleure et moins bonne ligne depuis le point précédent. */
@@ -73,8 +73,8 @@ function mouvements(entrees: EntreesBriefing): string | undefined {
     `${v.nom} ${formaterPourcentage(Decimal.de(v.pct.toFixed(2)))}`;
   const meilleure = variations[0];
   const pire = variations[variations.length - 1];
-  if (variations.length === 1) return `${meilleure.pct >= 0 ? '🏆' : '🔻'} ${texte(meilleure)}`;
-  return [meilleure.pct > 0 ? `🏆 ${texte(meilleure)}` : undefined, pire.pct < 0 ? `🔻 ${texte(pire)}` : undefined]
+  if (variations.length === 1) return `${meilleure.pct >= 0 ? '▲' : '▼'} ${texte(meilleure)}`;
+  return [meilleure.pct > 0 ? `▲ ${texte(meilleure)}` : undefined, pire.pct < 0 ? `▼ ${texte(pire)}` : undefined]
     .filter(Boolean)
     .join('  ·  ');
 }
@@ -135,7 +135,7 @@ export function composerBriefing(entrees: EntreesBriefing): Briefing | undefined
 
   if (agregats.plusValueLatentePct) {
     lignes.push(
-      `💼 Plus-value latente : ${formaterMontant(agregats.plusValueLatente, {
+      `Plus-value latente : ${formaterMontant(agregats.plusValueLatente, {
         signeExplicite: true,
       })} (${formaterPourcentage(agregats.plusValueLatentePct)}).`,
     );
@@ -146,7 +146,7 @@ export function composerBriefing(entrees: EntreesBriefing): Briefing | undefined
     const noms = new Map(entrees.titres.map(titre => [titre.id, titre.nom]));
     const manquants = sansCours.map(position => noms.get(position.titreId) ?? position.titreId);
     lignes.push(
-      `⚠️ ${manquants.length} valeur(s) sans cours, exclues du total : ${manquants.join(', ')}.`,
+      `⚠︎ ${manquants.length} valeur(s) sans cours, exclues du total : ${manquants.join(', ')}.`,
     );
   }
 

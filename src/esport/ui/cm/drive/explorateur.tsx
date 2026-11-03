@@ -9,6 +9,7 @@ import { Pressable, Text, View, type ViewStyle } from 'react-native';
 import { BoutonHub } from '../../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../../hub/themes';
 import { trDr } from '../../../i18n/drive';
+import { Icone } from '../../../../ui/icones';
 import { styles } from '../../commun';
 import { Compteur, ESP, attenue, texte, type EtatPresse } from '../../design';
 import type { Glisser } from './typesGlisser';
@@ -137,7 +138,10 @@ export function ArbreDossiers({
             onPress={() => onOuvrir(id)}
             testID={`${testID}-${cle}`}
             style={(e: EtatPresse) => ({ flex: 1, minWidth: 0, minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 6, borderRadius: 6, backgroundColor: courant === id ? teinteTransparente(theme.accent, 0.16) : e.hovered ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
-            <Text style={{ ...texte(theme, 13), fontWeight: courant === id ? '700' : '500', flex: 1 }} numberOfLines={1}>{`${id ? '📁' : '⌂'} ${nom}${restreint ? ' 🔒' : ''}`}</Text>
+            <Text style={{ ...texte(theme, 13), fontWeight: courant === id ? '700' : '500', flex: 1 }} numberOfLines={1}>
+              {id ? <Icone nom="dossier" /> : '⌂'} {nom}
+              {restreint ? <> <Icone nom="cadenas" libelle={trDr('element.restreint')} /></> : null}
+            </Text>
             <Compteur theme={theme} n={n} testID={`${testID}-${cle}-nouveautes`} />
           </Pressable>
         </View>
@@ -201,7 +205,10 @@ export function ChoixDansArbre({
               onPress={() => setChoisi(l.id)}
               testID={`${testID}-${l.id ?? 'racine'}`}
               style={(e: EtatPresse) => ({ minHeight: 40, justifyContent: 'center', paddingLeft: ESP.s + l.niveau * 16, borderRadius: 8, backgroundColor: actif ? teinteTransparente(theme.accent, 0.18) : e.hovered ? teinteTransparente(theme.accent, 0.08) : 'transparent' })}>
-              <Text style={{ ...texte(theme, 14), fontWeight: actif ? '700' : '500' }} numberOfLines={1}>{`${l.id ? '📁' : '⌂'} ${l.nom}${l.restreint ? ' 🔒' : ''}`}</Text>
+              <Text style={{ ...texte(theme, 14), fontWeight: actif ? '700' : '500' }} numberOfLines={1}>
+                {l.id ? <Icone nom="dossier" /> : '⌂'} {l.nom}
+                {l.restreint ? <> <Icone nom="cadenas" libelle={trDr('element.restreint')} /></> : null}
+              </Text>
             </Pressable>
           );
         })}

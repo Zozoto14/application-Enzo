@@ -13,6 +13,7 @@ import { formatTemps } from '../../review/libelles';
 import { Panneau, styles } from '../commun';
 import { ESP, rayonControle, type EtatPresse } from '../design';
 import { tr, trn } from '../../i18n';
+import { Glyphe } from '../../../ui/icones';
 
 export function BarreDessin({
   theme,
@@ -84,7 +85,7 @@ export function BarreDessin({
             accessibilityLabel={o.nom}
             onPress={() => onOutil(o.cle)}
             style={pastille(outil === o.cle)}>
-            <Text style={{ color: theme.texte, fontSize: 18, fontWeight: '700' }}>{o.glyphe}</Text>
+            <Glyphe valeur={o.glyphe} style={{ color: theme.texte, fontSize: 18, fontWeight: '700' }} />
           </Pressable>
         ))}
       </View>

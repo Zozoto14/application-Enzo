@@ -10,13 +10,15 @@
  * (version, plateforme, appareil, app, langue, rang).
  */
 
+import type { NomIcone } from '../ui/icones/traces';
+
 export type CategorieTicket = 'bug' | 'idee' | 'question' | 'compte';
 
-export const CATEGORIES_TICKET: ReadonlyArray<{ id: CategorieTicket; libelle: string; emoji: string; couleur: string }> = [
-  { id: 'bug', libelle: 'Bug', emoji: '🐞', couleur: '#e5484d' },
-  { id: 'idee', libelle: 'Idée', emoji: '💡', couleur: '#f5a524' },
-  { id: 'question', libelle: 'Question', emoji: '❓', couleur: '#3b82f6' },
-  { id: 'compte', libelle: 'Compte', emoji: '👤', couleur: '#8b5cf6' },
+export const CATEGORIES_TICKET: ReadonlyArray<{ id: CategorieTicket; libelle: string; /** Icône monochrome (src/ui/icones). */ icone: NomIcone; couleur: string }> = [
+  { id: 'bug', libelle: 'Bug', icone: 'bug', couleur: '#e5484d' },
+  { id: 'idee', libelle: 'Idée', icone: 'ampoule', couleur: '#f5a524' },
+  { id: 'question', libelle: 'Question', icone: 'question', couleur: '#3b82f6' },
+  { id: 'compte', libelle: 'Compte', icone: 'personne', couleur: '#8b5cf6' },
 ];
 /** Anciennes catégories (historique des versions précédentes). */
 const ALIAS_CATEGORIES: Record<string, CategorieTicket> = { demande: 'idee', autre: 'question' };

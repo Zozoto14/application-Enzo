@@ -224,7 +224,7 @@ export function LecteurFichier({ theme, obtenirUrl, depart = 0, onPret, onEtat, 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', width: '100%', paddingHorizontal: pleinEcran ? 16 : 0 }} testID="esport-lecteur-commandes">
           <BoutonHub
             theme={theme}
-            titre={lecture ? '❚❚' : '▶'}
+            titre={lecture ? '❚❚' : '▶︎'}
             libelle={lecture ? tr('medias.lecteur.pause') : tr('medias.lecteur.lire')}
             onPress={() => {
               const v = video.current;

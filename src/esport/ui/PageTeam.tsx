@@ -63,32 +63,32 @@ const MODULES_DISPONIBLES = new Set(['meeting_summaries', 'goals_tasks']);
 export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyphe: string; description: string; sections: readonly SectionTeam[] }> = [
   { id: 'accueil', get libelle() {
       return tr('pageTeam.accueil');
-    }, glyphe: '⌂', get description() {
+    }, glyphe: 'accueil', get description() {
       return tr('pageTeam.accueil_de_la_team');
     }, sections: ['accueil'] },
   { id: 'agenda', get libelle() {
       return tr('pageTeam.agenda');
-    }, glyphe: '◷', get description() {
+    }, glyphe: 'calendrier', get description() {
       return tr('pageTeam.agenda_planning_disponibilites');
     }, sections: ['module:planning', 'module:availability', 'module:attendance'] },
   { id: 'jeu', get libelle() {
       return tr('assistant.jeu');
-    }, glyphe: '◎', get description() {
+    }, glyphe: 'viseur', get description() {
       return tr('pageTeam.jeu_strats_playbook_review');
     }, sections: ['module:strat_editor', 'module:playbook', 'module:resources', 'module:video_review', 'module:scouting'] },
   { id: 'competition', get libelle() {
       return tr('pageTeam.competition');
-    }, glyphe: '♛', get description() {
+    }, glyphe: 'trophee', get description() {
       return tr('pageTeam.competition_description');
     }, sections: ['module:tournois', 'module:resultats'] },
   { id: 'equipe', get libelle() {
       return tr('pageTeam.equipe');
-    }, glyphe: '⚑', get description() {
+    }, glyphe: 'drapeau', get description() {
       return tr('pageTeam.equipe_resumes_objectifs_et');
     }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'module:player_notes', 'module:cm', 'membres'] },
   { id: 'reglages', get libelle() {
       return tr('pageTeam.reglages');
-    }, glyphe: '⚙︎', get description() {
+    }, glyphe: 'reglages', get description() {
       return tr('pageTeam.reglages_parametres_discord_jo');
     }, sections: ['parametres', 'module:discord', 'journal'] },
 ];

@@ -55,7 +55,7 @@ export function SectionTemps({ a, t, onSaisir, onErreur }: { a: Actions; t: Tach
           <Bouton
             theme={theme}
             variante={debut ? 'danger' : 'plein'}
-            titre={debut ? `■ Arrêter · ${chronoLisible(maintenant - Date.parse(debut))}` : '▶ Démarrer le minuteur'}
+            titre={debut ? `■ Arrêter · ${chronoLisible(maintenant - Date.parse(debut))}` : '▶︎ Démarrer le minuteur'}
             onPress={() => a.minuteur(t)}
             testID="detail-minuteur"
           />
@@ -147,7 +147,7 @@ export function PastilleMinuteur({ a, t, debut, onOuvrir }: { a: Actions; t: Tac
   return (
     <View style={[styles.pastille, { borderColor: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.1), borderRadius: Math.min(theme.rayonMoyen, 12) }]} testID="taches-minuteur">
       <Pressable accessibilityRole="button" accessibilityLabel={`Minuteur en cours sur « ${t.titre} » : ouvrir la tâche`} onPress={onOuvrir} style={styles.pastilleTexte}>
-        <Text style={[texteDe(theme), { fontWeight: '700', fontVariant: ['tabular-nums'] }]}>⏱ {chronoLisible(maintenant - debut)}</Text>
+        <Text style={[texteDe(theme), { fontWeight: '700', fontVariant: ['tabular-nums'] }]}>⏱︎ {chronoLisible(maintenant - debut)}</Text>
         <Text style={[attenueDe(theme), { flexShrink: 1 }]} numberOfLines={1}>
           {t.titre}
         </Text>
@@ -233,7 +233,7 @@ export function DialogueReleve({ a, onFermer, onExporter, onOuvrir }: { a: Actio
       </View>
       {r.lignes.length === 0 ? (
         <Text style={attenueDe(theme)} testID="releve-vide">
-          Aucun temps noté cette semaine. Lancez le minuteur ▶ dans le détail d’une tâche, ou saisissez du temps.
+          Aucun temps noté cette semaine. Lancez le minuteur ▶︎ dans le détail d’une tâche, ou saisissez du temps.
         </Text>
       ) : (
         <ScrollView horizontal contentContainerStyle={{ flexGrow: 1 }}>

@@ -32,7 +32,7 @@ export const ZONES: Record<Zone, InfoZone> = {
   reunion: { nom: 'Salle de réunion', role: 'délègue à des sous-agents ou planifie (Task, TodoWrite…)', teinte: '#C05BD8', icone: '✦' },
   reflexion: { nom: 'Coin réflexion', role: 'réfléchit : demande reçue, aucun outil pour l’instant', teinte: '#8F96A8', icone: '…' },
   accueil: { nom: 'Accueil', role: 'vient d’ouvrir une session, pas encore de demande', teinte: '#C7A23A', icone: '⌂' },
-  detente: { nom: 'Détente', role: 'inactif : a fini de répondre depuis un moment, café', teinte: '#B98552', icone: '☕' },
+  detente: { nom: 'Détente', role: 'inactif : a fini de répondre depuis un moment, café', teinte: '#B98552', icone: '◡' },
   guichet: { nom: 'Attend ta réponse', role: 'Claude te demande une autorisation ou pose une question : va voir Claude Code', teinte: '#E5484D', icone: '!' },
   salle: { nom: 'Salle d’attente', role: 'vient de terminer une tâche : touche-le pour voir ce qu’il a fini', teinte: '#2FA36B', icone: '✓' },
 };

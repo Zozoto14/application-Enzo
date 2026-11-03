@@ -494,7 +494,7 @@ export function notificationDuJour(
   aujourdhui: string,
 ): { titre: string; corps: string } | undefined {
   if (!reglages.notification || resume.texte === '' || dernierJour === aujourdhui) return undefined;
-  return { titre: '💳 Abonnements', corps: `${resume.texte[0].toUpperCase()}${resume.texte.slice(1)}.` };
+  return { titre: 'Abonnements', corps: `${resume.texte[0].toUpperCase()}${resume.texte.slice(1)}.` };
 }
 
 // --- Messages -----------------------------------------------------------------

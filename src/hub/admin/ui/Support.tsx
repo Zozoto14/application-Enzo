@@ -9,6 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Icone } from '../../../ui/icones';
 import { Pressable, Text, View } from 'react-native';
 import { ChampNote } from '../../../esport/ui/ChampNote';
 import { NoteMarkdown } from '../../../esport/ui/review/Note';
@@ -150,7 +151,7 @@ export function SupportAdmin({ outils }: { outils: OutilsAdmin }) {
               style={{ borderWidth: 1, borderColor: actif ? theme.accent : theme.ligne, borderLeftWidth: 4, borderLeftColor: c.couleur, borderRadius: Math.min(theme.rayonMoyen, 10), padding: 10, gap: 4, backgroundColor: actif ? teinteTransparente(theme.accent, 0.06) : 'transparent' }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 <Text style={[texte, { fontWeight: '700', flex: 1 }]} numberOfLines={2}>
-                  n° {x.numero} · {c.emoji} {x.titre}
+                  n° {x.numero} · <Icone nom={c.icone} /> {x.titre}
                 </Text>
                 {attente ? <Pilule theme={theme} texte="À traiter" couleur={theme.alerte} /> : null}
                 <Pilule theme={theme} texte={LIBELLES_STATUT_SERVEUR[x.statut as StatutServeur] ?? x.statut} couleur={x.statut === 'resolu' ? theme.ok : x.statut === 'repondu' ? theme.accent : theme.attenue} testID={`admin-support-ticket-${x.numero}-statut`} />

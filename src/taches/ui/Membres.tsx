@@ -77,7 +77,7 @@ export function PartageProjet({ a, projet, onErreur, onMembres }: { a: Actions; 
     return (
       <View style={{ gap: 8 }}>
         <Text style={attenueDe(a.theme)}>Invitez d’abord des membres (amis ou gestionnaires du hub).</Text>
-        <Bouton theme={a.theme} titre="👥 Membres…" onPress={onMembres} testID="projet-membres" style={{ alignSelf: 'flex-start' }} />
+        <Bouton theme={a.theme} icone="membres" titre="Membres…" onPress={onMembres} testID="projet-membres" style={{ alignSelf: 'flex-start' }} />
       </View>
     );
   }
@@ -140,7 +140,7 @@ export function DialogueMembres({ a, comptes, onFermer, onErreur, onAvis }: { a:
                 compact={!a.mobile}
                 variante="discret"
                 style={{ alignSelf: 'flex-start' }}
-                titre={`${m.perso ? '☑' : '☐'} Peut créer ses propres projets`}
+                titre={`${m.perso ? '☑︎' : '☐'} Peut créer ses propres projets`}
                 libelle={`Peut créer ses propres projets : ${m.perso ? 'oui' : 'non'}`}
                 onPress={() => {
                   try {

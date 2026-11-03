@@ -19,35 +19,36 @@ import { Compteur, ESP, attenue, rayonControle, texte, useDensite, type EtatPres
 import { tr } from '../i18n';
 import { BandeauTranscriptions } from './medias/Transcription';
 import { trNf } from '../i18n/notifications';
+import { Glyphe } from '../../ui/icones';
 
 export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques' | 'jeux';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
   { cle: 'dashboard', get libelle() {
       return tr('dashboard.dashboard');
-    }, glyphe: '▦', get description() {
+    }, glyphe: 'tableau', get description() {
       return tr('cadreEsport.dashboard_toutes_vos_teams');
     } },
   { cle: 'teams', get libelle() {
       return tr('dashboard.teams');
-    }, glyphe: '◆', get description() {
+    }, glyphe: 'bouclier', get description() {
       return tr('cadreEsport.teams_la_liste_la');
     } },
   { cle: 'membres', get libelle() {
       return tr('dashboard.membres');
-    }, glyphe: '☺', get description() {
+    }, glyphe: 'membres', get description() {
       return tr('cadreEsport.membres_tous_les_comptes');
     } },
   // Profils de jeu (formats, score, maps, personnages…) : le Fondateur et les comptes à qui il confie « jeux.gerer ».
   { cle: 'jeux', get libelle() {
       return tr('jeux.nav');
-    }, glyphe: '◈', get description() {
+    }, glyphe: 'manette', get description() {
       return tr('jeux.nav_description');
     } },
   // Réservée au Fondateur : l'entrée n'apparaît que pour lui (et le serveur répond 404 à tout autre compte).
   { cle: 'statistiques', get libelle() {
       return tr('statistiques.titre');
-    }, glyphe: '◔', get description() {
+    }, glyphe: 'graphique', get description() {
       return tr('statistiques.description_nav');
     } },
 ];
@@ -226,16 +227,9 @@ export function EntreeLaterale({
       {() => (
         <>
           {glyphe ? (
-            <Text
-              style={{
-                width: 22,
-                textAlign: 'center',
-                fontSize: 16,
-                color: choisi ? theme.texte : theme.attenue,
-              }}
-            >
-              {glyphe}
-            </Text>
+            <View style={{ width: 22, alignItems: 'center' }}>
+              <Glyphe valeur={glyphe} style={{ textAlign: 'center', fontSize: 16, color: choisi ? theme.texte : theme.attenue }} />
+            </View>
           ) : null}
           {reduite ? (
             <>
@@ -445,7 +439,7 @@ export function CadreEsport({
               <EntreeLaterale
                 theme={theme}
                 libelle={trNf('titre')}
-                glyphe="🔔"
+                glyphe="cloche"
                 description={trNf('sous')}
                 choisi={notifications.actif && !bloc}
                 compteur={notifications.n}

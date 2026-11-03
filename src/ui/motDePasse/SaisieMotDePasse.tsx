@@ -26,6 +26,7 @@ import { useLangue } from '../../esport/i18n';
 import type { PolitiqueMdp } from '../../profils/invitation';
 import { analyserMotDePasse, capsActif, lignesAide, type ProfilMdp } from './regles';
 import { texte, type LangueSaisie } from './textes';
+import { Icone } from '../icones';
 
 /** Langue de l'écran : celle de l'invitation si elle en porte une, sinon celle du compte ou de l'appareil. */
 export function useLangueSaisie(explicite?: LangueSaisie): LangueSaisie {
@@ -117,7 +118,7 @@ export function ChampMotDePasse({
       />
       {mobile ? null : (
         <Bouton44
-          libelle={`${visible ? '🙈' : '👁'} ${texte(l, visible ? 'bouton.masquer' : 'bouton.afficher')}`}
+          libelle={texte(l, visible ? 'bouton.masquer' : 'bouton.afficher')}
           libelleLecteur={texte(l, visible ? 'bouton.masquerLong' : 'bouton.afficherLong')}
           onPress={() => setVisible(v => !v)}
           testID={`${testID}-voir`}
@@ -231,17 +232,17 @@ export function SaisieNouveauMotDePasse({
           </View>
         ))}
         <Text style={{ color: palette.texte, fontSize: TAILLE, lineHeight: TAILLE + 7, fontWeight: '600' }} testID={`${prefixe}-aide-conseil`}>
-          💡 {aide.conseil}
+          <Icone nom="ampoule" /> {aide.conseil}
         </Text>
         <Text style={{ color: palette.texteSecondaire, fontSize: TAILLE, lineHeight: TAILLE + 7 }} testID={`${prefixe}-aide-rappel`}>
-          🔐 {aide.rappel}
+          <Icone nom="cadenas" /> {aide.rappel}
         </Text>
       </View>
 
       {/* --- Premier champ --- */}
       <Champ etiquette={etiquette} value={valeur} onChangeText={onChanger} testID={testIDs.mdp} {...communs} enterKeyHint="next" />
       <Bouton44
-        libelle={`${visible ? '🙈' : '👁'} ${texte(l, visible ? 'bouton.masquer' : 'bouton.afficher')}`}
+        libelle={texte(l, visible ? 'bouton.masquer' : 'bouton.afficher')}
         libelleLecteur={texte(l, visible ? 'bouton.masquerLong' : 'bouton.afficherLong')}
         onPress={() => setVisible(v => !v)}
         testID={`${testIDs.mdp}-voir`}

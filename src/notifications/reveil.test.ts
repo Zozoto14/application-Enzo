@@ -61,7 +61,7 @@ describe('executerReveil', () => {
 
     expect(resultat.briefingsEnvoyes).toEqual(['briefing-2026-09-21-matin']);
     expect(canal.envoyees).toHaveLength(1);
-    expect(canal.envoyees[0].titre).toMatch(/^☀️ Avant ouverture/);
+    expect(canal.envoyees[0].titre).toMatch(/^☀︎ Avant ouverture/);
   });
 
   it('ne touche à rien quand rien n’est dû', async () => {

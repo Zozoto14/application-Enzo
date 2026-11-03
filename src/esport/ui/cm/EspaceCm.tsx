@@ -47,13 +47,13 @@ export type GroupeCmId = 'accueil' | 'contenus' | 'medias' | 'diffusion' | 'part
 
 /** Pictogrammes des groupes dans la barre latérale (colonne d'icônes quand elle est réduite). */
 const GLYPHES_GROUPES: Record<GroupeCmId, string> = {
-  accueil: '⌂',
-  contenus: '▦',
-  medias: '◩',
-  diffusion: '◉',
-  partenaires: '★',
-  equipe: '☺',
-  gestion: '⚙︎',
+  accueil: 'accueil',
+  contenus: 'grille',
+  medias: 'image',
+  diffusion: 'megaphone',
+  partenaires: 'partenaires',
+  equipe: 'membres',
+  gestion: 'reglages',
 };
 
 /** Groupe de chaque section (sous-onglet). */

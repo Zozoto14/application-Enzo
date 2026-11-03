@@ -486,7 +486,7 @@ async function verifierEnFond(raison) {
   } else if (derniereProposee !== disponible && Notification.isSupported()) {
     derniereProposee = disponible;
     const notification = new Notification({
-      title: '🆕 Nouvelle version d’AppDashboard',
+      title: 'Nouvelle version d’AppDashboard',
       body: 'Cliquez pour l’installer : l’application redémarre en une minute, vos données restent là.',
     });
     notification.on('click', () => redemarrerPourMettreAJour());

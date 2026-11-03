@@ -25,8 +25,8 @@ const fr = (valeur: number) => valeur.toLocaleString('fr-FR', { maximumFractionD
 const dateFr = (iso: string) => iso.split('-').reverse().join('/');
 
 const ETATS: Record<LigneCarnet['etat'], { libelle: string; couleur: 'hausse' | 'baisse' | 'texteSecondaire' | 'accent' }> = {
-  'objectif-atteint': { libelle: '🎯 Objectif atteint', couleur: 'hausse' },
-  'a-revoir': { libelle: '⚠️ À revoir', couleur: 'baisse' },
+  'objectif-atteint': { libelle: 'Objectif atteint', couleur: 'hausse' },
+  'a-revoir': { libelle: '⚠︎ À revoir', couleur: 'baisse' },
   'en-cours': { libelle: 'En cours', couleur: 'accent' },
   'sans-cours': { libelle: 'Cours inconnu', couleur: 'texteSecondaire' },
 };

@@ -144,7 +144,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
           {supprimables.length > 0 ? (
             <BoutonHub theme={theme} titre={selection ? trSs('selection.terminer') : trSs('selection.activer')} variante={selection ? 'plein' : 'normal'} onPress={() => (selection ? quitterSelection() : setSelection(new Set()))} testID="esport-strats-selection" />
           ) : null}
-          {peutCorbeille ? <BoutonHub theme={theme} titre={`🗑 ${trSs('corbeille.ouvrir')}`} libelle={trSs('corbeille.ouvrir')} onPress={() => (quitterSelection(), setVueCorbeille(true))} testID="esport-strats-corbeille-ouvrir" /> : null}
+          {peutCorbeille ? <BoutonHub theme={theme} titre={`🗑︎ ${trSs('corbeille.ouvrir')}`} libelle={trSs('corbeille.ouvrir')} onPress={() => (quitterSelection(), setVueCorbeille(true))} testID="esport-strats-corbeille-ouvrir" /> : null}
         </View>
       ) : null}
       {selection ? (

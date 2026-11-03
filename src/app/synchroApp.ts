@@ -233,7 +233,7 @@ export function useSynchro({
     try {
       const resultat = await telechargerMiseAJour({ site, gestionnaire: new GestionnaireMiseAJour(fichiers), fichiers });
       return resultat.etat === 'installee'
-        ? `🆕 Nouvelle version téléchargée${resultat.notes ? ` (${resultat.notes})` : ''} : fermez et rouvrez l’application pour l’avoir.`
+        ? `Nouvelle version téléchargée${resultat.notes ? ` (${resultat.notes})` : ''} : fermez et rouvrez l’application pour l’avoir.`
         : undefined;
     } catch {
       return undefined;

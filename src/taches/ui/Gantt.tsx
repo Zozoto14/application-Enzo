@@ -317,7 +317,7 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
       {violees.length ? (
         <View style={[styles.alerte, { borderColor: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.08), borderRadius: 10 }]} accessibilityRole="alert" testID="gantt-violations">
           <Text style={[texteDe(theme), { color: theme.critique, flex: 1, minWidth: 200 }]}>
-            ⚠ {violees.length} dépendance{violees.length > 1 ? 's' : ''} non respectée{violees.length > 1 ? 's' : ''} : {violees.slice(0, 3).map(l => `« ${d.taches[l.vers]?.titre} » commence avant la fin de « ${d.taches[l.de]?.titre} »`).join(' ; ')}
+            ⚠︎ {violees.length} dépendance{violees.length > 1 ? 's' : ''} non respectée{violees.length > 1 ? 's' : ''} : {violees.slice(0, 3).map(l => `« ${d.taches[l.vers]?.titre} » commence avant la fin de « ${d.taches[l.de]?.titre} »`).join(' ; ')}
             {violees.length > 3 ? '…' : ''}
           </Text>
           <Bouton theme={theme} compact titre="Décaler les suivantes" onPress={decalerTout} testID="gantt-decaler" />

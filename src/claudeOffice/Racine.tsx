@@ -303,7 +303,7 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
         </>
       )}
       <AideRaccourcis theme={theme} visible={suivi.aide} onFermer={suivi.fermerAide} />
-      <Text style={[styles.credit, styles.texteMobile, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
+      <Text style={[styles.credit, styles.texteMobile, { color: theme.attenue }]}>D’après Claude Office, ©︎ 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );
 }

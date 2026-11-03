@@ -50,6 +50,7 @@ import { GroupeCellules } from '../ui/mobile/ListeCellules';
 import { BarreBasseHub } from '../ui/mobile/NavigationMobile';
 import { margesSecurite } from '../ui/mobile/ZoneSecurite';
 import { SelecteurOngletsMobile } from './multi/BarreOngletsApps';
+import { Glyphe } from '../ui/icones';
 
 /** Colonnes de la grille du téléphone (pure, testée) : 2 dès 340 px, sinon 1. */
 export function colonnesMobile(largeur: number, disposition: 'grille' | 'liste'): number {
@@ -233,11 +234,11 @@ function TuileMobile({
   const attenueHaut = blocs ? 'rgba(255,255,255,0.85)' : theme.attenue;
   const ouvrable = etat?.ouvrable ?? true;
   const indicateur = info?.indicateurs[0];
-  const sous = etat?.maintenance ? `🛠 ${etat.maintenance}` : etat?.desactivee ? 'Désactivée pour les autres utilisateurs' : info?.sousTitre ?? app.description;
+  const sous = etat?.maintenance ? `🛠︎ ${etat.maintenance}` : etat?.desactivee ? 'Désactivée pour les autres utilisateurs' : info?.sousTitre ?? app.description;
   const grande = taille === 'grande';
   const icone = (
     <View style={[styles.icone, { borderRadius: Math.min(theme.rayonMoyen, 12), backgroundColor: blocs ? 'rgba(255,255,255,0.2)' : teinteTransparente(couleur, 0.16) }]}>
-      <Text style={{ color: blocs ? '#FFFFFF' : couleur, fontSize: 20, fontWeight: '700' }}>{app.icone}</Text>
+      <Glyphe valeur={app.icone} style={{ color: blocs ? '#FFFFFF' : couleur, fontSize: 20, fontWeight: '700' }} />
     </View>
   );
   const valeur = indicateur ? (
@@ -364,7 +365,7 @@ function Personnalisation({
   return (
     <View style={{ gap: ESPACE.l, paddingHorizontal: 6 }} testID="hub-barre-edition">
       <Text style={{ color: theme.attenue, fontSize: TEXTE.legende + 1, lineHeight: 23, ...police(theme.policeTexte) }}>
-        Réordonnez avec ▲ ▼, épinglez ★, masquez 👁 ou changez la taille de chaque app. L’accueil se met à jour en direct.
+        Réordonnez avec ▲ ▼, épinglez ★, masquez 👁︎ ou changez la taille de chaque app. L’accueil se met à jour en direct.
       </Text>
       <View style={{ gap: ESPACE.m }}>
         {segments('Disposition', prefs.disposition, [['grille', '▦ Grille'], ['liste', '☰ Liste']] as const, v => onChanger(definirDisposition(prefs, v), `Disposition : ${v}.`), 'hub-disposition')}
@@ -443,7 +444,7 @@ function LigneEdition({
   return (
     <View style={[styles.ligneEdition, { opacity: tuile.masquee ? 0.6 : 1 }]} testID={`edition-${app.id}`}>
       <View style={styles.ligneEditionTete}>
-        <Text style={{ color: theme.teintes[app.teinte], fontSize: 18, width: 24, textAlign: 'center' }}>{app.icone}</Text>
+        <Glyphe valeur={app.icone} style={{ color: theme.teintes[app.teinte], fontSize: 18, width: 24, textAlign: 'center' }} />
         <Text style={{ flex: 1, color: theme.texte, fontSize: TEXTE.corps, fontWeight: '600', ...police(theme.policeTexte) }} numberOfLines={1}>
           {app.nom}
           {tuile.masquee ? ' (masquée)' : ''}
@@ -453,7 +454,7 @@ function LigneEdition({
         {outil(`edit-${app.id}-avant`, '▲', `Monter ${app.nom}`, () => onDeplacer(-1), { desactive: premier })}
         {outil(`edit-${app.id}-apres`, '▼', `Descendre ${app.nom}`, () => onDeplacer(1), { desactive: dernier })}
         {outil(`edit-${app.id}-epingler`, tuile.epinglee ? '★' : '☆', tuile.epinglee ? `Désépingler ${app.nom}` : `Épingler ${app.nom} en premier`, onEpingler, { actif: tuile.epinglee })}
-        {outil(`edit-${app.id}-masquer`, tuile.masquee ? '◌' : '👁', tuile.masquee ? `Afficher ${app.nom}` : `Masquer ${app.nom}`, onMasquer, { actif: tuile.masquee })}
+        {outil(`edit-${app.id}-masquer`, tuile.masquee ? '◌' : '👁︎', tuile.masquee ? `Afficher ${app.nom}` : `Masquer ${app.nom}`, onMasquer, { actif: tuile.masquee })}
         {outil(`edit-${app.id}-taille`, LIBELLES_TAILLE[tuile.taille], `Taille de ${app.nom} : ${LIBELLES_TAILLE[tuile.taille].toLowerCase()} (toucher pour changer)`, onTaille, { large: true })}
       </View>
     </View>

@@ -114,7 +114,7 @@ export function FicheValeur(props: FicheValeurProps) {
               testID="bouton-baggr-fiche"
               style={styles.retour}>
               <Text style={{ color: palette.accent, fontWeight: '600' }}>
-                {props.lienBaggr.includes('/screener/') ? 'Fiche Baggr ↗' : 'Ouvrir Baggr ↗'}
+                {props.lienBaggr.includes('/screener/') ? 'Fiche Baggr ↗︎' : 'Ouvrir Baggr ↗︎'}
               </Text>
             </Pressable>
           ) : null}

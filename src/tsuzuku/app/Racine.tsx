@@ -48,7 +48,7 @@ const ONGLET_SOURCES: readonly [Route['t'], string] = ['sources', 'Sources'];
 const GLYPHES: Partial<Record<Route['t'], { glyphe: string; court: string }>> = {
   accueil: { glyphe: '✦', court: 'Découvrir' },
   catalogue: { glyphe: '▦', court: 'Catalogue' },
-  bibliotheque: { glyphe: '♥', court: 'Biblio.' },
+  bibliotheque: { glyphe: '♥︎', court: 'Biblio.' },
   sources: { glyphe: '⊕', court: 'Sources' },
 };
 
@@ -202,7 +202,7 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
             <View style={[st.entete, { borderBottomColor: theme.ligne }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <View style={{ width: 34, height: 34, borderRadius: Math.min(theme.rayonMoyen, 8), backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '900' }}>▶</Text>
+                  <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '900' }}>▶︎</Text>
                 </View>
                 <Text accessibilityRole="header" style={{ color: theme.texte, fontSize: 24, fontWeight: theme.poidsTitre, letterSpacing: -0.4, ...police(theme.policeTitre) }}>
                   Tsuzuku <Text style={{ color: theme.accent }}>続く</Text>

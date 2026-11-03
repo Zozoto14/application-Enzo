@@ -36,6 +36,7 @@ import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurConvocation, SelecteurFuseau, useFuseau } from './commun';
 import { FeuilleAppel } from './FeuilleAppel';
 import { tr, trn } from '../../i18n';
+import { Icone } from '../../../ui/icones';
 import { useTempsReel } from '../../tempsReel/hooks';
 
 type Vue = 'mois' | 'semaine' | 'liste';
@@ -484,7 +485,11 @@ function DetailOccurrence({
           {dateLongue(o.jour)} · {o.heureDebut}–{o.heureFin}
           {o.jourFin !== o.jour ? tr('planning.planning.lendemain') : ''}
         </Text>
-        {o.lieu ? <Text style={texte}>📍 {o.lieu}</Text> : null}
+        {o.lieu ? (
+              <Text style={texte}>
+                <Icone nom="lieu" /> {o.lieu}
+              </Text>
+            ) : null}
         {o.description ? <Text style={attenue}>{o.description}</Text> : null}
         {o.adversaireId && adversaires?.some(a => a.id === o.adversaireId) ? (
           <Text style={texte} testID="esport-evenement-adversaire">

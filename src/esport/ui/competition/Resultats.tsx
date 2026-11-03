@@ -68,7 +68,7 @@ export function Resultats({ theme, client, detail, large, onAller }: PropsModule
       {b ? (
         <View style={[styles.ligne, { gap: ESP.s }]} testID="esport-resultats-chiffres">
           <ChiffreCle theme={theme} large={large} glyphe="%" libelle={trC('r.taux')} valeur={b.series.taux === null ? trC('r.pas_de_match') : `${b.series.taux} %`} detail={trC('r.vdn', { v: b.series.victoires, d: b.series.defaites, n: b.series.nuls })} ton={b.series.taux === null ? 'neutre' : b.series.taux >= 50 ? 'ok' : 'alerte'} testIDValeur="esport-resultats-taux" />
-          <ChiffreCle theme={theme} large={large} glyphe="↗" libelle={trC('r.serie_en_cours')} valeur={b.enCours ? trnC(`r.serie.${b.enCours.issue}` as 'r.serie.victoire', b.enCours.n) : trC('r.aucune')} detail={trC('r.records', { v: b.recordVictoires, d: b.recordDefaites })} testIDValeur="esport-resultats-serie" />
+          <ChiffreCle theme={theme} large={large} glyphe="↗︎" libelle={trC('r.serie_en_cours')} valeur={b.enCours ? trnC(`r.serie.${b.enCours.issue}` as 'r.serie.victoire', b.enCours.n) : trC('r.aucune')} detail={trC('r.records', { v: b.recordVictoires, d: b.recordDefaites })} testIDValeur="esport-resultats-serie" />
           <ChiffreCle theme={theme} large={large} glyphe="★" libelle={trC('r.forme')} valeur={b.forme.length ? b.forme.map(lettreForme).join(' ') : trC('r.aucune')} detail={trC('r.forme_aide')} testIDValeur="esport-resultats-forme" />
           {b.classements.joues ? (
             <ChiffreCle theme={theme} large={large} glyphe="#" libelle={trC('r.classements')} valeur={trC('r.place_moyenne', { place: String(b.classements.placeMoyenne ?? '') })} detail={trC('r.tops', { top1: b.classements.top1, top3: b.classements.top3, n: b.classements.joues })} testIDValeur="esport-resultats-classements" />
@@ -116,7 +116,7 @@ export function Resultats({ theme, client, detail, large, onAller }: PropsModule
       {liste && onglet === 'historique' ? (
         liste.resultats.length === 0 ? (
           <Carte theme={theme} testID="esport-resultats-vide">
-            <EtatVide theme={theme} glyphe="🏁" titre={resume.length ? trC('r.vide.filtres') : trC('r.vide.titre')} texte={saisir && !resume.length ? trC('r.vide.texte_saisir') : undefined} action={saisir && !resume.length ? { titre: trC('r.saisir'), onPress: () => setEdition({}), testID: 'esport-resultats-vide-saisir' } : undefined} />
+            <EtatVide theme={theme} glyphe="drapeau" titre={resume.length ? trC('r.vide.filtres') : trC('r.vide.titre')} texte={saisir && !resume.length ? trC('r.vide.texte_saisir') : undefined} action={saisir && !resume.length ? { titre: trC('r.saisir'), onPress: () => setEdition({}), testID: 'esport-resultats-vide-saisir' } : undefined} />
           </Carte>
         ) : (
           <View style={{ gap: ESP.s }} testID="esport-resultats-liste">

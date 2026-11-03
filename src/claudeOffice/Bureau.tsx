@@ -344,7 +344,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
       ) : null}
       <Text style={attenue}>
         {Platform.OS === 'web'
-          ? 'Dans la scène : survole (ou touche) un agent ou une zone pour le détail ; molette, pincer ou + / − pour zoomer ; double-tap sur une zone pour la cadrer ; ⏱ relecture de la journée, ▣ mini-carte, ◐ écran d’ambiance, ⛶ plein écran.'
+          ? 'Dans la scène : survole (ou touche) un agent ou une zone pour le détail ; molette, pincer ou + / − pour zoomer ; double-tap sur une zone pour la cadrer ; ⏱︎ relecture de la journée, ▣ mini-carte, ◐ écran d’ambiance, ⛶ plein écran.'
           : 'Touche un agent pour son détail.'}
       </Text>
       {reduit ? <Text style={attenue} testID="bureau-mouvement">Animations réduites</Text> : null}
@@ -362,7 +362,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           </Text>
         </View>
         {attendent.length ? (
-          <Bouton theme={theme} variante="plein" couleur={teinteLisible(TEINTES_ACTIVITE.attend, false)} titre={`✋ ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`} onPress={() => setChoisi(attendent[0].cle)} testID="bureau-pastille-attend" />
+          <Bouton theme={theme} variante="plein" couleur={teinteLisible(TEINTES_ACTIVITE.attend, false)} titre={`! ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`} onPress={() => setChoisi(attendent[0].cle)} testID="bureau-pastille-attend" />
         ) : null}
         {aVoir.length ? (
           <Bouton theme={theme} variante="plein" couleur={teinteLisible(ZONES.salle.teinte, false)} titre={`✓ ${aVoir.length} terminé${aVoir.length > 1 ? 's' : ''} à voir`} onPress={() => setChoisi(aVoir[0].cle)} testID="bureau-pastille-a-voir" />

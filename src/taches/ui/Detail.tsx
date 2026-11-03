@@ -83,7 +83,7 @@ function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
           {texte}
         </Text>
         {liens.map((m, i) => (
-          <Bouton key={i} theme={a.theme} variante="discret" titre={`↗ ${m.lien!.replace(/^https?:\/\//, '').slice(0, 40)}`} libelle={`Ouvrir ${m.lien}`} onPress={() => void Linking.openURL(m.lien!)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
+          <Bouton key={i} theme={a.theme} variante="discret" icone="externe" titre={m.lien!.replace(/^https?:\/\//, '').slice(0, 40)} libelle={`Ouvrir ${m.lien}`} onPress={() => void Linking.openURL(m.lien!)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
         ))}
       </View>
     );
@@ -238,7 +238,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
         </View>
 
         <SectionTemps a={a} t={t} onSaisir={() => onSaisirTemps(t)} onErreur={onErreur} />
-        {m && !d.projets[t.projetId]?.auto ? <Bouton theme={theme} titre="📓 Noter dans le journal du jour" onPress={() => onJournal(t)} testID="detail-journal" style={{ alignSelf: 'flex-start' }} /> : null}
+        {m && !d.projets[t.projetId]?.auto ? <Bouton theme={theme} icone="journal" titre="Noter dans le journal du jour" onPress={() => onJournal(t)} testID="detail-journal" style={{ alignSelf: 'flex-start' }} /> : null}
         <SectionLiens a={a} t={t} onOuvrirSession={s => onOuvrirSession?.(s)} onOuvrirApp={onOuvrirApp} />
         <SectionChronologie a={a} t={t} onAjouterDependance={() => onDependance?.(t)} onErreur={onErreur} onAvis={onAvis} />
         <SectionGithub a={a} t={t} onErreur={onErreur} />

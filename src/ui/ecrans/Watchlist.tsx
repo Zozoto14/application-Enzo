@@ -626,7 +626,7 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
         <View style={{ flexDirection: 'row', gap: ESPACEMENT.m }}>
           {onOuvrirFiche && ligne.ticker ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Fiche de ${ligne.nom}`} onPress={() => onOuvrirFiche(ligne.ticker)}>
-              <Text style={{ color: palette.texte, fontSize: 16 }}>↗</Text>
+              <Text style={{ color: palette.texte, fontSize: 16 }}>↗︎</Text>
             </Pressable>
           ) : null}
           <Pressable

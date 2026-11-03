@@ -455,10 +455,10 @@ describe('Tester les MP', () => {
     await fireEvent.press(screen.getByTestId('esport-discord-testmp-envoyer'));
     await screen.findByTestId('esport-discord-testmp-resultats');
     expect(appels.find(a => a.chemin.endsWith('/discord/testmp') && a.methode === 'POST')?.corps).toEqual({ comptes: ['max12345', 'tom12345', 'ana12345'] });
-    expect(screen.getByText(/✅ Max : MP de test reçu/)).toBeTruthy();
-    expect(screen.getByText(/❌ Tom : MP fermés ou bot bloqué .*50007/)).toBeTruthy();
+    expect(screen.getByText(/✓ Max : MP de test reçu/)).toBeTruthy();
+    expect(screen.getByText(/✕ Tom : MP fermés ou bot bloqué .*50007/)).toBeTruthy();
     expect(screen.getByText(/À faire : le membre ouvre ses messages privés/)).toBeTruthy();
-    expect(screen.getByText(/❌ Ana : compte Discord non lié/)).toBeTruthy();
+    expect(screen.getByText(/✕ Ana : compte Discord non lié/)).toBeTruthy();
     expect(screen.getByText(/À faire : le membre lie son compte avec \/lier/)).toBeTruthy();
     expect(screen.getByTestId('esport-discord-testmp-quota').props.children).toMatch(/Tests restants : 7 sur 10/);
   });
@@ -496,13 +496,13 @@ describe('Tester les MP', () => {
     await fireEvent.press(await screen.findByTestId('esport-discord-simulation-lancer'));
     await screen.findByTestId('esport-discord-simulation-resultat');
     expect(appels.find(a => a.chemin.endsWith('/testmp/simulation'))?.corps).toEqual({ evenementId: 'ev1', occurrence: '2026-10-22T18:30:00.000Z' });
-    expect(screen.getByText(/✉️ Tom : recevrait un MP · déjà pingé/)).toBeTruthy();
-    expect(screen.getByText(/💬 Ana : cité dans le salon, sans mention \(compte Discord non lié/)).toBeTruthy();
+    expect(screen.getByText(/✉︎ Tom : recevrait un MP · déjà pingé/)).toBeTruthy();
+    expect(screen.getByText(/› Ana : cité dans le salon, sans mention \(compte Discord non lié/)).toBeTruthy();
     expect(screen.getByTestId('esport-discord-simulation-deja').props.children).toMatch(/Déjà pingés pour cet événement : Tom/);
     expect(appels.some(a => a.chemin.endsWith('/testmp/relance'))).toBe(false);
     await fireEvent.press(screen.getByTestId('esport-discord-simulation-envoyer'));
     await waitFor(() => expect(appels.find(a => a.chemin.endsWith('/testmp/relance'))?.corps).toEqual({ evenementId: 'ev1', occurrence: '2026-10-22T18:30:00.000Z', compte: 'max12345' }));
-    expect(await screen.findByText(/✅ Max : MP de test reçu/)).toBeTruthy();
+    expect(await screen.findByText(/✓ Max : MP de test reçu/)).toBeTruthy();
   });
 
   it('journal : test MP', () => {

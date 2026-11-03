@@ -23,7 +23,7 @@ export const APP_ESPORT: AppHub = {
   get description() {
       return tr('registre.teams_membres_et_roles');
     },
-  icone: '◆',
+  icone: 'manette',
   teinte: 'anime',
   Racine: EsportDiffere,
 };

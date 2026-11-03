@@ -38,6 +38,7 @@ import {
   type VisibiliteRessource,
 } from '../../ressources/api';
 import { GLYPHES_GENRE, nomCategorie, nomGenre, nomNiveau } from '../../ressources/libelles';
+import { Icone } from '../../../ui/icones';
 import { extraireYoutube, miniatureYoutube } from '../../review/youtube';
 import { lireTags } from '../../strats/libelles';
 import { ACCEPT_RESSOURCE, choisirFichier, choixFichierDisponible, type FichierNavigateur } from '../../medias/choixFichier';
@@ -200,7 +201,7 @@ export function Ressources({ theme, client, detail, large, onAller }: PropsModul
         <Carte theme={theme} testID="esport-ressources-vide">
           <EtatVide
             theme={theme}
-            glyphe="📚"
+            glyphe="bibliotheque"
             titre={onglet === 'file' ? tr('ressources.vide.file') : onglet === 'miennes' ? tr('ressources.vide.miennes') : donnees.total === 0 ? tr('ressources.vide.titre') : tr('ressources.vide.filtres')}
             texte={onglet === 'fil' && donnees.total === 0 ? tr(peutAjouter ? 'ressources.vide.texte_staff' : 'ressources.vide.texte') : undefined}
             action={onglet === 'fil' && donnees.total === 0 && peutAjouter ? { titre: moi?.poster ? tr('ressources.nouvelle') : tr('ressources.proposer'), onPress: () => setEdition({}), testID: 'esport-ressources-vide-ajouter' } : undefined}
@@ -311,18 +312,18 @@ function CarteRessource({ theme, r, grille, nouveau, onOuvrir }: { theme: ThemeH
           />
         ) : (
           <View style={grille ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.accent, 0.08) } : { width: 52, height: 52, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.accent, 0.1) }}>
-            <Text style={{ fontSize: grille ? 30 : 22, color: theme.texte }}>{GLYPHES_GENRE[r.genre]}</Text>
+            <Icone nom={GLYPHES_GENRE[r.genre]} taille={grille ? 34 : 24} couleur={theme.texte} />
           </View>
         )}
         <View style={{ flex: grille ? undefined : 1, minWidth: 0, gap: ESP.xxs }}>
           <Text style={{ ...texte(theme, 16), fontWeight: '700' }} numberOfLines={2} testID={`esport-ressource-${r.id}-titre`}>
-            {r.epingle ? '📌 ' : ''}
+            {r.epingle ? <><Icone nom="epingle" libelle={tr('suivi.epinglee')} /> </> : null}
             {r.titre}
           </Text>
           <View style={[styles.ligne, { gap: 6 }]}>
             {nouveau ? <Badge theme={theme} ton="accent" texte={tr('ressources.nouveau')} testID={`esport-ressource-${r.id}-nouveau`} /> : null}
             <Badge theme={theme} texte={nomCategorie(r.categorie)} />
-            <Badge theme={theme} texte={`${GLYPHES_GENRE[r.genre]} ${nomGenre(r.genre)}`} />
+            <Badge theme={theme} icone={GLYPHES_GENRE[r.genre]} texte={nomGenre(r.genre)} />
             {r.niveau ? <Badge theme={theme} texte={nomNiveau(r.niveau)} /> : null}
             {r.visibilite === 'staff' ? <Badge theme={theme} ton="alerte" texte={tr('ressources.staff_seulement')} testID={`esport-ressource-${r.id}-staff`} /> : null}
             {r.statut === 'proposee' ? <Badge theme={theme} ton="alerte" texte={tr('ressources.statut.proposee')} /> : null}
@@ -337,7 +338,8 @@ function CarteRessource({ theme, r, grille, nouveau, onOuvrir }: { theme: ThemeH
             {[auteur, dateCourte(quand), r.carte?.nom, r.agent?.nom, ...r.tags.map(t => `#${t}`)].filter(Boolean).join(' · ')}
           </Text>
           <Text style={attenue(theme)} testID={`esport-ressource-${r.id}-compteurs`}>
-            {[r.favori ? '★' : '', reactions ? `${r.reactions.map(x => x.emoji).join('')} ${reactions}` : '', r.commentaires ? `💬 ${r.commentaires}` : ''].filter(Boolean).join('   ')}
+            {[r.favori ? '★' : '', reactions ? `${r.reactions.map(x => x.emoji).join('')} ${reactions}` : ''].filter(Boolean).join('   ')}
+            {r.commentaires ? <>{r.favori || reactions ? '   ' : ''}<Icone nom="bulle" /> {r.commentaires}</> : null}
           </Text>
         </View>
       </View>
@@ -430,7 +432,7 @@ function DetailVolet({
         <View style={{ gap: ESP.m }}>
           <View style={[styles.ligne, { gap: 6 }]}>
             <Badge theme={theme} texte={nomCategorie(r.categorie)} />
-            <Badge theme={theme} texte={`${GLYPHES_GENRE[r.genre]} ${nomGenre(r.genre)}`} />
+            <Badge theme={theme} icone={GLYPHES_GENRE[r.genre]} texte={nomGenre(r.genre)} />
             {r.niveau ? <Badge theme={theme} texte={nomNiveau(r.niveau)} /> : null}
             {r.visibilite === 'staff' ? <Badge theme={theme} ton="alerte" texte={tr('ressources.staff_seulement')} /> : null}
             {r.statut !== 'publiee' ? <Badge theme={theme} ton={r.statut === 'refusee' ? 'critique' : 'alerte'} texte={tr(r.statut === 'refusee' ? 'ressources.statut.refusee' : 'ressources.statut.proposee')} /> : null}
@@ -706,7 +708,7 @@ function FormulaireRessource({
     <Volet theme={theme} visible titre={existante ? tr('ressources.modifier_titre') : droits.poster ? tr('ressources.nouvelle') : tr('ressources.proposer')} onFermer={onFermer} testID="esport-ressource-form" largeur={large ? 640 : 560}>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-ressource-form" />
       {!droits.poster && !existante ? <Text style={attenue(theme, TYPO.texte)}>{tr('ressources.proposition_explication')}</Text> : null}
-      {!existante ? <Choix<GenreRessource> theme={theme} libelle={tr('resumes.type')} valeur={genre} options={genres.map(g => ({ id: g, nom: `${GLYPHES_GENRE[g]} ${nomGenre(g)}` }))} onChoisir={setGenre} testID="esport-ressource-genre" /> : null}
+      {!existante ? <Choix<GenreRessource> theme={theme} libelle={tr('resumes.type')} valeur={genre} options={genres.map(g => ({ id: g, nom: nomGenre(g) }))} onChoisir={setGenre} testID="esport-ressource-genre" /> : null}
       {genre === 'lien' || genre === 'youtube' ? (
         <View style={{ gap: ESP.xs }}>
           <Champ theme={theme} libelle={genre === 'youtube' ? tr('ressources.adresse_youtube') : tr('ressources.adresse')} valeur={url} onChanger={v => {

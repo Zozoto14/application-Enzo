@@ -15,8 +15,9 @@ import { tailleMedia } from '../../medias/envoi';
 import { BoutonConfirme, Panneau, Retours, styles, useAgir } from '../commun';
 import { TitreCarte } from '../design';
 import { langueCourante, tr } from '../../i18n';
+import { Icone, type NomIcone } from '../../../ui/icones';
 
-const GLYPHES: Record<NatureFichier, string> = { video: '🎬', enregistrement: '🎙', transcription: '📝', resume: '📄', miniature: '🖼', autre: '•' };
+const GLYPHES: Record<NatureFichier, NomIcone> = { video: 'video', enregistrement: 'micro', transcription: 'note', resume: 'document', miniature: 'image', autre: 'document' };
 
 export function EspaceTeam({ theme, client, teamId }: { theme: ThemeHub; client: ClientEsport; teamId: string }) {
   const api = useMemo(() => apiMedias(client, teamId), [client, teamId]);
@@ -41,9 +42,7 @@ export function EspaceTeam({ theme, client, teamId }: { theme: ThemeHub; client:
           {natures.length ? <Text style={attenue}>{natures.map(([n, o]) => `${tr(`espace.nature.${n}` as 'espace.nature.video')} : ${tailleMedia(o, l)}`).join(' · ')}</Text> : <Text style={attenue}>{tr('espace.vide')}</Text>}
           {espace.fichiers.map(f => (
             <View key={f.id} testID={`esport-espace-fichier-${f.id}`} style={[styles.ligne, { borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }]}>
-              <Text accessibilityElementsHidden style={{ fontSize: 16 }}>
-                {GLYPHES[f.nature] ?? '•'}
-              </Text>
+              <Icone nom={GLYPHES[f.nature] ?? 'document'} taille={18} couleur={theme.attenue} />
               <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
                 <Text style={[texte, { fontWeight: '600' }]} numberOfLines={1}>
                   {f.nom}

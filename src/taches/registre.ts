@@ -20,7 +20,7 @@ export const APP_TACHES: AppHub = {
   categorie: 'Organisation',
   page: 'publique',
   description: 'Projets, listes et tâches : Kanban, calendrier, chronologie, tableau de bord, objectifs, partage avec vos membres.',
-  icone: '☑︎',
+  icone: 'taches',
   teinte: 'quatre',
   disponible: accesTaches,
   info: infoTaches,

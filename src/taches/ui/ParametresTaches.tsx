@@ -95,8 +95,8 @@ export function ReglagesTachesPerso({ contexte, theme, onOuvrirTaches }: { conte
       <Text style={attenueDe(theme)}>Vue d’ouverture (cet appareil)</Text>
       <Options theme={theme} valeur={ouverture} onChoisir={choisir} options={(Object.keys(LIBELLES_OUVERTURE) as Ouverture[]).map(o => ({ valeur: o, texte: LIBELLES_OUVERTURE[o] }))} testID="parametres-taches-ouverture" />
       <View style={styles.rangee}>
-        <Bouton theme={theme} titre="🔔 Mes notifications…" onPress={() => setFenetre('notifications')} testID="parametres-taches-notifications" />
-        <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={() => setFenetre('releve')} testID="parametres-taches-releve" />
+        <Bouton theme={theme} icone="cloche" titre="Mes notifications…" onPress={() => setFenetre('notifications')} testID="parametres-taches-notifications" />
+        <Bouton theme={theme} icone="chrono" titre="Relevé du temps…" onPress={() => setFenetre('releve')} testID="parametres-taches-releve" />
         <Bouton theme={theme} variante="discret" titre="Ouvrir dans Tâches ›" onPress={onOuvrirTaches} testID="parametres-taches-ouvrir" />
       </View>
       {avis ? <Text style={attenueDe(theme)}>{avis}</Text> : null}
@@ -108,7 +108,7 @@ export function ReglagesTachesPerso({ contexte, theme, onOuvrirTaches }: { conte
           onTester={() => {
             const r = testerNotification(contexte, Date.now());
             a.etat.relire();
-            setAvis(r.systeme ? 'Notification du système envoyée.' : 'La pastille 🔔 la montre (pas de notification du système ici).');
+            setAvis(r.systeme ? 'Notification du système envoyée.' : 'La pastille de la cloche la montre (pas de notification du système ici).');
           }}
           onFermer={() => setFenetre(undefined)}
         />
@@ -135,10 +135,10 @@ export function ReglagesTachesFondateur({ contexte, theme, onOuvrirTaches }: { c
   return (
     <View style={styles.bloc} testID="parametres-taches-fondateur">
       <View style={styles.rangee}>
-        <Bouton theme={theme} titre="👥 Membres et droits…" onPress={() => setFenetre('membres')} testID="parametres-taches-membres" />
-        <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={() => setFenetre('liens')} testID="parametres-taches-liens" />
-        <Bouton theme={theme} titre="✨ IA et GitHub…" onPress={() => setFenetre('aides')} testID="parametres-taches-aides" />
-        <Bouton theme={theme} titre="🗑 Corbeille…" onPress={() => setFenetre('corbeille')} testID="parametres-taches-corbeille" />
+        <Bouton theme={theme} icone="membres" titre="Membres et droits…" onPress={() => setFenetre('membres')} testID="parametres-taches-membres" />
+        <Bouton theme={theme} icone="lien" titre="Liens avec les autres apps…" onPress={() => setFenetre('liens')} testID="parametres-taches-liens" />
+        <Bouton theme={theme} icone="etincelles" titre="IA et GitHub…" onPress={() => setFenetre('aides')} testID="parametres-taches-aides" />
+        <Bouton theme={theme} icone="corbeille" titre="Corbeille…" onPress={() => setFenetre('corbeille')} testID="parametres-taches-corbeille" />
         <Bouton theme={theme} variante="discret" titre="Ouvrir dans Tâches ›" onPress={onOuvrirTaches} testID="parametres-taches-ouvrir-fondateur" />
       </View>
       {avis ? <Text style={attenueDe(theme)} testID="parametres-taches-avis">{avis}</Text> : null}

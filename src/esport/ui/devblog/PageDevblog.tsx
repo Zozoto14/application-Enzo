@@ -59,7 +59,7 @@ export function PageDevblog({ theme, client, large, avant }: { theme: ThemeHub; 
         action={
           gestion ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
-              <BoutonHub theme={theme} titre={`⚙️ ${trDv('auto_bouton')}`} onPress={() => setVoirAuto(v => !v)} testID="esport-devblog-auto-ouvrir" />
+              <BoutonHub theme={theme} icone="reglages" titre={trDv('auto_bouton')} onPress={() => setVoirAuto(v => !v)} testID="esport-devblog-auto-ouvrir" />
               <BoutonHub theme={theme} titre={trDv('nouveau')} variante="plein" onPress={() => setEdition('nouveau')} testID="esport-devblog-nouveau" />
             </View>
           ) : undefined
@@ -80,7 +80,7 @@ export function PageDevblog({ theme, client, large, avant }: { theme: ThemeHub; 
       {!liste && !erreur ? <SqueletteCartes theme={theme} n={2} large={false} /> : null}
       {liste && liste.entrees.length === 0 ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="🚀" titre={trDv('vide')} texte={trDv('vide_aide')} />
+          <EtatVide theme={theme} glyphe="fusee" titre={trDv('vide')} texte={trDv('vide_aide')} />
         </Carte>
       ) : null}
       {liste?.entrees.map(e => (
@@ -90,8 +90,8 @@ export function PageDevblog({ theme, client, large, avant }: { theme: ThemeHub; 
               <View style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Badge theme={theme} texte={e.statut === 'publie' ? trDv('publie') : trDv('brouillon')} ton={e.statut === 'publie' ? 'ok' : 'alerte'} testID={`esport-devblog-${e.id}-statut`} />
                 {e.publieLe ? <Text style={attenue(theme, 12)}>{trDv('publie_le', { date: dateLisible(e.publieLe.slice(0, 10), langue) })}</Text> : null}
-                {e.origine === 'auto' ? <Badge theme={theme} texte={`✨ ${trDv('badge_auto')}`} /> : null}
-                {e.programmation && e.statut === 'brouillon' ? <Badge theme={theme} texte={`🗓️ ${trDv('badge_programme', { date: dateHeureClub(e.programmation.le) })}`} ton="accent" testID={`esport-devblog-${e.id}-programme`} /> : null}
+                {e.origine === 'auto' ? <Badge theme={theme} icone="etincelles" texte={trDv('badge_auto')} /> : null}
+                {e.programmation && e.statut === 'brouillon' ? <Badge theme={theme} icone="calendrier" texte={trDv('badge_programme', { date: dateHeureClub(e.programmation.le) })} ton="accent" testID={`esport-devblog-${e.id}-programme`} /> : null}
               </View>
               <Pressable accessibilityRole="button" onPress={() => setEdition(e)} testID={`esport-devblog-${e.id}-modifier`} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: ESP.xs }}>
                 <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 15 }}>{`${trDv('modifier')} ›`}</Text>

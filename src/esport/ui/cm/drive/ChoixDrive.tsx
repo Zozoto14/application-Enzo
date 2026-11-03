@@ -10,6 +10,7 @@ import { teinteTransparente, type ThemeHub } from '../../../../hub/themes';
 import type { ClientEsport } from '../../../client';
 import { GLYPHES_DRIVE, apiDrive, type ContenuDrive, type FichierDrive, type PorteeDrive } from '../../../cm/drive';
 import { trDr } from '../../../i18n/drive';
+import { Glyphe } from '../../../../ui/icones';
 import { Choix, Retours, useAgir } from '../../commun';
 import { ESP, Volet, attenue, texte, type EtatPresse } from '../../design';
 import { infosFichier, nomDossier, nomPortee } from './commun';
@@ -67,7 +68,7 @@ export function ChoixDrive({
       onPress={onPress}
       testID={`${testID}-${id}`}
       style={(e: EtatPresse) => ({ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: ESP.s, paddingHorizontal: ESP.xs, borderRadius: 8, backgroundColor: e.hovered ? teinteTransparente(theme.accent, 0.08) : 'transparent' })}>
-      <Text style={{ fontSize: 20 }}>{glyphe}</Text>
+      <Glyphe valeur={glyphe} style={{ fontSize: 20, color: theme.attenue }} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ ...texte(theme, 14), fontWeight: '600' }} numberOfLines={1}>
           {nom}

@@ -310,7 +310,7 @@ export const clientIAPC: ClientIA = {
   async appeler(d, r) {
     const p = pont();
     if (!p?.ia) throw new ErreurTaches('L’aide de l’IA passe par l’application du PC (sur le site, la clé devrait être exposée au navigateur).');
-    if (!r.cle) throw new ErreurTaches('Ajoutez votre clé de l’API Claude dans 👥 › Aide de l’IA.');
+    if (!r.cle) throw new ErreurTaches('Ajoutez votre clé de l’API Claude dans Partage › IA et GitHub.');
     const rep = await p.ia({ cle: r.cle, modele: r.modele, systeme: d.systeme, message: d.message, schema: d.schema, maxTokens: d.maxTokens });
     if (!rep.ok) throw new ErreurTaches(rep.erreur ?? 'L’IA n’a pas répondu.');
     return rep.json;

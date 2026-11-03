@@ -514,7 +514,7 @@ function ComparaisonPeriodes({ analyse }: { analyse: EntreesAnalyse }) {
                 { color: mieux === undefined ? palette.texte : mieux ? palette.hausse : palette.baisse, fontWeight: '700' },
               ]}>
               {texte(va, ligne.format)}
-              {mieux === undefined ? '' : mieux ? ' ↗' : ' ↘'}
+              {mieux === undefined ? '' : mieux ? ' ↗︎' : ' ↘︎'}
             </Text>
             <Text style={[styles.cellule, { color: palette.texteSecondaire }]}>{texte(vb, ligne.format)}</Text>
           </View>

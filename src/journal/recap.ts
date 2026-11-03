@@ -7,7 +7,7 @@
 
 import { COMPTEURS } from './agregation';
 import { debutMois, debutSemaine, finMois, finSemaine, jourCourt, jourLongMaj, moisLong, semaineLongue } from './dates';
-import { emojiHumeur, libelleHumeur, type ChiffreCle, type FaitMarquant, type Humeur, type PageJournal, type SectionPage } from './modele';
+import { libelleHumeur, type ChiffreCle, type FaitMarquant, type Humeur, type PageJournal, type SectionPage } from './modele';
 import { duree, eur, liste, majuscule, pct, pluriel, tirer } from './texte';
 
 export type PeriodeRecap = 'semaine' | 'mois';
@@ -110,7 +110,7 @@ export function composerRecap(periode: PeriodeRecap, jour: string, toutes: reado
     ajouter('affaires', 'Côté affaires', affaires);
     if (t(COMPTEURS.decisions)) ajouter('decisions', 'Décisions', [`${majuscule(pluriel(t(COMPTEURS.decisions), 'décision'))} enregistrées ${nom}.`]);
     if (humeur) {
-      ajouter('humeur', 'Humeur', [`Humeur moyenne ${emojiHumeur(humeur.arrondie)} « ${libelleHumeur(humeur.arrondie).toLowerCase()} » (${humeur.moyenne.toString().replace('.', ',')}/5 sur ${pluriel(humeur.pages, 'page')}).`]);
+      ajouter('humeur', 'Humeur', [`Humeur moyenne « ${libelleHumeur(humeur.arrondie).toLowerCase()} » (${humeur.moyenne.toString().replace('.', ',')}/5 sur ${pluriel(humeur.pages, 'page')}).`]);
     }
     const epinglees = pages.filter(p => p.epingle);
     if (epinglees.length) ajouter('epingles', 'Jours épinglés', [`À garder : ${liste(epinglees.map(p => jourCourt(p.jour)))}.`]);
@@ -128,7 +128,7 @@ export function composerRecap(periode: PeriodeRecap, jour: string, toutes: reado
   if (totaux[COMPTEURS.paiements]) c('paiements', 'Abonnements encaissés', totaux[COMPTEURS.encaisse] ? eur(totaux[COMPTEURS.encaisse]) : String(totaux[COMPTEURS.paiements]));
   if (totaux[COMPTEURS.relances]) c('relances', 'Prospects relancés', String(totaux[COMPTEURS.relances]));
   if (totaux[COMPTEURS.decisions]) c('decisions', 'Décisions', String(totaux[COMPTEURS.decisions]));
-  if (humeur) c('humeur', 'Humeur moyenne', `${emojiHumeur(humeur.arrondie)} ${humeur.moyenne.toString().replace('.', ',')}/5`);
+  if (humeur) c('humeur', 'Humeur moyenne', `${humeur.moyenne.toString().replace('.', ',')}/5 · ${libelleHumeur(humeur.arrondie).toLowerCase()}`);
 
   const marquants = [...pages]
     .filter(p => p.auto.marquant)

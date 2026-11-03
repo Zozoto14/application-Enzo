@@ -282,7 +282,7 @@ export const TEINTES_ACTIVITE: Record<Activite, string> = {
 };
 
 export const ICONES_ACTIVITE: Record<Activite, string> = {
-  attend: '!', code: '</>', terminal: '>_', recherche: '⌕', lecture: '¶', web: '◍', agent: '✦', outil: '⚙', pense: '…', pause: '☕', fini: '✓',
+  attend: '!', code: '</>', terminal: '>_', recherche: '⌕', lecture: '¶', web: '◍', agent: '✦', outil: '⚙︎', pense: '…', pause: '◡', fini: '✓',
 };
 
 /** Le gadget montré selon l'outil (le hook note la fin des outils, et leur durée). */

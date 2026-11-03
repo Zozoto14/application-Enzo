@@ -309,7 +309,7 @@ function Tendance({ theme, v }: { theme: ThemeHub; v: number | null | undefined 
   const points = Math.round(v * 100);
   const stable = Math.abs(points) < 5;
   const couleur = stable ? theme.attenue : points > 0 ? theme.ok : theme.critique;
-  const glyphe = stable ? '→' : points > 0 ? '↗' : '↘';
+  const glyphe = stable ? '→' : points > 0 ? '↗︎' : '↘︎';
   const libelle = stable ? tr('presence.tendance_stable') : tr(points > 0 ? 'presence.tendance_hausse' : 'presence.tendance_baisse', { n: Math.abs(points) });
   return (
     <Text style={{ ...styleAttenue(theme), color: couleur, fontWeight: '700' }} accessibilityLabel={libelle}>

@@ -184,7 +184,7 @@ function CarteProspect({ theme, p, d, gerer, onOuvrir, onDeplacer }: { theme: Th
       </View>
       {p.prochaineAction || p.prochaineActionLe ? (
         <Text style={p.actionEnRetard ? { ...texte(theme, 13), color: theme.critique } : texte(theme, 13)} testID={`esport-sp-carte-${p.id}-action`}>
-          {`${p.actionEnRetard ? '⚠ ' : '→ '}${[p.prochaineAction, quand(p.prochaineActionLe)].filter(Boolean).join(' · ')}`}
+          {`${p.actionEnRetard ? '⚠︎ ' : '→ '}${[p.prochaineAction, quand(p.prochaineActionLe)].filter(Boolean).join(' · ')}`}
         </Text>
       ) : null}
       {p.raisonPerte ? <Text style={attenue(theme)} numberOfLines={2}>{p.raisonPerte}</Text> : null}

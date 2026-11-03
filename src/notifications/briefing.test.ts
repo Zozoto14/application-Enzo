@@ -30,12 +30,12 @@ describe('composerBriefing', () => {
     // 10 titres a 110 plus 0 de liquidites restantes.
     const briefing = composerBriefing(entrees())!;
 
-    expect(briefing.titre).toBe(`🌙 Clôture — 1${FINE}100,00${INSEC}€`);
+    expect(briefing.titre).toBe(`☾ Clôture — 1${FINE}100,00${INSEC}€`);
   });
 
   it('distingue le matin du soir', () => {
     expect(composerBriefing(entrees({ moment: 'matin' }))!.titre).toMatch(
-      /^☀️ Avant ouverture/,
+      /^☀︎ Avant ouverture/,
     );
   });
 
@@ -55,7 +55,7 @@ describe('composerBriefing', () => {
     const briefing = composerBriefing(
       entrees({ valeurPrecedente: d('1000'), coursPrecedents: new Map([['air-liquide', d('100')]]) }),
     )!;
-    expect(briefing.corps).toMatch(/🏆 Air Liquide \+10,00/);
+    expect(briefing.corps).toMatch(/▲ Air Liquide \+10,00/);
     expect(briefing.corps.split('\n').length).toBeGreaterThanOrEqual(3);
     expect(briefing.corps).toMatch(/^▲ /);
   });

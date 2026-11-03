@@ -9,6 +9,8 @@ import { alertesSecurite } from './Securite';
 import { dateDuJour, lignesAbo, resumeRappels } from '../../abonnements/abonnements';
 import { ID_ABONNEMENTS, comptesSuivis, peutVoirAbonnements } from '../../abonnements/actionsAbo';
 import { Intertitre, Panneau, commun, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
+import { Glyphe } from '../../../ui/icones';
+import { Icone } from '../../../ui/icones';
 
 export function Tableau({ outils }: { outils: OutilsAdmin }) {
   const { theme, tous, apercu, registre, donnees } = outils;
@@ -79,7 +81,7 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
           disabled={!outils.onOuvrirApp}
           onPress={() => outils.onOuvrirApp?.(ID_ABONNEMENTS)}
           style={[commun.avis, { borderLeftColor: resumeAbo.retard > 0 ? theme.critique : theme.alerte, backgroundColor: teinteTransparente(resumeAbo.retard > 0 ? theme.critique : theme.alerte, 0.12) }]}>
-          <Text style={[texte, { fontSize: 13, fontWeight: '600' }]}>🔔 {resumeAbo.texte}</Text>
+          <Text style={[texte, { fontSize: 13, fontWeight: '600' }]}><Icone nom="cloche" /> {resumeAbo.texte}</Text>
         </Pressable>
       ) : null}
 
@@ -117,7 +119,7 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
           {stats.parApp.map(({ app, utilisateurs, active, maintenance }) => (
             <View key={app.id} style={commun.ligne}>
               <View style={[commun.carre, { backgroundColor: theme.teintes[app.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-                <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{app.icone}</Text>
+                <Glyphe valeur={app.icone} style={{ color: theme.surAccent, fontWeight: '700' }} />
               </View>
               <Text style={[texte, { flex: 1, fontWeight: '600' }]}>{app.nom}</Text>
               <Text style={[attenue, { fontSize: 13 }]}>

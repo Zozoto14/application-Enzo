@@ -11,6 +11,7 @@ import { LIBELLES_NIVEAU, niveauxDe } from '../niveaux';
 import { LONGUEUR_MAX_MESSAGE, etatApp, modifierEtatApp } from '../politique';
 import { exiger } from '../roles';
 import { BoutonHub, Champ, Interrupteur, Panneau, Pilule, Segments, commun, type OutilsAdmin } from './commun';
+import { Glyphe } from '../../../ui/icones';
 
 export function Applications({ outils }: { outils: OutilsAdmin }) {
   const { theme, registre } = outils;
@@ -51,7 +52,7 @@ function CarteApp({ outils, app }: { outils: OutilsAdmin; app: AppHub }) {
     <Panneau theme={theme} testID={`admin-registre-${app.id}`}>
       <View style={commun.ligne}>
         <View style={[commun.carre, { backgroundColor: theme.teintes[app.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-          <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{app.icone}</Text>
+          <Glyphe valeur={app.icone} style={{ color: theme.surAccent, fontWeight: '700' }} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[texte, { fontWeight: '700', fontSize: 16 }]}>{app.nom}</Text>

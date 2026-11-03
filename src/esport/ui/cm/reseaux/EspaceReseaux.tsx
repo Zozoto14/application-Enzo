@@ -87,11 +87,11 @@ function TableauDeBord({ theme, api, etat, large, version }: { theme: ThemeHub; 
           <View style={[styles.ligne, { gap: ESP.s }]}>
             <ChiffreCle theme={theme} large={large} glyphe="▤" libelle={trRs('tdb.publications')} valeur={String(t.totaux.publications)} detail={trRs('tdb.publications_detail', { n: t.totaux.relevees })} testID="esport-rs-tdb-publications" />
             <ChiffreCle theme={theme} large={large} glyphe="◉" libelle={trRs('tdb.vues')} valeur={nb(t.totaux.vues)} testID="esport-rs-tdb-vues" />
-            <ChiffreCle theme={theme} large={large} glyphe="♥" libelle={trRs('tdb.engagement')} valeur={pct(t.totaux.engagement)} detail={`${nb(t.totaux.interactions)} ${trRs('metrique.interactions').toLowerCase()}`} testID="esport-rs-tdb-engagement" />
+            <ChiffreCle theme={theme} large={large} glyphe="coeur" libelle={trRs('tdb.engagement')} valeur={pct(t.totaux.engagement)} detail={`${nb(t.totaux.interactions)} ${trRs('metrique.interactions').toLowerCase()}`} testID="esport-rs-tdb-engagement" />
             <ChiffreCle
               theme={theme}
               large={large}
-              glyphe="👥"
+              glyphe="membres"
               libelle={trRs('tdb.abonnes')}
               valeur={nb(t.totaux.abonnes)}
               ton={t.totaux.variationAbonnes !== null && t.totaux.variationAbonnes < 0 ? 'alerte' : 'neutre'}
@@ -377,7 +377,7 @@ function ReglagesBot({ theme, api, etat, onChange }: { theme: ThemeHub; api: Api
       </Panneau>
       <Carte theme={theme} testID="esport-rs-annonces">
         <TitreCarte theme={theme} titre={trRs('bot.annonces')} />
-        {annonces && !annonces.length ? <EtatVide theme={theme} glyphe="📣" titre={trRs('bot.annonces_vide')} texte="" /> : null}
+        {annonces && !annonces.length ? <EtatVide theme={theme} glyphe="megaphone" titre={trRs('bot.annonces_vide')} texte="" /> : null}
         {annonces?.map(a => (
           <View key={a.id} style={{ gap: 2 }} testID={`esport-rs-annonce-${a.id}`}>
             <Text style={{ ...texte(theme, 13), color: a.statut === 'abandonne' ? theme.critique : theme.texte }}>

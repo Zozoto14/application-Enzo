@@ -159,7 +159,7 @@ describe('rubrique Sponsors', () => {
     await render(<Pipeline theme={theme} api={apiSponsors(client)} large version={0} onOuvrir={() => undefined} onNouveau={() => undefined} onConvertir={() => undefined} />);
     expect(await screen.findByTestId(`esport-sp-carte-${P1}`)).toBeTruthy();
     expect(screen.getByTestId('esport-sp-colonne-a_contacter')).toBeTruthy();
-    expect(screen.getByTestId(`esport-sp-carte-${P1}-action`).props.children).toMatch(/^⚠ Envoyer le deck/);
+    expect(screen.getByTestId(`esport-sp-carte-${P1}-action`).props.children).toMatch(/^⚠\uFE0E Envoyer le deck/);
     await fireEvent.press(screen.getByTestId(`esport-sp-carte-${P1}-menu`));
     await fireEvent.press(await screen.findByTestId(`esport-sp-carte-${P1}-suivante`));
     await waitFor(() => expect(appels.some(a => a.chemin === `/sponsors/prospects/${P1}/deplacer` && (a.corps as { etapeId: string }).etapeId === 'e2')).toBe(true));

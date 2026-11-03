@@ -67,7 +67,7 @@ function BandeauUne({ une, entree }: { une: Une; entree: Entree | null }) {
           </Text>
         ) : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 4 }}>
-          <Bouton titre={film ? '▶ Regarder' : '▶ Voir la fiche'} variante="plein" onPress={() => aller(film ? { t: 'lecteur', kind: 'movie', id: une.id } : { t: 'fiche', kind: 'anime', id: une.id })} testID="une-principal" />
+          <Bouton titre={film ? '▶︎ Regarder' : '▶︎ Voir la fiche'} variante="plein" onPress={() => aller(film ? { t: 'lecteur', kind: 'movie', id: une.id } : { t: 'fiche', kind: 'anime', id: une.id })} testID="une-principal" />
           {film ? <Bouton titre="Voir la fiche" onPress={() => aller({ t: 'fiche', kind: 'movie', id: une.id })} testID="une-fiche" /> : null}
           {entree ? (
             <Text style={[styleAttenue(theme, 14), { color: theme.texte, fontWeight: '700' }]}>Déjà dans ta bibliothèque</Text>

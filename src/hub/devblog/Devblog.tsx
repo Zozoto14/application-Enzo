@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Icone } from '../../ui/icones';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BoutonHub } from '../Hub';
 import { police, teinteTransparente, type ThemeHub } from '../themes';
@@ -134,7 +135,7 @@ function Schema({ theme, genre }: { theme: ThemeHub; genre: Illustration }) {
   );
   const compte = (nom: string, couleur: string) => (
     <View style={[styles.compte, { borderColor: couleur, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-      <Text style={{ color: couleur, fontWeight: '800' }}>🔒</Text>
+      <Icone nom="cadenas" taille={16} couleur={couleur} />
       <Text style={{ color: theme.texte, fontSize: 11, fontWeight: '600' }}>{nom}</Text>
     </View>
   );
@@ -149,7 +150,7 @@ function Schema({ theme, genre }: { theme: ThemeHub; genre: Illustration }) {
           <Text style={{ color: theme.texte, fontWeight: '800', fontSize: 12 }}>▦ Hub</Text>
           <View style={styles.actions}>
             <Text style={[styles.puce, { borderColor: theme.accent, color: theme.accent }]}>⟳ Mettre à jour</Text>
-            <Text style={[styles.puce, { borderColor: theme.ligne, color: theme.texte }]}>⚙ Paramètres</Text>
+            <Text style={[styles.puce, { borderColor: theme.ligne, color: theme.texte }]}>⚙︎ Paramètres</Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -168,7 +169,7 @@ function Schema({ theme, genre }: { theme: ThemeHub; genre: Illustration }) {
           {compte('Ami A', theme.accent)}
           {compte('Ami B', theme.teintes.portefeuille)}
         </View>
-        <Text style={{ color: theme.attenue, fontSize: 11 }}>Chaque compte dans son coffre. 🗝 code d’accès → l’admin ouvre un compte ami, journalisé.</Text>
+        <Text style={{ color: theme.attenue, fontSize: 11 }}>Chaque compte dans son coffre. 🗝︎ code d’accès → l’admin ouvre un compte ami, journalisé.</Text>
       </View>
     </View>
   );

@@ -157,7 +157,7 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
       {!donnees && !erreur ? <SqueletteCartes theme={theme} n={large ? 4 : 2} large={large} /> : null}
       {donnees && visibles.length === 0 ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="☺" titre={donnees.fiches.length ? trTb('vide_filtres') : trTb('vide')} texte={donnees.fiches.length ? trTb('vide_filtres_aide') : trTb('vide_aide')} />
+          <EtatVide theme={theme} glyphe="membres" titre={donnees.fiches.length ? trTb('vide_filtres') : trTb('vide')} texte={donnees.fiches.length ? trTb('vide_filtres_aide') : trTb('vide_aide')} />
         </Carte>
       ) : null}
       {visibles.length ? (

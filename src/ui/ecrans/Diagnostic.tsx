@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { Icone } from '../icones';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { executerDiagnostic, rapportTexte, type Test, type Verification } from '../../diagnostic/verifications';
 import { Bouton, SousTitre, usePalette } from '../composants';
@@ -16,7 +17,8 @@ export interface DiagnosticProps {
   maintenant?: () => string;
 }
 
-const ICONES = { ok: '✅', echec: '❌', absent: '➖' } as const;
+const ICONES = { ok: 'valide', echec: 'erreur', absent: 'neutre' } as const;
+const LIBELLES = { ok: 'Réussi', echec: 'Échec', absent: 'Non disponible' } as const;
 
 export function Diagnostic({ tests, maintenant = () => new Date().toLocaleString('fr-FR') }: DiagnosticProps) {
   const palette = usePalette();
@@ -67,7 +69,7 @@ export function Diagnostic({ tests, maintenant = () => new Date().toLocaleString
               <View key={test.cle} style={[styles.ligne, { borderColor: palette.bordure }]} testID={`diagnostic-${test.cle}`}>
                 <View style={styles.icone}>
                   {resultat ? (
-                    <Text style={{ fontSize: 18 }}>{ICONES[resultat.statut]}</Text>
+                    <Icone nom={ICONES[resultat.statut]} taille={20} couleur={resultat.statut === 'ok' ? palette.hausse : resultat.statut === 'echec' ? palette.danger : palette.texteSecondaire} libelle={LIBELLES[resultat.statut]} />
                   ) : enCours ? (
                     <ActivityIndicator color={palette.accent} />
                   ) : (

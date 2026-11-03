@@ -198,7 +198,7 @@ describe('réactions : tri et journal', () => {
   });
 
   it('phrase du journal', () => {
-    expect(phraseJournalReview('review.reaction_changed', 'Léa', { cible: 'repere', valeur: 'like', repereTitre: 'Peek', review: 'Faucons vs Nova' })).toBe('Léa aime 👍 le repère « Peek » de « Faucons vs Nova »');
+    expect(phraseJournalReview('review.reaction_changed', 'Léa', { cible: 'repere', valeur: 'like', repereTitre: 'Peek', review: 'Faucons vs Nova' })).toBe('Léa aime le repère « Peek » de « Faucons vs Nova »');
     expect(phraseJournalReview('review.reaction_changed', 'Kai', { cible: 'commentaire', valeur: null, repereTitre: 'Peek', review: 'R' })).toBe('Kai a retiré sa réaction à un commentaire du repère « Peek » de « R »');
   });
 });
@@ -266,7 +266,7 @@ describe('écran Review v2 (app native)', () => {
     // Qui a réagi : appui long (ou survol sur le site), et dans le nom accessible.
     expect(screen.getByTestId('esport-repere-reaction-r2-like').props.accessibilityLabel).toMatch(/Kai, Coach Zed/);
     await fireEvent(screen.getByTestId('esport-repere-reaction-r2-like'), 'longPress');
-    expect(screen.getByTestId('esport-repere-reaction-r2-qui').props.children).toBe('👍 Kai, Coach Zed');
+    expect(screen.getByTestId('esport-repere-reaction-r2-qui').props.children).toBe('J’aime : Kai, Coach Zed');
   });
 
   it('réaction sur un commentaire ; commentaire rendu en Markdown', async () => {

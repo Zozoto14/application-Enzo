@@ -73,9 +73,9 @@ export function rappelsExpiration(expireLe: string, maintenant: Date = new Date(
   }
   const conseil = 'Branchez-vous sur le Wi-Fi de la maison avec le PC allumé : AltStore la renouvelle tout seul. Vos données ne risquent rien.';
   return [
-    { identifiant: 'expiration-j2', ecart: 2 * 86_400_000, titre: '📱 AppDashboard expire dans 2 jours' },
-    { identifiant: 'expiration-j1', ecart: 86_400_000, titre: '📱 AppDashboard expire demain' },
-    { identifiant: 'expiration-h3', ecart: 3 * 3_600_000, titre: '⚠️ AppDashboard expire dans 3 heures' },
+    { identifiant: 'expiration-j2', ecart: 2 * 86_400_000, titre: 'AppDashboard expire dans 2 jours' },
+    { identifiant: 'expiration-j1', ecart: 86_400_000, titre: 'AppDashboard expire demain' },
+    { identifiant: 'expiration-h3', ecart: 3 * 3_600_000, titre: 'AppDashboard expire dans 3 heures' },
   ]
     .map(rappel => ({ identifiant: rappel.identifiant, quand: new Date(fin - rappel.ecart), titre: rappel.titre, corps: conseil }))
     .filter(rappel => rappel.quand.getTime() > maintenant.getTime());

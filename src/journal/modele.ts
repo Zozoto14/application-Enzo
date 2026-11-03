@@ -12,6 +12,7 @@
 import type { FamilleEvenement } from '../hub/journal/contrat';
 import { FAMILLES } from '../hub/journal/contrat';
 import { jourValide, moisDe, moisValide } from './dates';
+import type { NomIcone } from '../ui/icones/traces';
 
 /** Ce que l'hôte donne : la base clé/valeur du profil (même forme que `BasePrefs` de Tsuzuku). */
 export interface BaseJournal {
@@ -32,16 +33,17 @@ export const CLES_JOURNAL = {
 // ------------------------------------------------------------------ Humeur
 
 export type Humeur = 1 | 2 | 3 | 4 | 5;
-export const HUMEURS: ReadonlyArray<{ valeur: Humeur; emoji: string; libelle: string }> = [
-  { valeur: 1, emoji: '😞', libelle: 'Difficile' },
-  { valeur: 2, emoji: '😕', libelle: 'Bof' },
-  { valeur: 3, emoji: '😐', libelle: 'Moyenne' },
-  { valeur: 4, emoji: '🙂', libelle: 'Bonne' },
-  { valeur: 5, emoji: '😄', libelle: 'Excellente' },
+/** Humeurs du jour : icône monochrome (visage, src/ui/icones) et libellé ; l'export écrit le libellé seul. */
+export const HUMEURS: ReadonlyArray<{ valeur: Humeur; icone: NomIcone; libelle: string }> = [
+  { valeur: 1, icone: 'triste', libelle: 'Difficile' },
+  { valeur: 2, icone: 'bof', libelle: 'Bof' },
+  { valeur: 3, icone: 'moyen', libelle: 'Moyenne' },
+  { valeur: 4, icone: 'content', libelle: 'Bonne' },
+  { valeur: 5, icone: 'ravi', libelle: 'Excellente' },
 ];
 export const humeurValide = (v: unknown): v is Humeur => v === 1 || v === 2 || v === 3 || v === 4 || v === 5;
 export const libelleHumeur = (h: Humeur | undefined): string => HUMEURS.find(x => x.valeur === h)?.libelle ?? '';
-export const emojiHumeur = (h: Humeur | undefined): string => HUMEURS.find(x => x.valeur === h)?.emoji ?? '';
+export const iconeHumeur = (h: Humeur | undefined): NomIcone | undefined => HUMEURS.find(x => x.valeur === h)?.icone;
 
 // ------------------------------------------------------------------ Réglages
 

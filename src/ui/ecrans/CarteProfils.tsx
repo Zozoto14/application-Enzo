@@ -16,6 +16,7 @@ import type { OptionsLier } from './LierCompte';
 import type { DocsJuridiques } from '../../juridique/modele';
 import { rangDe, texteTransparence } from '../../hub/admin/roles';
 import { QrCode } from './CarteSynchro';
+import { Icone } from '../icones';
 
 /** Options d'une invitation, réglées dans l'Administration (Fondateur). */
 export interface OptionsInvitationHote {
@@ -196,7 +197,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
             </SousTitre>
             {controle.autreAppareil ? (
               <View style={[styles.profil, { borderColor: palette.bordure, flexDirection: 'column', alignItems: 'flex-start' }]} testID="autre-appareil">
-                <Text style={{ color: palette.texte, fontWeight: '700' }}>📱 Connecter un autre appareil</Text>
+                <Text style={{ color: palette.texte, fontWeight: '700' }}><Icone nom="telephone" /> Connecter un autre appareil</Text>
                 <Text style={{ color: palette.texteSecondaire }}>
                   Scanne ce QR code avec l’appareil photo de ton autre appareil (ou ouvre le lien), puis saisis ton prénom et ton mot de passe.
                   Ne le montre à personne d’autre.
@@ -210,7 +211,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
             {texteTransparence(rangDe(actuel)) ? (
               <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
                 <Text style={{ color: palette.texte, flex: 1 }}>
-                  ⚠️ {texteTransparence(rangDe(actuel))} Chaque accès est inscrit à leur journal, et le dernier accès s’affiche ici.
+                  ⚠︎ {texteTransparence(rangDe(actuel))} Chaque accès est inscrit à leur journal, et le dernier accès s’affiche ici.
                   {controle.transparence?.dernierAccesAdmin
                     ? ` Dernier accès : ${new Date(controle.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}${controle.transparence.par ? ` (${controle.transparence.par}${controle.transparence.rangPar ? `, ${controle.transparence.rangPar}` : ''})` : ''}.`
                     : ' Aucun accès pour l’instant.'}
@@ -244,7 +245,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
               .filter(profil => !profil.admin)
               .map(profil => (
                 <View key={profil.id} style={[styles.profil, { borderColor: palette.bordure }]} testID={`ligne-profil-${profil.id}`}>
-                  <Text style={{ color: palette.texte, flex: 1, fontWeight: '600' }}>👤 {profil.nom}</Text>
+                  <Text style={{ color: palette.texte, flex: 1, fontWeight: '600' }}><Icone nom="personne" /> {profil.nom}</Text>
                   {aSupprimer === profil.id ? (
                     <>
                       <Text style={{ color: palette.baisse, fontSize: 13 }}>Tout son portefeuille sera effacé.</Text>

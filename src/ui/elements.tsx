@@ -172,7 +172,7 @@ export function Pastille({
       : tendance === 'baisse'
       ? palette.baisseFond
       : palette.accentFond;
-  const fleche = tendance === 'hausse' ? '↗' : tendance === 'baisse' ? '↘' : '';
+  const fleche = tendance === 'hausse' ? '↗︎' : tendance === 'baisse' ? '↘︎' : '';
   return (
     <View style={[styles.pastille, { backgroundColor: fond }]}>
       <Text style={{ color: couleur, fontSize: taille, fontWeight: '700' }}>
