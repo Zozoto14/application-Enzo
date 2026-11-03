@@ -9,12 +9,21 @@
  * validation (soumettre, valider, refuser avec motif, publier avec l'adresse du post par réseau) ; visuels
  * du post (« Générer le visuel », docs/esport/visuels.md). Toute
  * modification du contenu d'un post validé le repasse « à valider » : c'est le serveur qui décide.
+ *
+ * Saisies en cours (titre, description, textes du post, date, liens, adresses de publication) : ce sont des
+ * BROUILLONS (`useBrouillon`). Quand la carte est relue (autre action de la fiche, autre personne, visuel
+ * généré…), un brouillon modifié est GARDÉ ; seul un champ resté intact suit la nouvelle valeur du serveur.
+ * Avant, chaque relecture effaçait les textes tapés et le bouton « Enregistrer » disparaissait : la
+ * modification ne pouvait plus être enregistrée. Conflit de version (409, quelqu'un a changé la carte) : si le
+ * contenu du post n'a pas bougé, on renvoie avec la nouvelle version ; sinon la saisie est gardée et l'écart
+ * est expliqué. Chaque message (erreur ou « Enregistré ») s'affiche À CÔTÉ du bouton qui l'a provoqué.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
+import { ErreurEsport } from '../../client';
 import { PORTEE_CLUB, type ApiCm, type CarteDetail, type DetailTableau, type LiensCarte, type MatchsTeam, type Personne, type ReponseCarte, type Reseau, type TeamCm, type TextesPost } from '../../cm/api';
 import { CLES_RESEAUX, RESEAUX, analyserTexte } from '../../cm/reseaux';
 import { choisirFichier, choixFichierDisponible, ACCEPT_CM } from '../../medias/choixFichier';
@@ -37,6 +46,39 @@ import { useVerrouOptimiste } from '../../tempsReel/hooks';
 import { BandeauConflit, PastillePresence } from '../../tempsReel/ui';
 
 const vide = { fr: '', en: '' };
+
+/**
+ * Brouillon d'une saisie dont la valeur vient du serveur : `[valeur, changer, modifie, base]`. La comparaison
+ * se fait sur le CONTENU (JSON), jamais sur l'identité de l'objet : une carte relue avec les mêmes valeurs ne
+ * touche à rien. Valeur du serveur changée : adoptée si le brouillon était intact (ou égal à la nouvelle
+ * valeur : on vient de l'enregistrer), sinon le brouillon est gardé (`base` suit le serveur).
+ */
+export function useBrouillon<T>(serveur: T): [T, (v: T | ((x: T) => T)) => void, boolean, string] {
+  const cle = JSON.stringify(serveur ?? null);
+  const [etat, setEtat] = useState<{ base: string; valeur: T }>({ base: cle, valeur: serveur });
+  let courant = etat;
+  if (etat.base !== cle) {
+    const local = JSON.stringify(etat.valeur ?? null);
+    courant = local === etat.base || local === cle ? { base: cle, valeur: serveur } : { base: cle, valeur: etat.valeur };
+    setEtat(courant);
+  }
+  const changer = useCallback((v: T | ((x: T) => T)) => setEtat(e => ({ base: e.base, valeur: typeof v === 'function' ? (v as (x: T) => T)(e.valeur) : v })), []);
+  return [courant.valeur, changer, JSON.stringify(courant.valeur ?? null) !== cle, cle];
+}
+
+/** Groupes d'actions de la fiche : le message d'une action s'affiche dans son bloc. */
+const GROUPES_RETOURS: Record<string, string[]> = {
+  titre: ['titre'],
+  description: ['description'],
+  circuit: ['soumettre', 'valider', 'refuser', 'publier', 'depublier', 'post-transformer'],
+  post: ['post'],
+  details: ['etiquettes', 'etiquette', 'etiquettes-gestion', 'membres', 'echeance', 'faite', 'couverture', 'team'],
+  checklists: ['checklist', 'element'],
+  pieces: ['lien', 'fichier', 'drive', 'piece'],
+  commentaires: ['commenter', 'commentaire'],
+  fin: ['archive', 'supprimer'],
+};
+const groupeDe = (cle: string | undefined) => Object.keys(GROUPES_RETOURS).find(g => cle && GROUPES_RETOURS[g].includes(cle));
 
 export function FicheCarte({
   theme,
@@ -61,6 +103,8 @@ export function FicheCarte({
 }) {
   const [r, setR] = useState<ReponseCarte | undefined>();
   const { erreur, avis, agir, enCours, setAvis } = useAgir();
+  // Dernière action lancée : son message (erreur ou « Enregistré ») s'affiche dans son bloc, près du bouton.
+  const [derniere, setDerniere] = useState<string | undefined>();
   const charger = useCallback(async () => setR(await api.carte(id)), [api, id]);
   useEffect(() => {
     void agir('', charger);
@@ -68,9 +112,23 @@ export function FicheCarte({
   // « Le premier qui enregistre a la main » : version lue envoyée avec chaque modification, bandeau si un autre
   // a enregistré, pastille « X est en train de modifier » (docs/esport/temps-reel.md).
   const verrou = useVerrouOptimiste(api.client, `/cm/cartes/${id}`);
+  // Carte changée ailleurs (autre personne, déplacement, suggestion) : relue ; les brouillons modifiés restent.
+  const versionVue = tableau.cartes.find(x => x.id === id)?.version;
+  const versionLue = r?.carte.version;
+  const relecture = useRef(false);
+  useEffect(() => {
+    if (versionVue === undefined || versionLue === undefined || versionVue <= versionLue || relecture.current) return;
+    relecture.current = true;
+    charger()
+      .catch(() => undefined)
+      .finally(() => {
+        relecture.current = false;
+      });
+  }, [versionVue, versionLue, charger]);
   /** Écrit, garde la nouvelle carte, prévient le tableau. */
-  const faire = (cle: string, action: () => Promise<ReponseCarte | unknown>, message?: string) =>
-    agir(cle, async () => {
+  const faire = (cle: string, action: () => Promise<ReponseCarte | unknown>, message?: string) => {
+    setDerniere(cle);
+    return agir(cle, async () => {
       let res: ReponseCarte | unknown;
       try {
         res = await action();
@@ -83,6 +141,10 @@ export function FicheCarte({
       onChange();
       return message;
     });
+  };
+  /** Message de la dernière action, s'il appartient à ce bloc. */
+  const retour = (groupe: string) =>
+    groupeDe(derniere) === groupe ? <Retours theme={theme} erreur={erreur} avis={avis} prefixe={`esport-cm-fiche-${groupe}`} /> : null;
 
   if (!r) return <Retours theme={theme} erreur={erreur} prefixe="esport-cm-fiche" />;
   const c = r.carte;
@@ -92,16 +154,23 @@ export function FicheCarte({
 
   return (
     <View style={{ gap: ESP.m }} testID="esport-cm-fiche-contenu">
-      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-fiche" />
+      {/* Messages sans bloc (chargement, copie d'un texte) : en haut. Erreur et « Enregistré » d'une action : dans son bloc. */}
+      {groupeDe(derniere) ? null : <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-fiche" />}
       <PastillePresence theme={theme} presences={verrou.presences} testID="esport-cm-fiche-presence" />
+      {/* Conflit : « Recharger » relit la carte ; les saisies non enregistrées restent (brouillons). */}
       <BandeauConflit theme={theme} verrou={verrou} onRecharger={charger} testID="esport-cm-fiche-conflit" />
-      <Entete theme={theme} c={c} modifier={dr.modifier} liste={liste ? nomListe(liste) : ''} nom={nom} onTitre={titre => faire('titre', () => api.modifierCarte(c.id, { titre }), trCm('c.enregistre'))} />
+      {/* Un post publié est verrouillé : son titre ne se modifie plus (dépublier d'abord). */}
+      <Entete theme={theme} c={c} modifier={dr.modifier && !(c.post && c.statut === 'publie')} enCours={enCours === 'titre'} liste={liste ? nomListe(liste) : ''} nom={nom} onTitre={titre => faire('titre', () => api.modifierCarte(c.id, { titre }), trCm('c.enregistre'))} />
+      {retour('titre')}
       {c.post ? (
-        <Circuit theme={theme} api={api} r={r} nom={nom} faire={faire} />
+        <Circuit theme={theme} api={api} r={r} nom={nom} faire={faire} retour={retour('circuit')} />
       ) : dr.editer ? (
-        <BoutonHub theme={theme} titre={trCm('post.transformer')} onPress={() => void faire('post', () => api.modifierCarte(c.id, { post: true }))} testID="esport-cm-fiche-en-post" />
+        <>
+          <BoutonHub theme={theme} titre={trCm('post.transformer')} onPress={() => void faire('post-transformer', () => api.modifierCarte(c.id, { post: true }))} testID="esport-cm-fiche-en-post" />
+          {retour('circuit')}
+        </>
       ) : null}
-      {c.post ? <BlocPost theme={theme} api={api} r={r} large={large} fuseau={fuseau} personnes={tableau.personnes} teams={teams} faire={faire} onCopie={setAvis} /> : null}
+      {c.post ? <BlocPost theme={theme} api={api} r={r} large={large} fuseau={fuseau} personnes={tableau.personnes} teams={teams} faire={faire} onCopie={setAvis} onRelue={setR} enCours={enCours === 'post'} retour={retour('post')} /> : null}
       {c.post ? (
         <PanneauVisuelsCarte
           theme={theme}
@@ -117,7 +186,8 @@ export function FicheCarte({
 
       <Panneau theme={theme} testID="esport-cm-fiche-description">
         <Intertitre theme={theme}>{trCm('fiche.description')}</Intertitre>
-        {dr.modifier ? <Description theme={theme} valeur={c.description} joueurs={tableau.personnes.map(p => p.pseudo)} onEnregistrer={description => faire('description', () => api.modifierCarte(c.id, { description }), trCm('c.enregistre'))} /> : c.description ? <NoteMarkdown theme={theme} source={c.description} /> : <Text style={attenue(theme)}>{trCm('fiche.sans_description')}</Text>}
+        {dr.modifier ? <Description theme={theme} valeur={c.description} enCours={enCours === 'description'} joueurs={tableau.personnes.map(p => p.pseudo)} onEnregistrer={description => faire('description', () => api.modifierCarte(c.id, { description }), trCm('c.enregistre'))} /> : c.description ? <NoteMarkdown theme={theme} source={c.description} /> : <Text style={attenue(theme)}>{trCm('fiche.sans_description')}</Text>}
+        {retour('description')}
       </Panneau>
 
       <Panneau theme={theme} testID="esport-cm-fiche-details">
@@ -148,11 +218,12 @@ export function FicheCarte({
         ) : c.echeance ? (
           <Text style={texte(theme)}>{trCm('carte.echeance_le', { date: quand(c.echeance, fuseau) })}</Text>
         ) : null}
+        {retour('details')}
       </Panneau>
 
-      <Checklists theme={theme} api={api} c={c} editer={dr.editer} faire={faire} />
-      <Pieces theme={theme} api={api} c={c} portee={tableau.tableau.portee} modifier={dr.modifier} faire={faire} />
-      <Commentaires theme={theme} api={api} c={c} commenter={dr.commenter} gerer={dr.gerer} nom={nom} joueurs={tableau.personnes.map(p => p.pseudo)} faire={faire} />
+      <Checklists theme={theme} api={api} c={c} editer={dr.editer} faire={faire} retour={retour('checklists')} />
+      <Pieces theme={theme} api={api} c={c} portee={tableau.tableau.portee} modifier={dr.modifier} faire={faire} retour={retour('pieces')} />
+      <Commentaires theme={theme} api={api} c={c} commenter={dr.commenter} gerer={dr.gerer} nom={nom} joueurs={tableau.personnes.map(p => p.pseudo)} faire={faire} retour={retour('commentaires')} />
 
       <Panneau theme={theme} testID="esport-cm-fiche-activite">
         <Intertitre theme={theme}>{trCm('fiche.activite')}</Intertitre>
@@ -164,6 +235,7 @@ export function FicheCarte({
         ))}
       </Panneau>
 
+      {retour('fin')}
       {dr.editer ? (
         <View style={[styles.ligne, { gap: ESP.xs }]}>
           <BoutonHub theme={theme} titre={c.archive ? trCm('carte.restaurer') : trCm('carte.archiver')} onPress={() => void faire('archive', () => api.modifierCarte(c.id, { archive: !c.archive }))} testID="esport-cm-fiche-archiver" />
@@ -171,13 +243,14 @@ export function FicheCarte({
             theme={theme}
             titre={trCm('carte.supprimer')}
             confirmation={trCm('carte.supprimer_confirmer')}
-            onConfirme={() =>
+            onConfirme={() => {
+              setDerniere('supprimer');
               void agir('supprimer', async () => {
                 await api.supprimerCarte(c.id);
                 onChange();
                 onFermer();
-              })
-            }
+              });
+            }}
             testID="esport-cm-fiche-supprimer"
             desactive={Boolean(enCours)}
           />
@@ -201,15 +274,14 @@ function phraseActivite(action: string, qui: string, meta: Record<string, unknow
 
 // ------------------------------------------------------------------ En-tête
 
-function Entete({ theme, c, modifier, liste, nom, onTitre }: { theme: ThemeHub; c: CarteDetail; modifier: boolean; liste: string; nom(c: string | null): string; onTitre(t: string): void }) {
-  const [titre, setTitre] = useState(c.titre);
-  useEffect(() => setTitre(c.titre), [c.titre]);
+function Entete({ theme, c, modifier, enCours, liste, nom, onTitre }: { theme: ThemeHub; c: CarteDetail; modifier: boolean; enCours: boolean; liste: string; nom(c: string | null): string; onTitre(t: string): void }) {
+  const [titre, setTitre] = useBrouillon(c.titre);
   return (
     <View style={{ gap: ESP.xs }}>
       {modifier ? (
         <View style={{ gap: ESP.xs }}>
           <Champ theme={theme} libelle={trCm('carte.titre')} valeur={titre} onChanger={setTitre} maxLength={200} testID="esport-cm-fiche-titre" />
-          {titre.trim() && titre !== c.titre ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} onPress={() => onTitre(titre.trim())} testID="esport-cm-fiche-titre-ok" /> : null}
+          {titre.trim() && titre !== c.titre ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} variante="plein" desactive={enCours} onPress={() => onTitre(titre.trim())} testID="esport-cm-fiche-titre-ok" /> : null}
         </View>
       ) : (
         <Text accessibilityRole="header" style={{ ...texte(theme, 20), fontWeight: '800' }} testID="esport-cm-fiche-titre-lu">
@@ -231,14 +303,13 @@ function Entete({ theme, c, modifier, liste, nom, onTitre }: { theme: ThemeHub; 
 
 // ------------------------------------------------------------------ Circuit de validation
 
-function Circuit({ theme, api, r, nom, faire }: { theme: ThemeHub; api: ApiCm; r: ReponseCarte; nom(c: string | null): string; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
+function Circuit({ theme, api, r, nom, faire, retour }: { theme: ThemeHub; api: ApiCm; r: ReponseCarte; nom(c: string | null): string; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
   const c = r.carte;
   const dr = r.droits;
   const [motif, setMotif] = useState('');
   const [refus, setRefus] = useState(false);
   const [publier, setPublier] = useState(false);
-  const [adresses, setAdresses] = useState<Partial<Record<Reseau, string>>>(c.publications);
-  useEffect(() => setAdresses(c.publications), [c.publications]);
+  const [adresses, setAdresses] = useBrouillon<Partial<Record<Reseau, string>>>(c.publications);
   const statut = c.statut ?? 'brouillon';
   return (
     <Panneau theme={theme} testID="esport-cm-circuit" style={{ borderColor: statut === 'a_valider' ? theme.alerte : statut === 'refuse' ? theme.critique : theme.ligne }}>
@@ -326,6 +397,7 @@ function Circuit({ theme, api, r, nom, faire }: { theme: ThemeHub; api: ApiCm; r
           />
         </View>
       ) : null}
+      {retour}
       {statut === 'publie' && Object.keys(c.publications).length ? (
         <View style={{ gap: 2 }}>
           {(Object.entries(c.publications) as Array<[Reseau, string]>).map(([rs, url]) => (
@@ -351,6 +423,9 @@ function BlocPost({
   teams,
   faire,
   onCopie,
+  onRelue,
+  enCours,
+  retour,
 }: {
   theme: ThemeHub;
   api: ApiCm;
@@ -361,21 +436,46 @@ function BlocPost({
   teams: TeamCm[];
   faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>;
   onCopie(m: string): void;
+  /** Carte relue après un conflit de version (la saisie reste). */
+  onRelue(r: ReponseCarte): void;
+  enCours: boolean;
+  retour: React.ReactNode;
 }) {
   const c = r.carte;
   const editer = r.droits.editer && c.statut !== 'publie';
-  const [reseaux, setReseaux] = useState<Reseau[]>(c.reseaux);
-  const [textes, setTextes] = useState<TextesPost>(c.textes);
-  const [date, setDate] = useState<string | null>(c.datePublication);
-  const [liens, setLiens] = useState<LiensCarte>(c.liens);
+  // Un seul brouillon pour le contenu du post : relu ailleurs, il reste tant qu'il n'est pas enregistré.
+  const [contenu, setContenu, modifie, base] = useBrouillon({ reseaux: c.reseaux, textes: c.textes, date: c.datePublication, liens: c.liens });
+  const { reseaux, textes, date, liens } = contenu;
+  const setReseaux = (f: (x: Reseau[]) => Reseau[]) => setContenu(x => ({ ...x, reseaux: f(x.reseaux) }));
+  const setTextes = (f: (x: TextesPost) => TextesPost) => setContenu(x => ({ ...x, textes: f(x.textes) }));
+  const setDate = (d: string | null) => setContenu(x => ({ ...x, date: d }));
+  const setLiens = (l: LiensCarte | ((x: LiensCarte) => LiensCarte)) => setContenu(x => ({ ...x, liens: typeof l === 'function' ? l(x.liens) : l }));
   const [prerempli, setPrerempli] = useState(false);
-  useEffect(() => {
-    setReseaux(c.reseaux);
-    setTextes(c.textes);
-    setDate(c.datePublication);
-    setLiens(c.liens);
-  }, [c.reseaux, c.textes, c.datePublication, c.liens]);
-  const modifie = JSON.stringify([reseaux, textes, liens]) !== JSON.stringify([c.reseaux, c.textes, c.liens]) || (date ?? null) !== (c.datePublication ?? null);
+  /**
+   * Enregistre avec la version lue. 409 (la carte a changé entre-temps) : si le CONTENU du post est resté celui sur
+   * lequel la saisie a commencé (une étiquette, une checklist, un déplacement…), on renvoie avec la nouvelle
+   * version ; sinon on garde la saisie, on relit la carte et on explique (un second clic enregistre en connaissance de cause).
+   */
+  const enregistrer = () =>
+    faire(
+      'post',
+      async () => {
+        const saisie = { reseaux, textes, datePublication: date, liens };
+        try {
+          return await api.modifierCarte(c.id, { ...saisie, versionAttendue: c.version });
+        } catch (e) {
+          if (!(e instanceof ErreurEsport) || e.code !== 'modifiee-entre-temps') throw e;
+          const frais = await api.carte(c.id);
+          const contenuServeur = JSON.stringify({ reseaux: frais.carte.reseaux, textes: frais.carte.textes, date: frais.carte.datePublication, liens: frais.carte.liens });
+          if (contenuServeur !== base) {
+            onRelue(frais);
+            throw new ErreurEsport(trCm('post.conflit'), 409, 'modifiee-entre-temps');
+          }
+          return api.modifierCarte(c.id, { ...saisie, versionAttendue: frais.carte.version });
+        }
+      },
+      trCm('c.enregistre'),
+    );
   const teamId = c.teamId ?? liens.teamId ?? null;
   const copier = async (t: string) => onCopie((await copierTexte(t)) ? trCm('post.copie') : trCm('post.copie_impossible'));
   return (
@@ -394,8 +494,7 @@ function BlocPost({
           api={api}
           teamId={teamId}
           onChoisir={p => {
-            setTextes(t => ({ ...t, ...p.textes }));
-            setLiens(l => ({ ...l, ...p.liens }));
+            setContenu(x => ({ ...x, textes: { ...x.textes, ...p.textes }, liens: { ...x.liens, ...p.liens } }));
             setPrerempli(false);
           }}
         />
@@ -421,11 +520,13 @@ function BlocPost({
             theme={theme}
             titre={trCm('post.enregistrer')}
             variante="plein"
-            onPress={() => void faire('post', () => api.modifierCarte(c.id, { reseaux, textes, datePublication: date, liens, versionAttendue: c.version }), trCm('c.enregistre'))}
+            desactive={enCours}
+            onPress={() => void enregistrer()}
             testID="esport-cm-post-enregistrer"
           />
         </View>
       ) : null}
+      {retour}
     </Panneau>
   );
 }
@@ -578,13 +679,12 @@ function Echeance({ theme, valeur, fuseau, onEnregistrer }: { theme: ThemeHub; v
   );
 }
 
-function Description({ theme, valeur, joueurs, onEnregistrer }: { theme: ThemeHub; valeur: string; joueurs: string[]; onEnregistrer(v: string): void }) {
-  const [texteLocal, setTexteLocal] = useState(valeur);
-  useEffect(() => setTexteLocal(valeur), [valeur]);
+function Description({ theme, valeur, enCours, joueurs, onEnregistrer }: { theme: ThemeHub; valeur: string; enCours: boolean; joueurs: string[]; onEnregistrer(v: string): void }) {
+  const [texteLocal, setTexteLocal] = useBrouillon(valeur);
   return (
     <View style={{ gap: ESP.xs }}>
       <ChampNote theme={theme} libelle={trCm('fiche.description')} valeur={texteLocal} onChanger={setTexteLocal} testID="esport-cm-fiche-description-champ" maxLength={8000} joueurs={joueurs} />
-      {texteLocal !== valeur ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} onPress={() => onEnregistrer(texteLocal)} testID="esport-cm-fiche-description-ok" /> : null}
+      {texteLocal !== valeur ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} variante="plein" desactive={enCours} onPress={() => onEnregistrer(texteLocal)} testID="esport-cm-fiche-description-ok" /> : null}
     </View>
   );
 }
@@ -695,7 +795,7 @@ function Couverture({ theme, c, onChanger }: { theme: ThemeHub; c: CarteDetail; 
 
 // ------------------------------------------------------------------ Checklists, pièces jointes, commentaires
 
-function Checklists({ theme, api, c, editer, faire }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; editer: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
+function Checklists({ theme, api, c, editer, faire, retour }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; editer: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
   const [nouvelle, setNouvelle] = useState('');
   const [elements, setElements] = useState<Record<string, string>>({});
   if (!editer && !c.checklists.length) return null;
@@ -759,11 +859,12 @@ function Checklists({ theme, api, c, editer, faire }: { theme: ThemeHub; api: Ap
           />
         </View>
       ) : null}
+      {retour}
     </Panneau>
   );
 }
 
-function Pieces({ theme, api, c, portee, modifier, faire }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; portee: string; modifier: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
+function Pieces({ theme, api, c, portee, modifier, faire, retour }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; portee: string; modifier: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
   const [url, setUrl] = useState('');
   const [nom, setNom] = useState('');
   const [choixDrive, setChoixDrive] = useState(false);
@@ -856,11 +957,12 @@ function Pieces({ theme, api, c, portee, modifier, faire }: { theme: ThemeHub; a
           />
         </View>
       ) : null}
+      {retour}
     </Panneau>
   );
 }
 
-function Commentaires({ theme, api, c, commenter, gerer, nom, joueurs, faire }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; commenter: boolean; gerer: boolean; nom(c: string | null): string; joueurs: string[]; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
+function Commentaires({ theme, api, c, commenter, gerer, nom, joueurs, faire, retour }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; commenter: boolean; gerer: boolean; nom(c: string | null): string; joueurs: string[]; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; retour: React.ReactNode }) {
   const [texteNouveau, setTexteNouveau] = useState('');
   return (
     <Panneau theme={theme} testID="esport-cm-fiche-commentaires">
@@ -897,6 +999,7 @@ function Commentaires({ theme, api, c, commenter, gerer, nom, joueurs, faire }: 
           />
         </View>
       ) : null}
+      {retour}
     </Panneau>
   );
 }

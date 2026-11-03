@@ -127,7 +127,7 @@ export function EspaceCm({
         )
       ) : null}
       {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
-      {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} onOuvrirTableau={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
+      {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} creerPost={moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.editer'))} onOuvrirTableau={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
       {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}

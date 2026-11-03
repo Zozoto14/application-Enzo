@@ -89,3 +89,5 @@ export const ACCEPT_RESSOURCE = `application/pdf,.pdf,image/png,image/jpeg,image
 export const ACCEPT_CM = ACCEPT_RESSOURCE;
 /** Export JSON d'un tableau Trello. */
 export const ACCEPT_JSON = 'application/json,.json';
+/** Image de fond d'un tableau CM (jamais de SVG). */
+export const ACCEPT_IMAGE_FOND = 'image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif';

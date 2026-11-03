@@ -292,7 +292,7 @@ type WebGlobal = {
   removeEventListener(t: string, f: (e: never) => void, capture?: boolean): void;
 };
 
-export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_d_actions'), testID = 'esport-menu', titreBouton = '⋯' }: { theme: ThemeHub; actions: ReadonlyArray<ActionSecondaire | false | null | undefined | 0 | ''>; libelle?: string; testID?: string; titreBouton?: string }) {
+export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_d_actions'), testID = 'esport-menu', titreBouton = '⋯', compact = false }: { theme: ThemeHub; actions: ReadonlyArray<ActionSecondaire | false | null | undefined | 0 | ''>; libelle?: string; testID?: string; titreBouton?: string; /** Bouton discret (cartes et colonnes d'un tableau) : 32 px, sans cadre au repos. */ compact?: boolean }) {
   const actions = brutes.filter((a): a is ActionSecondaire => Boolean(a));
   const [ancre, setAncre] = useState<Ancre | undefined>();
   const bouton = React.useRef<React.ComponentRef<typeof Pressable>>(null);
@@ -362,14 +362,14 @@ export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_
         accessibilityState={{ expanded: ouvert }}
         onPress={ouvrir}
         style={(etat: EtatPresse) => ({
-          minWidth: 44,
-          minHeight: 44,
+          minWidth: compact ? 32 : 44,
+          minHeight: compact ? 32 : 44,
           paddingHorizontal: titreBouton === '⋯' ? 0 : ESP.s,
           alignItems: 'center',
           justifyContent: 'center',
-          borderWidth: 1,
+          borderWidth: compact && !(etat.hovered || etat.focused || ouvert) ? 0 : 1,
           borderColor: etat.hovered || ouvert ? theme.accent : theme.ligne,
-          backgroundColor: theme.surface,
+          backgroundColor: compact && !(etat.hovered || etat.focused || ouvert) ? 'transparent' : theme.surface,
           borderRadius: rayonControle(theme),
         })}>
         <Text style={{ color: theme.texte, fontSize: titreBouton === '⋯' ? 18 : 15, fontWeight: titreBouton === '⋯' ? '800' : '600', lineHeight: 20, ...police(theme.policeTexte) }}>{titreBouton}</Text>
@@ -744,7 +744,10 @@ export function Volet({ theme, visible, titre: t, onFermer, children, testID, la
               <Text style={{ color: theme.texte, fontSize: 22 }}>×</Text>
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={{ padding: ESP.xl, gap: ESP.m }}>{children}</ScrollView>
+          {/* « handled » : clavier ouvert (iPhone, Android), le premier toucher sur « Enregistrer » enregistre (il ne fait plus que fermer le clavier). */}
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: ESP.xl, gap: ESP.m }}>
+            {children}
+          </ScrollView>
         </View>
       </View>
     </Modal>

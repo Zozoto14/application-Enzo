@@ -29,11 +29,12 @@ import { servicesImportTrello } from './importTrello.mjs';
 import { PORTEE_SPONSORS, contexteSponsors, droitsSponsors } from '../sponsors/commun.mjs';
 import { servicesVisuelsCm } from './visuels/service.mjs';
 import { servicesDriveCm } from './drive/service.mjs';
+import { servicesCalendriersCm } from './calendriers.mjs';
 import { configDrive } from './drive/regles.mjs';
 import { utiliseHorsDrive, utiliseParDrive } from './utilisations.mjs';
 import { servicesReunionsCm } from './reunions/service.mjs';
 
-export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive: configDuDrive = configDrive() }) {
+export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive: configDuDrive = configDrive(), planning }) {
   // Envois par morceaux de la section : il faut pouvoir écrire quelque chose dans la portée.
   medias?.brancherContexte('cm', async (acteur, portee) => {
     // Sponsors (migration 0024) : pièces des prospects et partenaires, portée « sponsors » (sponsors.gerer).
@@ -55,6 +56,8 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   const visuels = servicesVisuelsCm({ base, maintenant, medias, cleSession, stockage, tableaux, drive });
   // Réunions de l'équipe CM (migration 0039) : une tâche de suivi peut devenir une carte d'un tableau.
   const reunions = servicesReunionsCm({ base, maintenant, tableaux });
+  // Calendriers des teams superposés au calendrier éditorial (lecture seule : planning si le compte le voit, sinon compétition publiable).
+  const calendriers = servicesCalendriersCm({ base, planning });
 
   /**
    * Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, image du club — logo, fond — et cm.voir
@@ -66,6 +69,14 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     if (compte === 'principal') return true;
     const acteur = { compte, superAdmin: false };
     if (await drive.peutLireFichierCm(compte, f.id)) return true;
+    // Image de fond d'un tableau (migration 0042) : qui voit le tableau voit son fond, même pris dans le Drive.
+    for (const { portee } of await base.tous('SELECT DISTINCT portee FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL LIMIT 20', [f.id])) {
+      try {
+        if ((await contexteCm(base, acteur, portee)).permissions.has('cm.voir')) return true;
+      } catch {
+        // Tableau d'une portée fermée au compte.
+      }
+    }
     if ((await utiliseParDrive(base, f.id)) && !(await utiliseHorsDrive(base, f.id))) return false;
     // Fichier de la rubrique Sponsors, ou pièce d'un sponsor prise dans le Drive : sponsors.voir.
     if (f.portee === PORTEE_SPONSORS) return (await droitsSponsors(base, acteur)).has('sponsors.voir');
@@ -114,5 +125,5 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     },
   };
 
-  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive, reunions };
+  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive, reunions, calendriers };
 }

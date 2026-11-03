@@ -17,6 +17,8 @@
  *   PATCH|DELETE      /cm/checklists/:id ; POST …/elements ; PATCH|DELETE /cm/elements/:id
  *   PATCH|DELETE      /cm/commentaires/:id ; DELETE /cm/pieces/:id ; POST /cm/pieces/:id/lien { telecharger }
  *   GET               /cm/a-valider ; /cm/calendrier?du&au&reseau ; /cm/recherche?q
+ *   GET               /cm/calendrier/teams?du&au                 calendriers des teams (lecture seule, superposés)
+ *   GET|PUT           /cm/preferences ; /cm/preferences/:cle     choix d'affichage du compte (colonnes réduites…)
  *   GET               /cm/teams/:t ; POST …/depots ; GET …/matchs ; GET …/resume?genre&id&prefixe ; GET …/membres
  *   GET|POST          /cm/teams/:t/clips ; GET /cm/clips?statut&team ; PATCH|DELETE /cm/clips/:id ; POST …/carte ; POST …/lien
  *   GET|POST          /cm/roles ; PATCH|DELETE /cm/roles/:id ; POST …/retablir
@@ -85,6 +87,11 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   if (n === 1 && a === 'a-valider' && m === 'GET') return tb.aValider(acteur);
   if (n === 1 && a === 'calendrier' && m === 'GET') return tb.calendrier(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, reseau: q.get('reseau') || undefined });
   if (n === 1 && a === 'recherche' && m === 'GET') return tb.recherche(acteur, { q: q.get('q') || '' });
+  // Calendriers des teams superposés au calendrier éditorial (lecture seule, ce que le compte a le droit de voir).
+  if (n === 2 && a === 'calendrier' && b === 'teams' && m === 'GET' && cm.calendriers) return cm.calendriers.teams(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, langue });
+  // Choix d'affichage mémorisés par compte (migration 0042).
+  if (n === 1 && a === 'preferences' && m === 'GET') return tb.preferences(acteur);
+  if (n === 2 && a === 'preferences' && m === 'PUT') return tb.changerPreference(acteur, b, await lireCorps());
 
   if (a === 'portees' && b && c === 'envois' && medias) return routesEnvois({ medias, acteur, teamId: b, usage: 'cm', p: p.slice(3), methode: m, requete, lireCorps });
   // Drive de la section (migration 0027, docs/esport/drive.md).
@@ -96,7 +103,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 1 && m === 'GET') return tb.tableaux(acteur, { archives: q.get('archives') === '1' });
     if (n === 1 && m === 'POST') return tb.creerTableau(acteur, await lireCorps());
     if (n === 2 && m === 'GET') return tb.tableau(acteur, b, { archives: q.get('archives') === '1', origine });
-    if (n === 2 && m === 'PATCH') return tb.modifierTableau(acteur, b, await lireCorps());
+    if (n === 2 && m === 'PATCH') return tb.modifierTableau(acteur, b, await lireCorps(), { origine });
     if (n === 2 && m === 'DELETE') return tb.supprimerTableau(acteur, b);
     if (n === 3 && c === 'listes' && m === 'POST') return tb.creerListe(acteur, b, await lireCorps());
     if (n === 3 && c === 'etiquettes' && m === 'POST') return tb.creerEtiquette(acteur, b, await lireCorps());

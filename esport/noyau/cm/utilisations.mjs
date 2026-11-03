@@ -1,6 +1,6 @@
 /**
  * Fichiers de la section CM (`cm_fichiers`) partagés entre plusieurs usages : pièce jointe d'une carte, clip,
- * visuel généré, image importée dans l'éditeur, pièce d'un sponsor, version d'un fichier du Drive (migration
+ * visuel généré, image importée dans l'éditeur, pièce d'un sponsor, fond d'un tableau, version d'un fichier du Drive (migration
  * 0027). Une même ligne peut servir à plusieurs (une pièce jointe choisie dans le Drive pointe vers les octets
  * du Drive) : les octets ne sont effacés que quand PLUS RIEN ne s'en sert.
  */
@@ -14,6 +14,8 @@ const USAGES_HORS_DRIVE = [
   'SELECT 1 AS x FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL',
   'SELECT 1 AS x FROM cm_visuel_images WHERE fichier_id = ? AND supprime_le IS NULL',
   'SELECT 1 AS x FROM sp_pieces WHERE fichier_id = ? AND supprime_le IS NULL',
+  // Image de fond d'un tableau (migration 0042).
+  'SELECT 1 AS x FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL',
 ];
 
 /** Le fichier sert-il ailleurs que dans le Drive ? */

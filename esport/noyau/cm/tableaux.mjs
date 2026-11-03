@@ -59,6 +59,15 @@ const MAX_MEMBRES = 20;
 const COMMENTAIRE_MAX = 4000;
 const ECART_MIN = 1e-6;
 
+/**
+ * Fonds de tableau prédéfinis (migration 0042) : la clé seule est enregistrée, l'app a les mêmes teintes
+ * (src/esport/cm/fonds.ts). Une image (importée ou prise dans le Drive) est un fichier CM de la portée.
+ */
+export const FONDS_COULEURS = Object.freeze(['bleu', 'vert', 'orange', 'rouge', 'violet', 'rose', 'ciel', 'gris']);
+export const FONDS_DEGRADES = Object.freeze(['aurore', 'ocean', 'foret', 'crepuscule', 'neon', 'nuit']);
+const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.reduites|calendrier\.teams)$/;
+const PREFERENCE_MAX = 4000;
+
 // ------------------------------------------------------------------ Outils purs
 
 /** Instant saisi (ISO avec fuseau, ou « AAAA-MM-JJ HH:MM » mural dans `fuseau`) → ISO UTC ; null si vide. */
@@ -220,6 +229,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const comptes = new Set();
     if (await base.premier("SELECT id FROM comptes WHERE id = 'principal'", [])) comptes.add('principal');
     for (const l of await base.tous("SELECT DISTINCT compte_id FROM cm_affectations WHERE portee = 'club'", [])) comptes.add(l.compte_id);
+    // Rôles du club (migration 0033 : Second CEO, rôle « CM » du club…) qui ouvrent la section CM.
+    for (const l of await base.tous("SELECT DISTINCT compte_id FROM permissions_club WHERE permission = 'cm.voir'", [])) comptes.add(l.compte_id);
     if (tableau.team_id) {
       for (const l of await base.tous(
         "SELECT DISTINCT a.compte_id FROM cm_affectations a JOIN membres m ON m.team_id = a.portee AND m.compte_id = a.compte_id AND m.statut = 'actif' WHERE a.portee = ?",
@@ -284,8 +295,56 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       archive: Boolean(t.archive_le),
       trello: Boolean(t.trello_id),
       majLe: t.maj_le,
+      fond: fondPublic(t),
       ...extra,
     };
+  }
+
+  /** Fond enregistré (JSON) tel que l'app le lit ; l'adresse d'une image est ajoutée par `tableau()`. */
+  function fondPublic(t, image) {
+    const f = jsonOu(t.fond, null);
+    if (f?.genre === 'couleur' && FONDS_COULEURS.includes(f.cle)) return { genre: 'couleur', cle: f.cle };
+    if (f?.genre === 'degrade' && FONDS_DEGRADES.includes(f.cle)) return { genre: 'degrade', cle: f.cle };
+    if (f?.genre === 'image' && t.fond_fichier_id) return { genre: 'image', ...(image ? { image } : {}) };
+    return null;
+  }
+
+  /** Lien signé (2 h) vers l'image de fond d'un tableau, si elle existe encore. */
+  async function imageFond(t, acteur, origine) {
+    if (!t.fond_fichier_id) return undefined;
+    const f = await base.premier('SELECT id, type_mime FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [t.fond_fichier_id]);
+    if (!f || !String(f.type_mime).startsWith('image/')) return undefined;
+    const { chemin } = await cheminSigne(cleSession, { fichierId: f.id, compte: acteur.compte, maintenant: maintenant(), duree: DUREE_LIEN_CM_MS, genre: 'cm' });
+    return `${origine}${chemin}`;
+  }
+
+  /**
+   * Fond saisi : `null` (thème), `{ genre: 'couleur' | 'degrade', cle }`, ou une image : `{ genre: 'image', drive }`
+   * (fichier du Drive de la portée ou du club, aucun octet copié) ou `{ genre: 'image', envoi }` (image envoyée par
+   * morceaux dans la portée). Rend `{ fond, fichierId, instructions }`. Jamais de SVG (formats d'image reconnus).
+   */
+  async function lireFond(acteur, ctx, tb, v) {
+    if (v === null) return { fond: null, fichierId: null, instructions: [] };
+    if (typeof v !== 'object' || Array.isArray(v)) throw echec(400, 'fond', 'Fond illisible.');
+    if (v.genre === 'couleur' || v.genre === 'degrade') {
+      if (!(v.genre === 'couleur' ? FONDS_COULEURS : FONDS_DEGRADES).includes(v.cle)) throw echec(400, 'fond', 'Fond inconnu.');
+      return { fond: { genre: v.genre, cle: v.cle }, fichierId: null, instructions: [] };
+    }
+    if (v.genre !== 'image') throw echec(400, 'fond', 'Fond illisible.');
+    if (v.drive !== undefined) {
+      if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      const f = await drive.fichierPourIntegration(acteur, v.drive, { portees: [tb.portee, PORTEE_CLUB] });
+      if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(String(f.type))) throw echec(400, 'fond-image', 'Le fond doit être une image (PNG, JPEG, WebP, GIF).');
+      return { fond: { genre: 'image' }, fichierId: f.fichierId, instructions: [] };
+    }
+    if (v.envoi !== undefined) {
+      if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      const r = await medias.preparerRattachement({ acteur: ctx.acteur, team: { id: teamDePortee(tb.portee) }, portee: tb.portee }, v.envoi, 'cm', { entiteType: 'cm_tableau', entiteId: tb.id });
+      const mime = String(r.instructions[0]?.params?.[4] ?? '');
+      if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(mime)) throw echec(400, 'fond-image', 'Le fond doit être une image (PNG, JPEG, WebP, GIF).');
+      return { fond: { genre: 'image' }, fichierId: r.fichierId, instructions: r.instructions };
+    }
+    throw echec(400, 'fond', 'Fond illisible.');
   }
 
   /** `GET /cm/tableaux` : tableaux visibles (le tableau « Contenus » du club est créé au premier passage). */
@@ -333,11 +392,22 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return tableau(acteur, id);
   }
 
-  async function modifierTableau(acteur, id, corps) {
+  async function modifierTableau(acteur, id, corps, { origine = '' } = {}) {
     const { tableau: tb, ctx } = await tableauVisible(acteur, id);
-    exiger(ctx, 'cm.gerer');
+    // Le fond seul se change avec cm.editer (comme sur Trello, qui prépare le tableau le décore) ; le reste : cm.gerer.
+    const seulFond = corps && typeof corps === 'object' && Object.keys(corps).every(k => k === 'fond');
+    exiger(ctx, seulFond ? 'cm.editer' : 'cm.gerer');
     const champs = [];
     const valeurs = [];
+    const avant = [];
+    let ancienFichier = null;
+    if (corps?.fond !== undefined) {
+      const f = await lireFond(acteur, ctx, tb, corps.fond);
+      champs.push('fond', 'fond_fichier_id');
+      valeurs.push(f.fond ? JSON.stringify(f.fond) : null, f.fichierId);
+      avant.push(...f.instructions);
+      if (tb.fond_fichier_id && tb.fond_fichier_id !== f.fichierId) ancienFichier = tb.fond_fichier_id;
+    }
     if (corps?.nom !== undefined) {
       champs.push('nom');
       valeurs.push(corps.nom === null && tb.cle_defaut ? null : nomListe(corps.nom));
@@ -358,11 +428,14 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (champs.length) {
       const t = maintenant();
       await base.lot([
+        ...avant,
         { sql: `UPDATE cm_tableaux SET ${champs.map(c => `${c} = ?`).join(', ')}, version = version + 1, maj_le = ? WHERE id = ?`, params: [...valeurs, iso(t), id] },
-        evenement('cm.tableau_modifie', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: id, charge: { champs }, maintenant: t }),
+        evenement('cm.tableau_modifie', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: id, charge: { champs: champs.filter(c => c !== 'fond_fichier_id') }, maintenant: t }),
       ]);
+      // Ancienne image de fond : ses octets partent s'il ne sert plus à rien (Drive, pièce jointe…).
+      if (ancienFichier) await effacerFichierSiOrphelin(ancienFichier, t);
     }
-    return tableau(acteur, id);
+    return tableau(acteur, id, { origine });
   }
 
   async function supprimerTableau(acteur, id) {
@@ -429,7 +502,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     const pseudos = await pseudosDe(base, [...new Set(cartes.flatMap(c => memb.get(c.id) ?? []))]);
     return {
-      tableau: tableauPublic(tb, noms),
+      tableau: tableauPublic(tb, noms, { fond: fondPublic(tb, await imageFond(tb, acteur, origine)) }),
       droits: droitsDe(ctx),
       moi: acteur.compte,
       listes: listes.map(l => ({ id: l.id, nom: l.nom ?? null, cle: l.cle ?? null, position: Number(l.position), archive: Boolean(l.archive_le) })),
@@ -465,6 +538,33 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       noms: pseudos,
       personnes: await personnesTableau(tb),
     };
+  }
+
+  // ---------------------------------------------------------------- Préférences d'affichage (par compte)
+
+  /** `GET /cm/preferences` : choix d'affichage du compte (colonnes réduites, calendriers des teams). */
+  async function preferences(acteur) {
+    const lignes = await base.tous('SELECT cle, valeur FROM cm_preferences WHERE compte_id = ?', [acteur.compte]);
+    return { preferences: Object.fromEntries(lignes.map(l => [l.cle, jsonOu(l.valeur, null)])) };
+  }
+
+  /** `PUT /cm/preferences/:cle { valeur }` : un choix d'affichage (JSON de 4 000 caractères au plus ; null l'efface). */
+  async function changerPreference(acteur, cle, corps) {
+    if (!acteur.compte || !CLE_PREFERENCE.test(String(cle))) throw echec(400, 'preference', 'Préférence inconnue.');
+    const portees = await porteesDe(base, acteur);
+    if (!portees.club.has('cm.voir') && ![...portees.teams.values()].some(x => x.has('cm.voir'))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const valeur = corps?.valeur;
+    if (valeur === null || valeur === undefined) {
+      await base.executer('DELETE FROM cm_preferences WHERE compte_id = ? AND cle = ?', [acteur.compte, cle]);
+      return { ok: true };
+    }
+    const texte = JSON.stringify(valeur);
+    if (texte.length > PREFERENCE_MAX) throw echec(400, 'preference', 'Préférence trop longue.');
+    if (cle.endsWith('.reduites') && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
+    if (cle === 'calendrier.teams' && !(valeur && typeof valeur === 'object' && !Array.isArray(valeur) && Object.entries(valeur).every(([k, v]) => MOTIF_UUID.test(k) && typeof v === 'boolean'))) throw echec(400, 'preference', 'Préférence illisible.');
+    const t = iso(maintenant());
+    await base.executer('INSERT INTO cm_preferences (compte_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le', [acteur.compte, cle, texte, t]);
+    return { ok: true };
   }
 
   // ---------------------------------------------------------------- Listes
@@ -782,10 +882,18 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return sortie;
   }
 
-  async function verifierMembres(tb, comptes) {
+  /**
+   * Membres saisis : seuls les NOUVEAUX doivent avoir accès au tableau. Un membre déjà assigné qui l'a perdu depuis
+   * (affectation retirée, membre importé de Trello, rôle changé) reste tant qu'on ne le retire pas : sinon plus
+   * aucune modification des membres de la carte ne passait (400 à chaque clic).
+   */
+  async function verifierMembres(tb, comptes, avant = new Set()) {
     if (!Array.isArray(comptes) || comptes.length > MAX_MEMBRES || comptes.some(c => typeof c !== 'string' || !MOTIF_COMPTE.test(c))) throw echec(400, 'membres', 'Membres illisibles.');
-    const permis = new Set((await personnesTableau(tb)).map(p => p.compte));
-    for (const c of comptes) if (!permis.has(c)) throw echec(400, 'membre', 'Ce compte n’a pas accès à ce tableau.');
+    const nouveaux = comptes.filter(c => !avant.has(c));
+    if (nouveaux.length) {
+      const permis = new Set((await personnesTableau(tb)).map(p => p.compte));
+      for (const c of nouveaux) if (!permis.has(c)) throw echec(400, 'membre', 'Ce compte n’a pas accès à ce tableau.');
+    }
     return [...new Set(comptes)];
   }
 
@@ -845,8 +953,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     let nouveaux = [];
     if (corps?.membres !== undefined) {
-      const liste = await verifierMembres(tb, corps.membres);
       const avant = new Set((await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id));
+      const liste = await verifierMembres(tb, corps.membres, avant);
       nouveaux = liste.filter(m => !avant.has(m));
       lot.push({ sql: 'DELETE FROM cm_carte_membres WHERE carte_id = ?', params: [c.id] }, ...liste.map(m => ({ sql: 'INSERT INTO cm_carte_membres (carte_id, compte_id) VALUES (?, ?)', params: [c.id, m] })));
       modifies.push('membres');
@@ -1402,6 +1510,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     calendrier,
     recherche,
     etat,
+    preferences,
+    changerPreference,
     // Pour les autres services de la section (dépôts, clips, import) :
     tableauVisible,
     carteVisible,

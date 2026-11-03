@@ -26,3 +26,5 @@ export const ACCEPT_REUNION = '';
 export const ACCEPT_RESSOURCE = '';
 export const ACCEPT_CM = '';
 export const ACCEPT_JSON = '';
+/** Image de fond d'un tableau CM (jamais de SVG). */
+export const ACCEPT_IMAGE_FOND = '';

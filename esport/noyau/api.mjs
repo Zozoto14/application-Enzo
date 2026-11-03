@@ -201,7 +201,7 @@ export function creerApi({
   const jx = servicesJeux({ base, maintenant, socle: s, ia, travauxIa });
   // Section CM (migration 0023) : espace du club et partie CM des teams ; fichiers par envoi par morceaux (usage « cm »).
   // Drive de la section (migration 0027) : quota, plafond d'un fichier, ZIP (ESPORT_DRIVE_*).
-  const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage, drive: configDuDrive });
+  const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage, drive: configDuDrive, planning: p });
   // Sponsors & partenaires (migration 0024) : rubrique de l'espace CM, permissions du club sponsors.voir / sponsors.gerer.
   const sp = servicesSponsors({ base, maintenant, medias: md, cleSession, stockage, drive: cm.drive });
   // Page « Réseaux » de l'espace CM (migration 0026) : comptes, bot d'annonce Discord des posts publiés, statistiques.

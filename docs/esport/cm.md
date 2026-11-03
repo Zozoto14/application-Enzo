@@ -15,7 +15,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -68,6 +68,33 @@ Contrôles d'une route CM : session → team existante → module `cm` activé (
 
 ## Tableaux façon Trello
 
+- **Mise en page** (comme le Trello de la CM) : les colonnes sont **côte à côte** et le **tableau défile
+  horizontalement** ; il prend la **hauteur de la fenêtre** qui reste sous son en-tête (la page ne défile pas) et
+  **chaque colonne a sa propre barre de défilement vertical**. En-tête de colonne **fixe** : nom, **nombre de
+  cartes**, bouton **réduire** (→←) et menu **⋯** ; **« + Ajouter une carte »** reste **en bas** de la colonne. Une
+  colonne **réduite** devient une **bande verticale** (nom vertical, nombre de cartes ; un clic l'agrandit) ; le
+  choix est **mémorisé par compte** (`cm_preferences`, clé `tableau.<id>.reduites`). Téléphone : **une colonne par
+  écran**, balayage latéral (le bas de l'écran reste à la barre de navigation).
+- **Cartes compactes** : par défaut le **titre seul** (deux lignes au plus, environ 36 px). La carte ne grandit que
+  si elle a quelque chose à montrer : **étiquettes** (pastilles au-dessus du titre), **couverture**, et sous le
+  titre une ligne d'informations : statut et réseaux d'un post, date prévue, **échéance**, icône **description**
+  (≡), **commentaires**, **checklist** (x/y), **pièces jointes**, dépôt / suggestion, **membres** (avatars).
+- **Fond du tableau** (menu **⋯ › Changer le fond…**, `cm.editer`) : 8 **couleurs** et 6 **dégradés** prédéfinis
+  (seule la clé est enregistrée, `src/esport/cm/fonds.ts`), ou une **image** prise dans le **Drive** du tableau ou
+  du club (aucun octet copié) ou **importée** (envoi par morceaux dans la portée du tableau) : PNG, JPEG, WebP, GIF,
+  jamais de SVG. Un **voile sombre** recouvre toujours le fond et les colonnes gardent une surface presque opaque :
+  lisible en thème **clair comme sombre**. L'image se lit par lien signé (2 h) pour qui voit le tableau, même sans
+  accès au Drive ; ses octets partent quand plus rien ne s'en sert (fond changé, `utilisations.mjs`).
+- **Enregistrer une modification** (fiche d'une carte) : chaque champ s'enregistre par son bouton ou sa case ; ce qui
+  est tapé est un **brouillon** gardé tant qu'il n'est pas enregistré, même si la carte est relue entre-temps (autre
+  action de la fiche : étiquette, checklist, visuel ; autre personne ; rafraîchissement). Le message (« Enregistré. »
+  ou l'erreur) s'affiche **dans le bloc** du bouton. Post : la sauvegarde envoie la **version lue** ; si la carte a
+  changé ailleurs sans toucher au contenu du post (étiquette, déplacement…), l'app renvoie avec la nouvelle version ;
+  si quelqu'un a changé le texte, la saisie reste et l'écart est expliqué. Le titre d'un post **publié** ne se
+  modifie plus (dépublier d'abord). Un membre assigné qui a **perdu l'accès** au tableau (affectation retirée,
+  membre importé de Trello) reste sur la carte et ne bloque plus les autres changements de membres ; seuls les
+  membres **ajoutés** doivent avoir accès. Sur iPhone et Android, toucher « Enregistrer » clavier ouvert enregistre
+  du premier coup.
 - **Plusieurs tableaux** : du club, ou rattachés à une team. Le tableau par défaut **« Contenus »** (club, et une team
   dès qu'on ouvre sa partie CM) a les listes **Idées → En préparation → À valider → Validé / Programmé → Publié** ;
   renommées, elles gardent leur rôle. Il ne s'archive ni ne se supprime.
@@ -173,6 +200,21 @@ lien signé (2 h), valable pour l'auteur et ceux qui voient la partie CM de la t
 **CM › Calendrier** : posts prévus (date de publication) par **semaine** ou par **mois**, filtre par réseau ;
 grille sur PC, jour par jour sur téléphone. Toucher un post ouvre son tableau.
 
+**Calendriers des teams** (superposés, **lecture seule**, `GET /cm/calendrier/teams?du&au`, 100 jours au plus) : un
+**interrupteur par team** (sa couleur, palette fixe dans l'ordre alphabétique), choix **mémorisé par compte**
+(`cm_preferences`, clé `calendrier.teams` ; toutes affichées par défaut). Ce qui apparaît dépend de ce que le compte
+a déjà le droit de voir :
+
+| Accès | Ce qui s'affiche |
+| --- | --- |
+| membre actif de la team avec `planning.view` (ou Fondateur, ou rôle du club « Accès à toutes les teams ») | son **planning** : matchs, scrims, tournois, événements (pas les entraînements ni les réunions), lieu et description compris |
+| partie CM seulement (CM du club, correspondant sans planning) | la **compétition publiable** : matchs de tournoi et tournois publiables (`competition/resume.mjs`), sans scrim, lieu, note ni description |
+| ni l'un ni l'autre | rien (la team n'apparaît pas) ; sans `cm.voir` nulle part : 403 |
+
+Toucher un événement ouvre son **détail** ; **« Créer un post pour cet événement »** (qui prépare des posts) pose un
+post brouillon daté du début de l'événement dans « Idées » du tableau « Contenus » du club (sinon de la team), team
+liée, textes FR / EN **pré-remplis** si le match ou le tournoi est publiable, puis ouvre le tableau.
+
 ## Import Trello
 
 **CM › Import Trello** (`cm.gerer`, depuis le site ou l'app PC) :
@@ -244,6 +286,9 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `POST /cm/cartes/:id/(soumettre\|publier\|depublier)` ; `…/(valider\|refuser)` | editer ; valider |
 | `POST /cm/cartes/:id/(checklists\|commentaires\|pieces)` ; `PATCH\|DELETE /cm/(checklists\|elements\|commentaires)/:id` ; `DELETE /cm/pieces/:id` ; `POST /cm/pieces/:id/lien` | editer (commenter : deposer ou editer) |
 | `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` | voir |
+| `PATCH /cm/tableaux/:id { fond }` (fond seul : `null`, `{ genre: 'couleur' \| 'degrade', cle }`, `{ genre: 'image', drive \| envoi }`) | editer |
+| `GET /cm/calendrier/teams?du&au` (calendriers des teams, lecture seule) | voir (et droits de chaque team) |
+| `GET /cm/preferences` ; `PUT /cm/preferences/:cle { valeur }` (`tableau.<id>.reduites`, `calendrier.teams` ; `null` efface) | voir (ses choix seulement) |
 | `GET /cm/teams/:t` ; `POST …/depots` ; `GET …/matchs` ; `GET …/resume?genre&id&prefixe` ; `GET …/membres` | droits de la team |
 | `GET\|POST /cm/teams/:t/clips` ; `GET /cm/clips` ; `PATCH\|DELETE /cm/clips/:id` ; `POST …/carte` ; `POST …/lien` | proposer ; voir ; editer |
 | `GET\|POST /cm/roles` ; `PATCH\|DELETE /cm/roles/:id` ; `POST …/retablir` ; `GET\|POST /cm/affectations` ; `DELETE …/:id` ; `GET /cm/comptes` ; `GET\|PUT /cm/reglages` ; `GET /cm/journal` | gerer (club) |
@@ -251,6 +296,10 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `/cm/portees/:portee/envois…` (envoi par morceaux, portée `club` ou une team) ; `GET /cm/fichiers/:id?c&exp&sig` (lien signé) | editer, deposer ou proposer |
 
 Limites de débit (par compte et par heure) : 20 imports Trello, 30 clips, 30 dépôts.
+
+La migration `0042_cm_tableaux_fond.sql` ajoute `cm_tableaux.fond` (JSON de la teinte ou du dégradé, ou
+`{ genre: 'image' }`) et `cm_tableaux.fond_fichier_id` (fichier CM de l'image), et `cm_preferences` (choix
+d'affichage par compte : dans l'export / import de la base et l'export RGPD du compte, effacés avec lui).
 
 La migration `0026_cm_reseaux.sql` ajoute la page **Réseaux** (comptes, annonces, statistiques : tables `cm_rs_*`,
 voir [reseaux-stats.md](reseaux-stats.md)). La migration `0027_cm_drive.sql` ajoute le **Drive** (tables `cm_drive_*`,
@@ -262,17 +311,24 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 
 - Serveur : `esport/noyau/cm/` — `commun.mjs` (portées, droits), `reseaux.mjs` et `posts.mjs` (règles pures),
   `tableaux.mjs`, `equipe.mjs`, `clips.mjs`, `droits.mjs`, `trello.mjs` (lecture pure de l'export),
-  `importTrello.mjs`, `suggestions.mjs` et `bus.mjs` (abonnés du bus), `rgpd.mjs`, `routes.mjs`, `service.mjs`.
-- App : `src/esport/cm/` (client, règles des réseaux, phrases), `src/esport/ui/cm/` (EspaceCm, Tableau,
+  `importTrello.mjs`, `suggestions.mjs` et `bus.mjs` (abonnés du bus), `calendriers.mjs` (calendriers des teams),
+  `rgpd.mjs`, `routes.mjs`, `service.mjs`.
+- App : `src/esport/cm/` (client, règles des réseaux, phrases, `fonds.ts`), `src/esport/ui/cm/` (EspaceCm, Tableau,
   FicheCarte, Calendrier, Clips, ImportTrello, RolesCm, CmTeam), textes `src/esport/i18n/cm.ts`.
 - Tests : `esport/test/cm.test.mjs` (SQLite et PostgreSQL : règles, migration sur base existante, périmètre et
   permissions, tableaux, circuit de validation et invalidation, suggestions, clips, import Trello et entrées
-  malformées, RGPD, export / import), `src/esport/Cm.test.tsx`.
+  malformées, RGPD, export / import), `esport/test/cm-tableaux.test.mjs` (chaque modification d'une carte en
+  POST + `X-Methode` relue en base, cartes Trello, suggestions, post validé → « à valider », version 409,
+  permissions, fond, préférences, calendriers des teams et périmètre), `src/esport/Cm.test.tsx`,
+  `src/esport/CmTableaux.test.tsx` (brouillons gardés, conflit, défilement par colonne, colonne réduite, cartes
+  compactes, fond, calendriers superposés) et le bout en bout `scripts/e2e-esport-cm-tableaux.mjs` (site construit,
+  faux frontal o2switch qui refuse PATCH / PUT / DELETE, captures 1440 × 900 et 390 × 844).
 
 ## Pour le Fondateur
 
 1. Mettre à jour le serveur Esport (déploiement automatique o2switch, ou `npm run migrer --prefix esport`) : la
-   migration `0023_cm.sql` s'applique seule. Publier le site et l'app PC.
+   migration `0023_cm.sql` s'applique seule (puis les suivantes, dont `0042_cm_tableaux_fond.sql` : fond des
+   tableaux et choix d'affichage). Publier le site et l'app PC.
 2. **Esport › Teams › CM du club › Équipe CM** : affecter le rôle **Responsable CM** au CM du club (portée « Club »), et
    **Correspondant CM** à une personne de chaque team (portée = la team ; elle doit en être membre).
 3. Dans chaque team : **Paramètres › Modules › CM** (activé d'office pour une nouvelle team « complète »).

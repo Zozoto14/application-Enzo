@@ -74,6 +74,33 @@ export interface DroitsTableau {
   gerer: boolean;
   commenter: boolean;
 }
+/** Fond d'un tableau (migration 0042) : teinte ou dégradé prédéfini (src/esport/cm/fonds.ts), ou image (lien signé). */
+export type FondTableau = { genre: 'couleur' | 'degrade'; cle: string } | { genre: 'image'; image?: string };
+/** Fond saisi : prédéfini, image du Drive (`drive` : élément du Drive) ou envoyée (`envoi`), ou null (thème). */
+export type SaisieFond = { genre: 'couleur' | 'degrade'; cle: string } | { genre: 'image'; drive: string } | { genre: 'image'; envoi: string } | null;
+/** Événement d'un calendrier de team superposé au calendrier éditorial (lecture seule). */
+export interface EvenementTeam {
+  id: string;
+  /** planning : vu par un membre ; match / tournoi : compétition publiable (CM du club). */
+  genre: 'planning' | 'match' | 'tournoi';
+  type: string;
+  titre: string;
+  debut: string;
+  fin: string | null;
+  jour?: boolean;
+  lieu: string;
+  description: string;
+  matchId: string | null;
+  tournoiId: string | null;
+  publiable: boolean;
+}
+export interface CalendrierTeam {
+  id: string;
+  nom: string;
+  couleur: string;
+  acces: 'planning' | 'competition';
+  evenements: EvenementTeam[];
+}
 export interface TableauListe {
   id: string;
   nom: string | null;
@@ -89,6 +116,8 @@ export interface TableauListe {
   cartes?: number;
   aValider?: number;
   droits?: DroitsTableau;
+  /** Fond (migration 0042) ; null : fond du thème. */
+  fond?: FondTableau | null;
 }
 export interface ListeTableaux {
   tableaux: TableauListe[];
@@ -380,7 +409,12 @@ export function apiCm(client: ClientEsport) {
     tableaux: (archives = false) => r<ListeTableaux>(`/cm/tableaux${requeteUrl({ archives: archives ? 1 : undefined })}`),
     creerTableau: (t: { nom: string; portee: string; couleur?: string; description?: string; modele?: 'vide' | 'contenus' }) => r<DetailTableau>('/cm/tableaux', 'POST', t),
     tableau: (id: string, archives = false) => r<DetailTableau>(`/cm/tableaux/${e(id)}${requeteUrl({ archives: archives ? 1 : undefined })}`),
-    modifierTableau: (id: string, t: { nom?: string | null; couleur?: string; description?: string; archive?: boolean }) => r<DetailTableau>(`/cm/tableaux/${e(id)}`, 'PATCH', t),
+    modifierTableau: (id: string, t: { nom?: string | null; couleur?: string; description?: string; archive?: boolean; fond?: SaisieFond }) => r<DetailTableau>(`/cm/tableaux/${e(id)}`, 'PATCH', t),
+    /** Choix d'affichage du compte (colonnes réduites `tableau.<id>.reduites`, calendriers `calendrier.teams`). */
+    preferences: () => r<{ preferences: Record<string, unknown> }>('/cm/preferences'),
+    changerPreference: (cle: string, valeur: unknown) => r<{ ok: true }>(`/cm/preferences/${e(cle)}`, 'PUT', { valeur }),
+    /** Calendriers des teams (planning ou compétition publiable, selon les droits du compte). */
+    calendrierTeams: (du: string, au: string) => r<{ du: string; au: string; teams: CalendrierTeam[] }>(`/cm/calendrier/teams${requeteUrl({ du, au })}`),
     supprimerTableau: (id: string) => r<{ ok: true }>(`/cm/tableaux/${e(id)}`, 'DELETE'),
     creerListe: (tableauId: string, nom: string) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/listes`, 'POST', { nom }),
     modifierListe: (id: string, l: { nom?: string | null; archive?: boolean }) => r<{ ok: true }>(`/cm/listes/${e(id)}`, 'PATCH', l),
