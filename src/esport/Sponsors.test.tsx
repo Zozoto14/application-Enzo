@@ -15,6 +15,7 @@ import { phraseJournalSponsors } from './sponsors/libelles';
 import { cibleDeplacement, formaterMontant, lienMailto, nomPeriode, prospectsDe, saisieMontant } from './sponsors/regles';
 import { definirLangue } from './i18n';
 import { phraseNotification } from './libelles';
+import { CadreEsport } from './ui/CadreEsport';
 import { EspaceCm } from './ui/cm/EspaceCm';
 import { MentionsSponsors } from './ui/sponsors/MentionsSponsors';
 import { Pipeline } from './ui/sponsors/Pipeline';
@@ -138,12 +139,12 @@ describe('rubrique Sponsors', () => {
   it('espace CM : onglet « Sponsors » selon les droits ; seul visible pour un compte qui n’a que les Sponsors', async () => {
     const { client, appels } = fauxClient();
     const moi = (club: string[], sponsors: string[]): MoiCm => ({ espace: true, club: club as MoiCm['club'], teams: [], gerer: club.includes('cm.gerer'), sponsors });
-    const r = await render(<EspaceCm theme={theme} client={client} large moi={moi(['cm.voir', 'cm.editer'], [])} />);
+    const r = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.voir', 'cm.editer'], [])} /></CadreEsport>);
     expect(screen.queryByTestId('esport-cm-onglet-sponsors')).toBeNull();
     await r.unmount();
     appels.length = 0;
     // Lecteur Sponsors seulement : l'espace s'ouvre sur la rubrique, sans tableau CM ni requête /cm/etat.
-    const r2 = await render(<EspaceCm theme={theme} client={client} large moi={moi([], ['sponsors.voir'])} />);
+    const r2 = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi([], ['sponsors.voir'])} /></CadreEsport>);
     expect(screen.getByTestId('esport-cm-onglet-sponsors')).toBeTruthy();
     expect(screen.queryByTestId('esport-cm-onglet-tableaux')).toBeNull();
     expect(await screen.findByTestId('esport-sp-tdb')).toBeTruthy();

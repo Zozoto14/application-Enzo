@@ -223,6 +223,9 @@ export function TitreCarte({ theme, titre: t, sous, droite, testID }: { theme: T
 
 // ------------------------------------------------------------------ En-tête de page
 
+/** Couleur de la pastille « CM » (tuile « CM du club » et bloc de la barre latérale) : hors des teintes des teams et des accents des thèmes. */
+export const COULEUR_CM_CLUB = '#D6409F';
+
 export interface ActionSecondaire {
   titre: string;
   onPress(): void;

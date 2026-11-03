@@ -15,6 +15,7 @@ import { phraseJournalCm } from './cm/libelles';
 import { definirLangue } from './i18n';
 import { libelleChamp, raisonImport } from './i18n/reseaux';
 import { phraseNotification } from './libelles';
+import { CadreEsport } from './ui/CadreEsport';
 import { EspaceCm } from './ui/cm/EspaceCm';
 import { EspaceReseaux } from './ui/cm/reseaux/EspaceReseaux';
 
@@ -123,13 +124,13 @@ describe('page Réseaux', () => {
   it('espace CM : onglet « Réseaux » pour qui voit la section CM, pas pour un compte sans cm.voir', async () => {
     const { client } = fauxClient(false);
     const moi = (club: string[], sponsors: string[] = []): MoiCm => ({ espace: true, club: club as MoiCm['club'], teams: [], gerer: club.includes('cm.gerer'), sponsors });
-    const r = await render(<EspaceCm theme={theme} client={client} large moi={moi(['cm.voir'])} />);
+    const r = await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.voir'])} /></CadreEsport>);
     await fireEvent.press(screen.getByTestId('esport-cm-onglet-reseaux'));
     expect(await screen.findByTestId('esport-rs-tdb')).toBeTruthy();
     // Sans cm.gerer : pas d'onglet « Bot Discord ».
     expect(screen.queryByTestId('esport-rs-onglet-bot')).toBeNull();
     await r.unmount();
-    await render(<EspaceCm theme={theme} client={client} large moi={moi(['cm.deposer'])} />);
+    await render(<CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}><EspaceCm theme={theme} client={client} large moi={moi(['cm.deposer'])} /></CadreEsport>);
     expect(screen.queryByTestId('esport-cm-onglet-reseaux')).toBeNull();
   });
 

@@ -29,7 +29,7 @@ import { PageMembres, type SousOngletMembres } from './membres/PageMembres';
 import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam';
 import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './commun';
-import { AvatarTeam, Badge, Carte, Compteur, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
+import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
@@ -245,7 +245,9 @@ export function Esport(props: PropsRacineApp) {
           moi={moiCm}
           onExporter={exporter}
           ongletInitial={vue.onglet}
-          avant={<LienRetour theme={theme} titre={tr('dashboard.teams')} onPress={() => setVue({ v: 'teams' })} testID="esport-cm-retour" />}
+          fondateur={etat.moi.superAdmin}
+          onQuitter={() => setVue({ v: 'teams' })}
+          onOuvrirTeam={id => setVue({ v: 'team', id })}
         />
       );
     } else if (onglet === 'membres') {
@@ -554,8 +556,8 @@ function MesTeams({
   );
 }
 
-/** Couleur du bandeau de la tuile « CM du club » : hors des teintes des teams et des accents des thèmes. */
-export const COULEUR_CM_CLUB = '#D6409F';
+/** Couleur du bandeau de la tuile « CM du club » (définie dans design.tsx, partagée avec la barre latérale du CM). */
+export { COULEUR_CM_CLUB };
 
 /**
  * Tuile « CM du club » (page Teams, première de la grille) : même gabarit que les cartes de team (bandeau coloré,

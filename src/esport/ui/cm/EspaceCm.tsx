@@ -4,25 +4,26 @@
  * CM, import Trello, réglages (suggestions automatiques), journal de la section. Page « Réseaux » (comptes, bot
  * d'annonce Discord, statistiques ; docs/esport/reseaux-stats.md) pour qui voit la section CM. Drive (dossiers et fichiers du
  * club et des teams ; docs/esport/drive.md) pour qui a un droit cm.drive.*. Rubrique « Sponsors » pour qui a
- * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Onglet « Réunions »
+ * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Section « Réunions »
  * (réunions, disponibilités et rendez-vous de l'équipe CM ; docs/esport/cm-reunions.md) pour l'équipe CM et pour
- * un membre du club invité à une réunion. Tout est décidé
+ * un membre du club invité à une réunion. Les sections sont rangées dans la barre latérale du cadre (bloc « CM du club »,
+ * comme les sections d'une team) ; sur téléphone, un sélecteur de section en haut de page. Tout est décidé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
-import type { ClientEsport } from '../../client';
+import type { ClientEsport, TeamListee } from '../../client';
 import { apiCm, PORTEE_CLUB, voitDrive, type ApiCm, type CarteTransverse, type EntreeJournalCm, type ListeTableaux, type MoiCm, type ReglagesCm, type TeamCm } from '../../cm/api';
 import { phraseJournalCm } from '../../cm/libelles';
 import { CLES_RESEAUX, RESEAUX } from '../../cm/reseaux';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { tr } from '../../i18n';
-import { PageEsport } from '../CadreEsport';
-import { Retours, styles, useAgir } from '../commun';
-import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, Onglets, SqueletteCartes, TitreCarte, Volet, attenue, texte } from '../design';
+import { EntreeLaterale, PageEsport, SiBarreEtendue, SiBarreReduite, useBlocLateral } from '../CadreEsport';
+import { PastilleRole, Retours, styles, useAgir } from '../commun';
+import { Badge, COULEUR_CM_CLUB, Carte, ESP, EtatVide, Grille, MenuActions, SqueletteCartes, TitreCarte, Volet, attenue, texte, type ActionSecondaire } from '../design';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PALETTE, PastilleReseau, Teinte, nomTableau, quand, useEtatCm } from './commun';
 import { Tableau } from './Tableau';
 import { Calendrier } from './Calendrier';
@@ -40,6 +41,118 @@ import { useNouveautesDrive } from '../../cm/nouveautesDrive';
 
 export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
+/** Pictogrammes des sections dans la barre latérale (colonne d'icônes quand elle est réduite). */
+const GLYPHES_CM: Record<OngletCm, string> = {
+  tableaux: '▦',
+  valider: '✓',
+  calendrier: '▤',
+  clips: '▶',
+  visuels: '◩',
+  drive: '☁',
+  reseaux: '◉',
+  sponsors: '★',
+  reunions: '◷',
+  equipe: '☺',
+  import: '⇩',
+  reglages: '⚙︎',
+  journal: '≡',
+};
+
+export interface EntreeCm {
+  id: OngletCm;
+  libelle: string;
+  glyphe: string;
+  /** Compteur (posts à valider, nouveautés du Drive). */
+  compteur?: number;
+}
+export interface GroupeCm {
+  id: string;
+  libelle: string;
+  entrees: EntreeCm[];
+}
+
+/**
+ * Sections de l'espace CM rangées par groupe, selon les droits (mêmes conditions qu'avant dans la rangée d'onglets) :
+ * Contenus, Médias, Diffusion, Partenaires, Équipe, Gestion. Un groupe sans section n'apparaît pas.
+ */
+export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number }): GroupeCm[] {
+  const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, glyphe: GLYPHES_CM[id], compteur: compteur || undefined });
+  return (
+    [
+      { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux')), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
+      { id: 'medias', libelle: trCm('espace.g.medias'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : [])] },
+      { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
+      { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
+      { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...(reunions ? [e('reunions', trRe('onglet'))] : []), ...(gerer ? [e('equipe', trCm('espace.equipe'))] : [])] },
+      { id: 'gestion', libelle: trCm('espace.g.gestion'), entrees: gerer ? [e('import', trCm('espace.import')), e('reglages', trCm('espace.reglages')), e('journal', trCm('espace.journal'))] : [] },
+    ] as GroupeCm[]
+  ).filter(g => g.entrees.length > 0);
+}
+
+/** Rôle CM affiché dans le bloc de la barre latérale : le plus haut niveau de permission CM du compte. */
+function roleCm(moi: MoiCm, fondateur: boolean | undefined, voirCm: boolean): string {
+  if (fondateur) return tr('pageTeam.super_admin');
+  const a = (p: string) => moi.club.some(x => x === p) || moi.teams.some(t => t.permissions.some(x => x === p));
+  if (moi.gerer) return trCm('espace.role_gerer');
+  if (a('cm.valider')) return trCm('espace.role_valider');
+  if (a('cm.editer')) return trCm('espace.role_editer');
+  return voirCm ? trCm('espace.role_lecture') : trCm('espace.role_partiel');
+}
+
+/** Bloc de la barre latérale : pastille « CM », titre, rôle, « ⇄ Changer », sections par groupe. */
+function BlocLateralCm({ theme, groupes, actif, onChoisir, role, destinations }: { theme: ThemeHub; groupes: GroupeCm[]; actif: OngletCm; onChoisir(id: OngletCm): void; role: string; destinations: ActionSecondaire[] }) {
+  const rayon = theme.id === 'terminal' ? 0 : Math.round(40 * 0.28);
+  return (
+    <View style={{ gap: ESP.xs }} testID="esport-cm-barre">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, paddingHorizontal: ESP.xs, paddingBottom: ESP.xs }}>
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="esport-cm-pastille" style={{ width: 40, height: 40, borderRadius: rayon, backgroundColor: COULEUR_CM_CLUB, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '800' }}>CM</Text>
+        </View>
+        <SiBarreEtendue>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text style={{ ...texte(theme, 16), fontWeight: '800' }} numberOfLines={2} accessibilityRole="header">
+              {tr('cm.club_titre')}
+            </Text>
+            <PastilleRole theme={theme} nom={role} couleur={COULEUR_CM_CLUB} testID="esport-cm-role" />
+          </View>
+        </SiBarreEtendue>
+      </View>
+      {destinations.length ? (
+        <SiBarreEtendue>
+          <View style={{ paddingHorizontal: ESP.xxs, paddingBottom: ESP.xs }}>
+            <MenuActions theme={theme} testID="esport-cm-changer" libelle={trCm('espace.changer_libelle')} titreBouton={trCm('espace.changer')} actions={destinations} />
+          </View>
+        </SiBarreEtendue>
+      ) : null}
+      <View accessibilityRole="tablist" accessibilityLabel={trCm('espace.sections_de')} style={{ gap: ESP.xxs }} testID="esport-cm-onglets">
+        {groupes.map((g, i) => (
+          <View key={g.id} style={{ gap: ESP.xxs }} testID={`esport-cm-groupe-${g.id}`}>
+            <SiBarreEtendue>
+              <Text style={{ ...attenue(theme, 11), fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', paddingHorizontal: ESP.s, paddingTop: i ? ESP.xs : 0 }} accessibilityRole="header">
+                {g.libelle}
+              </Text>
+            </SiBarreEtendue>
+            {i > 0 ? <SiBarreReduite><View style={{ height: 1, backgroundColor: theme.ligne, marginVertical: ESP.xxs, marginHorizontal: ESP.xs }} /></SiBarreReduite> : null}
+            {g.entrees.map(en => (
+              <EntreeLaterale
+                key={en.id}
+                theme={theme}
+                libelle={en.libelle}
+                glyphe={en.glyphe}
+                description={en.compteur ? `${en.libelle} (${en.compteur})` : en.libelle}
+                choisi={en.id === actif}
+                compteur={en.compteur}
+                onPress={() => onChoisir(en.id)}
+                testID={`esport-cm-onglet-${en.id}`}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function EspaceCm({
   theme,
   client,
@@ -47,7 +160,9 @@ export function EspaceCm({
   moi,
   onExporter,
   ongletInitial,
-  avant,
+  fondateur,
+  onQuitter,
+  onOuvrirTeam,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -56,8 +171,12 @@ export function EspaceCm({
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
   /** Onglet ouvert d'abord (raccourci « Drive » de la carte « CM du club ») ; ignoré s'il n'est pas permis. */
   ongletInitial?: OngletCm;
-  /** Au-dessus du titre : le lien de retour vers Teams. */
-  avant?: React.ReactNode;
+  /** Le compte est le Fondateur (rôle affiché dans la barre latérale). */
+  fondateur?: boolean;
+  /** Retour vers Teams (fil d'Ariane, « ⇄ Changer », lien de retour du téléphone). */
+  onQuitter?(): void;
+  /** « ⇄ Changer » : ouvre une team. */
+  onOuvrirTeam?(id: string): void;
 }) {
   const api = useMemo(() => apiCm(client), [client]);
   // Rubrique Sponsors (migration 0024) : permissions du club, indépendantes de la section CM.
@@ -77,34 +196,80 @@ export function EspaceCm({
   // Pastille du Drive : nouveautés (fichiers, dossiers, versions ajoutés par d'autres) dans tous les Drive visibles.
   const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
   const teams: TeamCm[] = moi.teams;
-  const entrees = [
-    ...(voirCm
-      ? [
-          { id: 'tableaux', libelle: trCm('espace.tableaux') },
-          { id: 'valider', libelle: etat?.aValider ? trCm('espace.valider_n', { n: etat.aValider }) : trCm('espace.valider') },
-          { id: 'calendrier', libelle: trCm('espace.calendrier') },
-          { id: 'clips', libelle: trCm('espace.clips') },
-          { id: 'visuels', libelle: trVi('espace.titre') },
-        ]
-      : []),
-    ...(reunions ? [{ id: 'reunions', libelle: trRe('onglet') }] : []),
-    ...(drive ? [{ id: 'drive', libelle: trCm('espace.drive'), pastille: nouveautesDrive }] : []),
-    // Page Réseaux (migration 0026) : comptes, annonce Discord des posts publiés, statistiques.
-    ...(voirCm ? [{ id: 'reseaux', libelle: trCm('espace.reseaux') }] : []),
-    ...(sponsors ? [{ id: 'sponsors', libelle: trCm('espace.sponsors') }] : []),
-    ...(moi.gerer
-      ? [
-          { id: 'equipe', libelle: trCm('espace.equipe') },
-          { id: 'import', libelle: trCm('espace.import') },
-          { id: 'reglages', libelle: trCm('espace.reglages') },
-          { id: 'journal', libelle: trCm('espace.journal') },
-        ]
-      : []),
+  // « ⇄ Changer » : Teams, puis chaque team (comme le sélecteur d'une team).
+  const [mesTeams, setMesTeams] = useState<TeamListee[]>([]);
+  useEffect(() => {
+    if (!onOuvrirTeam) return;
+    let vivant = true;
+    void Promise.resolve()
+      .then(() => client.teams())
+      .then(l => vivant && setMesTeams(l), () => undefined);
+    return () => {
+      vivant = false;
+    };
+  }, [client, onOuvrirTeam]);
+  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive });
+  const toutes = groupes.flatMap(g => g.entrees);
+  const courante = toutes.find(e => e.id === onglet);
+  const choisir = (id: OngletCm) => {
+    if (id === 'tableaux') setOuvert(undefined);
+    setOnglet(id);
+  };
+  const destinations: ActionSecondaire[] = [
+    ...(onQuitter ? [{ titre: tr('dashboard.teams'), onPress: onQuitter, testID: 'esport-cm-changer-teams' }] : []),
+    ...mesTeams.filter(t => !t.suspendu).map(t => ({ titre: t.nom, onPress: () => onOuvrirTeam?.(t.id), testID: `esport-cm-changer-${t.slug}` })),
   ];
+  const role = roleCm(moi, fondateur, voirCm);
+  // PC : sections dans la barre latérale du cadre (sous l'Esport), comme les sections d'une team.
+  useBlocLateral(<BlocLateralCm theme={theme} groupes={groupes} actif={onglet} onChoisir={choisir} role={role} destinations={destinations} />, large);
   return (
     <PageEsport large={large} testID="esport-cm" largeur={1600}>
-      <EnTetePage theme={theme} large={large} titre={trCm('espace.titre')} sous={trCm('espace.sous')} avant={avant} />
-      <Onglets theme={theme} prefixe="esport-cm-onglet" testID="esport-cm-onglets" actif={onglet} onChoisir={id => setOnglet(id as OngletCm)} entrees={entrees} defilant={!large} />
+      {large ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')} testID="esport-cm-fil">
+          {onQuitter ? (
+            <>
+              <Pressable testID="esport-cm-retour" accessibilityRole="link" onPress={onQuitter} style={{ minHeight: 32, justifyContent: 'center' }}>
+                <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }}>{tr('dashboard.teams')}</Text>
+              </Pressable>
+              <Text style={attenue(theme, 14)}>›</Text>
+            </>
+          ) : null}
+          <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{tr('cm.club_titre')}</Text>
+          {courante ? (
+            <>
+              <Text style={attenue(theme, 14)}>›</Text>
+              <Text style={attenue(theme, 14)} testID="esport-cm-fil-section">{courante.libelle}</Text>
+            </>
+          ) : null}
+        </View>
+      ) : (
+        // Téléphone : pas de nouvelle section dans la barre du bas ; retour et sélecteur de section en haut de page.
+        <View style={{ gap: ESP.xs }} testID="esport-cm-mobile">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
+            {onQuitter ? (
+              <Pressable testID="esport-cm-retour" accessibilityRole="link" accessibilityLabel={tr('pageTeam.retour_aux_teams')} onPress={onQuitter} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: theme.accent, fontSize: 26, lineHeight: 28, marginTop: -2 }}>‹</Text>
+                <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600' }}>{tr('dashboard.teams')}</Text>
+              </Pressable>
+            ) : null}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1} accessibilityRole="header">
+                {tr('cm.club_titre')}
+              </Text>
+              <Text style={attenue(theme, 13)} numberOfLines={1}>
+                {role}
+              </Text>
+            </View>
+          </View>
+          <MenuActions
+            theme={theme}
+            testID="esport-cm-sections"
+            libelle={trCm('espace.sections_de')}
+            titreBouton={`${courante?.libelle ?? trCm('espace.titre')} ▾`}
+            actions={toutes.map(en => ({ titre: en.compteur ? `${en.libelle} (${en.compteur})` : en.libelle, onPress: () => choisir(en.id), testID: `esport-cm-onglet-${en.id}` }))}
+          />
+        </View>
+      )}
       {onglet === 'sponsors' && sponsors ? (
         <EspaceSponsors
           theme={theme}

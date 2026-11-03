@@ -11,7 +11,7 @@
  * en tête de la page Teams ; l'entrée « Teams » reste surlignée dans l'espace CM). Voir RacineEsport.tsx.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
@@ -101,6 +101,28 @@ export function SiBarreEtendue({ children }: { children: React.ReactNode }) {
   return useBarreReduite() ? null : <>{children}</>;
 }
 
+/**
+ * Emplacement du bloc de contexte de la barre latérale (PC), sous la navigation de l'Esport : l'espace CM du club y
+ * publie son bloc (identité, sections) depuis son propre écran, chargé à la demande. Une team le passe par `blocTeam`.
+ */
+/** Infobulle d'une entrée de la barre réduite, dessinée par le cadre à côté de la barre (jamais coupée par le défilement). */
+const ContexteInfobulle = createContext<{ montrer(libelle: string, noeud: unknown): void; cacher(): void } | undefined>(undefined);
+const ContexteBlocLateral = createContext<((bloc: React.ReactNode) => void) | undefined>(undefined);
+/** Publie `bloc` dans la barre latérale tant que l'écran est monté (rien sur téléphone : pas de barre latérale). */
+export function useBlocLateral(bloc: React.ReactNode, actif: boolean): void {
+  const definir = useContext(ContexteBlocLateral);
+  // Avant l'affichage : le bloc est dans la barre dès la première image (pas de barre sans contexte qui clignote).
+  useLayoutEffect(() => {
+    definir?.(actif ? bloc : undefined);
+  });
+  useEffect(() => () => definir?.(undefined), [definir]);
+}
+
+/** N'affiche son contenu que si la barre est réduite (séparateurs de groupes). */
+export function SiBarreReduite({ children }: { children: React.ReactNode }) {
+  return useBarreReduite() ? <>{children}</> : null;
+}
+
 type EcouteurClavier = {
   addEventListener(t: string, f: (e: ToucheWeb) => void): void;
   removeEventListener(t: string, f: (e: ToucheWeb) => void): void;
@@ -171,8 +193,18 @@ export function EntreeLaterale({
   role?: 'tab' | 'link' | 'button';
 }) {
   const reduite = useBarreReduite();
+  // Infobulle de la barre réduite : affichée par le cadre (la liste défile : elle serait coupée dans l'entrée).
+  const ref = useRef<React.ComponentRef<typeof Pressable>>(null);
+  const infobulle = useContext(ContexteInfobulle);
+  const montrer = () => infobulle?.montrer(libelle, ref.current);
+  useEffect(() => () => infobulle?.cacher(), [infobulle]);
   return (
     <Pressable
+      ref={ref}
+      onHoverIn={reduite ? montrer : undefined}
+      onFocus={reduite ? montrer : undefined}
+      onHoverOut={reduite ? infobulle?.cacher : undefined}
+      onBlur={reduite ? infobulle?.cacher : undefined}
       testID={testID}
       accessibilityRole={role}
       accessibilityState={{ selected: choisi }}
@@ -191,7 +223,7 @@ export function EntreeLaterale({
         backgroundColor: choisi ? teinteTransparente(theme.accent, theme.sombre ? 0.2 : 0.14) : etat.hovered || etat.focused ? teinteTransparente(theme.attenue, 0.1) : 'transparent',
       })}
     >
-      {(etat: EtatPresse) => (
+      {() => (
         <>
           {glyphe ? (
             <Text
@@ -221,28 +253,6 @@ export function EntreeLaterale({
                     backgroundColor: theme.accent,
                   }}
                 />
-              ) : null}
-              {etat.hovered || etat.focused ? (
-                <View
-                  pointerEvents="none"
-                  testID={`${testID}-infobulle`}
-                  style={{
-                    position: 'absolute',
-                    left: '100%',
-                    marginLeft: ESP.xs,
-                    zIndex: 50,
-                    paddingHorizontal: ESP.s,
-                    paddingVertical: ESP.xxs,
-                    borderRadius: 8,
-                    backgroundColor: theme.surface,
-                    borderWidth: 1,
-                    borderColor: theme.ligne,
-                  }}
-                >
-                  <Text style={{ ...texte(theme, 13), fontWeight: '600' }} numberOfLines={1}>
-                    {libelle}
-                  </Text>
-                </View>
               ) : null}
             </>
           ) : (
@@ -306,6 +316,18 @@ export function CadreEsport({
   children: React.ReactNode;
 }) {
   const { reduite, basculer } = useBarreLaterale(large);
+  const [injecte, setInjecte] = useState<React.ReactNode>();
+  const rangee = useRef<React.ComponentRef<typeof View>>(null);
+  const [info, setInfo] = useState<{ libelle: string; top: number; left: number } | undefined>();
+  const cacher = useCallback(() => setInfo(undefined), []);
+  const montrer = useCallback((libelle: string, noeud: unknown) => {
+    type Mesurable = { measureInWindow?(cb: (x: number, y: number, l: number, h: number) => void): void };
+    const entree = noeud as Mesurable | null;
+    const cadre = rangee.current as unknown as Mesurable | null;
+    entree?.measureInWindow?.((x, y, l, h) => cadre?.measureInWindow?.((rx, ry) => setInfo({ libelle, top: y - ry + h / 2 - 16, left: x - rx + l + ESP.xs })));
+  }, []);
+  const infobulle = React.useMemo(() => ({ montrer, cacher }), [montrer, cacher]);
+  const bloc = blocTeam ?? injecte;
   if (!large) {
     return (
       <View style={{ flex: 1 }}>
@@ -335,8 +357,10 @@ export function CadreEsport({
     );
   }
   return (
+    <ContexteBlocLateral.Provider value={setInjecte}>
     <ContexteBarre.Provider value={reduite}>
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+    <ContexteInfobulle.Provider value={infobulle}>
+      <View ref={rangee} style={{ flex: 1, flexDirection: 'row' }}>
         <View
           testID="esport-barre-laterale"
           nativeID="esport-barre-laterale"
@@ -400,6 +424,9 @@ export function CadreEsport({
               <Text style={{ color: theme.attenue, fontSize: 18 }}>{reduite ? '»' : '«'}</Text>
             </Pressable>
           </View>
+          {/* Navigation et bloc de contexte défilent ensemble quand ils ne tiennent pas dans la hauteur (l'espace CM a
+              jusqu'à treize sections) ; l'en-tête (réduction) et le pseudo restent en place. */}
+          <ScrollView testID="esport-barre-defilement" onScroll={cacher} scrollEventThrottle={64} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: ESP.l }} showsVerticalScrollIndicator={false}>
           <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
             {navEsport(fondateur, gererJeux).map(n => (
               <EntreeLaterale
@@ -408,7 +435,7 @@ export function CadreEsport({
                 libelle={n.libelle}
                 glyphe={n.glyphe}
                 description={n.description}
-                choisi={onglet === n.cle && !blocTeam && !notifications?.actif}
+                choisi={onglet === n.cle && !bloc && !notifications?.actif}
                 compteur={compteurs?.[n.cle]}
                 onPress={() => onOnglet(n.cle)}
                 testID={`esport-nav-${n.cle}`}
@@ -420,7 +447,7 @@ export function CadreEsport({
                 libelle={trNf('titre')}
                 glyphe="🔔"
                 description={trNf('sous')}
-                choisi={notifications.actif && !blocTeam}
+                choisi={notifications.actif && !bloc}
                 compteur={notifications.n}
                 onPress={notifications.onPress}
                 testID="esport-nav-notifications"
@@ -428,19 +455,10 @@ export function CadreEsport({
               />
             ) : null}
           </View>
-          {blocTeam ? (
-            <View
-              style={{
-                gap: ESP.xs,
-                borderTopWidth: 1,
-                borderTopColor: theme.ligne,
-                paddingTop: ESP.m,
-              }}
-            >
-              {blocTeam}
-            </View>
+          {bloc ? (
+            <View style={{ gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.m }}>{bloc}</View>
           ) : null}
-          <View style={{ flex: 1 }} />
+          </ScrollView>
           {pseudo && !reduite ? (
             <Text style={{ ...attenue(theme), paddingHorizontal: ESP.s }} numberOfLines={1}>
               {tr('cadreEsport.connecte', { pseudo })}
@@ -451,8 +469,21 @@ export function CadreEsport({
           <BandeauTranscriptions theme={theme} />
           <View style={{ flex: 1 }}>{children}</View>
         </View>
+        {reduite && info ? (
+          <View
+            pointerEvents="none"
+            testID="esport-barre-infobulle"
+            style={{ position: 'absolute', left: info.left, top: info.top, zIndex: 50, paddingHorizontal: ESP.s, paddingVertical: ESP.xxs, borderRadius: 8, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.ligne }}
+          >
+            <Text style={{ ...texte(theme, 13), fontWeight: '600' }} numberOfLines={1}>
+              {info.libelle}
+            </Text>
+          </View>
+        ) : null}
       </View>
+    </ContexteInfobulle.Provider>
     </ContexteBarre.Provider>
+    </ContexteBlocLateral.Provider>
   );
 }
 
