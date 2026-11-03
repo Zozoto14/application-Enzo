@@ -131,8 +131,9 @@ export function Drive({
   const infoPortee = portees?.find(p => p.portee === portee);
   const droits = contenu?.droits ?? infoPortee?.droits;
   const depot = Boolean(droits?.depot);
+  const aDroits = Boolean(droits);
   useEffect(() => {
-    if (!portee || depot || !droits) return undefined;
+    if (!portee || depot || !aDroits) return undefined;
     let vivant = true;
     api.arbre(portee).then(
       r => vivant && setArbre(r.dossiers),
@@ -141,7 +142,7 @@ export function Drive({
     return () => {
       vivant = false;
     };
-  }, [api, portee, depot, droits, versionArbre]);
+  }, [api, portee, depot, aDroits, versionArbre]);
   const ouvrirDossier = (id: string | null) => {
     setResultats(undefined);
     setCorbeille(false);

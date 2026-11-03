@@ -201,6 +201,8 @@ export function useGlisser(o: OptionsGlisser): Glisser {
     };
 
     const relache = (e: PointerEvent) => {
+      // Écran tactile : un « pointercancel » pendant le glisser n'arrête rien (la fin vient de « touchend »).
+      if (etat.mode === 'glisse' && e.type === 'pointercancel' && e.pointerType === 'touch') return;
       if (etat.mode === 'glisse') {
         finirGlisse(e.type === 'pointerup');
         return;
