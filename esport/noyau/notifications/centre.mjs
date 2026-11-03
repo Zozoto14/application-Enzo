@@ -22,6 +22,7 @@ import { echec, iso, jsonOu } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
 import { CATEGORIES, categoriePerso, chargePublique, lienDeCategorie, regleDe, regleEffective } from './regles.mjs';
 import { aCm, droitsLecteur, teamsDuLecteur, voit } from './droits.mjs';
+import { horsTableauxInterdits } from '../cm/acces.mjs';
 
 export const RETENTION_NOTIFICATIONS_JOURS = 90;
 const JOUR_MS = 86_400_000;
@@ -133,11 +134,14 @@ async function annoncerEvenement(base, ev, regle) {
     if (selonPreferences(await lirePreferences(base, p.compte_id), categorie, p.team_id, { annonce: true })) annoncer({ compte: p.compte_id, id: p.id, source: 'perso', categorie, teamId: p.team_id ?? null });
   }
   if (regle.acces === 'aucun') return;
+  // Tableau CM de l'élément (migration 0046) : jamais annoncé à qui ne voit pas ce tableau restreint.
+  const tableau = ev.entite_type === 'cm_tableau' ? ev.entite_id : ev.entite_type === 'cm_carte' && ev.entite_id ? ((await base.premier('SELECT tableau_id FROM cm_cartes WHERE id = ?', [ev.entite_id]))?.tableau_id ?? null) : null;
   const comptes = await base.tous('SELECT id FROM comptes', []);
   for (const { id: compte } of comptes) {
     if (deja.has(compte) || compte === ev.acteur_id) continue;
     const droits = await droitsLecteur(base, { compte, superAdmin: compte === 'principal' });
     if (!voit(droits, regle.acces, ev.team_id)) continue;
+    if (tableau && droits.tableauxInterdits?.includes(tableau)) continue;
     if (selonPreferences(await lirePreferences(base, compte), regle.categorie, ev.team_id, { annonce: true })) annoncer({ compte, id: ev.id, source: 'fil', categorie: regle.categorie, teamId: ev.team_id ?? null });
   }
 }
@@ -205,6 +209,11 @@ export function filtrePerso(droits) {
   );
   params.push(...PERSO_HORS_TEAM, ...teams, ...teamsCm);
   if (!droits.club.has('sponsors.voir')) conditions.push("COALESCE(p.categorie, '') <> 'sponsors'");
+  // Carte d'un tableau CM restreint dont le lecteur n'est pas (ou plus) : masquée (migration 0046).
+  if (droits.tableauxInterdits?.length) {
+    conditions.push(`(p.cm_carte_id IS NULL OR p.cm_carte_id NOT IN (SELECT ki.id FROM cm_cartes ki WHERE ki.tableau_id IN (${droits.tableauxInterdits.map(() => '?').join(', ')})))`);
+    params.push(...droits.tableauxInterdits);
+  }
   if (!aCm(droits)) conditions.push("COALESCE(p.categorie, '') NOT IN ('cm', 'drive')");
   return { sql: conditions.join(' AND '), params };
 }
@@ -240,7 +249,10 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     const visibles = [...new Set(cles.filter(c => voit(droits, c.acces, c.team_id)).map(c => c.portee_cle))];
     if (!visibles.length) return { c: '1 = 0', e: '1 = 0', params: [] };
     const marques = visibles.map(() => '?').join(', ');
-    return { c: `c.portee_cle IN (${marques})`, e: `e.portee_cle IN (${marques})`, params: visibles };
+    // Tableaux CM restreints dont le lecteur n'est pas : leur tableau et leurs cartes sont masqués (migration 0046).
+    const hc = horsTableauxInterdits('c', droits.tableauxInterdits ?? []);
+    const he = horsTableauxInterdits('e', droits.tableauxInterdits ?? []);
+    return { c: `(c.portee_cle IN (${marques}) AND ${hc.sql})`, e: `(e.portee_cle IN (${marques}) AND ${he.sql})`, params: [...visibles, ...hc.params] };
   }
 
   /** Requête unifiée (fil + personnelles) d'un lecteur, avant filtres. */

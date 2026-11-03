@@ -134,7 +134,8 @@ export interface DetailFichierDrive {
   fichier: FichierDrive;
   chemin: MaillonDrive[];
   versions: VersionDrive[];
-  utilisations: { cartes: Array<{ id: string; titre: string; tableauId: string }>; visuels: number; sponsors: number };
+  /** `cartesMasquees` : cartes de tableaux restreints que le lecteur ne voit pas (migration 0046), comptées sans titre. */
+  utilisations: { cartes: Array<{ id: string; titre: string; tableauId: string }>; cartesMasquees?: number; visuels: number; sponsors: number };
   droits: DroitsDrive & { modifier: boolean };
   noms: Record<string, string | null>;
 }

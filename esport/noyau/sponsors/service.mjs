@@ -20,6 +20,7 @@ import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { lienSur } from '../review/markdown.mjs';
 import { MOTIF_COMPTE, MOTIF_UUID, porteesDe, positionEntre } from '../cm/commun.mjs';
 import { DUREE_LIEN_CM_MS, lireInstantCm } from '../cm/tableaux.mjs';
+import { lecteurTableaux } from '../cm/acces.mjs';
 import { PORTEE_SPONSORS, comptesSponsors, contexteSponsors, droitsSponsors } from './commun.mjs';
 import { effacerFichierCmSiOrphelin } from '../cm/utilisations.mjs';
 import {
@@ -768,7 +769,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
    * Avancement des obligations (`lignes`) : périodes passées et courante (12 dernières), quantité faite
    * (saisie à la main + posts CM publiés qui mentionnent le partenaire, pour le comptage « cartes »).
    */
-  async function avancement(lignes, aujourd, { historique = 12 } = {}) {
+  async function avancement(lignes, aujourd, { historique = 12, acteur = null } = {}) {
     if (!lignes.length) return new Map();
     const suivis = await lignesParIds(base, 'SELECT * FROM sp_suivi WHERE obligation_id', lignes.map(o => o.id));
     const parObligation = new Map();
@@ -777,6 +778,8 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
       parObligation.get(s.obligation_id).set(s.periode, s);
     }
     const cartes = await cartesMentionnant([...new Set(lignes.filter(o => o.comptage === 'cartes').map(o => o.partenaire_id))]);
+    // Posts d'un tableau CM restreint dont le lecteur n'est pas (migration 0046) : comptés, sans titre ni lien.
+    const interdits = new Set(acteur ? await lecteurTableaux(base, acteur).interdits() : []);
     const sortie = new Map();
     for (const o of lignes) {
       const periodes = periodesEntre(o.frequence, o.debut, o.fin ?? null, aujourd, historique).map(p => {
@@ -784,7 +787,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
         const parCartes = o.comptage === 'cartes' ? (cartes.get(o.partenaire_id) ?? []).filter(c => c.jour >= p.debut && c.jour <= p.fin) : [];
         const manuel = Number(s?.fait ?? 0);
         const fait = manuel + parCartes.length;
-        return { cle: p.cle, debut: p.debut, fin: p.fin, manuel, cartes: parCartes.map(c => ({ id: c.id, titre: c.titre, tableauId: c.tableauId, jour: c.jour })), fait, quantite: Number(o.quantite), note: s?.note ?? '', etat: etatPeriode({ fait, quantite: Number(o.quantite), fin: p.fin }, aujourd) };
+        return { cle: p.cle, debut: p.debut, fin: p.fin, manuel, cartes: parCartes.map(c => (interdits.has(c.tableauId) ? { id: null, titre: null, tableauId: null, jour: c.jour, masque: true } : { id: c.id, titre: c.titre, tableauId: c.tableauId, jour: c.jour })), fait, quantite: Number(o.quantite), note: s?.note ?? '', etat: etatPeriode({ fait, quantite: Number(o.quantite), fin: p.fin }, aujourd) };
       });
       const courante = periodes.find(p => p.debut <= aujourd && p.fin >= aujourd) ?? null;
       sortie.set(o.id, { periodes, courante, enRetard: periodes.filter(p => p.etat === 'en_retard').length });
@@ -836,7 +839,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     const aujourd = aujourdhui();
     const contrats = await contratsDe(lignes.map(p => p.id));
     const obligations = await lignesParIds(base, 'SELECT * FROM sp_obligations WHERE supprime_le IS NULL AND archive_le IS NULL AND partenaire_id', lignes.map(p => p.id));
-    const av = await avancement(obligations, aujourd, { historique: 6 });
+    const av = await avancement(obligations, aujourd, { historique: 6, acteur });
     const teams = await nomsTeams(lignes.flatMap(p => jsonOu(p.teams, [])));
     return {
       partenaires: lignes.map(p => {
@@ -870,7 +873,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     const aujourd = aujourdhui();
     const contrats = (await contratsDe([p.id])).map(c => contratPublic(c, aujourd));
     const obligations = await base.tous('SELECT * FROM sp_obligations WHERE partenaire_id = ? AND supprime_le IS NULL ORDER BY archive_le IS NOT NULL, cree_le', [p.id]);
-    const av = await avancement(obligations, aujourd);
+    const av = await avancement(obligations, aujourd, { acteur });
     const contacts = await base.tous('SELECT * FROM sp_contacts WHERE partenaire_id = ? ORDER BY principal DESC, cree_le', [p.id]);
     const echanges = await base.tous('SELECT * FROM sp_echanges WHERE partenaire_id = ? AND supprime_le IS NULL ORDER BY date DESC, cree_le DESC LIMIT ?', [p.id, MAX_ECHANGES_FICHE]);
     const teams = await nomsTeams(jsonOu(p.teams, []));
@@ -1214,7 +1217,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     }
 
     const obligations = await base.tous("SELECT o.*, p.nom AS partenaire_nom FROM sp_obligations o JOIN sp_partenaires p ON p.id = o.partenaire_id AND p.supprime_le IS NULL AND p.statut = 'actif' WHERE o.supprime_le IS NULL AND o.archive_le IS NULL", []);
-    const av = await avancement(obligations, aujourd, { historique: 12 });
+    const av = await avancement(obligations, aujourd, { historique: 12, acteur });
     const enRetard = [];
     const aFaire = [];
     for (const o of obligations) {

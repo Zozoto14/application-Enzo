@@ -22,6 +22,7 @@
  * Content-Disposition, SVG et texte avec une politique « sandbox » (medias/lecture.mjs).
  */
 
+import { lecteurTableaux } from '../acces.mjs';
 import { evenement } from '../../evenements.mjs';
 import { cheminSigne, verifierLien } from '../../fichiers.mjs';
 import { FORMATS, FORMATS_PERMIS, analysePublique } from '../../medias/formats.mjs';
@@ -605,6 +606,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const versions = await base.tous('SELECT * FROM cm_drive_versions WHERE element_id = ? ORDER BY version DESC', [f.id]);
     const ids = [f.fichier_id];
     const pieces = await lignesParIds(base, 'SELECT p.id, c.id AS carte_id, c.titre, c.tableau_id FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id WHERE p.supprime_le IS NULL AND c.supprime_le IS NULL AND p.fichier_id', ids);
+    const interdits = new Set(await lecteurTableaux(base, acteur).interdits());
     const visuels = await lignesParIds(base, 'SELECT id FROM cm_visuels WHERE supprime_le IS NULL AND fichier_id', ids);
     const sponsors = await lignesParIds(base, 'SELECT id FROM sp_pieces WHERE supprime_le IS NULL AND fichier_id', ids);
     const noms = await pseudosDe(base, [f.cree_par, f.maj_par, ...versions.map(v => v.cree_par)].filter(Boolean));
@@ -612,7 +614,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       fichier,
       chemin: f.dossier_id ? (chaine(map, map.get(f.dossier_id)) ?? []).map(d => ({ id: d.id, nom: d.nom ?? null, cle: d.cle ?? null })) : [],
       versions: versions.map(v => ({ version: Number(v.version), nom: v.nom, type: v.type_mime, taille: Number(v.taille), creePar: v.cree_par ?? null, creeLe: v.cree_le, actuelle: Number(v.version) === Number(f.version), meta: metaPublique(v) })),
-      utilisations: { cartes: pieces.map(p => ({ id: p.carte_id, titre: p.titre, tableauId: p.tableau_id })), visuels: visuels.length, sponsors: sponsors.length },
+      // Cartes d'un tableau restreint dont l'acteur n'est pas (migration 0046) : comptées, sans titre ni lien.
+      utilisations: { cartes: pieces.filter(p => !interdits.has(p.tableau_id)).map(p => ({ id: p.carte_id, titre: p.titre, tableauId: p.tableau_id })), cartesMasquees: pieces.filter(p => interdits.has(p.tableau_id)).length, visuels: visuels.length, sponsors: sponsors.length },
       droits: { ...dc.drive, modifier: peutModifierFichier(dc, f) },
       noms,
     };

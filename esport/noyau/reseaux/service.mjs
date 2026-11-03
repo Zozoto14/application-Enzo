@@ -14,6 +14,7 @@ import { evenement } from '../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteNettoye } from '../outils.mjs';
 import { lignesParIds } from '../requetes.mjs';
 import { MOTIF_UUID } from '../cm/commun.mjs';
+import { lecteurTableaux } from '../cm/acces.mjs';
 import { chiffrerWebhook, finDeWebhook, masquerWebhook, validerUrlWebhook } from '../discord/chiffrement.mjs';
 import { appelerDiscord, modulesActifs } from '../discord/file.mjs';
 import { construireCharge, lireRoleMention, texteCharge } from '../discord/messages.mjs';
@@ -487,14 +488,16 @@ export function servicesReseaux({ base, maintenant = () => Date.now(), cle, fetc
   async function annonces(acteur) {
     const d = await droitsReseaux(base, acteur);
     exigerGerer(d);
-    const lignes = await base.tous('SELECT a.*, c.titre FROM cm_rs_annonces a LEFT JOIN cm_cartes c ON c.id = a.carte_id ORDER BY a.maj_le DESC, a.id LIMIT 50', []);
+    const lignes = await base.tous('SELECT a.*, c.titre, c.tableau_id FROM cm_rs_annonces a LEFT JOIN cm_cartes c ON c.id = a.carte_id ORDER BY a.maj_le DESC, a.id LIMIT 50', []);
+    // Post d'un tableau CM restreint dont l'acteur n'est pas (migration 0046) : ni titre ni lien vers la carte.
+    const interdits = new Set(await lecteurTableaux(base, acteur).interdits());
     const salons = new Map((await base.tous('SELECT id, nom FROM cm_rs_salons', [])).map(s => [s.id, s.nom]));
     const teams = await teamsConnues(lignes.map(l => l.team_id));
     return {
       annonces: lignes.map(l => ({
         id: l.id,
-        carteId: l.carte_id,
-        titre: l.titre ?? '',
+        carteId: interdits.has(l.tableau_id) ? null : l.carte_id,
+        titre: interdits.has(l.tableau_id) ? '' : (l.titre ?? ''),
         reseau: l.reseau,
         cible: l.team_id ? { genre: 'team', nom: teams.get(l.team_id) ?? '' } : { genre: 'salon', nom: salons.get(l.salon_id) ?? '' },
         statut: l.statut,
@@ -519,12 +522,22 @@ export function servicesReseaux({ base, maintenant = () => Date.now(), cle, fetc
     interactions: interactions(r),
   });
 
-  function publicationPublique(p, { releves = [], comptes, teams }) {
+  /**
+   * Cartes (parmi `ids`) d'un tableau CM restreint dont l'acteur n'est pas (migration 0046) : la publication, déjà
+   * publique sur le réseau, reste dans les statistiques, mais sans lien vers sa carte.
+   */
+  async function cartesFermees(acteur, ids) {
+    const interdits = new Set(await lecteurTableaux(base, acteur).interdits());
+    if (!interdits.size || !ids.length) return new Set();
+    return new Set((await lignesParIds(base, 'SELECT id, tableau_id FROM cm_cartes WHERE id', ids)).filter(c => interdits.has(c.tableau_id)).map(c => c.id));
+  }
+
+  function publicationPublique(p, { releves = [], comptes, teams, fermees }) {
     const dernier = dernierReleve(releves);
     const compte = p.compte_id ? comptes?.get(p.compte_id) : null;
     return {
       id: p.id,
-      carteId: p.carte_id ?? null,
+      carteId: p.carte_id && !fermees?.has(p.carte_id) ? p.carte_id : null,
       reseau: p.reseau,
       url: p.url,
       titre: p.titre,
@@ -608,7 +621,8 @@ export function servicesReseaux({ base, maintenant = () => Date.now(), cle, fetc
     const releves = await relevesDe(lignes.map(p => p.id));
     const comptes = new Map((await lignesParIds(base, 'SELECT id, identifiant FROM cm_rs_comptes WHERE id', lignes.map(p => p.compte_id).filter(Boolean))).map(c => [c.id, c]));
     const teams = await teamsConnues(lignes.map(p => p.team_id));
-    return { publications: lignes.map(p => publicationPublique(p, { releves: releves.get(p.id), comptes, teams })), editer: d.club.has('cm.editer') || [...d.teams.values()].some(s => s.has('cm.editer')) };
+    const fermees = await cartesFermees(acteur, lignes.map(p => p.carte_id).filter(Boolean));
+    return { publications: lignes.map(p => publicationPublique(p, { releves: releves.get(p.id), comptes, teams, fermees })), editer: d.club.has('cm.editer') || [...d.teams.values()].some(s => s.has('cm.editer')) };
   }
 
   /** `GET /cm/reseaux/publications/:id` : relevés et évolution (J+n, écarts, engagement). */
@@ -619,7 +633,7 @@ export function servicesReseaux({ base, maintenant = () => Date.now(), cle, fetc
     const comptes = new Map((await lignesParIds(base, 'SELECT id, identifiant FROM cm_rs_comptes WHERE id', [p.compte_id].filter(Boolean))).map(c => [c.id, c]));
     const teams = await teamsConnues([p.team_id]);
     return {
-      publication: publicationPublique(p, { releves, comptes, teams }),
+      publication: publicationPublique(p, { releves, comptes, teams, fermees: await cartesFermees(acteur, [p.carte_id].filter(Boolean)) }),
       releves: releves.map(RELEVE_PUBLIC),
       evolution: evolutionPost(releves, jourDans(Date.parse(p.publie_le), FUSEAU)),
       editer: peutSur(d, 'cm.editer', p.team_id),

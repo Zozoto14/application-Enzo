@@ -17,7 +17,8 @@
 
 import { evenement } from '../../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteNettoye } from '../../outils.mjs';
-import { pseudosDe } from '../../requetes.mjs';
+import { lignesParIds, pseudosDe } from '../../requetes.mjs';
+import { lecteurTableaux } from '../acces.mjs';
 import { cheminSigne } from '../../fichiers.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, peut, porteesDe, teamDePortee, MOTIF_UUID } from '../commun.mjs';
 import { DUREE_LIEN_CM_MS } from '../tableaux.mjs';
@@ -208,8 +209,9 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     exigerUuid(fichierId, 'fichier');
     const f = await base.premier('SELECT id, portee FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [fichierId]);
     const image = f ? await base.premier('SELECT portee FROM cm_visuel_images WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]) : null;
-    const visuel = f && !image ? await base.premier('SELECT id FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]) : null;
+    const visuel = f && !image ? await base.premier('SELECT id, carte_id FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]) : null;
     if (!f || (!image && !visuel)) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    if (visuel && !(await sansCartesInterdites(acteur, [visuel])).length) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
     if (image?.portee === PORTEE_CLUB) await voitSection(acteur);
     // Image prise dans le Drive : sa portée est celle de l'image (les octets peuvent venir d'une copie).
     else await ctxPortee(acteur, image?.portee ?? f.portee, 'cm.voir');
@@ -487,7 +489,19 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const ctx = await ctxPortee(acteur, v.portee, ...(permissions.length ? permissions : ['cm.voir'])).catch(e => {
       throw e.statut === 403 && permissions.length ? e : echec(404, 'visuel-introuvable', 'Visuel introuvable.');
     });
+    // Visuel généré depuis une carte d'un tableau restreint dont l'acteur n'est pas (migration 0046) : 404.
+    if ((await sansCartesInterdites(acteur, [v])).length === 0) throw echec(404, 'visuel-introuvable', 'Visuel introuvable.');
     return { v, ctx };
+  }
+
+  /** Retire les visuels liés à une carte d'un tableau restreint dont l'acteur n'est pas (migration 0046). */
+  async function sansCartesInterdites(acteur, lignes) {
+    const cartes = [...new Set(lignes.map(l => l.carte_id).filter(Boolean))];
+    if (!cartes.length) return lignes;
+    const interdits = new Set(await lecteurTableaux(base, acteur).interdits());
+    if (!interdits.size) return lignes;
+    const fermees = new Set((await lignesParIds(base, 'SELECT id, tableau_id FROM cm_cartes WHERE id', cartes)).filter(c => interdits.has(c.tableau_id)).map(c => c.id));
+    return lignes.filter(l => !l.carte_id || !fermees.has(l.carte_id));
   }
 
   /** `GET /cm/visuels?portee&carte` : visuels visibles (les plus récents d'abord). */
@@ -500,7 +514,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const p = await voitSection(acteur);
     const portees = [...(p.club.has('cm.voir') ? [PORTEE_CLUB] : []), ...[...p.teams].filter(([, s]) => s.has('cm.voir')).map(([id]) => id)].filter(x => !portee || x === portee);
     if (!portees.length) return { visuels: [] };
-    const lignes = await base.tous(`SELECT * FROM cm_visuels WHERE supprime_le IS NULL AND portee IN (${portees.map(() => '?').join(', ')}) ORDER BY maj_le DESC LIMIT 100`, portees);
+    const lignes = await sansCartesInterdites(acteur, await base.tous(`SELECT * FROM cm_visuels WHERE supprime_le IS NULL AND portee IN (${portees.map(() => '?').join(', ')}) ORDER BY maj_le DESC LIMIT 100`, portees));
     return { visuels: await Promise.all(lignes.map(l => visuelPublic(acteur, l))) };
   }
 

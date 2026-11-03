@@ -123,6 +123,9 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 2 && m === 'GET') return tb.tableau(acteur, b, { archives: q.get('archives') === '1', origine });
     if (n === 2 && m === 'PATCH') return tb.modifierTableau(acteur, b, await lireCorps(), { origine });
     if (n === 2 && m === 'DELETE') return tb.supprimerTableau(acteur, b);
+    // Accès au tableau (migration 0046) : tous ceux qui ont accès au CM, ou restreint (cm.gerer ou créateur).
+    if (n === 3 && c === 'acces' && m === 'GET') return tb.accesTableau(acteur, b);
+    if (n === 3 && c === 'acces' && m === 'PUT') return tb.changerAcces(acteur, b, await lireCorps());
     if (n === 3 && c === 'listes' && m === 'POST') return tb.creerListe(acteur, b, await lireCorps());
     if (n === 3 && c === 'etiquettes' && m === 'POST') return tb.creerEtiquette(acteur, b, await lireCorps());
     if (n === 4 && c === 'etiquettes' && d === 'ordre' && m === 'PUT') return tb.ordonnerEtiquettes(acteur, b, await lireCorps());

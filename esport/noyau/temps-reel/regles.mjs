@@ -209,6 +209,9 @@ export function publicationsDe(methode, chemin, acteur) {
   }
   const club = sujetClub(chemin);
   if (!club) return [];
+  // Accès d'un tableau CM changé (migration 0046) : les autorisations en cache sont oubliées partout (un retrait vaut
+  // tout de suite, présence et clés comprises).
+  if (objet && /^\/cm\/tableaux\/[^/]+\/acces$/.test(chemin)) return [{ ...objet, action, bump, invalider: true }];
   if (objet) return [{ ...objet, action, bump }];
   return [{ ...club, action }];
 }

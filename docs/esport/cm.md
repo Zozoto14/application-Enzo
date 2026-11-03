@@ -26,7 +26,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -221,6 +221,53 @@ nombre) prévient les autres. L'état « lu » est gardé **par le serveur, par 
   (`transfert.mjs`) ; **RGPD** : l'export d'un compte contient son état « lu » (`cmCommentairesVus`) et ses cartes
   suivies (`cmCartesSuivies`), sa suppression efface les deux.
 
+## Accès au tableau (tableaux restreints)
+
+Un tableau est visible de **« Tous ceux qui ont accès au CM »** de sa portée (défaut : le comportement d'avant, et
+la valeur de tous les tableaux existants à la migration 0046) ou **« Restreint »** : seulement les **personnes** et
+les **rôles** choisis — rôles CM, rôles du club (Rôles et permissions), rôles de team (ceux de la team du tableau ;
+pour un tableau du club, ceux des teams au module CM) —, chacun avec un niveau :
+
+| Niveau | Ce qu'il ouvre |
+| --- | --- |
+| **Peut voir** | le tableau, ses cartes, commentaires, pièces jointes, visuels, en **lecture seule** : aucune écriture (ni commentaire, ni validation, ni déplacement : 403) |
+| **Peut modifier** | les permissions CM **habituelles** du compte sur la portée (cm.editer, cm.valider, cm.gerer…) |
+
+- **Le Fondateur (CEO) voit et modifie toujours tout**, sans être cité. L'accès au tableau ne **donne** jamais rien :
+  il faut d'abord voir le CM de la portée (cm.voir) ; il ne fait que retirer. Une personne citée qui perd son
+  rôle CM ne voit plus le tableau ; un rôle compte pour qui l'a **aujourd'hui** (affectation CM du club ou de la
+  team du tableau — membre actif —, rôle du club, rôle de team d'un membre actif).
+- **Réglage** : menu **⋯** du tableau › **Accès au tableau…** (volet : « Tous ceux qui ont accès au CM » ou
+  « Restreint », puis pour chaque personne et chaque rôle **Aucun / Peut voir / Peut modifier**, et « Qui voit ce
+  tableau aujourd'hui »). Réservé à qui a **cm.gerer** sur la portée **ou a créé le tableau**, au niveau « peut
+  modifier » (le Fondateur toujours). Un **cadenas « Restreint »** s'affiche sur le tableau dans la liste et dans son
+  en-tête.
+- **Garde-fous** (409) : le **tableau par défaut** « Contenus » reste ouvert (`tableau-defaut` : dépôts, clips,
+  suggestions et événements y arrivent) ; un tableau restreint garde **au moins une personne, hors Fondateur, qui
+  peut le gérer** (« peut modifier » avec cm.gerer, ou son créateur : `acces-sans-gestionnaire`) ; hors Fondateur,
+  on ne **se retire pas soi-même** (`acces-soi-meme`). Une personne citée doit avoir accès au CM de la portée, un
+  rôle doit exister (400 `regle-inconnue`) ; 100 personnes ou rôles au plus.
+- **Contrôle côté serveur partout** (`esport/noyau/cm/acces.mjs`, relu à chaque requête : un retrait vaut **tout de
+  suite**) : qui n'est pas du tableau reçoit **404** (on ne dit pas qu'il existe) sur le tableau, ses cartes,
+  commentaires, checklists, pièces jointes (et leurs **liens signés** déjà donnés : 403), étiquettes, listes, visuels
+  générés depuis ses cartes, son réglage d'accès ; il ne le voit ni dans la **liste des tableaux**, ni dans le
+  **calendrier éditorial**, la **recherche**, **À valider**, l'**Accueil CM**, l'**état** (`/cm/etat` : versions et
+  compteur « à valider »), la partie CM d'une team (tableaux, dépôts), le **journal** (section et team), les
+  utilisations d'un fichier du Drive (comptées, sans titre), les posts comptés d'un **sponsor** (« post d'un tableau
+  restreint », sans titre ni lien), les annonces et publications de **Réseaux** (sans lien vers la carte) ; l'**import
+  Trello** ne met pas à jour un tableau restreint qu'il ne voit pas (409) et l'aperçu n'en donne pas le nom.
+  **Pastilles de commentaires non lus** : jamais comptées pour un tableau restreint qu'on ne voit pas (carte, colonne,
+  tableau, sous-onglet, groupe Contenus, tuile CM). Les **ressources** (DATA) liées à une de ses cartes ne la montrent
+  pas (« Voir où il est lié »). **Notifications** : les personnelles (assignée, mention, nouveau commentaire — suiveurs
+  compris : un suiveur retiré n'est plus prévenu —, à valider, validé, refusé) ne partent qu'à ceux qui voient
+  le tableau (`notifications.cm_carte_id`), et le centre masque à la lecture le fil et les personnelles d'un tableau
+  restreint (ou de ses cartes, même déplacées) dont le lecteur n'est pas ou plus — anciennes notifications
+  comprises. **Temps réel** : la clé d'une carte, sa version, la présence et l'auteur ne partent que si la route de la
+  carte répond au destinataire (rejouée à chaque message) ; changer l'accès d'un tableau oublie les autorisations en
+  cache (`invalider`). Les personnes **assignables** et **mentionnables** d'un tableau restreint sont celles qui le voient.
+- Un post **publié** reste public sur son réseau : sa ligne de statistiques (Réseaux) et son annonce Discord restent,
+  sans lien vers la carte pour qui ne voit pas le tableau.
+
 ## Posts et validation
 
 Une carte peut être un **post** : réseaux ciblés, **textes FR et EN par réseau** avec compteur de caractères
@@ -332,7 +379,8 @@ Trello pour les ouvrir (l'app le dit) ; une image de couverture Trello reste une
 
 Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), post à valider (et à valider de nouveau après une
 modification), post validé ou refusé (auteur et membres de la carte), dépôt d'une team (CM du club), clip proposé (CM
-de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive).
+de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive). Pour une carte d'un
+**tableau restreint**, seulement ceux qui voient le tableau (voir « Accès au tableau »).
 
 Journal (bus) : actions `cm.*` (tableaux, cartes, commentaires, dépôts, soumissions, validations, refus,
 invalidations, publications, clips, import Trello, rôles, affectations, réglages). Une action sur un tableau de team
@@ -370,6 +418,7 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | --- | --- |
 | `GET /cm/moi` ; `GET /cm/etat` | session |
 | `GET\|POST /cm/tableaux` ; `GET\|PATCH\|DELETE /cm/tableaux/:id` (`?archives=1`) | voir ; gerer |
+| `GET\|PUT /cm/tableaux/:id/acces` (`{ acces: 'tous' \| 'restreint', regles: [{ genre: 'compte' \| 'role_cm' \| 'role_club' \| 'role_team', cible, niveau: 'voir' \| 'modifier' }] }`) | gerer ou créateur du tableau |
 | `POST /cm/tableaux/:id/(listes\|etiquettes\|cartes)` ; `PATCH /cm/listes/:id` ; `POST …/deplacer` ; `PATCH /cm/etiquettes/:id` ; `PUT /cm/tableaux/:id/etiquettes/ordre { ids }` | editer |
 | `DELETE /cm/etiquettes/:id` (définitif, rend `{ cartes }`) ; `POST /cm/etiquettes/:id/fusionner { vers }` | gerer |
 | `GET\|PATCH\|DELETE /cm/cartes/:id` ; `POST /cm/cartes/:id/deplacer` (`{ listeId, index, tableauId? }`) | voir ; editer (auteur d'un dépôt : titre, description, pièces) |
@@ -388,6 +437,12 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 
 Limites de débit (par compte et par heure) : 20 imports Trello, 30 clips, 30 dépôts.
 
+La migration `0046_cm_tableaux_acces.sql` ajoute `cm_tableaux.acces` (`'tous'` pour tous les tableaux existants),
+`cm_tableau_acces` (personnes et rôles d'un tableau restreint, avec leur niveau ; dans l'export / import de la base ;
+l'export RGPD d'un compte donne les tableaux où il est cité, la suppression du compte l'en retire) et
+`notifications.cm_carte_id` (carte d'une notification personnelle du CM, remplie pour les existantes depuis leur
+événement).
+
 La migration `0042_cm_tableaux_fond.sql` ajoute `cm_tableaux.fond` (JSON de la teinte ou du dégradé, ou
 `{ genre: 'image' }`) et `cm_tableaux.fond_fichier_id` (fichier CM de l'image), et `cm_preferences` (choix
 d'affichage par compte : dans l'export / import de la base et l'export RGPD du compte, effacés avec lui).
@@ -403,6 +458,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 - Serveur : `esport/noyau/cm/` — `commun.mjs` (portées, droits), `reseaux.mjs` et `posts.mjs` (règles pures),
   `tableaux.mjs`, `equipe.mjs`, `clips.mjs`, `droits.mjs`, `trello.mjs` (lecture pure de l'export),
   `importTrello.mjs`, `suggestions.mjs` et `bus.mjs` (abonnés du bus), `calendriers.mjs` (calendriers des teams),
+  `acces.mjs` (tableaux restreints : niveaux, tableaux interdits d'un lecteur, condition SQL du journal et du fil),
   `rgpd.mjs`, `routes.mjs`, `service.mjs`.
 - App : `src/esport/cm/` (client, règles des réseaux, phrases, `fonds.ts`), `src/esport/ui/cm/` (EspaceCm, Tableau,
   FicheCarte, Calendrier, Clips, ImportTrello, RolesCm, CmTeam), textes `src/esport/i18n/cm.ts`.
@@ -410,7 +466,10 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
   permissions, tableaux, circuit de validation et invalidation, suggestions, clips, import Trello et entrées
   malformées, RGPD, export / import), `esport/test/cm-commentaires.test.mjs` (SQLite et PostgreSQL : commentaires non lus par compte, vu à l'ouverture, tout lu, permissions, notifications aux bonnes personnes, temps réel, RGPD) et `src/esport/CmCommentairesNonLus.test.tsx` (pastilles carte, colonne, tableau, groupe, tuile), `esport/test/cm-tableaux.test.mjs` (chaque modification d'une carte en
   POST + `X-Methode` relue en base, cartes Trello, suggestions, post validé → « à valider », version 409,
-  permissions, fond, préférences, calendriers des teams et périmètre), `src/esport/Cm.test.tsx`,
+  permissions, fond, préférences, calendriers des teams et périmètre), `esport/test/cm-acces.test.mjs` (tableau
+  restreint : rien par chaque route — liste, carte, commentaires, calendrier, recherche, à valider, état, journal,
+  notifications, temps réel, lien signé —, « peut voir » sans écriture, retrait immédiat, Fondateur, garde-fous, rôles,
+  export / import, RGPD), `src/esport/CmAcces.test.tsx` (menu, cadenas, réglage envoyé), `src/esport/Cm.test.tsx`,
   `src/esport/CmTableaux.test.tsx` (brouillons gardés, conflit, défilement par colonne, colonne réduite, cartes
   compactes, fond, calendriers superposés) et le bout en bout `scripts/e2e-esport-cm-tableaux.mjs` (site construit,
   faux frontal o2switch qui refuse PATCH / PUT / DELETE, captures 1440 × 900 et 390 × 844).
@@ -424,3 +483,6 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
    **Correspondant CM** à une personne de chaque team (portée = la team ; elle doit en être membre).
 3. Dans chaque team : **Paramètres › Modules › CM** (activé d'office pour une nouvelle team « complète »).
 4. Facultatif : **CM › Réglages** (suggestions, hashtags) ; **CM › Import Trello** pour reprendre les tableaux Trello.
+5. Facultatif : limiter un tableau à certaines personnes : ouvrir le tableau › menu **⋯** › **Accès au tableau…** ›
+   **Restreint**, puis choisir les personnes et les rôles (« peut voir » ou « peut modifier »). Les tableaux existants
+   restent ouverts tant que personne ne les restreint.

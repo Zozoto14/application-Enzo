@@ -40,6 +40,7 @@ import { ChoixDrive } from './drive/ChoixDrive';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand, signalerEtatCm } from './commun';
 import { FicheCarte } from './FicheCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
+import { AccesTableau } from './AccesTableau';
 
 type FiltreEcheance = 'toutes' | 'retard' | 'semaine' | 'sans';
 type FiltreType = 'tout' | 'posts' | 'cartes';
@@ -161,6 +162,7 @@ export function Tableau({
   const [deplacer, setDeplacer] = useState<CarteResume | undefined>();
   const [gestionEtiquettes, setGestionEtiquettes] = useState(false);
   const [choixFond, setChoixFond] = useState(false);
+  const [reglageAcces, setReglageAcces] = useState(false);
   const [limites, setLimites] = useState<Record<string, number>>({});
   const [reduites, setReduites] = useState<string[]>([]);
   const [fantome, setFantome] = useState<{ x: number; y: number; l: number; carte: CarteResume } | undefined>();
@@ -423,6 +425,7 @@ export function Tableau({
           <View accessible={Boolean(d.nonLus)} accessibilityLabel={d.nonLus ? trnCm('nonlus.carte_n', d.nonLus) : undefined}>
             <Compteur theme={theme} n={d.nonLus ?? 0} testID="esport-cm-tableau-nonlus" />
           </View>
+          {t.acces === 'restreint' ? <Badge theme={theme} icone="cadenas" texte={trCm('acces.restreint_badge')} testID="esport-cm-tableau-restreint" /> : null}
         </View>
         <View style={[styles.ligne, { gap: ESP.xs }]}>
           {d.nonLus ? (
@@ -448,6 +451,7 @@ export function Tableau({
               { titre: archives ? trCm('tableau.masquer_archives') : trCm('tableau.voir_archives'), onPress: () => setArchives(a => !a), testID: 'esport-cm-tableau-archives' },
               d.droits.editer && { titre: trCm('fond.changer'), onPress: () => setChoixFond(true), testID: 'esport-cm-tableau-fond' },
               d.droits.editer && { titre: trCm('etiquette.gerer'), onPress: () => setGestionEtiquettes(true), testID: 'esport-cm-tableau-etiquettes' },
+              d.droits.acces && { titre: trCm('acces.menu'), onPress: () => setReglageAcces(true), testID: 'esport-cm-tableau-acces' },
               d.droits.gerer && { titre: trCm('tableau.renommer'), onPress: () => setRenommer({ id: t.id, nom: nomTableau(t) }), testID: 'esport-cm-tableau-renommer' },
               d.droits.gerer &&
                 !t.cleDefaut && {
@@ -732,6 +736,11 @@ export function Tableau({
         </Volet>
       ) : null}
 
+      {reglageAcces ? (
+        <Volet theme={theme} visible titre={trCm('acces.titre')} onFermer={() => setReglageAcces(false)} testID="esport-cm-acces-volet">
+          <AccesTableau theme={theme} api={api} tableauId={t.id} onChange={() => recharger()} />
+        </Volet>
+      ) : null}
       {choixFond ? <ChoixFond theme={theme} api={api} tableau={t} enCours={false} onChoisir={changerFond} onFermer={() => setChoixFond(false)} erreur={erreur} /> : null}
 
       {deplacer ? (

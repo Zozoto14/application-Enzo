@@ -343,7 +343,15 @@ function Contreparties({
             {c?.cartes.length ? (
               <View style={[styles.ligne, { gap: ESP.xs }]}>
                 <Text style={attenue(theme)}>{trSp('obligations.posts_comptes')}</Text>
-                {c.cartes.map(x => (onOuvrirTableau ? <BoutonHub key={x.id} theme={theme} titre={x.titre} onPress={() => onOuvrirTableau(x.tableauId)} testID={`esport-sp-obligation-carte-${x.id}`} /> : <Badge key={x.id} theme={theme} texte={x.titre} />))}
+                {c.cartes.map((x, i) =>
+                  x.masque || !x.id || !x.tableauId ? (
+                    <Badge key={`masque-${i}`} theme={theme} icone="cadenas" texte={trSp('obligations.post_restreint')} />
+                  ) : onOuvrirTableau ? (
+                    <BoutonHub key={x.id} theme={theme} titre={x.titre ?? ''} onPress={() => onOuvrirTableau(x.tableauId as string)} testID={`esport-sp-obligation-carte-${x.id}`} />
+                  ) : (
+                    <Badge key={x.id} theme={theme} texte={x.titre ?? ''} />
+                  ),
+                )}
               </View>
             ) : null}
             <Text style={attenue(theme)}>{[trSp('obligations.du_au', { debut: o.debut, fin: o.fin ?? '…' }), o.responsable ? nomCompte(noms, o.responsable) : '', trSp('obligations.rappel', { n: o.rappelJours })].filter(Boolean).join(' · ')}</Text>

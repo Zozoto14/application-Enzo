@@ -7,6 +7,7 @@
  * le scouting détaillé ni les strats.
  */
 
+import { lecteurTableaux } from './acces.mjs';
 import { evenement } from '../evenements.mjs';
 import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
@@ -44,7 +45,10 @@ export function servicesEquipeCm({ base, maintenant = () => Date.now(), medias }
     if (!['cm.voir', 'cm.deposer', 'cm.clips.proposer'].some(p => peut(ctx, p))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     const t = maintenant();
     if (peut(ctx, 'cm.voir') || peut(ctx, 'cm.deposer')) await assurerTableauDefaut(base, teamId, t);
-    const lignes = peut(ctx, 'cm.voir') ? await base.tous('SELECT * FROM cm_tableaux WHERE portee = ? AND supprime_le IS NULL AND archive_le IS NULL ORDER BY cle_defaut, position, cree_le', [teamId]) : [];
+    const lecteur = lecteurTableaux(base, acteur);
+    // Tableaux restreints dont l'acteur n'est pas (migration 0046) : ni le tableau ni les dépôts qui y sont passés.
+    const lignes = peut(ctx, 'cm.voir') ? await lecteur.filtrer(await base.tous('SELECT * FROM cm_tableaux WHERE portee = ? AND supprime_le IS NULL AND archive_le IS NULL ORDER BY cle_defaut, position, cree_le', [teamId])) : [];
+    const interdits = new Set(await lecteur.interdits());
     // Sans cm.voir (dépôt seulement) : ses propres dépôts.
     const condition = peut(ctx, 'cm.voir') ? '' : 'AND c.cree_par = ?';
     const depots = peut(ctx, 'cm.voir') || peut(ctx, 'cm.deposer')
@@ -54,12 +58,13 @@ export function servicesEquipeCm({ base, maintenant = () => Date.now(), medias }
           peut(ctx, 'cm.voir') ? [teamId] : [teamId, acteur.compte],
         )
       : [];
-    const noms = await pseudosDe(base, depots.map(d => d.cree_par).filter(Boolean));
+    const depotsVus = depots.filter(d => !interdits.has(d.tableau_id));
+    const noms = await pseudosDe(base, depotsVus.map(d => d.cree_par).filter(Boolean));
     return {
       team: { id: ctx.team.id, nom: ctx.team.nom, slug: ctx.team.slug, logoUrl: ctx.team.logo_url ?? null, fuseau: ctx.team.fuseau },
       permissions: [...ctx.permissions].sort(),
-      tableaux: lignes.map(t => ({ id: t.id, nom: t.nom ?? null, cleDefaut: t.cle_defaut ?? null, couleur: t.couleur, version: Number(t.version) })),
-      depots: depots.map(d => ({ id: d.id, titre: d.titre, genre: d.depot_genre ?? 'autre', auteur: d.cree_par ?? null, creeLe: d.cree_le, statut: d.statut ?? null, liste: { nom: d.liste_nom ?? null, cle: d.liste_cle ?? null }, tableauId: d.tableau_id })),
+      tableaux: lignes.map(t => ({ id: t.id, nom: t.nom ?? null, cleDefaut: t.cle_defaut ?? null, couleur: t.couleur, version: Number(t.version), acces: t.acces === 'restreint' ? 'restreint' : 'tous' })),
+      depots: depotsVus.map(d => ({ id: d.id, titre: d.titre, genre: d.depot_genre ?? 'autre', auteur: d.cree_par ?? null, creeLe: d.cree_le, statut: d.statut ?? null, liste: { nom: d.liste_nom ?? null, cle: d.liste_cle ?? null }, tableauId: d.tableau_id })),
       noms,
       genres: [...GENRES_DEPOT],
     };

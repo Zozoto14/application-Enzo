@@ -16,12 +16,15 @@
  */
 
 import { comptesClubAvec, comptesTeamAvec } from './commun.mjs';
+import { estRestreint, niveauxTableau } from './acces.mjs';
 import { mettreMpEnFile } from './reunions/mp.mjs';
 
 export const TYPES_CM = [
   'cm.tableau_cree',
   'cm.tableau_modifie',
   'cm.tableau_supprime',
+  // Accès au tableau changé (migration 0046) : « tous » ou « restreint » (jamais la liste des personnes dans la charge).
+  'cm.tableau_acces',
   'cm.etiquette_modifiee',
   'cm.etiquette_supprimee',
   'cm.etiquette_fusionnee',
@@ -89,10 +92,24 @@ export const TYPES_CM = [
 export const TYPES_HORS_JOURNAL = ['drive.ajout'];
 
 async function notifier(base, ev, compte, type, charge) {
+  // Carte concernée (migration 0046) : la notification se masque dès que le destinataire ne voit plus son tableau.
+  const carte = ev.entite_type === 'cm_carte' ? (ev.entite_id ?? null) : null;
   await base.executer(
-    'INSERT INTO notifications (id, compte_id, team_id, type, charge, cree_le) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
-    [`${ev.id}:${compte}`, compte, ev.team_id, type, JSON.stringify(charge), ev.cree_le],
+    'INSERT INTO notifications (id, compte_id, team_id, type, charge, cree_le, cm_carte_id) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
+    [`${ev.id}:${compte}`, compte, ev.team_id, type, JSON.stringify(charge), ev.cree_le, carte],
   );
+}
+
+/**
+ * Tableau RESTREINT d'une carte (migration 0046) : seuls ceux qui le voient sont prévenus (le Fondateur toujours).
+ * Rend un filtre de comptes (l'identité si la carte est dans un tableau ouvert, ou introuvable : rien à masquer).
+ */
+async function filtreTableau(base, ev) {
+  if (ev.entite_type !== 'cm_carte' || !ev.entite_id) return () => true;
+  const tb = await base.premier('SELECT t.id, t.portee, t.team_id, t.acces FROM cm_cartes c JOIN cm_tableaux t ON t.id = c.tableau_id WHERE c.id = ?', [ev.entite_id]);
+  if (!estRestreint(tb)) return () => true;
+  const niveaux = await niveauxTableau(base, tb);
+  return compte => compte === 'principal' || niveaux.has(compte);
 }
 
 /** Valideurs d'un tableau : niveau club, ou club + affectations de la team pour un tableau de team. */
@@ -107,8 +124,9 @@ export async function abonneCm(base, ev) {
     charge = {};
   }
   const carte = ev.entite_id;
+  const voitTableau = await filtreTableau(base, ev);
   const envoyer = async (comptes, type, donnees) => {
-    for (const compte of new Set(comptes)) if (compte && compte !== ev.acteur_id) await notifier(base, ev, compte, type, donnees);
+    for (const compte of new Set(comptes)) if (compte && compte !== ev.acteur_id && voitTableau(compte)) await notifier(base, ev, compte, type, donnees);
   };
   switch (ev.type) {
     case 'cm.carte_assignee':
@@ -119,7 +137,8 @@ export async function abonneCm(base, ev) {
       // Personnes concernées (assignées, auteur de la carte, suiveurs ; migration 0045) : une seule notification non lue
       // par carte et par personne (pas de rafale quand la conversation s'anime).
       for (const compte of new Set(charge.concernes ?? [])) {
-        if (!compte || compte === ev.acteur_id || (charge.mentions ?? []).includes(compte)) continue;
+        // Tableau restreint (migration 0046) : un suiveur ou un assigné qui ne le voit plus n'est pas prévenu.
+        if (!compte || compte === ev.acteur_id || (charge.mentions ?? []).includes(compte) || !voitTableau(compte)) continue;
         const deja = (await base.tous("SELECT charge FROM notifications WHERE compte_id = ? AND type = 'cm-commentaire' AND lue_le IS NULL", [compte])).some(l => {
           try {
             return JSON.parse(l.charge).carte === carte;

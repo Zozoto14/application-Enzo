@@ -798,7 +798,14 @@
   "Créneau introuvable.": "Slot not found.",
   "Vous ne pouvez pas réserver votre propre créneau.": "You cannot book your own slot.",
   "Ce créneau est passé.": "This slot is in the past.",
-  "Ce créneau vient d’être réservé par quelqu’un d’autre.": "This slot has just been booked by someone else."
+  "Ce créneau vient d’être réservé par quelqu’un d’autre.": "This slot has just been booked by someone else.",
+  "Ce tableau Trello est déjà importé dans un tableau auquel vous n’avez pas accès.": "This Trello board is already imported into a board you do not have access to.",
+  "Accès : tous ou restreint.": "Access: everyone or restricted.",
+  "Le tableau par défaut reste ouvert à tous ceux qui ont accès au CM.": "The default board stays open to everyone with CM access.",
+  "Personnes ou rôles illisibles.": "Unreadable people or roles.",
+  "Gardez au moins une personne qui peut gérer ce tableau (niveau « peut modifier » avec la gestion du CM, ou son créateur).": "Keep at least one person who can manage this board (“can edit” level with CM management, or its creator).",
+  "Vous ne pouvez pas vous retirer l’accès « peut modifier » à ce tableau.": "You cannot remove your own “can edit” access to this board.",
+  "Cette personne n’a pas accès au CM de ce tableau.": "This person has no access to this board’s CM area."
  },
  "motifs": [
   [
@@ -1216,6 +1223,10 @@
   [
    "^Tâche confidentielle \\((.+)\\) : seule l’IA locale du serveur peut la faire, et elle est indisponible\\. Rien n’a été envoyé à un service externe\\.$",
    "Confidential task ($1): only the server’s local AI may do it, and it is unavailable. Nothing was sent to an external service."
+  ],
+  [
+   "^(\\d+) personnes ou rôles au plus\\.$",
+   "$1 people or roles at most."
   ]
  ]
 }

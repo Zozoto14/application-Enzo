@@ -132,7 +132,8 @@ export interface Periode {
   debut: string;
   fin: string;
   manuel: number;
-  cartes: Array<{ id: string; titre: string; tableauId: string; jour: string }>;
+  /** Posts CM comptés ; d'un tableau restreint que le lecteur ne voit pas (migration 0046) : `masque`, sans titre ni lien. */
+  cartes: Array<{ id: string | null; titre: string | null; tableauId: string | null; jour: string; masque?: boolean }>;
   fait: number;
   quantite: number;
   note: string;

@@ -14,6 +14,7 @@
  *    Lignes sans team (export ou suppression de compte) : RETENTION_GLOBALE_JOURS.
  */
 
+import { horsTableauxInterdits, lecteurTableaux } from './cm/acces.mjs';
 import { evenement } from './evenements.mjs';
 import { exigerPeriode } from './periode.mjs';
 import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from './langues.mjs';
@@ -121,6 +122,13 @@ export function servicesJournal({ base, maintenant = () => Date.now(), socle }) 
     return { ...ctx, configJournal: jsonOu(l?.config, {}) ?? {} };
   }
 
+  /** Entrées d'un tableau CM restreint dont l'acteur n'est pas (ou de ses cartes) : jamais montrées (migration 0046). */
+  async function horsTableauxCm(acteur, conditions, params) {
+    const h = horsTableauxInterdits(null, await lecteurTableaux(base, acteur).interdits());
+    conditions.push(h.sql);
+    params.push(...h.params);
+  }
+
   /** Liste paginée (50 par défaut, 100 au plus), du plus récent au plus ancien. */
   async function liste(acteur, teamId, filtres = {}) {
     const ctx = await contexte(acteur, teamId);
@@ -139,6 +147,7 @@ export function servicesJournal({ base, maintenant = () => Date.now(), socle }) 
         params.push(iso(avant));
       }
     }
+    await horsTableauxCm(acteur, conditions, params);
     const lignes = await base.tous(`SELECT * FROM journal WHERE ${conditions.join(' AND ')} ORDER BY cree_le DESC, id DESC LIMIT ?`, [...params, limite + 1]);
     const entrees = lignes.slice(0, limite).map(entreePublique);
     // Membres de la team (filtre « membre ») : une seule requête.
@@ -157,6 +166,7 @@ export function servicesJournal({ base, maintenant = () => Date.now(), socle }) 
   async function exporter(acteur, teamId, filtres = {}) {
     const ctx = await contexte(acteur, teamId);
     const { conditions, params } = conditionsFiltres(teamId, filtres, ctx.team.fuseau);
+    await horsTableauxCm(acteur, conditions, params);
     const lignes = await base.tous(`SELECT * FROM journal WHERE ${conditions.join(' AND ')} ORDER BY cree_le DESC, id DESC LIMIT ?`, [...params, MAX_EXPORT]);
     const entrees = lignes.map(entreePublique);
     const noms = await pseudosDe(base, comptesCites(entrees));

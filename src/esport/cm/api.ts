@@ -73,6 +73,33 @@ export interface DroitsTableau {
   valider: boolean;
   gerer: boolean;
   commenter: boolean;
+  /** Régler l'accès au tableau (migration 0046) : cm.gerer ou créateur, au niveau « peut modifier ». */
+  acces?: boolean;
+}
+/** Accès d'un tableau (migration 0046) : tous ceux qui ont accès au CM, ou restreint aux personnes et rôles choisis. */
+export type AccesTableau = 'tous' | 'restreint';
+export type GenreAcces = 'compte' | 'role_cm' | 'role_club' | 'role_team';
+export type NiveauAcces = 'voir' | 'modifier';
+export interface RegleAcces {
+  genre: GenreAcces;
+  cible: string;
+  niveau: NiveauAcces;
+  nom?: string | null;
+}
+export interface RoleProposeAcces {
+  id: string;
+  nom: string;
+  couleur: string;
+  team?: { id: string; nom: string | null };
+}
+export interface ReglageAcces {
+  tableau: { id: string; nom: string | null; cleDefaut: string | null; portee: string; creePar: string | null };
+  acces: AccesTableau;
+  regles: RegleAcces[];
+  /** Qui voit le tableau aujourd'hui (restreint) ; null s'il est ouvert. */
+  effectifs: Array<{ compte: string; pseudo: string; niveau: NiveauAcces }> | null;
+  options: { personnes: Array<{ compte: string; pseudo: string }>; rolesCm: RoleProposeAcces[]; rolesClub: RoleProposeAcces[]; rolesTeam: RoleProposeAcces[] };
+  moi: string;
 }
 /** Fond d'un tableau (migration 0042) : teinte ou dégradé prédéfini (src/esport/cm/fonds.ts), ou image (lien signé). */
 export type FondTableau = { genre: 'couleur' | 'degrade'; cle: string } | { genre: 'image'; image?: string };
@@ -112,6 +139,8 @@ export interface TableauListe {
   version: number;
   archive: boolean;
   trello: boolean;
+  /** Accès (migration 0046) : « restreint » affiche un cadenas. */
+  acces?: AccesTableau;
   majLe: string;
   cartes?: number;
   aValider?: number;
@@ -303,7 +332,7 @@ export interface EtatCm {
 export interface PageTeamCm {
   team: TeamCm & { fuseau: string };
   permissions: PermissionCm[];
-  tableaux: Array<{ id: string; nom: string | null; cleDefaut: string | null; couleur: string; version: number }>;
+  tableaux: Array<{ id: string; nom: string | null; cleDefaut: string | null; couleur: string; version: number; acces?: AccesTableau }>;
   depots: Array<{ id: string; titre: string; genre: GenreDepot; auteur: string | null; creeLe: string; statut: StatutPost | null; liste: { nom: string | null; cle: CleListe | null }; tableauId: string }>;
   noms: Record<string, string | null>;
   genres: GenreDepot[];
@@ -426,6 +455,9 @@ export function apiCm(client: ClientEsport) {
     tableaux: (archives = false) => r<ListeTableaux>(`/cm/tableaux${requeteUrl({ archives: archives ? 1 : undefined })}`),
     creerTableau: (t: { nom: string; portee: string; couleur?: string; description?: string; modele?: 'vide' | 'contenus' }) => r<DetailTableau>('/cm/tableaux', 'POST', t),
     tableau: (id: string, archives = false) => r<DetailTableau>(`/cm/tableaux/${e(id)}${requeteUrl({ archives: archives ? 1 : undefined })}`),
+    /** Accès au tableau (migration 0046). */
+    accesTableau: (id: string) => r<ReglageAcces>(`/cm/tableaux/${e(id)}/acces`),
+    changerAccesTableau: (id: string, acces: AccesTableau, regles: RegleAcces[]) => r<ReglageAcces>(`/cm/tableaux/${e(id)}/acces`, 'PUT', { acces, regles: regles.map(x => ({ genre: x.genre, cible: x.cible, niveau: x.niveau })) }),
     modifierTableau: (id: string, t: { nom?: string | null; couleur?: string; description?: string; archive?: boolean; fond?: SaisieFond }) => r<DetailTableau>(`/cm/tableaux/${e(id)}`, 'PATCH', t),
     /** Choix d'affichage du compte (colonnes réduites `tableau.<id>.reduites`, calendriers `calendrier.teams`). */
     preferences: () => r<{ preferences: Record<string, unknown> }>('/cm/preferences'),

@@ -525,7 +525,7 @@ function ListeTableauxCm({ theme, api, large, onOuvrir, nonLus }: { theme: Theme
       {liste?.tableaux.length ? (
         <Grille min={large ? 280 : 240} testID="esport-cm-tableaux-liste">
           {liste.tableaux.map(t => (
-            <Carte key={t.id} theme={theme} dense accent={t.couleur} onPress={() => onOuvrir(t.id)} libelle={trCm('espace.ouvrir_tableau', { nom: nomTableau(t) })} testID={`esport-cm-tableau-${t.cleDefaut && !t.team ? 'club' : t.id}`}>
+            <Carte key={t.id} theme={theme} dense accent={t.couleur} onPress={() => onOuvrir(t.id)} libelle={`${trCm('espace.ouvrir_tableau', { nom: nomTableau(t) })}${t.acces === 'restreint' ? ` ${trCm('acces.restreint_libelle')}` : ''}`} testID={`esport-cm-tableau-${t.cleDefaut && !t.team ? 'club' : t.id}`}>
               <Text style={{ ...texte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
                 {nomTableau(t)}
               </Text>
@@ -539,6 +539,7 @@ function ListeTableauxCm({ theme, api, large, onOuvrir, nonLus }: { theme: Theme
                   </View>
                 ) : null}
                 {t.trello ? <Badge theme={theme} texte="Trello" /> : null}
+                {t.acces === 'restreint' ? <Badge theme={theme} icone="cadenas" texte={trCm('acces.restreint_badge')} testID={`esport-cm-tableau-${t.id}-restreint`} /> : null}
                 {t.archive ? <Badge theme={theme} ton="alerte" texte={trCm('c.archive')} /> : null}
               </View>
             </Carte>

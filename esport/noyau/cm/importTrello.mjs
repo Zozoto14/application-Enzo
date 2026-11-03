@@ -16,6 +16,7 @@
 import { evenement } from '../evenements.mjs';
 import { echec, iso, nouvelId } from '../outils.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, lirePortee, porteesDe, teamDePortee, versionTableau } from './commun.mjs';
+import { niveauTableau } from './acces.mjs';
 import { TrelloInvalide, bilanTrello, lireExportTrello } from './trello.mjs';
 
 const PAQUET = 40;
@@ -70,8 +71,10 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     const ctx = await contexteCm(base, acteur, portee);
     exiger(ctx, 'cm.gerer');
     const m = lire(corps);
-    const existant = await base.premier('SELECT id, nom, portee, supprime_le FROM cm_tableaux WHERE trello_id = ?', [m.tableau.trelloId]);
-    const personnes = await personnesDe(existant?.portee ?? portee);
+    const existant = await base.premier('SELECT id, nom, portee, team_id, acces, supprime_le FROM cm_tableaux WHERE trello_id = ?', [m.tableau.trelloId]);
+    // Tableau déjà importé mais RESTREINT et fermé à l'acteur (migration 0046) : ni son nom ni ses personnes.
+    const ferme = existant && !existant.supprime_le && !(await tableaux.tableauVisible(acteur, existant.id).then(() => true, () => false));
+    const personnes = existant && !existant.supprime_le && !ferme ? await tableaux.personnesTableau(existant) : await personnesDe(existant?.portee ?? portee);
     return {
       tableau: { nom: m.tableau.nom, trelloId: m.tableau.trelloId },
       bilan: bilanTrello(m),
@@ -81,7 +84,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       membresTrello: m.membres.map(x => ({ id: x.id, nom: x.nom, identifiant: x.identifiant })),
       correspondances: proposer(m.membres, personnes),
       personnes,
-      dejaImporte: existant && !existant.supprime_le ? { id: existant.id, nom: existant.nom, portee: existant.portee } : null,
+      dejaImporte: existant && !existant.supprime_le ? (ferme ? { restreint: true } : { id: existant.id, nom: existant.nom, portee: existant.portee }) : null,
       listes: m.listes.slice(0, 50).map(l => ({ nom: l.nom, archivee: l.archivee, cartes: m.cartes.filter(c => c.listeTrelloId === l.trelloId).length })),
     };
   }
@@ -103,6 +106,8 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       portee = tb.portee;
       porteeConservee = true;
     }
+    // Mise à jour d'un tableau existant : il faut le voir au niveau « modifier » (tableau restreint, migration 0046).
+    if (tb && (await niveauTableau(base, acteur, tb)) !== 'modifier') throw echec(409, 'deja-importe', 'Ce tableau Trello est déjà importé dans un tableau auquel vous n’avez pas accès.');
     const nouveauTableau = !tb;
     if (!tb) {
       const id = nouvelId();
@@ -116,7 +121,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     }
 
     // Correspondance des membres Trello → comptes qui ont accès au tableau (les autres sont ignorés).
-    const personnes = new Set((await personnesDe(portee)).map(p => p.compte));
+    const personnes = new Set((await tableaux.personnesTableau(tb)).map(p => p.compte));
     const corr = new Map();
     const demandees = corps?.correspondances && typeof corps.correspondances === 'object' && !Array.isArray(corps.correspondances) ? corps.correspondances : {};
     for (const mb of m.membres) {

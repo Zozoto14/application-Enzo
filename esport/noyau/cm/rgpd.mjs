@@ -31,6 +31,8 @@ export async function exportCm(base, compte) {
     // Drive (migration 0027) : fichiers déposés (ou ajoutés en version) et favoris.
     cmDrive: (await q('SELECT nom, type_mime, taille, portee, version, cree_le FROM cm_drive_fichiers WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(f => ({ nom: f.nom, type: f.type_mime, taille: Number(f.taille), version: Number(f.version), portee: f.portee === 'club' ? 'club' : (teams.get(f.portee) ?? f.portee), date: f.cree_le })),
     cmPreferences: (await q('SELECT cle, valeur, maj_le FROM cm_preferences WHERE compte_id = ? ORDER BY cle')).map(p => ({ cle: p.cle, valeur: p.valeur, date: p.maj_le })),
+    // Tableaux restreints où le compte figure nommément (migration 0046).
+    cmTableauxAcces: (await q("SELECT a.niveau, a.ajoute_le, t.nom, t.cle_defaut FROM cm_tableau_acces a JOIN cm_tableaux t ON t.id = a.tableau_id WHERE a.genre = 'compte' AND a.cible = ? ORDER BY a.ajoute_le")).map(a => ({ tableau: a.nom ?? a.cle_defaut, niveau: a.niveau, depuis: a.ajoute_le })),
     cmDriveFavoris: (await q('SELECT genre, cree_le FROM cm_drive_favoris WHERE compte_id = ? ORDER BY cree_le')).map(f => ({ genre: f.genre, date: f.cree_le })),
     cmReunions: (await q("SELECT r.titre, r.genre, r.debut, r.fin, r.fuseau, r.statut, r.organisateur_id, p.reponse, p.commentaire FROM cm_reunion_participants p JOIN cm_reunions r ON r.id = p.reunion_id WHERE p.compte_id = ? ORDER BY r.debut")).map(r => ({ titre: r.titre, genre: r.genre, debut: r.debut, fin: r.fin, fuseau: r.fuseau, statut: r.statut, organisateur: r.organisateur_id === compte, reponse: r.reponse, commentaire: r.commentaire })),
     cmDisponibilites: {
@@ -53,6 +55,9 @@ export async function effacementCm(base, compte) {
   const lot = [
     { sql: 'DELETE FROM cm_affectations WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_preferences WHERE compte_id = ?', params: [compte] },
+    // Accès nominatifs aux tableaux restreints (migration 0046).
+    { sql: "DELETE FROM cm_tableau_acces WHERE genre = 'compte' AND cible = ?", params: [compte] },
+    { sql: 'UPDATE cm_tableau_acces SET ajoute_par = NULL WHERE ajoute_par = ?', params: [compte] },
     { sql: 'DELETE FROM cm_carte_membres WHERE compte_id = ?', params: [compte] },
     // Migration 0045 : son état « lu » des commentaires et ses cartes suivies disparaissent.
     { sql: 'DELETE FROM cm_commentaires_vus WHERE compte_id = ?', params: [compte] },

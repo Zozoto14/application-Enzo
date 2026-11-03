@@ -18,6 +18,7 @@ import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 import { permissionsGlobalesDe } from '../roles/globales.mjs';
 import { droitsReunions } from './reunions/service.mjs';
+import { horsTableauxInterdits, lecteurTableaux } from './acces.mjs';
 
 /** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges ; 0039 : réunions). */
 export const ROLES_CM_SYSTEME = Object.freeze({
@@ -330,8 +331,10 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   async function journal(acteur, { avant } = {}) {
     await ctxClub(acteur);
     const pagine = typeof avant === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(avant);
-    const condition = pagine ? 'AND cree_le < ?' : '';
-    const lignes = await base.tous(`SELECT * FROM journal WHERE action LIKE 'cm.%' ${condition} ORDER BY cree_le DESC, id LIMIT 100`, pagine ? [avant] : []);
+    // Tableaux restreints dont l'acteur n'est pas (migration 0046) : ni le tableau ni ses cartes.
+    const hors = horsTableauxInterdits(null, await lecteurTableaux(base, acteur).interdits());
+    const conditions = ["action LIKE 'cm.%'", ...(pagine ? ['cree_le < ?'] : []), hors.sql];
+    const lignes = await base.tous(`SELECT * FROM journal WHERE ${conditions.join(' AND ')} ORDER BY cree_le DESC, id LIMIT 100`, [...(pagine ? [avant] : []), ...hors.params]);
     const noms = await pseudosDe(base, lignes.flatMap(l => [l.acteur_id, jsonOu(l.meta, {}).compte]).filter(Boolean));
     const teams = new Map((await lignesParIds(base, 'SELECT id, nom FROM teams WHERE id', lignes.map(l => l.team_id).filter(Boolean))).map(t => [t.id, t.nom]));
     return {

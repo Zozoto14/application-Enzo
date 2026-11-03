@@ -118,6 +118,8 @@ export const TABLES = [
   ['cm_affectations', 'id'],
   ['cm_reglages', 'cle'],
   ['cm_tableaux', 'id'],
+  // Accès restreint des tableaux (migration 0046) : personnes et rôles qui voient un tableau restreint.
+  ['cm_tableau_acces', 'tableau_id, genre, cible'],
   ['cm_listes', 'id'],
   ['cm_etiquettes', 'id'],
   ['cm_etiquettes_retirees', 'tableau_id, trello_id'],

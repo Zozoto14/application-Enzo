@@ -21,6 +21,7 @@ import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
 import { evenement } from '../evenements.mjs';
 import { verifierAdresse } from '../ressources/apercu.mjs';
 import { lignesParIds } from '../requetes.mjs';
+import { lecteurTableaux, permissionsAuNiveau } from './acces.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, permissionsSur, porteesDe } from './commun.mjs';
 
 export const LIENS_MAX = 500;
@@ -191,13 +192,17 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
 
   /**
    * Cartes (hors carte supprimée ou tableau supprimé) dont le compte voit le tableau (`cm.voir` de sa portée) parmi
-   * `ids` : `Map(id → { id, titre, tableauId, tableau, portee, modifier })`.
+   * `ids` : `Map(id → { id, titre, tableauId, tableau, portee, modifier })`. Tableau RESTREINT (migration 0046) :
+   * seulement s'il en est (« peut voir » : sans droit de lier).
    */
-  async function cartesAccessibles(c, ids) {
+  async function cartesAccessibles(acteur, c, ids) {
     const sortie = new Map();
-    const lignes = await lignesParIds(base, 'SELECT c.id, c.titre, c.tableau_id, t.nom, t.cle_defaut, t.portee FROM cm_cartes c JOIN cm_tableaux t ON t.id = c.tableau_id WHERE c.supprime_le IS NULL AND t.supprime_le IS NULL AND c.id', ids);
+    const lecteur = lecteurTableaux(base, acteur);
+    const lignes = await lignesParIds(base, 'SELECT c.id, c.titre, c.tableau_id, t.nom, t.cle_defaut, t.portee, t.team_id, t.acces FROM cm_cartes c JOIN cm_tableaux t ON t.id = c.tableau_id WHERE c.supprime_le IS NULL AND t.supprime_le IS NULL AND c.id', ids);
     for (const l of lignes) {
-      const p = permissionsSur(c.portees, l.portee);
+      const niveau = await lecteur.niveau({ id: l.tableau_id, portee: l.portee, team_id: l.team_id, acces: l.acces });
+      if (!niveau) continue;
+      const p = permissionsAuNiveau(permissionsSur(c.portees, l.portee), niveau);
       if (!p.has('cm.voir')) continue;
       sortie.set(l.id, { id: l.id, titre: l.titre, tableauId: l.tableau_id, tableau: l.nom ?? l.cle_defaut ?? null, portee: l.portee, modifier: p.has('cm.editer') });
     }
@@ -209,7 +214,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     const sortie = new Map();
     if (!lienIds.length) return sortie;
     const lignes = await lignesParIds(base, 'SELECT lien_id, genre, cible_id FROM cm_lien_liaisons WHERE lien_id', lienIds);
-    const cartes = await cartesAccessibles(c, lignes.filter(l => l.genre === 'carte').map(l => l.cible_id));
+    const cartes = await cartesAccessibles(acteur, c, lignes.filter(l => l.genre === 'carte').map(l => l.cible_id));
     const dossiers = drive ? await drive.dossiersAccessibles(acteur, lignes.filter(l => l.genre === 'dossier').map(l => l.cible_id)) : new Map();
     for (const l of lignes) {
       const cible = l.genre === 'carte' ? cartes.get(l.cible_id) : dossiers.get(l.cible_id);
@@ -240,7 +245,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
   async function cibleVisible(acteur, c, genre, cibleId) {
     if (!GENRES_LIAISON.includes(genre)) throw echec(400, 'genre', 'Genre de liaison inconnu : carte ou dossier.');
     exigerUuid(cibleId, genre);
-    const cible = (genre === 'carte' ? await cartesAccessibles(c, [cibleId]) : drive ? await drive.dossiersAccessibles(acteur, [cibleId]) : new Map()).get(cibleId);
+    const cible = (genre === 'carte' ? await cartesAccessibles(acteur, c, [cibleId]) : drive ? await drive.dossiersAccessibles(acteur, [cibleId]) : new Map()).get(cibleId);
     if (!cible) throw echec(404, `${genre}-introuvable`, genre === 'carte' ? 'Carte introuvable.' : 'Dossier introuvable.');
     return cible;
   }

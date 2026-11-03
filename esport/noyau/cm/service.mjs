@@ -23,6 +23,7 @@ import { verifierLien } from '../fichiers.mjs';
 import { reponseFichierStocke } from '../medias/lecture.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, porteesDe, teamDePortee } from './commun.mjs';
 import { servicesTableauxCm } from './tableaux.mjs';
+import { lecteurTableaux } from './acces.mjs';
 import { servicesDroitsCm } from './droits.mjs';
 import { servicesEquipeCm } from './equipe.mjs';
 import { servicesClipsCm } from './clips.mjs';
@@ -73,10 +74,19 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     if (compte === 'principal') return true;
     const acteur = { compte, superAdmin: false };
     if (await drive.peutLireFichierCm(compte, f.id)) return true;
+    // Tableaux qui utilisent le fichier (pièce jointe d'une carte, fond) : s'ils sont TOUS restreints et fermés au
+    // compte (migration 0046), le fichier ne se lit plus, sauf pour l'auteur du clip ou par la rubrique Sponsors.
+    const lecteur = lecteurTableaux(base, acteur);
+    const fonds = await base.tous('SELECT id, portee, team_id, acces FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL LIMIT 20', [f.id]);
+    const parPieces = await base.tous('SELECT DISTINCT t.id, t.portee, t.team_id, t.acces FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id JOIN cm_tableaux t ON t.id = c.tableau_id WHERE p.fichier_id = ? AND p.supprime_le IS NULL AND c.supprime_le IS NULL AND t.supprime_le IS NULL LIMIT 20', [f.id]);
+    if (fonds.length + parPieces.length > 0 && (await lecteur.filtrer([...fonds, ...parPieces])).length === 0) {
+      const ailleurs = (await base.premier('SELECT id FROM cm_clips WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) || (await base.premier('SELECT id FROM sp_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) || f.portee === PORTEE_SPONSORS;
+      if (!ailleurs) return false;
+    }
     // Image de fond d'un tableau (migration 0042) : qui voit le tableau voit son fond, même pris dans le Drive.
-    for (const { portee } of await base.tous('SELECT DISTINCT portee FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL LIMIT 20', [f.id])) {
+    for (const tb of await lecteur.filtrer(fonds)) {
       try {
-        if ((await contexteCm(base, acteur, portee)).permissions.has('cm.voir')) return true;
+        if ((await contexteCm(base, acteur, tb.portee)).permissions.has('cm.voir')) return true;
       } catch {
         // Tableau d'une portée fermée au compte.
       }
@@ -103,8 +113,7 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
       }
     }
     // Pièce jointe d'une carte d'une autre portée (fichier du Drive du club joint à une carte de team).
-    const portees = await base.tous('SELECT DISTINCT t.portee FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id JOIN cm_tableaux t ON t.id = c.tableau_id WHERE p.fichier_id = ? AND p.supprime_le IS NULL AND c.supprime_le IS NULL AND t.supprime_le IS NULL LIMIT 20', [f.id]);
-    for (const { portee } of portees) {
+    for (const { portee } of await lecteur.filtrer(parPieces)) {
       if (portee === f.portee) continue;
       try {
         if ((await contexteCm(base, acteur, portee)).permissions.has('cm.voir')) return true;

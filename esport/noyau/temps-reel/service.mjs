@@ -356,6 +356,9 @@ export function servicesTempsReel({ base, maintenant = () => Date.now(), socle, 
   async function apresEcriture(methode, chemin, acteur, verrou) {
     const publications = publicationsDe(methode, chemin, acteur);
     if (publications.length === 0) return 0;
+    // Droits changés (rôle, accès d'un tableau CM…) : oubliés tout de suite dans CE processus, même sans navigateur
+    // connecté (les autres processus l'apprennent par le message).
+    if (publications.some(p => p.invalider)) oublierAcces();
     const pseudo = await pseudoDe(acteur?.compte);
     for (const p of publications) {
       await publierEnBase(
@@ -644,7 +647,8 @@ export function servicesTempsReel({ base, maintenant = () => Date.now(), socle, 
   async function objetLisible(acteur, chemin) {
     const propre = typeof chemin === 'string' ? chemin.split('?')[0].replace(/^\/api\/esport(?=\/)/, '') : '';
     const objet = /^\/[A-Za-z0-9/_.:%-]{1,300}$/.test(propre) ? objetDe(propre) : null;
-    if (!objet || !(await accesSujet(acteur, objet.sujet)) || !(await accesObjet(acteur, objet))) throw echec(404, 'introuvable', 'Élément introuvable.');
+    // `frais` : un « oui » en cache ne suffit pas (accès retiré à l'instant : tableau CM restreint, rôle retiré).
+    if (!objet || !(await accesSujet(acteur, objet.sujet)) || !(await accesObjet(acteur, objet, { frais: true }))) throw echec(404, 'introuvable', 'Élément introuvable.');
     return objet;
   }
 

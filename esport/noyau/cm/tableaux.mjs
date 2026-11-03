@@ -41,6 +41,7 @@ import {
   teamDePortee,
   versionTableau,
 } from './commun.mjs';
+import { ACCES_TABLEAU, GENRES_ACCES, MAX_REGLES_ACCES, NIVEAUX_ACCES, estRestreint, lecteurTableaux, niveauTableau, niveauxTableau, permissionsAuNiveau } from './acces.mjs';
 import { LISTE_DU_STATUT, empreinteContenu, lireLiens, lirePublications, lireReseaux, lireTextes, lireTitre, problemesPost } from './posts.mjs';
 import { mentions as mentionsDe } from './reseaux.mjs';
 
@@ -181,7 +182,11 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return t;
   }
 
-  /** Tableau et contexte CM de l'acteur sur sa portée ; cm.voir exigé (404 sinon : on ne dit pas qu'il existe). */
+  /**
+   * Tableau et contexte CM de l'acteur sur sa portée ; cm.voir exigé (404 sinon : on ne dit pas qu'il existe).
+   * Tableau RESTREINT (migration 0046, acces.mjs) : 404 pour qui n'en est pas ; au niveau « voir », le contexte ne
+   * garde que cm.voir (toute écriture est refusée, 403). `ctx.niveau` : 'voir' ou 'modifier'.
+   */
   async function tableauVisible(acteur, id) {
     const tableau = await tableauLigne(id);
     let ctx;
@@ -191,8 +196,13 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       throw echec(404, 'tableau-introuvable', 'Tableau introuvable.');
     }
     if (!peut(ctx, 'cm.voir')) throw echec(404, 'tableau-introuvable', 'Tableau introuvable.');
-    return { tableau, ctx };
+    const niveau = await niveauTableau(base, acteur, tableau);
+    if (!niveau) throw echec(404, 'tableau-introuvable', 'Tableau introuvable.');
+    return { tableau, ctx: { ...ctx, permissions: permissionsAuNiveau(ctx.permissions, niveau), niveau } };
   }
+
+  /** Régler l'accès au tableau : cm.gerer de la portée ou créateur du tableau, avec le niveau « modifier » (Fondateur : toujours). */
+  const peutGererAcces = (ctx, tb) => Boolean(ctx.acteur?.superAdmin) || (ctx.niveau === 'modifier' && (peut(ctx, 'cm.gerer') || (Boolean(tb.cree_par) && tb.cree_par === ctx.acteur?.compte)));
 
   async function carteVisible(acteur, id) {
     exigerUuid(id, 'carte');
@@ -227,7 +237,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
    * Personnes d'un tableau (assignables, mentionnables) : le Fondateur, les comptes affectés au club, et
    * pour un tableau de team ses membres actifs qui voient la partie CM (rôle ou affectation de la team).
    */
-  async function personnesTableau(tableau) {
+  async function personnesTableau(tableau, { portee = false } = {}) {
     const comptes = new Set();
     if (await base.premier("SELECT id FROM comptes WHERE id = 'principal'", [])) comptes.add('principal');
     for (const l of await base.tous("SELECT DISTINCT compte_id FROM cm_affectations WHERE portee = 'club'", [])) comptes.add(l.compte_id);
@@ -243,6 +253,11 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
           WHERE m.team_id = ? AND m.statut = 'actif' AND (r.cle_systeme = 'proprietaire' OR rp.permission IS NOT NULL)`,
         [tableau.team_id],
       )) comptes.add(l.compte_id);
+    }
+    // Tableau restreint : seulement ceux qui le voient (le Fondateur toujours).
+    if (!portee && estRestreint(tableau)) {
+      const niveaux = await niveauxTableau(base, tableau);
+      for (const c of [...comptes]) if (c !== 'principal' && !niveaux.has(c)) comptes.delete(c);
     }
     const noms = await pseudosDe(base, [...comptes]);
     return [...comptes].filter(c => noms[c]).map(c => ({ compte: c, pseudo: noms[c] })).sort((a, b) => a.pseudo.localeCompare(b.pseudo));
@@ -364,6 +379,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       version: Number(t.version),
       archive: Boolean(t.archive_le),
       trello: Boolean(t.trello_id),
+      // Accès (migration 0046) : 'tous' ou 'restreint' (cadenas dans la liste) ; jamais la liste des personnes ici.
+      acces: t.acces === 'restreint' ? 'restreint' : 'tous',
       majLe: t.maj_le,
       fond: fondPublic(t),
       ...extra,
@@ -422,7 +439,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const portees = await porteesDe(base, acteur);
     const visibles = [...(portees.club.has('cm.voir') ? [PORTEE_CLUB] : []), ...[...portees.teams].filter(([, s]) => s.has('cm.voir')).map(([id]) => id)];
     if (portees.club.has('cm.voir')) await assurerTableauDefaut(base, PORTEE_CLUB, maintenant());
-    const lignes = (await lignesParIds(base, 'SELECT * FROM cm_tableaux WHERE supprime_le IS NULL AND portee', visibles)).filter(t => archives || !t.archive_le);
+    // Tableaux restreints : seulement ceux dont l'acteur est (migration 0046).
+    const lignes = await lecteurTableaux(base, acteur).filtrer((await lignesParIds(base, 'SELECT * FROM cm_tableaux WHERE supprime_le IS NULL AND portee', visibles)).filter(t => archives || !t.archive_le));
     const comptes = new Map(
       (await lignesParIds(base, 'SELECT tableau_id, COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND tableau_id', lignes.map(t => t.id), { apres: 'GROUP BY tableau_id' })).map(l => [l.tableau_id, Number(l.n)]),
     );
@@ -432,7 +450,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const non = await nonLus(acteur, lignes.filter(t => !t.archive_le).map(t => t.id));
     lignes.sort((a, b) => (a.portee === PORTEE_CLUB ? 0 : 1) - (b.portee === PORTEE_CLUB ? 0 : 1) || (a.cle_defaut ? 0 : 1) - (b.cle_defaut ? 0 : 1) || Number(a.position) - Number(b.position) || String(a.cree_le).localeCompare(String(b.cree_le)));
     return {
-      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, nonLus: non.parTableau.get(t.id) ?? 0, droits: droitsDe({ permissions: permissionsSur(portees, t.portee) }) })),
+      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, nonLus: non.parTableau.get(t.id) ?? 0, droits: droitsDe({ permissions: permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau) }) })),
       nonLus: non.total,
       portees: [
         ...(portees.club.size ? [{ portee: PORTEE_CLUB, team: null, permissions: [...portees.club].sort() }] : []),
@@ -578,7 +596,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return {
       nonLus: non.total,
       tableau: tableauPublic(tb, noms, { fond: fondPublic(tb, await imageFond(tb, acteur, origine)) }),
-      droits: droitsDe(ctx),
+      droits: { ...droitsDe(ctx), acces: peutGererAcces(ctx, tb) },
       moi: acteur.compte,
       listes: listes.map(l => ({ id: l.id, nom: l.nom ?? null, cle: l.cle ?? null, position: Number(l.position), archive: Boolean(l.archive_le) })),
       etiquettes: etiquettes.map(e => ({ id: e.id, nom: e.nom, couleur: e.couleur, cartes: nbParEtiquette.get(e.id) ?? 0 })),
@@ -614,6 +632,108 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       noms: pseudos,
       personnes: await personnesTableau(tb),
     };
+  }
+
+  // ---------------------------------------------------------------- Accès au tableau (migration 0046)
+
+  /** Rôles proposés : rôles CM, rôles du club, rôles de la team du tableau (tableau du club : des teams au module CM). */
+  async function rolesProposes(tb) {
+    const rolesCm = await base.tous('SELECT id, nom, couleur FROM cm_roles ORDER BY position, nom, id', []);
+    const rolesClub = await base.tous('SELECT id, nom, couleur FROM roles_globaux ORDER BY position, nom, id', []);
+    const condition = tb.team_id ? 'AND r.team_id = ?' : 'AND EXISTS (SELECT 1 FROM team_modules m WHERE m.team_id = t.id AND m.module = ? AND m.active = 1)';
+    const rolesTeam = await base.tous(
+      `SELECT r.id, r.nom, r.couleur, r.team_id, t.nom AS team_nom FROM roles r JOIN teams t ON t.id = r.team_id
+        WHERE t.supprimee_le IS NULL ${condition}
+        ORDER BY t.nom, r.position, r.nom, r.id`,
+      [tb.team_id ?? 'cm'],
+    );
+    return {
+      rolesCm: rolesCm.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur })),
+      rolesClub: rolesClub.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur })),
+      rolesTeam: rolesTeam.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, team: { id: r.team_id, nom: r.team_nom } })),
+    };
+  }
+
+  /** Comptes qui peuvent régler l'accès (hors Fondateur) parmi `niveaux` : niveau « modifier », et cm.gerer ou créateur. */
+  async function gestionnairesParmi(tb, niveaux, personnes) {
+    const sortie = [];
+    for (const [compte, niveau] of niveaux) {
+      if (niveau !== 'modifier' || !personnes.has(compte)) continue;
+      if (tb.cree_par && compte === tb.cree_par) {
+        sortie.push(compte);
+        continue;
+      }
+      try {
+        if ((await contexteCm(base, { compte, superAdmin: false }, tb.portee)).permissions.has('cm.gerer')) sortie.push(compte);
+      } catch {
+        // Plus d'accès à la portée.
+      }
+    }
+    return sortie;
+  }
+
+  /** `GET /cm/tableaux/:id/acces` : réglage d'accès (cm.gerer ou créateur du tableau ; 403 sinon). */
+  async function accesTableau(acteur, id) {
+    const { tableau: tb, ctx } = await tableauVisible(acteur, id);
+    if (!peutGererAcces(ctx, tb)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const regles = await base.tous('SELECT genre, cible, niveau FROM cm_tableau_acces WHERE tableau_id = ? ORDER BY genre, cible', [tb.id]);
+    const personnes = await personnesTableau(tb, { portee: true });
+    const options = await rolesProposes(tb);
+    const niveaux = estRestreint(tb) ? await niveauxTableau(base, tb) : null;
+    const pseudos = new Map(personnes.map(p => [p.compte, p.pseudo]));
+    const noms = new Map([...options.rolesCm.map(r => [`role_cm|${r.id}`, r.nom]), ...options.rolesClub.map(r => [`role_club|${r.id}`, r.nom]), ...options.rolesTeam.map(r => [`role_team|${r.id}`, r.team?.nom ? `${r.nom} (${r.team.nom})` : r.nom])]);
+    return {
+      tableau: { id: tb.id, nom: tb.nom ?? null, cleDefaut: tb.cle_defaut ?? null, portee: tb.portee, creePar: tb.cree_par ?? null },
+      acces: estRestreint(tb) ? 'restreint' : 'tous',
+      // Règles dont la cible existe encore (personne qui a toujours accès au CM de la portée, rôle non supprimé).
+      regles: regles.filter(r => (r.genre === 'compte' ? pseudos.has(r.cible) : noms.has(`${r.genre}|${r.cible}`))).map(r => ({ genre: r.genre, cible: r.cible, niveau: r.niveau, nom: r.genre === 'compte' ? (pseudos.get(r.cible) ?? null) : (noms.get(`${r.genre}|${r.cible}`) ?? null) })),
+      // Qui voit le tableau aujourd'hui (restreint) : personnes de la portée retenues par les règles, et le Fondateur.
+      effectifs: niveaux ? personnes.filter(p => p.compte === 'principal' || niveaux.has(p.compte)).map(p => ({ ...p, niveau: p.compte === 'principal' ? 'modifier' : niveaux.get(p.compte) })) : null,
+      options: { personnes, ...options },
+      moi: acteur.compte,
+    };
+  }
+
+  /**
+   * `PUT /cm/tableaux/:id/acces { acces: 'tous' | 'restreint', regles: [{ genre, cible, niveau }] }`. Garde-fous : le
+   * tableau par défaut reste ouvert ; un tableau restreint garde au moins une personne (hors Fondateur) qui peut le
+   * gérer (niveau « modifier » avec cm.gerer, ou son créateur) ; hors Fondateur, on ne se retire pas soi-même.
+   */
+  async function changerAcces(acteur, id, corps) {
+    const { tableau: tb, ctx } = await tableauVisible(acteur, id);
+    if (!peutGererAcces(ctx, tb)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const acces = corps?.acces;
+    if (!ACCES_TABLEAU.includes(acces)) throw echec(400, 'acces', 'Accès : tous ou restreint.');
+    if (acces === 'restreint' && tb.cle_defaut) throw echec(409, 'tableau-defaut', 'Le tableau par défaut reste ouvert à tous ceux qui ont accès au CM.');
+    const brutes = corps?.regles ?? [];
+    if (!Array.isArray(brutes) || brutes.length > MAX_REGLES_ACCES) throw echec(400, 'regles', `${MAX_REGLES_ACCES} personnes ou rôles au plus.`);
+    const vues = new Map();
+    for (const r of brutes) {
+      if (!r || typeof r !== 'object' || !GENRES_ACCES.includes(r.genre) || typeof r.cible !== 'string' || !r.cible || r.cible.length > 64 || !NIVEAUX_ACCES.includes(r.niveau ?? 'voir')) throw echec(400, 'regles', 'Personnes ou rôles illisibles.');
+      vues.set(`${r.genre}|${r.cible}`, { genre: r.genre, cible: r.cible, niveau: r.niveau ?? 'voir' });
+    }
+    const regles = [...vues.values()];
+    const personnes = await personnesTableau(tb, { portee: true });
+    const comptes = new Set(personnes.map(p => p.compte));
+    const options = await rolesProposes(tb);
+    const ids = { role_cm: new Set(options.rolesCm.map(r => r.id)), role_club: new Set(options.rolesClub.map(r => r.id)), role_team: new Set(options.rolesTeam.map(r => r.id)) };
+    for (const r of regles) {
+      if (r.genre === 'compte' ? !comptes.has(r.cible) : !ids[r.genre].has(r.cible)) throw echec(400, 'regle-inconnue', r.genre === 'compte' ? 'Cette personne n’a pas accès au CM de ce tableau.' : 'Rôle inconnu.');
+    }
+    if (acces === 'restreint') {
+      const niveaux = await niveauxTableau(base, tb, regles);
+      if (!(await gestionnairesParmi(tb, niveaux, comptes)).length) throw echec(409, 'acces-sans-gestionnaire', 'Gardez au moins une personne qui peut gérer ce tableau (niveau « peut modifier » avec la gestion du CM, ou son créateur).');
+      if (!acteur.superAdmin && niveaux.get(acteur.compte) !== 'modifier') throw echec(409, 'acces-soi-meme', 'Vous ne pouvez pas vous retirer l’accès « peut modifier » à ce tableau.');
+    }
+    const t = maintenant();
+    await base.lot([
+      { sql: 'DELETE FROM cm_tableau_acces WHERE tableau_id = ?', params: [tb.id] },
+      ...regles.map(r => ({ sql: 'INSERT INTO cm_tableau_acces (tableau_id, genre, cible, niveau, ajoute_par, ajoute_le) VALUES (?, ?, ?, ?, ?, ?)', params: [tb.id, r.genre, r.cible, r.niveau, acteur.compte, iso(t)] })),
+      { sql: 'UPDATE cm_tableaux SET acces = ?, version = version + 1, maj_le = ? WHERE id = ?', params: [acces, iso(t), tb.id] },
+      evenement('cm.tableau_acces', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: tb.id, charge: { acces, regles: regles.length, tableau: tb.id }, maintenant: t }),
+    ]);
+    // Le Fondateur peut s'être retiré des règles : il voit toujours tout, la relecture passe.
+    return accesTableau(acteur, id);
   }
 
   // ---------------------------------------------------------------- Préférences d'affichage (par compte)
@@ -1508,18 +1628,20 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       soumisLe: c.soumis_le ?? null,
       origine: c.origine,
       version: Number(c.version),
-      droits: { valider: permissionsSur(portees, tb?.portee).has('cm.valider'), editer: permissionsSur(portees, tb?.portee).has('cm.editer') },
+      droits: { valider: permissionsAuNiveau(permissionsSur(portees, tb?.portee), tb?.niveau).has('cm.valider'), editer: permissionsAuNiveau(permissionsSur(portees, tb?.portee), tb?.niveau).has('cm.editer') },
     };
   };
 
-  async function tableauxDe(portees) {
-    return new Map((await lignesParIds(base, 'SELECT * FROM cm_tableaux WHERE supprime_le IS NULL AND portee', portees)).map(t => [t.id, t]));
+  /** Tableaux visibles des portées (restreints : seulement ceux dont l'acteur est), avec leur `niveau`. */
+  async function tableauxDe(acteur, portees) {
+    const lignes = await lecteurTableaux(base, acteur).filtrer(await lignesParIds(base, 'SELECT * FROM cm_tableaux WHERE supprime_le IS NULL AND portee', portees));
+    return new Map(lignes.map(t => [t.id, t]));
   }
 
   /** `GET /cm/a-valider` : les posts à valider des tableaux visibles. */
   async function aValider(acteur) {
     const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
-    const tableauxVus = await tableauxDe(liste);
+    const tableauxVus = await tableauxDe(acteur, liste);
     const cartes = (await lignesParIds(base, "SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND statut = 'a_valider' AND tableau_id", [...tableauxVus.keys()])).sort((a, b) => String(a.soumis_le ?? '').localeCompare(String(b.soumis_le ?? '')));
     const noms = await pseudosDe(base, cartes.map(c => c.soumis_par).filter(Boolean));
     return { cartes: cartes.map(c => ({ ...resumeCarte(c, tableauxVus, portees), textes: jsonOu(c.textes, {}) })), noms };
@@ -1535,7 +1657,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (!(b > a) || b - a > 120 * 86_400_000) throw echec(400, 'periode', 'Période de 4 mois au plus.');
     if (reseau !== undefined && reseau !== '' && !lireReseaux([reseau]).length) throw echec(400, 'reseaux', 'Réseau inconnu.');
     const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
-    const tableauxVus = await tableauxDe(liste);
+    const tableauxVus = await tableauxDe(acteur, liste);
     const cartes = (await lignesParIds(base, 'SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND post = 1 AND date_publication >= ? AND date_publication < ? AND tableau_id', [...tableauxVus.keys()], { paramsAvant: [iso(a), iso(b)] }))
       .filter(c => !reseau || jsonOu(c.reseaux, []).includes(reseau))
       .sort((x, y) => String(x.date_publication).localeCompare(String(y.date_publication)));
@@ -1547,7 +1669,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const texte = texteNettoye(q, 80);
     if (texte.length < 2) return { cartes: [] };
     const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
-    const tableauxVus = await tableauxDe(liste);
+    const tableauxVus = await tableauxDe(acteur, liste);
     const motif = `%${echapperLike(texte)}%`;
     const cartes = (await lignesParIds(base, "SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND (titre LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\') AND tableau_id", [...tableauxVus.keys()], { paramsAvant: [motif, motif] }))
       .sort((x, y) => String(y.maj_le).localeCompare(String(x.maj_le)))
@@ -1558,8 +1680,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
   /** `GET /cm/etat` : versions des tableaux visibles et nombre de posts à valider (rafraîchissement léger). */
   async function etat(acteur) {
     const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
-    const lignes = await lignesParIds(base, 'SELECT id, version, portee FROM cm_tableaux WHERE supprime_le IS NULL AND portee', liste);
-    const validables = lignes.filter(t => permissionsSur(portees, t.portee).has('cm.valider')).map(t => t.id);
+    const lignes = await lecteurTableaux(base, acteur).filtrer(await lignesParIds(base, 'SELECT id, version, portee, team_id, acces FROM cm_tableaux WHERE supprime_le IS NULL AND portee', liste));
+    const validables = lignes.filter(t => permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau).has('cm.valider')).map(t => t.id);
     const n = (await lignesParIds(base, "SELECT COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND statut = 'a_valider' AND tableau_id", validables)).reduce((s, l) => s + Number(l.n), 0);
     const non = await nonLus(acteur, lignes.map(t => t.id));
     return { versions: Object.fromEntries(lignes.map(t => [t.id, Number(t.version)])), aValider: n, nonLus: { total: non.total, tableaux: Object.fromEntries(non.parTableau) } };
@@ -1571,6 +1693,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     modifierTableau,
     supprimerTableau,
     tableau,
+    accesTableau,
+    changerAcces,
     creerListe,
     modifierListe,
     deplacerListe,
