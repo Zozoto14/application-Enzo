@@ -46,7 +46,7 @@ export function GenererVisuel({
   proposition?: { type: TypeVisuel; source: SourceVisuel } | null;
   teams: TeamCm[];
   charte: Charte | undefined;
-  /** Dossiers des visuels de la portée (migration 0040) ; lus ici s'ils ne sont pas fournis. */
+  /** Dossiers des visuels de la portée (migration 0041) ; lus ici s'ils ne sont pas fournis. */
   dossiers?: DossierVisuel[];
   /** Dossier proposé (dossier ouvert dans la galerie) ; sans : selon le genre. */
   dossierInitial?: string | null;

@@ -7,7 +7,7 @@ exacte de chaque réseau, jointes directement à la carte post.
 
 Entrée : **Esport › Teams › CM du club › Visuels** (onglets Modèles, Visuels générés, Charte graphique) et, sur une carte post, le
 panneau **Visuels** (bouton **Générer le visuel**). Migrations : `esport/migrations/0025_cm_visuels.sql`,
-`0040_cm_drive_nouveautes_visuels_dossiers.sql` (dossiers).
+`0041_cm_drive_nouveautes_visuels_dossiers.sql` (dossiers).
 Code : `esport/noyau/cm/visuels/`, `src/esport/cm/visuels/`, `src/esport/ui/cm/visuels/`, textes
 `src/esport/i18n/visuels.ts`.
 
@@ -181,7 +181,7 @@ de sa team et du club, sans les modifier s'il n'a pas `cm.editer`.
 | `cm_modeles`, `cm_modele_versions` | modèles du club (un document par format), anciennes versions (30) |
 | `cm_visuels` | visuels générés : modèle, format, langue, source, retouche, rendu (fichier, pièce jointe), état au dernier rendu |
 | `cm_visuel_images` | images importées dans l'éditeur et logos |
-| `cm_visuels_dossiers` (migration 0040) | dossiers des modèles et visuels (portée, parent, nom ou clé du dossier par défaut) ; `dossier_id` sur `cm_modeles` et `cm_visuels` |
+| `cm_visuels_dossiers` (migration 0041) | dossiers des modèles et visuels (portée, parent, nom ou clé du dossier par défaut) ; `dossier_id` sur `cm_modeles` et `cm_visuels` |
 
 Les fichiers (images, rendus) sont des `cm_fichiers` (stockage privé de la section CM). Tout est dans l'**export /
 import de la base**. **RGPD** : l'export d'un compte liste ses modèles et visuels (et les dossiers qu'il a créés) ; à la suppression, ils restent sans

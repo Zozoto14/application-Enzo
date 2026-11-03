@@ -1,5 +1,5 @@
 /**
- * Drive (migration 0040) : déplacer à la souris (cycles interdits, permissions, déplacement groupé et annulation,
+ * Drive (migration 0041) : déplacer à la souris (cycles interdits, permissions, déplacement groupé et annulation,
  * POST + X-Methode), nouveautés par compte (permissions, ses propres ajouts exclus, « vu » par dossier, tout marquer
  * comme vu, nouvelles versions, événement `drive.ajout` hors du journal), dossiers des visuels (dossiers par défaut,
  * rangement par genre, dossier choisi, déplacement, cycles, suppression qui fait remonter le contenu), RGPD et

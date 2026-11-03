@@ -1,5 +1,5 @@
 /**
- * Pastilles « nouveautés » du Drive (migration 0040, docs/esport/drive.md) : nombre de fichiers, dossiers ou
+ * Pastilles « nouveautés » du Drive (migration 0041, docs/esport/drive.md) : nombre de fichiers, dossiers ou
  * nouvelles versions ajoutés par d'autres depuis la dernière visite de chaque dossier. L'état « vu » est gardé
  * par le serveur, par compte et par dossier (jamais dans le navigateur).
  *

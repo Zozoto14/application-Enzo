@@ -1,5 +1,5 @@
 /**
- * Dossiers des visuels (migration 0040, docs/esport/visuels.md, « Dossiers »), dans le style du Drive et avec ses
+ * Dossiers des visuels (migration 0041, docs/esport/visuels.md, « Dossiers »), dans le style du Drive et avec ses
  * briques (fil d'Ariane, arborescence latérale, glisser-déposer, toast « Annuler ») : les modèles du club et les
  * visuels générés d'une portée se rangent dans des dossiers (Annonces, Résultats, Recrues, Programmes, Sponsors,
  * Divers par défaut ; créer, renommer, déplacer, supprimer). Vue grille ou liste, recherche par nom.

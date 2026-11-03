@@ -22,7 +22,7 @@ export interface ModeleResume {
   type: TypeVisuel;
   base: string | null;
   formats: CleFormat[];
-  /** Dossier (migration 0040 ; null : racine). */
+  /** Dossier (migration 0041 ; null : racine). */
   dossierId?: string | null;
   version: number;
   creePar: string | null;
@@ -53,7 +53,7 @@ export interface Visuel {
   langue: Langue;
   source: SourceVisuel;
   retouche: boolean;
-  /** Dossier (migration 0040 ; null : racine). */
+  /** Dossier (migration 0041 ; null : racine). */
   dossierId?: string | null;
   document?: DocumentVisuel | null;
   donnees?: DonneesVisuel | null;
@@ -79,7 +79,7 @@ export interface ImageImportee {
   portee: string;
 }
 
-/** Dossiers par défaut des visuels (migration 0040). */
+/** Dossiers par défaut des visuels (migration 0041). */
 export type CleDossierVisuel = 'annonces' | 'resultats' | 'recrues' | 'programmes' | 'sponsors' | 'divers';
 export interface DossierVisuel {
   id: string;

@@ -71,7 +71,7 @@ export const TYPES_CM = [
   'cm.reunion_reponse',
   'cm.reunion_rappel',
   'cm.rdv_reserve',
-  // Ajout dans le Drive (migration 0040), pour le centre de notifications : un fichier ou un dossier ajouté, une
+  // Ajout dans le Drive (migration 0041), pour le centre de notifications : un fichier ou un dossier ajouté, une
   // nouvelle version. Charge : { portee, dossierId, element: 'fichier' | 'dossier', type: 'fichier' | 'dossier' |
   // 'version', genre: 'ajout' | 'copie' | 'version' | 'rangement', nom, version, auteur }. Le destinataire doit VOIR l'élément : drive.destinatairesAjout(ev)
   // (service du Drive) donne les comptes concernés, l'auteur exclu. Hors du journal (cm.drive_* y est déjà).

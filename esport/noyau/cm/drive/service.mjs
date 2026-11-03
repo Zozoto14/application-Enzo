@@ -639,7 +639,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   }
 
   /**
-   * Événement de bus `drive.ajout` (migration 0040) : signal pour le centre de notifications (format simple,
+   * Événement de bus `drive.ajout` (migration 0041) : signal pour le centre de notifications (format simple,
    * documenté dans docs/esport/drive.md). `acteur` null : rangement automatique sans auteur.
    */
   const evAjout = ({ portee, acteur, element, id, dossierId, genre, nom, version = 1, t }) =>
@@ -1111,7 +1111,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return { ok: true, elements: lots.size };
   }
 
-  // ---------------------------------------------------------------- Nouveautés (migration 0040)
+  // ---------------------------------------------------------------- Nouveautés (migration 0041)
 
   /**
    * État « vu » du Drive, par compte et par dossier (`cm_drive_vus`) : un élément est NOUVEAU pour un compte s'il

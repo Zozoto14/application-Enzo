@@ -1,5 +1,5 @@
 /**
- * Dossiers des visuels de la section CM (migration 0040, docs/esport/visuels.md, partie « Dossiers ») : les
+ * Dossiers des visuels de la section CM (migration 0041, docs/esport/visuels.md, partie « Dossiers ») : les
  * modèles du club et les visuels générés d'une portée (club ou team) se rangent dans une arborescence, comme le
  * Drive. Dossiers par défaut (créés au premier passage) : Annonces, Résultats, Recrues, Programmes, Sponsors,
  * Divers ; un modèle ou un visuel créé sans dossier va dans celui de son genre (annonce → Annonces…).

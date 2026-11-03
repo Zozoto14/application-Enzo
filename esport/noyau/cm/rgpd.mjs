@@ -35,7 +35,7 @@ export async function exportCm(base, compte) {
       statut: (await q('SELECT fuseau, statut, message, statut_jusqua FROM cm_reunion_profils WHERE compte_id = ?')).map(x => ({ fuseau: x.fuseau, statut: x.statut, message: x.message, jusqua: x.statut_jusqua }))[0] ?? null,
     },
     cmRendezVous: (await q('SELECT titre, description, duree_minutes, ouverte, cree_le FROM cm_rdv_offres WHERE proprietaire_id = ? ORDER BY cree_le')).map(o => ({ titre: o.titre, description: o.description, dureeMinutes: Number(o.duree_minutes), ouverte: Number(o.ouverte) === 1, creeLe: o.cree_le })),
-    // Nouveautés du Drive (migration 0040) : dossiers vus et quand (pour les pastilles « nouveau »).
+    // Nouveautés du Drive (migration 0041) : dossiers vus et quand (pour les pastilles « nouveau »).
     cmDriveVus: (await q('SELECT portee, dossier, vu_le FROM cm_drive_vus WHERE compte_id = ? ORDER BY vu_le')).map(v => ({ portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), dossier: v.dossier, vuLe: v.vu_le })),
     cmVisuelsDossiers: (await q('SELECT nom, cle, portee, cree_le FROM cm_visuels_dossiers WHERE cree_par = ? ORDER BY cree_le')).map(d => ({ nom: d.nom ?? d.cle, portee: d.portee === 'club' ? 'club' : (teams.get(d.portee) ?? d.portee), creeLe: d.cree_le })),
     cmVisuels: (await q('SELECT nom, type, format, langue, portee, cree_le FROM cm_visuels WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(v => ({ nom: v.nom, type: v.type, format: v.format, langue: v.langue, portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), creeLe: v.cree_le })),
@@ -74,7 +74,7 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_drive_dossiers SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_drive_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     { sql: 'UPDATE cm_drive_dossiers SET supprime_par = NULL WHERE supprime_par = ?', params: [compte] },
-    // Migration 0040 : son état « vu » du Drive disparaît ; les dossiers de visuels qu'il a créés restent, sans auteur.
+    // Migration 0041 : son état « vu » du Drive disparaît ; les dossiers de visuels qu'il a créés restent, sans auteur.
     { sql: 'DELETE FROM cm_drive_vus WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE cm_visuels_dossiers SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_visuels_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
