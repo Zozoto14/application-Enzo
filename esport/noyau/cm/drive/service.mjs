@@ -29,7 +29,7 @@ import { ENTETES_LIEN, reponseFichierStocke } from '../../medias/lecture.mjs';
 import { disposition } from '../../entetes.mjs';
 import { echec, iso, jsonOu, nouvelId } from '../../outils.mjs';
 import { lignesParIds, pseudosDe } from '../../requetes.mjs';
-import { MOTIF_COMPTE, PORTEE_CLUB, contexteCm, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
+import { MOTIF_COMPTE, PORTEE_CLUB, comptesClubAvec, comptesTeamAvec, contexteCm, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
 import { effacerFichierCmSiOrphelin, utiliseHorsDrive } from '../utilisations.mjs';
 import { lireDebut } from '../visuels/service.mjs';
 import { OCTETS_ENTETE, dimensionsImage } from '../visuels/images.mjs';
@@ -65,6 +65,8 @@ import { fluxZip, tailleZip } from './zip.mjs';
 /** Formats qu'un navigateur affiche dans une balise <img> (vignettes, aperçu). */
 const FORMATS_VIGNETTE = ['png', 'jpeg', 'gif', 'webp', 'svg', 'avif'];
 const LOT_MAX = 200;
+const CLE_RACINE = 'racine';
+const CLE_TOUT = '*';
 const MOTIF_JOUR = /^\d{4}-\d{2}-\d{2}$/;
 const REGLAGES_DEFAUT = Object.freeze({ rangementVisuels: true, rangementClips: true });
 
@@ -431,7 +433,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
    * `GET /cm/drive?portee&dossier` : contenu d'un dossier (racine sans `dossier`), fil d'Ariane, droits, quota.
    * Dépôt des joueurs : directement leur dossier, avec leurs seuls fichiers.
    */
-  async function lister(acteur, { portee, dossier, origine = '' } = {}) {
+  async function lister(acteur, { portee, dossier, origine = '', vu = false } = {}) {
     const dc = await ctxDrive(acteur, portee);
     await assurerDossiers(dc.portee);
     const map = await arbre(dc.portee);
@@ -453,8 +455,15 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const dossiers = await dossiersPublics(dc, sousDossiers);
     const noms = await pseudosDe(base, [...fichiers.flatMap(f => [f.creePar, f.majPar]), ...dossiers.map(d => d.creePar)].filter(Boolean));
     const c = courant ? (chaine(map, courant) ?? []) : [];
+    // Ouverture par l'écran du Drive (`vu`) : le dossier est marqué vu, puis les compteurs de nouveautés suivent.
+    let nouveautes = null;
+    if (vu && acteur.compte) {
+      await marquer(acteur.compte, dc.portee, courant?.id ?? CLE_RACINE);
+      nouveautes = publierNouveautes(await calculerNouveautes(dc, map));
+    }
     return {
       portee: dc.portee,
+      nouveautes,
       team: dc.team ? { id: dc.team.id, nom: dc.team.nom } : null,
       droits: dc.drive,
       dossier: courant ? (await dossiersPublics(dc, [courant]))[0] : null,
@@ -629,6 +638,13 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return nomPourFormat(radical, nouveauFormat);
   }
 
+  /**
+   * Événement de bus `drive.ajout` (migration 0038) : signal pour le centre de notifications (format simple,
+   * documenté dans docs/esport/drive.md). `acteur` null : rangement automatique sans auteur.
+   */
+  const evAjout = ({ portee, acteur, element, id, dossierId, genre, nom, version = 1, t }) =>
+    evenement('drive.ajout', { teamId: teamDePortee(portee), acteur: acteur ?? null, entiteType: element === 'dossier' ? 'cm_drive_dossier' : 'cm_drive', entiteId: id, charge: { portee, dossierId: dossierId ?? null, element, genre, nom, version }, maintenant: t });
+
   const tagsInstr = (elementId, tags) => [{ sql: 'DELETE FROM cm_drive_tags WHERE element_id = ?', params: [elementId] }, ...tags.map(tag => ({ sql: 'INSERT INTO cm_drive_tags (element_id, tag) VALUES (?, ?)', params: [elementId, tag] }))];
 
   // ---------------------------------------------------------------- Fichiers
@@ -664,6 +680,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       { sql: 'INSERT INTO cm_drive_versions (id, element_id, version, fichier_id, nom, type_mime, taille, meta, cree_par, cree_le) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), id, r.fichierId, nom, mime, Number(r.envoi.taille), meta, acteur.compte, iso(t)] },
       ...tagsInstr(id, tags),
       evenement('cm.drive_fichier_ajoute', { teamId: teamDePortee(dc.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: id, charge: { nom, portee: dc.portee, taille: Number(r.envoi.taille), dossier: dossier ? nomAffiche(dossier) : null }, maintenant: t }),
+      evAjout({ portee: dc.portee, acteur: acteur.compte, element: 'fichier', id, dossierId: dossier?.id, genre: 'ajout', nom, t }),
     ]);
     await verifierAlerteDrive(base, { quota: config.quota, maintenant: t }).catch(() => false);
     const f = await base.premier('SELECT * FROM cm_drive_fichiers WHERE id = ?', [id]);
@@ -767,6 +784,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       { sql: 'INSERT INTO cm_drive_versions (id, element_id, version, fichier_id, nom, type_mime, taille, meta, cree_par, cree_le) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), nouveau, f.fichier_id, nom, f.type_mime, Number(f.taille), f.meta, acteur.compte, iso(t)] },
       ...tagsInstr(nouveau, tags),
       evenement('cm.drive_fichier_ajoute', { teamId: teamDePortee(dest.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: nouveau, charge: { nom, portee: dest.portee, copie: true }, maintenant: t }),
+      evAjout({ portee: dest.portee, acteur: acteur.compte, element: 'fichier', id: nouveau, dossierId: dossier?.id, genre: 'copie', nom, t }),
     ]);
     return { id: nouveau };
   }
@@ -799,6 +817,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
         params: [fichierId, v, nom, cleRecherche(nom), mime, genre, taille, meta, acteur?.compte ?? null, iso(t), f.id, Number(f.version)],
       },
       evenement('cm.drive_version_ajoutee', { teamId: teamDePortee(f.portee), acteur: acteur?.compte ?? null, entiteType: 'cm_drive', entiteId: f.id, charge: { nom, version: v, restauree }, maintenant: t }),
+      evAjout({ portee: f.portee, acteur: acteur?.compte, element: 'fichier', id: f.id, dossierId: f.dossier_id, genre: 'version', nom, version: v, t }),
     ]);
     if (res[instructions.length + 1]?.changements !== 1) throw echec(409, 'conflit', 'Ce fichier a changé entre-temps : rechargez-le.');
     // Historique borné : les plus anciennes versions partent (leurs octets aussi s'ils ne servent plus).
@@ -866,6 +885,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     await base.lot([
       { sql: 'INSERT INTO cm_drive_dossiers (id, portee, team_id, parent_id, nom, cle, restreint, cree_par, cree_le, maj_par, maj_le) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)', params: [id, dc.portee, teamDePortee(dc.portee), parent?.id ?? null, nom, restreint ? 1 : 0, acteur.compte, iso(t), acteur.compte, iso(t)] },
       evenement('cm.drive_dossier_cree', { teamId: teamDePortee(dc.portee), acteur: acteur.compte, entiteType: 'cm_drive_dossier', entiteId: id, charge: { nom, portee: dc.portee }, maintenant: t }),
+      evAjout({ portee: dc.portee, acteur: acteur.compte, element: 'dossier', id, dossierId: parent?.id, genre: 'ajout', nom, t }),
     ]);
     return { id };
   }
@@ -1057,6 +1077,132 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return { ok: true, elements: lots.size };
   }
 
+  // ---------------------------------------------------------------- Nouveautés (migration 0038)
+
+  /**
+   * État « vu » du Drive, par compte et par dossier (`cm_drive_vus`) : un élément est NOUVEAU pour un compte s'il
+   * a été ajouté (fichier, dossier, copie, rangement automatique) ou a reçu une nouvelle version, par quelqu'un
+   * d'autre, après la dernière visite de son dossier parent par ce compte (et après « Tout marquer comme vu »).
+   * Seuls les éléments visibles du compte comptent (dossiers restreints, dépôt des joueurs). Le compteur d'un
+   * dossier additionne ses nouveautés et celles de ses sous-dossiers.
+   */
+  const marquer = (compte, portee, dossier, t = maintenant()) =>
+    base.executer('INSERT INTO cm_drive_vus (compte_id, portee, dossier, vu_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, portee, dossier) DO UPDATE SET vu_le = excluded.vu_le', [compte, portee, dossier, iso(t)]);
+
+  async function calculerNouveautes(dc, map) {
+    const compte = dc.acteur.compte;
+    const vus = new Map((await base.tous('SELECT dossier, vu_le FROM cm_drive_vus WHERE compte_id = ? AND portee = ?', [compte, dc.portee])).map(l => [l.dossier, l.vu_le]));
+    const parDossier = new Map();
+    let base0 = vus.get(CLE_TOUT);
+    if (!base0) {
+      // Premier passage : rien n'est « nouveau » (ce qui existait avant n'encombre pas les pastilles).
+      base0 = iso(maintenant());
+      await base.executer('INSERT INTO cm_drive_vus (compte_id, portee, dossier, vu_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, portee, dossier) DO NOTHING', [compte, dc.portee, CLE_TOUT, base0]);
+      return { total: 0, parDossier, racine: 0 };
+    }
+    const seuil = parent => {
+      const v = vus.get(parent ?? CLE_RACINE);
+      return v && v > base0 ? v : base0;
+    };
+    const nouveaux = new Map();
+    for (const f of await base.tous('SELECT id, dossier_id, cree_par, cree_le FROM cm_drive_fichiers WHERE portee = ? AND supprime_le IS NULL AND cree_le > ? AND (cree_par IS NULL OR cree_par <> ?) LIMIT 5000', [dc.portee, base0, compte])) {
+      if (f.cree_le > seuil(f.dossier_id)) nouveaux.set(f.id, f);
+    }
+    const versions = await base.tous(
+      'SELECT v.element_id, v.cree_le, f.id, f.dossier_id, f.cree_par FROM cm_drive_versions v JOIN cm_drive_fichiers f ON f.id = v.element_id WHERE f.portee = ? AND f.supprime_le IS NULL AND v.version > 1 AND v.cree_le > ? AND (v.cree_par IS NULL OR v.cree_par <> ?) LIMIT 5000',
+      [dc.portee, base0, compte],
+    );
+    for (const v of versions) if (v.cree_le > seuil(v.dossier_id) && !nouveaux.has(v.id)) nouveaux.set(v.id, v);
+    const elements = [...nouveaux.values()].filter(f => fichierAccessible(dc, map, f)).map(f => f.dossier_id ?? null);
+    if (!dc.drive.depot) {
+      for (const d of map.values()) {
+        if (!d.cle && d.cree_par !== compte && d.cree_le > seuil(d.parent_id) && dossierAccessible(dc, map, d)) elements.push(d.parent_id ?? null);
+      }
+    }
+    let racine = 0;
+    for (const parent of elements) {
+      if (!parent) {
+        racine++;
+        continue;
+      }
+      for (const x of chaine(map, map.get(parent)) ?? []) parDossier.set(x.id, (parDossier.get(x.id) ?? 0) + 1);
+    }
+    return { total: elements.length, parDossier, racine };
+  }
+
+  const publierNouveautes = n => ({ total: n.total, racine: n.racine, dossiers: Object.fromEntries(n.parDossier) });
+
+  /**
+   * `GET /cm/drive/nouveautes?portee` : compteurs de nouveautés de l'acteur. Avec `portee` : total et compteur
+   * par dossier ; sans : total de chaque Drive visible (pastilles de la tuile « CM du club » et des onglets).
+   */
+  async function nouveautes(acteur, { portee } = {}) {
+    if (portee) {
+      const dc = await ctxDrive(acteur, portee);
+      await assurerDossiers(dc.portee);
+      return { portee: dc.portee, ...publierNouveautes(await calculerNouveautes(dc, await arbre(dc.portee))) };
+    }
+    const liste = await portees(acteur).catch(() => ({ portees: [] }));
+    const sortie = [];
+    for (const p of liste.portees) {
+      const dc = await ctxDrive(acteur, p.portee);
+      sortie.push({ portee: p.portee, total: (await calculerNouveautes(dc, await arbre(dc.portee))).total });
+    }
+    return { total: sortie.reduce((s, x) => s + x.total, 0), portees: sortie };
+  }
+
+  /** `POST /cm/drive/vu { portee, dossierId }` : le dossier (null : la racine) est vu maintenant. */
+  async function vu(acteur, corps) {
+    const dc = await ctxDrive(acteur, corps?.portee);
+    const map = await arbre(dc.portee);
+    const d = corps?.dossierId ? dossierCible(dc, map, corps.dossierId) : null;
+    await marquer(acteur.compte, dc.portee, d?.id ?? CLE_RACINE);
+    return { portee: dc.portee, ...publierNouveautes(await calculerNouveautes(dc, map)) };
+  }
+
+  /** `POST /cm/drive/tout-vu { portee? }` : tout est vu, dans le Drive de la portée (sans portée : tous les Drive visibles). */
+  async function toutVu(acteur, corps) {
+    const cibles = corps?.portee ? [(await ctxDrive(acteur, corps.portee)).portee] : (await portees(acteur)).portees.map(p => p.portee);
+    const t = maintenant();
+    const lot = [];
+    for (const p of cibles) {
+      lot.push(
+        { sql: 'DELETE FROM cm_drive_vus WHERE compte_id = ? AND portee = ? AND dossier <> ?', params: [acteur.compte, p, CLE_TOUT] },
+        { sql: 'INSERT INTO cm_drive_vus (compte_id, portee, dossier, vu_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, portee, dossier) DO UPDATE SET vu_le = excluded.vu_le', params: [acteur.compte, p, CLE_TOUT, iso(t)] },
+      );
+    }
+    if (lot.length) await base.lot(lot);
+    return { ok: true, portees: cibles };
+  }
+
+  /** Le compte voit-il cet élément du Drive (hors corbeille) ? Pour les abonnés de `drive.ajout`. */
+  async function elementVisiblePour(compte, element, id) {
+    try {
+      if (element === 'dossier') await dossierVisible(acteurDuLien(compte), id);
+      else await fichierVisible(acteurDuLien(compte), id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Destinataires d'un événement `drive.ajout` (centre de notifications) : comptes qui ont un droit sur le Drive de
+   * la portée et VOIENT l'élément, sauf son auteur.
+   */
+  async function destinatairesAjout(ev) {
+    const charge = jsonOu(ev?.charge, {});
+    if (ev?.type !== 'drive.ajout' || typeof charge.portee !== 'string') return [];
+    const candidats = new Set();
+    for (const p of ['cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer']) {
+      for (const c of charge.portee === PORTEE_CLUB ? await comptesClubAvec(base, p) : await comptesTeamAvec(base, charge.portee, p)) candidats.add(c);
+    }
+    candidats.delete(ev.acteur_id);
+    const sortie = [];
+    for (const c of candidats) if (await elementVisiblePour(c, charge.element, ev.entite_id)) sortie.push(c);
+    return sortie.sort();
+  }
+
   // ---------------------------------------------------------------- Lot, favoris
 
   /** `POST /cm/drive/lot { action: deplacer | copier | corbeille, elements: [{ genre, id }], dossierId?, portee? }`. */
@@ -1067,9 +1213,15 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     if (!Array.isArray(elements) || !elements.length || elements.length > LOT_MAX) throw echec(400, 'elements', `De 1 à ${LOT_MAX} éléments.`);
     const faits = [];
     const erreurs = [];
+    // Déplacement : emplacement d'avant de chaque élément déplacé (l'app s'en sert pour « Annuler »).
+    const avant = {};
     for (const e of elements) {
       const genre = e?.genre === 'dossier' ? 'dossier' : 'fichier';
       try {
+        if (action === 'deplacer' && typeof e?.id === 'string') {
+          const l = genre === 'dossier' ? await base.premier('SELECT parent_id AS p FROM cm_drive_dossiers WHERE id = ?', [e.id]) : await base.premier('SELECT dossier_id AS p FROM cm_drive_fichiers WHERE id = ?', [e.id]);
+          if (l) avant[e.id] = l.p ?? null;
+        }
         if (action === 'corbeille') await (genre === 'dossier' ? mettreDossierALaCorbeille(acteur, e?.id) : mettreFichierALaCorbeille(acteur, e?.id));
         else if (action === 'deplacer') await (genre === 'dossier' ? modifierDossier(acteur, e?.id, { parentId: corps?.dossierId ?? null }) : modifierFichier(acteur, e?.id, { dossierId: corps?.dossierId ?? null }));
         else {
@@ -1079,9 +1231,10 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
         faits.push(e.id);
       } catch (err) {
         erreurs.push({ id: typeof e?.id === 'string' ? e.id : null, code: err?.code ?? 'erreur', erreur: err?.message ?? String(err) });
+        delete avant[e?.id];
       }
     }
-    return { faits, erreurs };
+    return action === 'deplacer' ? { faits, erreurs, avant } : { faits, erreurs };
   }
 
   /** `POST /cm/drive/favoris { genre, id, favori }` : favori personnel (fichier ou dossier visible). */
@@ -1253,6 +1406,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
         },
         { sql: 'INSERT INTO cm_drive_versions (id, element_id, version, fichier_id, nom, type_mime, taille, meta, cree_par, cree_le) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), id, fichierId, n, FORMATS[format].mime, Number(cm.taille), meta, acteur?.compte ?? null, iso(t)] },
         ...tagsInstr(id, [origine]),
+        evAjout({ portee, acteur: acteur?.compte, element: 'fichier', id, dossierId: dossier?.id, genre: 'rangement', nom: n, t }),
       ]);
       return id;
     } catch (e) {
@@ -1327,6 +1481,11 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     viderCorbeille,
     enLot,
     favori,
+    nouveautes,
+    vu,
+    toutVu,
+    elementVisiblePour,
+    destinatairesAjout,
     lienZip,
     servirZip,
     servirContenu,

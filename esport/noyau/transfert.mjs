@@ -164,6 +164,9 @@ export const TABLES = [
   ['cm_drive_versions', 'id'],
   ['cm_drive_tags', 'element_id, tag'],
   ['cm_drive_favoris', 'compte_id, element_id'],
+  // Nouveautés du Drive (migration 0038) : état « vu » par compte et par dossier ; dossiers des visuels.
+  ['cm_drive_vus', 'compte_id, portee, dossier'],
+  ['cm_visuels_dossiers', 'id'],
   // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).
   ['trombi_fiches', 'compte_id'],
   ['trombi_photos', 'compte_id'],

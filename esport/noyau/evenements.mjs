@@ -24,7 +24,7 @@ import { TYPES_REVIEW, abonneReview } from './review/bus.mjs';
 import { TYPES_STRATS, abonneStrats } from './strats/bus.mjs';
 import { TYPES_RESSOURCES, abonneRessources } from './ressources/bus.mjs';
 import { TYPES_COMPETITION, abonneCompetition } from './competition/bus.mjs';
-import { TYPES_CM, abonneCm } from './cm/bus.mjs';
+import { TYPES_CM, TYPES_HORS_JOURNAL, abonneCm } from './cm/bus.mjs';
 import { abonneCmSuggestions } from './cm/suggestions.mjs';
 import { TYPES_SPONSORS, abonneSponsors } from './sponsors/bus.mjs';
 import { TYPES_RESEAUX, abonneReseaux } from './reseaux/bus.mjs';
@@ -139,6 +139,7 @@ export function evenement(type, { teamId = null, acteur = null, entiteType = nul
 
 /** Journal d'activité : une ligne par événement (même identifiant), jamais modifiée ni supprimée. */
 export async function abonneJournal(base, ev) {
+  if (TYPES_HORS_JOURNAL.includes(ev.type)) return;
   await base.executer(
     'INSERT INTO journal (id, team_id, acteur_id, action, entite_type, entite_id, meta, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
     [ev.id, ev.team_id, ev.acteur_id, ev.type, ev.entite_type, ev.entite_id, ev.charge ?? '{}', ev.cree_le],

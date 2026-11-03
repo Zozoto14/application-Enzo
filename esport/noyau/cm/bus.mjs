@@ -71,7 +71,15 @@ export const TYPES_CM = [
   'cm.reunion_reponse',
   'cm.reunion_rappel',
   'cm.rdv_reserve',
+  // Ajout dans le Drive (migration 0038), pour le centre de notifications : un fichier ou un dossier ajouté, une
+  // nouvelle version. Charge : { portee, dossierId, element: 'fichier' | 'dossier', genre: 'ajout' | 'copie' |
+  // 'version' | 'rangement', nom, version }. Le destinataire doit VOIR l'élément : drive.destinatairesAjout(ev)
+  // (service du Drive) donne les comptes concernés, l'auteur exclu. Hors du journal (cm.drive_* y est déjà).
+  'drive.ajout',
 ];
+
+/** Événements du bus qui ne vont pas au journal d'activité (signaux pour d'autres abonnés, déjà journalisés). */
+export const TYPES_HORS_JOURNAL = ['drive.ajout'];
 
 async function notifier(base, ev, compte, type, charge) {
   await base.executer(

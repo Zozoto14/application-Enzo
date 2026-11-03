@@ -6,7 +6,9 @@
  *   GET|HEAD          /cm/drive/zip/<dossier>?c&exp&sig                   dossier en ZIP par lien signé
  *
  *   GET               /cm/drive/portees                                   portées, droits, quota, réglages
- *   GET               /cm/drive?portee&dossier                            contenu d'un dossier (racine sans dossier)
+ *   GET               /cm/drive?portee&dossier&vu                         contenu d'un dossier (racine sans dossier) ; vu=1 : marqué vu
+ *   GET               /cm/drive/nouveautes?portee                         nouveautés de l'acteur (par dossier, ou par Drive)
+ *   POST              /cm/drive/vu { portee, dossierId } ; /cm/drive/tout-vu { portee? }
  *   GET               /cm/drive/arbre?portee ; /cm/drive/filtres?portee ; /cm/drive/recherche?portee&q&genre&tag&auteur&du&au&favoris&dossier
  *   PATCH|DELETE      /cm/drive/tags { portee, tag, nom } ; ?portee&tag   renommer / retirer une étiquette de tous les fichiers (gérer)
  *   GET               /cm/drive/elements/:id                              où est un élément (lien interne)
@@ -54,7 +56,11 @@ export async function routesDrive({ drive, medias, acteur, p, methode: m, url, r
   const origine = prefixeDe(url);
   const portee = q.get('portee') || undefined;
 
-  if (n === 1 && m === 'GET') return drive.lister(acteur, { portee, dossier: q.get('dossier') || undefined, origine });
+  if (n === 1 && m === 'GET') return drive.lister(acteur, { portee, dossier: q.get('dossier') || undefined, origine, vu: q.get('vu') === '1' });
+  // Nouveautés par compte (migration 0038) : compteurs, dossier vu, tout marquer comme vu.
+  if (n === 2 && b === 'nouveautes' && m === 'GET') return drive.nouveautes(acteur, { portee });
+  if (n === 2 && b === 'vu' && m === 'POST') return drive.vu(acteur, await lireCorps());
+  if (n === 2 && b === 'tout-vu' && m === 'POST') return drive.toutVu(acteur, await lireCorps());
   if (n === 2 && b === 'portees' && m === 'GET') return drive.portees(acteur);
   if (n === 2 && b === 'arbre' && m === 'GET') return drive.arborescence(acteur, { portee });
   if (n === 2 && b === 'filtres' && m === 'GET') return drive.filtres(acteur, { portee });

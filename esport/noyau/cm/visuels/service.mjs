@@ -23,6 +23,7 @@ import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, peut, porteesD
 import { DUREE_LIEN_CM_MS } from '../tableaux.mjs';
 import { CHARTE_DEFAUT, CLES_FORMATS, FORMATS, LANGUES_VISUEL, TYPES_VISUEL, DocumentInvalide, erreurDocument, fichiersDuDocument, lireCharte, lireDocument, lireDocuments } from './document.mjs';
 import { GENRES_SOURCE, donneesVisuel } from './champs.mjs';
+import { servicesDossiersVisuels } from './dossiers.mjs';
 import { OCTETS_ENTETE, TAILLE_MAX_IMAGE, TAILLE_MAX_RENDU, dimensionsAcceptables, dimensionsImage } from './images.mjs';
 
 const MAX_MODELES = 300;
@@ -71,6 +72,8 @@ export async function lireDebut(stockage, cle, n) {
 }
 
 export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, tableaux, drive }) {
+  // Dossiers des modèles et visuels (migration 0038).
+  const dossiers = servicesDossiersVisuels({ base, maintenant });
   // ---------------------------------------------------------------- Contextes
 
   /** Contexte d'une portée avec une des permissions (404 si la portée n'est pas visible, 403 sans la permission). */
@@ -238,6 +241,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     type: m.type,
     base: m.base ?? null,
     formats: Object.keys(jsonOu(m.documents, {})),
+    dossierId: m.dossier_id ?? null,
     version: Number(m.version),
     creePar: m.cree_par ?? null,
     majPar: m.maj_par ?? null,
@@ -292,7 +296,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     return { modele: modelePublic(m, await pseudosDe(base, [m.cree_par, m.maj_par].filter(Boolean)), { documents: true }) };
   }
 
-  /** `POST /cm/modeles { portee, nom, type, base, documents }` (cm.editer de la portée). */
+  /** `POST /cm/modeles { portee, nom, type, base, documents, dossierId? }` (cm.editer de la portée ; sans dossier : celui du genre). */
   async function creerModele(acteur, corps) {
     const ctx = await ctxPortee(acteur, corps?.portee ?? PORTEE_CLUB, 'cm.editer');
     const type = lireType(corps?.type);
@@ -302,10 +306,11 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const n = await base.premier('SELECT COUNT(*) AS n FROM cm_modeles WHERE supprime_le IS NULL', []);
     if (Number(n?.n ?? 0) >= MAX_MODELES) throw echec(409, 'trop-de-modeles', `${MAX_MODELES} modèles au plus.`);
     const baseModele = typeof corps?.base === 'string' && (MOTIF_MODELE_DEFAUT.test(corps.base) || MOTIF_UUID.test(corps.base)) ? corps.base : null;
+    const dossierId = await dossiers.dossierPour(ctx.portee, type, corps?.dossierId);
     const id = nouvelId();
     const t = iso(maintenant());
     await base.lot([
-      { sql: 'INSERT INTO cm_modeles (id, portee, team_id, nom, type, base, documents, version, cree_par, cree_le, maj_par, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)', params: [id, ctx.portee, teamDePortee(ctx.portee), nom, type, baseModele, JSON.stringify(documents), acteur.compte, t, acteur.compte, t] },
+      { sql: 'INSERT INTO cm_modeles (id, portee, team_id, nom, type, base, documents, version, cree_par, cree_le, maj_par, maj_le, dossier_id) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)', params: [id, ctx.portee, teamDePortee(ctx.portee), nom, type, baseModele, JSON.stringify(documents), acteur.compte, t, acteur.compte, t, dossierId] },
       evenement('cm.modele_cree', { teamId: teamDePortee(ctx.portee), acteur: acteur.compte, entiteType: 'cm_modele', entiteId: id, charge: { nom, type, portee: ctx.portee }, maintenant: maintenant() }),
     ]);
     return modele(acteur, id);
@@ -342,7 +347,10 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
   /** `POST /cm/modeles/:id/dupliquer { nom?, portee? }` : copie (version 1) dans une portée où l'on peut éditer. */
   async function dupliquerModele(acteur, id, corps) {
     const { m } = await modeleVisible(acteur, id);
-    return creerModele(acteur, { portee: corps?.portee ?? m.portee, nom: lireNom(corps?.nom, `${m.nom} (2)`.slice(0, 80)), type: m.type, base: m.id, documents: jsonOu(m.documents, {}) });
+    const portee = corps?.portee ?? m.portee;
+    // La copie reste dans le dossier de l'original (même portée), sinon dans celui de son genre.
+    const dossierId = corps?.dossierId !== undefined ? corps.dossierId : portee === m.portee && m.dossier_id ? m.dossier_id : undefined;
+    return creerModele(acteur, { portee, nom: lireNom(corps?.nom, `${m.nom} (2)`.slice(0, 80)), type: m.type, base: m.id, documents: jsonOu(m.documents, {}), dossierId });
   }
 
   async function versionsModele(acteur, id) {
@@ -463,6 +471,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
       langue: v.langue,
       source,
       retouche: Number(v.retouche) === 1,
+      dossierId: v.dossier_id ?? null,
       ...(avecDonnees ? { document: jsonOu(v.document, null), donnees: donneesActuelles, erreurDonnees, perime } : {}),
       renduLe: v.rendu_le ?? null,
       version: Number(v.version),
@@ -534,9 +543,11 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const id = nouvelId();
     const t = iso(maintenant());
     const nom = texteNettoye(corps?.nom, 120) || texteNettoye(d[langue].champs.titre || d[langue].champs.joueur || d[langue].champs.semaine || d[langue].champs.team, 120) || modeleRef.type;
+    // Dossier (migration 0038) : celui choisi (même depuis une carte), sinon celui du genre (annonce → Annonces…).
+    const dossierId = await dossiers.dossierPour(ctx.portee, modeleRef.type, corps?.dossierId);
     await base.executer(
-      'INSERT INTO cm_visuels (id, portee, team_id, carte_id, nom, modele, type, format, langue, source, retouche, version, cree_par, cree_le, maj_par, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?)',
-      [id, ctx.portee, teamDePortee(ctx.portee), carteId, nom, modeleRef.ref, modeleRef.type, format, langue, JSON.stringify(source), acteur.compte, t, acteur.compte, t],
+      'INSERT INTO cm_visuels (id, portee, team_id, carte_id, nom, modele, type, format, langue, source, retouche, version, cree_par, cree_le, maj_par, maj_le, dossier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)',
+      [id, ctx.portee, teamDePortee(ctx.portee), carteId, nom, modeleRef.ref, modeleRef.type, format, langue, JSON.stringify(source), acteur.compte, t, acteur.compte, t, dossierId],
     );
     return visuel(acteur, id);
   }
@@ -682,6 +693,11 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
   }
 
   return {
+    dossiers: dossiers.lister,
+    creerDossier: dossiers.creer,
+    modifierDossier: dossiers.modifier,
+    supprimerDossier: dossiers.supprimer,
+    deplacer: dossiers.deplacer,
     charte,
     changerCharte,
     importerImage,

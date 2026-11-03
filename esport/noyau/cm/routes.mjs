@@ -32,6 +32,7 @@
  *   GET|POST          /cm/modeles ; GET|PATCH|DELETE /cm/modeles/:id ; POST …/dupliquer
  *   GET               /cm/modeles/:id/versions ; GET …/versions/:v ; POST …/versions/:v/restaurer
  *   GET|POST          /cm/visuels ; GET|PATCH|DELETE /cm/visuels/:id ; POST …/(rendu|carte|lien)
+ *   GET|POST          /cm/visuels/dossiers ; PATCH|DELETE /cm/visuels/dossiers/:id ; POST /cm/visuels/deplacer
  *   GET               /cm/cartes/:id/visuels                     visuels d'une carte et proposition
  *
  *   Réunions de l'équipe CM (docs/esport/cm-reunions.md) : /cm/reunions… (reunions/routes.mjs).
@@ -127,6 +128,14 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 5 && c === 'versions' && p[4] === 'restaurer' && m === 'POST') return vi.restaurerModele(acteur, b, p[3], await lireCorps());
   }
   if (a === 'visuels') {
+    // Dossiers des modèles et visuels (migration 0038).
+    if (b === 'dossiers') {
+      if (n === 2 && m === 'GET') return vi.dossiers(acteur, { portee: q.get('portee') || undefined });
+      if (n === 2 && m === 'POST') return vi.creerDossier(acteur, await lireCorps());
+      if (n === 3 && m === 'PATCH') return vi.modifierDossier(acteur, c, await lireCorps());
+      if (n === 3 && m === 'DELETE') return vi.supprimerDossier(acteur, c);
+    }
+    if (n === 2 && b === 'deplacer' && m === 'POST') return vi.deplacer(acteur, await lireCorps());
     if (n === 2 && b === 'images' && m === 'GET') return vi.images(acteur, { portee: q.get('portee') || undefined });
     if (n === 2 && b === 'images' && m === 'POST') {
       const corps = await lireCorps();
