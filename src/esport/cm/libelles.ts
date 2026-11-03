@@ -5,6 +5,7 @@
 
 import { langueCourante, tr } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
+import { trCm } from '../i18n/cm';
 import { trDr } from '../i18n/drive';
 import { trRe, type CleRe } from '../i18n/reunions';
 import { trLi } from '../i18n/liens';
@@ -35,6 +36,8 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return tr('cm.jr.carte_assignee', { qui, titre });
     case 'cm.carte_supprimee':
       return tr('cm.jr.carte_supprimee', { qui, titre });
+    case 'cm.carte_urgence':
+      return tr('cm.jr.carte_urgence', { qui, titre, niveau: m.niveau === 'faible' || m.niveau === 'moyen' || m.niveau === 'urgent' || m.niveau === 'critique' ? trCm(`urgence.${m.niveau}`) : '?' });
     case 'cm.commentaire_ajoute':
       return tr('cm.jr.commentaire_ajoute', { qui, titre });
     case 'cm.depot':
@@ -158,6 +161,8 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
       return tr('cm.nt.assigne', { membre: nom(c.membre), titre });
     case 'cm-mention':
       return tr('cm.nt.mention', { membre: nom(c.membre), titre });
+    case 'cm-urgence':
+      return tr(c.niveau === 'critique' ? 'cm.nt.urgence_critique' : 'cm.nt.urgence_urgent', { membre: nom(c.membre), titre });
     case 'cm-commentaire':
       return tr('cm.nt.commentaire', { membre: nom(c.membre), titre });
     case 'cm-a-valider':

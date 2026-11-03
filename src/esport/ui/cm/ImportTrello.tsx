@@ -12,7 +12,8 @@ import { BoutonHub, Case } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import { PORTEE_CLUB, type ApiCm, type ApercuTrello, type ResultatImport, type TeamCm } from '../../cm/api';
 import { ACCEPT_JSON, choisirFichier, choixFichierDisponible } from '../../medias/choixFichier';
-import { trCm } from '../../i18n/cm';
+import { cleLibelleUrgence } from '../../cm/urgence';
+import { trCm, trnCm } from '../../i18n/cm';
 import { Choix, Retours, styles, useAgir } from '../commun';
 import { Carte, ESP, TitreCarte, attenue, texte } from '../design';
 import { Aide } from './commun';
@@ -28,6 +29,8 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
   const [apercu, setApercu] = useState<ApercuTrello | undefined>();
   const [corr, setCorr] = useState<Record<string, string | null>>({});
   const [resultat, setResultat] = useState<ResultatImport | undefined>();
+  // Étiquettes Critique / Urgent / Moyen / Faible : proposées en drapeau d'urgence (coché par défaut).
+  const [convertir, setConvertir] = useState(true);
   const { erreur, avis, agir, enCours, setErreur } = useAgir();
   useEffect(() => {
     void agir('', async () => {
@@ -120,6 +123,21 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
           {apercu.listes.map((l, i) => (
             <Text key={i} style={texte(theme, 13)}>{`• ${l.nom} (${l.cartes})${l.archivee ? ` · ${trCm('c.archivee')}` : ''}`}</Text>
           ))}
+          {apercu.urgences?.length ? (
+            <View style={{ gap: ESP.xs }} testID="esport-cm-trello-urgences">
+              <Text style={{ ...texte(theme), fontWeight: '700' }}>{trCm('trello.urgences')}</Text>
+              {apercu.urgences.map((u, i) => (
+                <Text key={i} style={texte(theme, 13)}>
+                  {`• ${trnCm('trello.urgences_ligne', u.cartes, { nom: u.nom, niveau: trCm(cleLibelleUrgence(u.niveau)) })}`}
+                </Text>
+              ))}
+              <View style={[styles.ligne, { gap: ESP.xs }]}>
+                <Case theme={theme} coche={convertir} libelle={trCm('trello.urgences_convertir')} onChanger={setConvertir} testID="esport-cm-trello-urgences-convertir" />
+                <Text style={texte(theme)}>{trCm('trello.urgences_convertir')}</Text>
+              </View>
+              <Aide theme={theme}>{trCm('trello.urgences_aide')}</Aide>
+            </View>
+          ) : null}
           {apercu.bilan.piecesDeposees ? <Aide theme={theme} testID="esport-cm-trello-fichiers">{trCm('trello.fichiers_liens', { n: apercu.bilan.piecesDeposees })}</Aide> : null}
           {apercu.piecesIgnorees ? <Aide theme={theme}>{trCm('trello.pieces_ignorees', { n: apercu.piecesIgnorees })}</Aide> : null}
           {apercu.membresTrello.length ? (
@@ -148,7 +166,7 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
               void agir('importer', async () => {
                 if (!fichier) return;
                 setErreur(undefined);
-                const r = await api.importerTrello(fichier.contenu, portee, archivees, corr);
+                const r = await api.importerTrello(fichier.contenu, portee, archivees, corr, convertir && Boolean(apercu.urgences?.length));
                 setResultat(r);
                 return trCm('trello.fait', { cartes: r.bilan.cartesCreees, maj: r.bilan.cartesMisesAJour });
               })

@@ -26,7 +26,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints ; `0047_cm_urgence.sql`, drapeau d'urgence des cartes). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -221,6 +221,67 @@ nombre) prévient les autres. L'état « lu » est gardé **par le serveur, par 
   (`transfert.mjs`) ; **RGPD** : l'export d'un compte contient son état « lu » (`cmCommentairesVus`) et ses cartes
   suivies (`cmCartesSuivies`), sa suppression efface les deux.
 
+### Urgences : le drapeau des cartes (migration 0047)
+
+Chaque carte peut porter un **drapeau d'urgence** à quatre niveaux : **Faible**, **Moyen**, **Urgent**, **Critique** (par
+défaut : **aucun**). Colonne `cm_cartes.urgence` (`NULL` ou `faible` / `moyen` / `urgent` / `critique`), constantes et
+ordre dans `esport/noyau/cm/urgence.mjs` (serveur) et `src/esport/cm/urgence.ts` (app).
+
+- **Réglage** (`cm.editer`, comme les autres champs de carte ; un lecteur voit le drapeau sans pouvoir le changer, un
+  correspondant qui ne fait que déposer n'y touche pas : 403) : `PATCH /cm/cartes/:id { urgence }` (`null` ou `"aucune"` =
+  aucun ; 400 `urgence` si la valeur est inconnue). Trois façons dans l'app : le **sélecteur rapide** de la fiche
+  (« Niveau d'urgence », cinq choix), le menu **⋯ › Urgence…** de la carte (volet à cinq choix, utilisable au clavier et au
+  lecteur d'écran) et, à l'import, la conversion d'étiquettes Trello (ci-dessous). Chaque changement est inscrit dans le
+  **journal d'activité de la carte** (« X a changé l'urgence : Aucune → Faible ») ; un changement vers le même niveau
+  n'écrit rien. Pas de raccourci clavier dédié : le menu ⋯ se parcourt déjà au clavier.
+- **Sur la carte** : un **drapeau monochrome** (icône `drapeau`, `src/ui/icones`) **devant le titre**, sur la même ligne :
+  la carte compacte **ne grandit pas** (le drapeau n'est pas une « information » de `carteAInfos`). Couleurs de trait
+  (contraste au moins 4,5:1 sur les surfaces des thèmes clairs et sombres, testé) : Critique rouge, Urgent orange, Moyen
+  ambre, Faible bleu. Urgent et Critique ajoutent un **liseré gauche** de la même couleur. La couleur ne porte jamais
+  seule l'information : le libellé (« Urgence : Critique ») est lu par les lecteurs d'écran (dans le nom de la carte), en
+  infobulle sur le web, et écrit dans la fiche et les filtres.
+- **Filtre** : dans **Filtres** du tableau, une rangée de cases Critique / Urgent / Moyen / Faible / **Sans drapeau**
+  (plusieurs niveaux possibles) ; un filtre à choix unique dans **À valider** et dans le **calendrier éditorial**, qui
+  affichent aussi le drapeau (`/cm/a-valider`, `/cm/calendrier`, `/cm/recherche` rendent `urgence`).
+- **Tri** : menu ⋯ de la colonne › **« Trier la colonne par urgence »** (Critique, Urgent, Moyen, Faible, puis les cartes
+  sans drapeau ; à niveau égal l'ordre de la colonne est conservé). C'est une **vue** : l'ordre réel des cartes n'est pas
+  modifié, le choix est **mémorisé par compte** (`cm_preferences`, clé `tableau.<id>.tri_urgence`) et un indicateur ⇅
+  l'annonce. Dans une colonne triée, le glisser-déposer, « Monter » et « Descendre » sont masqués (ils n'auraient pas de
+  sens) ; « Liste précédente / suivante » et « Déplacer vers… » restent.
+- **Compteurs** : l'en-tête de chaque colonne montre le nombre de cartes **Critique** et **Urgent** (archivées exclues,
+  drapeau coloré + nombre, libellé « 2 cartes critiques » pour les lecteurs d'écran). `GET /cm/tableaux` rend
+  `urgences: { critique, urgent }` par tableau (puces sur la liste des tableaux) ; `GET /cm/etat` rend `urgences` (total
+  sur les tableaux visibles) ; `GET /cm/urgences` rend les cartes critiques puis urgentes (échéance la plus proche en
+  premier) des tableaux visibles. L'**Accueil CM** a une carte **« Urgences »** (nombre et cinq premières cartes, qui
+  ouvrent le tableau), relue quand le nombre change.
+- **Alertes** (centre de notifications, catégorie **CM**, type `cm-urgence`, événement `cm.carte_urgence`) : passer une
+  carte en **Urgent** ou **Critique**, **en montant seulement** (Faible → Urgent, Urgent → Critique, aucun → Critique :
+  une notification chaque fois ; descendre, ou passer à Faible / Moyen, n'en envoie jamais), prévient les **membres
+  assignés** et les **personnes qui suivent** la carte, et, pour **Critique**, les comptes qui ont `cm.gerer` sur la partie
+  du tableau (la Responsable CM du club, ou celles de la team). Jamais l'auteur du changement, et seulement les comptes qui
+  **voient le tableau** (une personne assignée avant de perdre son accès, ou d'un tableau **restreint** qu'elle ne voit pas, n'est
+  pas prévenue : le service filtre avec `personnesTableau` et le bus avec la visibilité du tableau ; les compteurs, `GET /cm/urgences`
+  et la carte « Urgences » de l'Accueil ignorent aussi ces tableaux). Pas de notification dans le fil de tous ceux qui voient le CM (règle `cm.carte_urgence` : aucune,
+  comme les commentaires) ; l'événement reste dans le journal d'activité. Pas de rafale : une montée = une notification
+  par personne.
+- **Temps réel** : le drapeau est une écriture du sujet `cm` (version du tableau incrémentée) : il apparaît chez les
+  autres en moins d'une seconde, comme tout changement de carte (voir [temps-reel.md](temps-reel.md)). Le verrouillage
+  optimiste de la fiche (`versionAttendue`) s'applique comme aux autres champs.
+- **Import Trello** : une étiquette nommée **Critique / Urgent / Moyen / Faible** (ou **Critical / Urgent / Medium / Low**,
+  sans tenir compte des accents ni de la casse) est signalée à l'**aperçu** (`urgences: [{ nom, niveau, cartes }]`). La case
+  **« Les convertir en drapeau d'urgence »** (cochée par défaut) envoie `convertirUrgences: true` : les cartes qui portent
+  ces étiquettes reçoivent le drapeau (le plus haut niveau si plusieurs), les étiquettes ne sont **pas** importées, et une
+  carte qui a déjà un drapeau le **garde** (relancer l'import n'écrase rien). Décochée : comportement habituel
+  (étiquettes importées). Le bilan rend `urgencesConverties`.
+- **Données** : une colonne de `cm_cartes` (+ index `cm_cartes_urgence`) : export / import de la base inchangés
+  (`transfert.mjs` lit toutes les colonnes), aucune donnée personnelle nouvelle (l'auteur d'un changement est dans le
+  journal d'activité, déjà couvert par l'export et l'effacement RGPD). Migration SQL standard, identique sur SQLite et
+  PostgreSQL.
+- **Tests** : `esport/test/cm-urgence.test.mjs` (réglage et permissions, journal, compteurs, À valider et calendrier,
+  notifications montée seulement / assignés / suiveurs / responsables / visibilité, temps réel, import Trello) ;
+  `src/esport/CmUrgence.test.tsx` (couleurs AA, tri, filtre, carte compacte, en-tête de colonne, menu ⋯, fiche, phrases
+  FR / EN) et `NavCm.test.tsx` (carte « Urgences » de l'Accueil).
+
 ## Accès au tableau (tableaux restreints)
 
 Un tableau est visible de **« Tous ceux qui ont accès au CM »** de sa portée (défaut : le comportement d'avant, et
@@ -267,7 +328,6 @@ pour un tableau du club, ceux des teams au module CM) —, chacun avec un niveau
   cache (`invalider`). Les personnes **assignables** et **mentionnables** d'un tableau restreint sont celles qui le voient.
 - Un post **publié** reste public sur son réseau : sa ligne de statistiques (Réseaux) et son annonce Discord restent,
   sans lien vers la carte pour qui ne voit pas le tableau.
-
 ## Posts et validation
 
 Une carte peut être un **post** : réseaux ciblés, **textes FR et EN par réseau** avec compteur de caractères
@@ -361,7 +421,8 @@ liée, textes FR / EN **pré-remplis** si le match ou le tournoi est publiable, 
    **correspondance des membres Trello** avec les comptes qui ont accès au tableau (proposée par pseudo).
 4. **Importer** : tableau, listes (archivées en option), cartes et positions, descriptions, étiquettes et couleurs,
    échéances, checklists, commentaires (depuis les actions de Trello ; auteur associé, sinon son nom), pièces jointes en
-   **liens**, couvertures de couleur.
+   **liens**, couvertures de couleur. Les étiquettes **Critique / Urgent / Moyen / Faible** peuvent devenir le **drapeau
+   d'urgence** des cartes (voir « Urgences »).
 
 **Relancer l'import** du même tableau le met à jour **sans rien dupliquer** (identifiants Trello) : noms, positions,
 archivage repris ; nouveaux éléments ajoutés ; rien de ce qui a été ajouté dans l'app n'est retiré ; une carte
@@ -377,7 +438,7 @@ Trello pour les ouvrir (l'app le dit) ; une image de couverture Trello reste une
 
 ## Notifications, journal, Discord
 
-Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), post à valider (et à valider de nouveau après une
+Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), carte passée en urgent ou critique (assignés, suiveurs, responsables CM pour critique ; voir « Urgences »), post à valider (et à valider de nouveau après une
 modification), post validé ou refusé (auteur et membres de la carte), dépôt d'une team (CM du club), clip proposé (CM
 de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive). Pour une carte d'un
 **tableau restreint**, seulement ceux qui voient le tableau (voir « Accès au tableau »).
@@ -425,10 +486,11 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `POST /cm/cartes/:id/(soumettre\|publier\|depublier)` ; `…/(valider\|refuser)` | editer ; valider |
 | `POST /cm/cartes/:id/(checklists\|commentaires\|pieces)` ; `PATCH\|DELETE /cm/(checklists\|elements\|commentaires)/:id` ; `DELETE /cm/pieces/:id` ; `POST /cm/pieces/:id/lien` | editer (commenter : deposer ou editer) |
 | `POST /cm/tableaux/:id/tout-vu` ; `GET /cm/cartes/:id?vu=1` (fiche ouverte : commentaires marqués lus) ; `POST /cm/cartes/:id/suivre { suivre }` | voir (état personnel) |
-| `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` | voir |
+| `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` ; `GET /cm/urgences` (cartes critiques et urgentes) | voir |
+| `PATCH /cm/cartes/:id { urgence }` (`null` ou `"aucune"`, `faible`, `moyen`, `urgent`, `critique`) | editer |
 | `PATCH /cm/tableaux/:id { fond }` (fond seul : `null`, `{ genre: 'couleur' \| 'degrade', cle }`, `{ genre: 'image', drive \| envoi }`) | editer |
 | `GET /cm/calendrier/teams?du&au` (calendriers des teams, lecture seule) | voir (et droits de chaque team) |
-| `GET /cm/preferences` ; `PUT /cm/preferences/:cle { valeur }` (`tableau.<id>.reduites`, `calendrier.teams` ; `null` efface) | voir (ses choix seulement) |
+| `GET /cm/preferences` ; `PUT /cm/preferences/:cle { valeur }` (`tableau.<id>.reduites`, `tableau.<id>.tri_urgence`, `calendrier.teams` ; `null` efface) | voir (ses choix seulement) |
 | `GET /cm/teams/:t` ; `POST …/depots` ; `GET …/matchs` ; `GET …/resume?genre&id&prefixe` ; `GET …/membres` | droits de la team |
 | `GET\|POST /cm/teams/:t/clips` ; `GET /cm/clips` ; `PATCH\|DELETE /cm/clips/:id` ; `POST …/carte` ; `POST …/lien` | proposer ; voir ; editer |
 | `GET\|POST /cm/roles` ; `PATCH\|DELETE /cm/roles/:id` ; `POST …/retablir` ; `GET\|POST /cm/affectations` ; `DELETE …/:id` ; `GET /cm/comptes` ; `GET\|PUT /cm/reglages` ; `GET /cm/journal` | gerer (club) |

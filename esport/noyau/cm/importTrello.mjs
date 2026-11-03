@@ -10,6 +10,9 @@
  *  - étiquettes et membres des cartes, éléments de checklist, commentaires, pièces jointes : ajoutés s'ils sont
  *    nouveaux (rien de ce qui a été ajouté dans l'app n'est retiré) ;
  *  - couvertures : couleurs reprises ; une image de couverture reste une pièce jointe Trello.
+ *  - étiquettes nommées Critique / Urgent / Moyen / Faible (ou Critical / Urgent / Medium / Low) : l'aperçu les signale ;
+ *    avec `convertirUrgences`, elles deviennent le DRAPEAU D'URGENCE des cartes (le plus haut niveau si plusieurs ; une
+ *    carte qui a déjà un drapeau le garde) et ne sont pas importées comme étiquettes.
  * Permission : cm.gerer sur la portée choisie (club ou team).
  */
 
@@ -17,6 +20,7 @@ import { evenement } from '../evenements.mjs';
 import { echec, iso, nouvelId } from '../outils.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, lirePortee, porteesDe, teamDePortee, versionTableau } from './commun.mjs';
 import { niveauTableau } from './acces.mjs';
+import { urgenceDepuisNom, rangUrgence } from './urgence.mjs';
 import { TrelloInvalide, bilanTrello, lireExportTrello } from './trello.mjs';
 
 const PAQUET = 40;
@@ -54,6 +58,27 @@ function lire(corps) {
   }
 }
 
+/** Étiquettes Trello qui désignent un niveau d'urgence, avec le nombre de cartes concernées. */
+function urgencesDetectees(m) {
+  return m.etiquettes
+    .map(e => ({ trelloId: e.trelloId, nom: e.nom, niveau: urgenceDepuisNom(e.nom) }))
+    .filter(e => e.niveau)
+    .map(e => ({ ...e, cartes: m.cartes.filter(c => c.etiquettes.includes(e.trelloId)).length }));
+}
+
+/** Pose le drapeau par paquets de cartes d'un même niveau (une carte qui en a déjà un le garde). */
+function instructionsUrgence(parCarte) {
+  const sortie = [];
+  for (const niveau of new Set(parCarte.values())) {
+    const ids = [...parCarte].filter(([, n]) => n === niveau).map(([id]) => id);
+    for (let i = 0; i < ids.length; i += 200) {
+      const paquet = ids.slice(i, i + 200);
+      sortie.push({ sql: `UPDATE cm_cartes SET urgence = ? WHERE urgence IS NULL AND id IN (${paquet.map(() => '?').join(', ')})`, params: [niveau, ...paquet] });
+    }
+  }
+  return sortie;
+}
+
 export function servicesImportTrello({ base, maintenant = () => Date.now(), tableaux }) {
   async function personnesDe(portee) {
     return tableaux.personnesTableau({ team_id: teamDePortee(portee) });
@@ -79,6 +104,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       tableau: { nom: m.tableau.nom, trelloId: m.tableau.trelloId },
       bilan: bilanTrello(m),
       archivees: m.archivees,
+      urgences: urgencesDetectees(m).map(({ nom, niveau, cartes }) => ({ nom, niveau, cartes })),
       piecesIgnorees: m.piecesIgnorees,
       avertissements: m.avertissements,
       membresTrello: m.membres.map(x => ({ id: x.id, nom: x.nom, identifiant: x.identifiant })),
@@ -135,7 +161,9 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     const listes = uniques(m.listes);
     // Étiquettes supprimées ou fusionnées dans l'app (migration 0029) : jamais recréées.
     const retirees = new Set((await base.tous('SELECT trello_id FROM cm_etiquettes_retirees WHERE tableau_id = ?', [tb.id])).map(l => l.trello_id));
-    const etiquettes = uniques(m.etiquettes).filter(e => !retirees.has(e.trelloId));
+    // Étiquettes d'urgence converties en drapeau : ni créées, ni posées sur les cartes.
+    const niveauParEtiquette = new Map(corps?.convertirUrgences === true ? urgencesDetectees(m).map(e => [e.trelloId, e.niveau]) : []);
+    const etiquettes = uniques(m.etiquettes).filter(e => !retirees.has(e.trelloId) && !niveauParEtiquette.has(e.trelloId));
     await base.lot([
       ...insertions('cm_listes', ['id', 'tableau_id', 'nom', 'position', 'trello_id', 'archive_le', 'cree_le', 'maj_le'], listes.map(l => [nouvelId(), tb.id, l.nom, l.position, l.trelloId, l.archivee ? quand : null, quand, quand]),
         'ON CONFLICT (tableau_id, trello_id) DO UPDATE SET nom = excluded.nom, position = excluded.position, archive_le = excluded.archive_le, maj_le = excluded.maj_le'),
@@ -162,17 +190,24 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     // 3. Étiquettes et membres des cartes, checklists, commentaires, pièces jointes (ajouts seulement).
     const liensEtiquettes = [];
     const liensMembres = [];
+    const urgenceParCarte = new Map();
     const pieces = [];
     for (const c of cartes) {
       const cid = idCarte.get(c.trelloId);
       if (!cid) continue;
-      for (const e of new Set(c.etiquettes)) if (idEtiquette.has(e)) liensEtiquettes.push([cid, idEtiquette.get(e)]);
+      for (const e of new Set(c.etiquettes)) {
+        if (niveauParEtiquette.has(e)) {
+          if (rangUrgence(niveauParEtiquette.get(e)) > rangUrgence(urgenceParCarte.get(cid))) urgenceParCarte.set(cid, niveauParEtiquette.get(e));
+        } else if (idEtiquette.has(e)) liensEtiquettes.push([cid, idEtiquette.get(e)]);
+      }
       for (const mb of new Set(c.membres)) if (corr.has(mb)) liensMembres.push([cid, corr.get(mb)]);
       for (const p of uniques(c.pieces)) pieces.push([nouvelId(), cid, 'lien', p.nom, p.url, p.depose ? 1 : 0, p.trelloId, acteur.compte, quand]);
     }
     const checklists = uniques(m.checklists).filter(k => idCarte.has(k.carteTrelloId));
     await base.lot([
       ...insertions('cm_carte_etiquettes', ['carte_id', 'etiquette_id'], uniques(liensEtiquettes, x => x.join()), 'ON CONFLICT DO NOTHING'),
+      // Drapeaux d'urgence (une carte qui en a déjà un le garde).
+      ...instructionsUrgence(urgenceParCarte),
       ...insertions('cm_carte_membres', ['carte_id', 'compte_id'], uniques(liensMembres, x => x.join()), 'ON CONFLICT DO NOTHING'),
       ...insertions('cm_pieces', ['id', 'carte_id', 'genre', 'nom', 'url', 'trello', 'trello_id', 'cree_par', 'cree_le'], pieces, 'ON CONFLICT DO NOTHING'),
       ...insertions('cm_checklists', ['id', 'carte_id', 'nom', 'position', 'trello_id'], checklists.map(k => [nouvelId(), idCarte.get(k.carteTrelloId), k.nom, k.position, k.trelloId]),
@@ -206,6 +241,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       cartesPostsInchangees: cartes.filter(c => cartesAvant.get(c.trelloId) === 1).length,
       membresAssocies: corr.size,
       piecesIgnorees: m.piecesIgnorees,
+      urgencesConverties: urgenceParCarte.size,
       couverturesImages: m.cartes.filter(c => c.couverture?.pieceTrelloId).length,
     };
     await base.lot([

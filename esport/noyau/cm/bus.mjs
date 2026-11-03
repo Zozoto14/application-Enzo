@@ -5,6 +5,7 @@
  * par la page Réseaux (reseaux/annonces.mjs : annonce Discord, publications suivies pour les statistiques).
  *
  * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, personnes concernées par un
+ * passage d'une carte en urgent / critique (assignées, suiveurs, responsables CM : `cm-urgence`, migration 0047), personnes concernées par un
  * nouveau commentaire (assignées, auteur de la carte, suiveurs : `cm-commentaire`, migration 0045), valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
  * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
@@ -30,6 +31,8 @@ export const TYPES_CM = [
   'cm.etiquette_fusionnee',
   'cm.carte_creee',
   'cm.carte_assignee',
+  // Carte passée en « urgent » ou « critique » (migration 0047) : charge { titre, tableau, niveau, concernes }.
+  'cm.carte_urgence',
   'cm.carte_supprimee',
   'cm.commentaire_ajoute',
   'cm.depot',
@@ -131,6 +134,9 @@ export async function abonneCm(base, ev) {
   switch (ev.type) {
     case 'cm.carte_assignee':
       return envoyer(charge.comptes ?? [], 'cm-assigne', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id });
+    case 'cm.carte_urgence':
+      // `concernes` : déjà filtrés par le service (assignés, suiveurs, responsables CM pour « critique »; accès au tableau).
+      return envoyer(charge.concernes ?? [], 'cm-urgence', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, niveau: charge.niveau ?? null, membre: ev.acteur_id });
     case 'cm.commentaire_ajoute': {
       const donnees = { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id };
       await envoyer(charge.mentions ?? [], 'cm-mention', donnees);

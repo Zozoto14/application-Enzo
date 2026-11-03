@@ -17,7 +17,7 @@
  *   POST              /cm/cartes/:id/(deplacer|soumettre|valider|refuser|publier|depublier|checklists|commentaires|suivre|pieces)
  *   PATCH|DELETE      /cm/checklists/:id ; POST …/elements ; PATCH|DELETE /cm/elements/:id
  *   PATCH|DELETE      /cm/commentaires/:id ; DELETE /cm/pieces/:id ; POST /cm/pieces/:id/lien { telecharger }
- *   GET               /cm/a-valider ; /cm/calendrier?du&au&reseau ; /cm/recherche?q
+ *   GET               /cm/a-valider ; /cm/urgences (cartes critiques et urgentes) ; /cm/calendrier?du&au&reseau ; /cm/recherche?q
  *   GET               /cm/calendrier/teams?du&au                 calendriers des teams (lecture seule, superposés)
  *   GET|PUT           /cm/preferences ; /cm/preferences/:cle     choix d'affichage du compte (colonnes réduites…)
  *   GET               /cm/teams/:t ; POST …/depots ; GET …/matchs ; GET …/resume?genre&id&prefixe ; GET …/membres
@@ -91,6 +91,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   if (n === 1 && a === 'moi' && m === 'GET') return droits.moi(acteur);
   if (n === 1 && a === 'etat' && m === 'GET') return tb.etat(acteur);
   if (n === 1 && a === 'a-valider' && m === 'GET') return tb.aValider(acteur);
+  if (n === 1 && a === 'urgences' && m === 'GET') return tb.urgences(acteur);
   if (n === 1 && a === 'calendrier' && m === 'GET') return tb.calendrier(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, reseau: q.get('reseau') || undefined });
   if (n === 1 && a === 'recherche' && m === 'GET') return tb.recherche(acteur, { q: q.get('q') || '' });
   // Calendriers des teams superposés au calendrier éditorial (lecture seule, ce que le compte a le droit de voir).

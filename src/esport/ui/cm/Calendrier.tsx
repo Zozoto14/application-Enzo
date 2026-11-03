@@ -19,6 +19,7 @@ import { trCm, type CleCm } from '../../i18n/cm';
 import { Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, Volet, attenue, texte, type EtatPresse } from '../design';
 import { Aide, FUSEAU_CLUB, PastilleReseau, TON_STATUT, murale, nomStatut, quand } from './commun';
+import { Drapeau, FiltreUrgenceCm, libelleUrgence, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
 
 type Mode = 'semaine' | 'mois';
 const JOUR = 86_400_000;
@@ -73,6 +74,7 @@ export function Calendrier({
   const [mode, setMode] = useState<Mode>(large ? 'mois' : 'semaine');
   const [reference, setReference] = useState(() => Date.now());
   const [reseau, setReseau] = useState<Reseau | ''>('');
+  const [urgence, setUrgence] = useState<FiltreUrgence>('');
   const [cartes, setCartes] = useState<CarteTransverse[] | undefined>();
   const { erreur, agir } = useAgir();
   const jours = useMemo(() => joursDe(mode, reference), [mode, reference]);
@@ -129,13 +131,13 @@ export function Calendrier({
   }, [teamsCal, affichees]);
   const parJour = useMemo(() => {
     const m = new Map<string, CarteTransverse[]>();
-    for (const c of cartes ?? []) {
+    for (const c of (cartes ?? []).filter(x => passeFiltreUrgence(urgence, x.urgence))) {
       const j = murale(c.datePublication, FUSEAU_CLUB).date;
       if (!m.has(j)) m.set(j, []);
       m.get(j)!.push(c);
     }
     return m;
-  }, [cartes]);
+  }, [cartes, urgence]);
   const decaler = (sens: number) => {
     const d = new Date(reference);
     setReference(mode === 'semaine' ? reference + sens * 7 * JOUR : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + sens, 15));
@@ -148,7 +150,7 @@ export function Calendrier({
     <Pressable
       key={c.id}
       accessibilityRole="button"
-      accessibilityLabel={`${c.titre}, ${murale(c.datePublication, FUSEAU_CLUB).heure}${c.statut ? `, ${nomStatut(c.statut)}` : ''}`}
+      accessibilityLabel={`${c.titre}, ${murale(c.datePublication, FUSEAU_CLUB).heure}${c.statut ? `, ${nomStatut(c.statut)}` : ''}${c.urgence ? `, ${trCm('urgence.carte', { niveau: libelleUrgence(c.urgence) })}` : ''}`}
       onPress={() => onOuvrirTableau(c.tableauId)}
       testID={`esport-cm-calendrier-${c.id}`}
       style={(e: EtatPresse) => ({
@@ -160,7 +162,10 @@ export function Calendrier({
         gap: 2,
         minHeight: 36,
       })}>
-      <Text style={{ ...texte(theme, 12), fontWeight: '700' }} numberOfLines={2}>{`${murale(c.datePublication, FUSEAU_CLUB).heure} · ${c.titre}`}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 3 }}>
+        {c.urgence ? <Drapeau theme={theme} niveau={c.urgence} taille={13} /> : null}
+        <Text style={{ ...texte(theme, 12), fontWeight: '700', flex: 1, minWidth: 0 }} numberOfLines={2}>{`${murale(c.datePublication, FUSEAU_CLUB).heure} · ${c.titre}`}</Text>
+      </View>
       <View style={{ flexDirection: 'row', gap: 2, flexWrap: 'wrap' }}>
         {c.reseaux.map(r => (
           <PastilleReseau key={r} theme={theme} reseau={r} compact />
@@ -211,6 +216,7 @@ export function Calendrier({
           <PastilleReseau key={r} theme={theme} reseau={r} actif={reseau === r} onPress={() => setReseau(reseau === r ? '' : r)} testID={`esport-cm-calendrier-reseau-${r}`} />
         ))}
       </View>
+      <FiltreUrgenceCm theme={theme} valeur={urgence} onChoisir={setUrgence} testID="esport-cm-calendrier-urgence" />
       {teamsCal.length ? (
         <View style={{ gap: ESP.xxs }} testID="esport-cm-calendrier-teams">
           <Text style={{ ...texte(theme, 13), fontWeight: '700' }}>{trCm('calendrier.teams')}</Text>

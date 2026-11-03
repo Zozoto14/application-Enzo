@@ -30,6 +30,8 @@ import {
   MOTIF_UUID,
   PORTEE_CLUB,
   activite,
+  comptesClubAvec,
+  comptesTeamAvec,
   contexteCm,
   exiger,
   exigerUuid,
@@ -44,6 +46,7 @@ import {
 import { ACCES_TABLEAU, GENRES_ACCES, MAX_REGLES_ACCES, NIVEAUX_ACCES, estRestreint, lecteurTableaux, niveauTableau, niveauxTableau, permissionsAuNiveau } from './acces.mjs';
 import { LISTE_DU_STATUT, empreinteContenu, lireLiens, lirePublications, lireReseaux, lireTextes, lireTitre, problemesPost } from './posts.mjs';
 import { mentions as mentionsDe } from './reseaux.mjs';
+import { NIVEAUX_ALERTE, lireUrgence, rangUrgence } from './urgence.mjs';
 
 export const LISTES_DEFAUT = Object.freeze(['idees', 'preparation', 'a_valider', 'valide', 'publie']);
 export const CLE_TABLEAU_DEFAUT = 'contenus';
@@ -68,7 +71,7 @@ const ECART_MIN = 1e-6;
  */
 export const FONDS_COULEURS = Object.freeze(['bleu', 'vert', 'orange', 'rouge', 'violet', 'rose', 'ciel', 'gris']);
 export const FONDS_DEGRADES = Object.freeze(['aurore', 'ocean', 'foret', 'crepuscule', 'neon', 'nuit']);
-const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.reduites|calendrier\.teams)$/;
+const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.(reduites|tri_urgence)|calendrier\.teams)$/;
 const PREFERENCE_MAX = 4000;
 
 // ------------------------------------------------------------------ Outils purs
@@ -447,10 +450,14 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const aValider = new Map(
       (await lignesParIds(base, "SELECT tableau_id, COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND statut = 'a_valider' AND tableau_id", lignes.map(t => t.id), { apres: 'GROUP BY tableau_id' })).map(l => [l.tableau_id, Number(l.n)]),
     );
+    const urgences = new Map();
+    for (const l of await lignesParIds(base, "SELECT tableau_id, urgence, COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND urgence IN ('urgent', 'critique') AND tableau_id", lignes.map(t => t.id), { apres: 'GROUP BY tableau_id, urgence' })) {
+      urgences.set(l.tableau_id, { ...(urgences.get(l.tableau_id) ?? { critique: 0, urgent: 0 }), [l.urgence]: Number(l.n) });
+    }
     const non = await nonLus(acteur, lignes.filter(t => !t.archive_le).map(t => t.id));
     lignes.sort((a, b) => (a.portee === PORTEE_CLUB ? 0 : 1) - (b.portee === PORTEE_CLUB ? 0 : 1) || (a.cle_defaut ? 0 : 1) - (b.cle_defaut ? 0 : 1) || Number(a.position) - Number(b.position) || String(a.cree_le).localeCompare(String(b.cree_le)));
     return {
-      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, nonLus: non.parTableau.get(t.id) ?? 0, droits: droitsDe({ permissions: permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau) }) })),
+      tableaux: lignes.map(t => tableauPublic(t, portees.noms, { cartes: comptes.get(t.id) ?? 0, aValider: aValider.get(t.id) ?? 0, nonLus: non.parTableau.get(t.id) ?? 0, urgences: urgences.get(t.id) ?? { critique: 0, urgent: 0 }, droits: droitsDe({ permissions: permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau) }) })),
       nonLus: non.total,
       portees: [
         ...(portees.club.size ? [{ portee: PORTEE_CLUB, team: null, permissions: [...portees.club].sort() }] : []),
@@ -551,7 +558,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const listes = await base.tous(`SELECT * FROM cm_listes WHERE tableau_id = ? ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le`, [id]);
     const etiquettes = await base.tous('SELECT * FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom, id', [id]);
     const cartes = await base.tous(
-      `SELECT id, liste_id, team_id, titre, CASE WHEN description = '' THEN 0 ELSE 1 END AS a_desc, position, couverture, echeance, echeance_faite, date_publication, post, statut, reseaux, origine, depot_genre, archive_le, version, cree_par, maj_le
+      `SELECT id, liste_id, team_id, titre, CASE WHEN description = '' THEN 0 ELSE 1 END AS a_desc, position, couverture, echeance, echeance_faite, date_publication, post, statut, reseaux, origine, depot_genre, archive_le, version, cree_par, maj_le, urgence
          FROM cm_cartes WHERE tableau_id = ? AND supprime_le IS NULL ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le LIMIT ?`,
       [id, MAX_CARTES_TABLEAU],
     );
@@ -620,6 +627,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
           depotGenre: c.depot_genre ?? null,
           etiquettes: etiq.get(c.id) ?? [],
           membres: memb.get(c.id) ?? [],
+          urgence: c.urgence ?? null,
           commentaires: com.get(c.id) ?? 0,
           nonLus: non.parCarte.get(c.id) ?? 0,
           checklist: chk.get(c.id) ?? { total: 0, faits: 0 },
@@ -756,7 +764,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     const texte = JSON.stringify(valeur);
     if (texte.length > PREFERENCE_MAX) throw echec(400, 'preference', 'Préférence trop longue.');
-    if (cle.endsWith('.reduites') && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
+    if ((cle.endsWith('.reduites') || cle.endsWith('.tri_urgence')) && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
     if (cle === 'calendrier.teams' && !(valeur && typeof valeur === 'object' && !Array.isArray(valeur) && Object.entries(valeur).every(([k, v]) => MOTIF_UUID.test(k) && typeof v === 'boolean'))) throw echec(400, 'preference', 'Préférence illisible.');
     const t = iso(maintenant());
     await base.executer('INSERT INTO cm_preferences (compte_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le', [acteur.compte, cle, texte, t]);
@@ -1018,6 +1026,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
         echeance: c.echeance ?? null,
         echeanceFaite: Number(c.echeance_faite) === 1,
         datePublication: c.date_publication ?? null,
+        urgence: c.urgence ?? null,
         post: Number(c.post) === 1,
         statut: c.statut ?? null,
         reseaux: jsonOu(c.reseaux, []),
@@ -1121,7 +1130,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (corps?.titre !== undefined) contenu.titre = champs.titre = lireTitre(corps.titre);
     if (corps?.description !== undefined) champs.description = nettoyerNote(corps.description ?? '', NOTE_MAX);
     // Le reste : éditeurs seulement (un correspondant ne change que le titre, la description et les pièces de son dépôt).
-    const reserve = ['echeance', 'echeanceFaite', 'datePublication', 'couverture', 'teamId', 'etiquettes', 'membres', 'archive', 'post', 'reseaux', 'textes', 'liens'];
+    const reserve = ['echeance', 'echeanceFaite', 'datePublication', 'couverture', 'teamId', 'etiquettes', 'membres', 'archive', 'post', 'reseaux', 'textes', 'liens', 'urgence'];
     if (!editeur && reserve.some(k => corps?.[k] !== undefined)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     if (corps?.echeance !== undefined) champs.echeance = lireInstantCm(corps.echeance, fuseau, 'echeance');
     if (corps?.echeanceFaite !== undefined) champs.echeance_faite = corps.echeanceFaite ? 1 : 0;
@@ -1131,6 +1140,17 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (corps?.archive !== undefined) {
       champs.archive_le = corps.archive ? iso(t) : null;
       modifies.push(corps.archive ? 'archivee' : 'restauree');
+    }
+    // Drapeau d'urgence : aucun, faible, moyen, urgent, critique. Une MONTÉE vers urgent / critique alerte les personnes concernées.
+    let alerteUrgence = null;
+    if (corps?.urgence !== undefined) {
+      const niveau = lireUrgence(corps.urgence);
+      if (niveau === undefined) throw echec(400, 'urgence', 'Niveau d’urgence inconnu.');
+      if (niveau !== (c.urgence ?? null)) {
+        champs.urgence = niveau;
+        lot.push(activite(c.id, tb.id, acteur.compte, 'urgence', { de: c.urgence ?? null, vers: niveau }, t));
+        if (rangUrgence(niveau) > rangUrgence(c.urgence) && NIVEAUX_ALERTE.includes(niveau)) alerteUrgence = niveau;
+      }
     }
     let post = Number(c.post) === 1;
     if (corps?.post !== undefined) {
@@ -1172,14 +1192,28 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     // Colonnes : noms fixés par le code ci-dessus (jamais tirés de la requête).
     const extra = colonnes.map(k => `, ${k} = ?`).join('');
     lot.unshift({ sql: `UPDATE cm_cartes SET auto = 0, maj_par = ?, maj_le = ?, version = version + 1${extra} WHERE id = ?`, params: [acteur.compte, iso(t), ...colonnes.map(json), c.id] });
-    const changes = colonnes.filter(k => !['archive_le'].includes(k));
+    const changes = colonnes.filter(k => !['archive_le', 'urgence'].includes(k));
     if (changes.length) lot.push(activite(c.id, tb.id, acteur.compte, 'modifiee', { champs: changes }, t));
     for (const m of modifies) if (m === 'archivee' || m === 'restauree') lot.push(activite(c.id, tb.id, acteur.compte, m, {}, t));
     if (modifies.includes('membres')) lot.push(activite(c.id, tb.id, acteur.compte, 'membres', { ajoutes: nouveaux }, t));
     if (nouveaux.length) lot.push(evenement('cm.carte_assignee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { comptes: nouveaux, titre: champs.titre ?? c.titre, tableau: tb.id }, maintenant: t }));
+    if (alerteUrgence) lot.push(await evenementUrgence(c, tb, acteur, alerteUrgence, t));
     lot.push(versionTableau(tb.id, t));
     await base.lot(lot);
     return carte(acteur, id);
+  }
+
+  /**
+   * Alerte « carte passée en urgent / critique » : membres assignés et suiveurs de la carte (les responsables CM
+   * aussi pour « critique »), seulement ceux qui ont accès au tableau, jamais l'auteur du changement.
+   */
+  async function evenementUrgence(c, tb, acteur, niveau, t) {
+    const accessibles = new Set((await personnesTableau(tb)).map(p => p.compte));
+    const assignes = (await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
+    const suiveurs = (await base.tous('SELECT compte_id FROM cm_carte_suivis WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
+    const responsables = niveau === 'critique' ? [...(tb.team_id ? await comptesTeamAvec(base, tb.team_id, 'cm.gerer') : await comptesClubAvec(base, 'cm.gerer'))] : [];
+    const concernes = [...new Set([...assignes, ...suiveurs, ...responsables])].filter(x => x && x !== acteur.compte && accessibles.has(x));
+    return evenement('cm.carte_urgence', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, niveau, concernes }, maintenant: t });
   }
 
   async function lireCouverture(carteId, v) {
@@ -1624,6 +1658,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       post: Number(c.post) === 1,
       reseaux: jsonOu(c.reseaux, []),
       datePublication: c.date_publication ?? null,
+      urgence: c.urgence ?? null,
       soumisPar: c.soumis_par ?? null,
       soumisLe: c.soumis_le ?? null,
       origine: c.origine,
@@ -1677,6 +1712,16 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { cartes: cartes.map(c => ({ ...resumeCarte(c, tableauxVus, portees), archive: Boolean(c.archive_le) })) };
   }
 
+  /** `GET /cm/urgences` : cartes « critique » et « urgent » des tableaux visibles (critiques d'abord, puis échéance). */
+  async function urgences(acteur) {
+    const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
+    const tableauxVus = await tableauxDe(acteur, liste);
+    const cartes = (await lignesParIds(base, "SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND urgence IN ('urgent', 'critique') AND tableau_id", [...tableauxVus.keys()])).sort(
+      (a, b) => rangUrgence(b.urgence) - rangUrgence(a.urgence) || String(a.echeance ?? '9').localeCompare(String(b.echeance ?? '9')) || String(a.maj_le).localeCompare(String(b.maj_le)),
+    );
+    return { cartes: cartes.map(c => resumeCarte(c, tableauxVus, portees)) };
+  }
+
   /** `GET /cm/etat` : versions des tableaux visibles et nombre de posts à valider (rafraîchissement léger). */
   async function etat(acteur) {
     const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
@@ -1684,7 +1729,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const validables = lignes.filter(t => permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau).has('cm.valider')).map(t => t.id);
     const n = (await lignesParIds(base, "SELECT COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND statut = 'a_valider' AND tableau_id", validables)).reduce((s, l) => s + Number(l.n), 0);
     const non = await nonLus(acteur, lignes.map(t => t.id));
-    return { versions: Object.fromEntries(lignes.map(t => [t.id, Number(t.version)])), aValider: n, nonLus: { total: non.total, tableaux: Object.fromEntries(non.parTableau) } };
+    const urg = (await lignesParIds(base, "SELECT COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND urgence IN ('urgent', 'critique') AND tableau_id", lignes.map(t => t.id))).reduce((s, l) => s + Number(l.n), 0);
+    return { urgences: urg, versions: Object.fromEntries(lignes.map(t => [t.id, Number(t.version)])), aValider: n, nonLus: { total: non.total, tableaux: Object.fromEntries(non.parTableau) } };
   }
 
   return {
@@ -1728,6 +1774,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     publier,
     depublier,
     aValider,
+    urgences,
     calendrier,
     recherche,
     etat,

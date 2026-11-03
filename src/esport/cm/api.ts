@@ -128,6 +128,8 @@ export interface CalendrierTeam {
   acces: 'planning' | 'competition';
   evenements: EvenementTeam[];
 }
+/** Drapeau d'urgence d'une carte (migration 0046) ; null : aucun. */
+export type Urgence = 'faible' | 'moyen' | 'urgent' | 'critique';
 export interface TableauListe {
   id: string;
   nom: string | null;
@@ -146,6 +148,8 @@ export interface TableauListe {
   aValider?: number;
   /** Commentaires non lus du compte sur ce tableau (migration 0045). */
   nonLus?: number;
+  /** Cartes (non archivées) en urgence critique / urgente (migration 0046). */
+  urgences?: { critique: number; urgent: number };
   droits?: DroitsTableau;
   /** Fond (migration 0042) ; null : fond du thème. */
   fond?: FondTableau | null;
@@ -188,6 +192,8 @@ export interface CarteResume {
   depotGenre: GenreDepot | null;
   etiquettes: string[];
   membres: string[];
+  /** Drapeau d'urgence (migration 0046) ; absent d'un serveur ancien. */
+  urgence?: Urgence | null;
   commentaires: number;
   /** Commentaires de la carte écrits par d'autres depuis la dernière ouverture (migration 0045). */
   nonLus?: number;
@@ -253,6 +259,7 @@ export interface CarteDetail {
   echeance: string | null;
   echeanceFaite: boolean;
   datePublication: string | null;
+  urgence?: Urgence | null;
   post: boolean;
   statut: StatutPost | null;
   reseaux: Reseau[];
@@ -315,6 +322,7 @@ export interface CarteTransverse {
   post: boolean;
   reseaux: Reseau[];
   datePublication: string | null;
+  urgence?: Urgence | null;
   soumisPar: string | null;
   soumisLe: string | null;
   origine: string;
@@ -326,6 +334,8 @@ export interface CarteTransverse {
 export interface EtatCm {
   versions: Record<string, number>;
   aValider: number;
+  /** Cartes critiques ou urgentes des tableaux visibles (migration 0046). */
+  urgences?: number;
   /** Commentaires non lus : total et par tableau (migration 0045). */
   nonLus?: { total: number; tableaux: Record<string, number> };
 }
@@ -401,6 +411,8 @@ export interface ApercuTrello {
   tableau: { nom: string; trelloId: string };
   bilan: { listes: number; cartes: number; etiquettes: number; checklists: number; elements: number; commentaires: number; pieces: number; piecesDeposees: number; echeances: number; couvertures: number };
   archivees: { listes: number; cartes: number };
+  /** Étiquettes nommées Critique / Urgent / Moyen / Faible (ou Critical / Medium / Low), convertibles en drapeau. */
+  urgences?: Array<{ nom: string; niveau: Urgence; cartes: number }>;
   piecesIgnorees: number;
   avertissements: string[];
   membresTrello: Array<{ id: string; nom: string; identifiant: string }>;
@@ -436,6 +448,8 @@ export interface SaisieCarte {
   etiquettes?: string[];
   membres?: string[];
   archive?: boolean;
+  /** Drapeau d'urgence ; null : aucun. */
+  urgence?: Urgence | null;
   post?: boolean;
   reseaux?: Reseau[];
   textes?: TextesPost;
@@ -504,6 +518,8 @@ export function apiCm(client: ClientEsport) {
     supprimerPiece: (id: string) => r<ReponseCarte>(`/cm/pieces/${e(id)}`, 'DELETE'),
     lienPiece: (id: string, telecharger = false) => r<{ url: string; expire: string }>(`/cm/pieces/${e(id)}/lien`, 'POST', { telecharger }),
     aValider: () => r<{ cartes: CarteTransverse[]; noms: Record<string, string | null> }>('/cm/a-valider'),
+    /** Cartes critiques et urgentes des tableaux visibles (critiques d'abord). */
+    urgences: () => r<{ cartes: CarteTransverse[] }>('/cm/urgences'),
     calendrier: (du: string, au: string, reseau?: Reseau) => r<{ cartes: CarteTransverse[] }>(`/cm/calendrier${requeteUrl({ du, au, reseau })}`),
     recherche: (q: string) => r<{ cartes: CarteTransverse[] }>(`/cm/recherche${requeteUrl({ q })}`),
     team: (teamId: string) => r<PageTeamCm>(`/cm/teams/${e(teamId)}`),
@@ -533,8 +549,8 @@ export function apiCm(client: ClientEsport) {
     journal: (avant?: string) => r<{ entrees: EntreeJournalCm[]; noms: Record<string, string | null> }>(`/cm/journal${requeteUrl({ avant })}`),
     porteesImport: () => r<{ portees: Array<{ portee: string; team: TeamCm | null }> }>('/cm/import/portees'),
     apercuTrello: (trello: unknown, portee: string, avecArchivees: boolean) => r<ApercuTrello>('/cm/import/trello/apercu', 'POST', { trello, portee, avecArchivees }),
-    importerTrello: (trello: unknown, portee: string, avecArchivees: boolean, correspondances: Record<string, string | null>) =>
-      r<ResultatImport>('/cm/import/trello', 'POST', { trello, portee, avecArchivees, correspondances }),
+    importerTrello: (trello: unknown, portee: string, avecArchivees: boolean, correspondances: Record<string, string | null>, convertirUrgences = false) =>
+      r<ResultatImport>('/cm/import/trello', 'POST', { trello, portee, avecArchivees, correspondances, convertirUrgences }),
   };
 }
 

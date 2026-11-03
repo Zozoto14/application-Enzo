@@ -44,6 +44,8 @@ export const REGLES = Object.freeze({
   // Commentaire d'une carte : jamais dans le fil de tout le monde, seulement la notification personnelle (cm-commentaire,
   // cm-mention) des personnes concernées.
   'cm.commentaire_ajoute': AUCUN,
+  // Carte passée en urgent / critique : seulement la notification personnelle (cm-urgence) des personnes concernées.
+  'cm.carte_urgence': AUCUN,
   'cm.post_soumis': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_valide': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_refuse': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },

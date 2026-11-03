@@ -24,7 +24,7 @@ import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport } from '../../client';
-import { PORTEE_CLUB, type ApiCm, type CarteDetail, type DetailTableau, type LiensCarte, type MatchsTeam, type Personne, type ReponseCarte, type Reseau, type TeamCm, type TextesPost } from '../../cm/api';
+import { PORTEE_CLUB, type ApiCm, type CarteDetail, type DetailTableau, type LiensCarte, type MatchsTeam, type Personne, type ReponseCarte, type Reseau, type TeamCm, type TextesPost, type Urgence } from '../../cm/api';
 import { CLES_RESEAUX, RESEAUX, analyserTexte } from '../../cm/reseaux';
 import { choisirFichier, choixFichierDisponible, ACCEPT_CM } from '../../medias/choixFichier';
 import { tailleMedia } from '../../medias/envoi';
@@ -38,6 +38,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { ChoixDrive } from './drive/ChoixDrive';
 import { trDr } from '../../i18n/drive';
 import { ouvrirLienDiffere } from '../ouvrirLien';
+import { SelecteurUrgence, libelleUrgence } from './Drapeau';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand, signalerEtatCm } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
@@ -73,7 +74,7 @@ const GROUPES_RETOURS: Record<string, string[]> = {
   description: ['description'],
   circuit: ['soumettre', 'valider', 'refuser', 'publier', 'depublier', 'post-transformer'],
   post: ['post'],
-  details: ['etiquettes', 'etiquette', 'etiquettes-gestion', 'membres', 'echeance', 'faite', 'couverture', 'team'],
+  details: ['etiquettes', 'etiquette', 'etiquettes-gestion', 'membres', 'echeance', 'faite', 'couverture', 'team', 'urgence'],
   checklists: ['checklist', 'element'],
   pieces: ['lien', 'fichier', 'drive', 'piece'],
   commentaires: ['commenter', 'commentaire', 'suivre'],
@@ -207,6 +208,8 @@ export function FicheCarte({
 
       <Panneau theme={theme} testID="esport-cm-fiche-details">
         <Intertitre theme={theme}>{trCm('fiche.details')}</Intertitre>
+        <SelecteurUrgence theme={theme} valeur={c.urgence} editer={dr.editer} onChoisir={urgence => void faire('urgence', () => api.modifierCarte(c.id, { urgence }))} testID="esport-cm-fiche-urgence" />
+        {dr.editer ? <Aide theme={theme}>{trCm('urgence.regler_aide')}</Aide> : null}
         <Etiquettes theme={theme} api={api} c={c} tableau={tableau} editer={dr.editer} faire={faire} onChangeEtiquettes={() => faire('etiquettes-gestion', async () => undefined)} />
         <Membres theme={theme} c={c} personnes={tableau.personnes} editer={dr.editer} onChanger={membres => faire('membres', () => api.modifierCarte(c.id, { membres }))} />
         {dr.editer ? (
@@ -283,6 +286,7 @@ function phraseActivite(action: string, qui: string, meta: Record<string, unknow
     return trCm('activite.deplacee', { qui, liste: vers ? nomListe(vers) : '?' });
   }
   if (action === 'refusee') return trCm('activite.refusee', { qui, motif: typeof meta.motif === 'string' ? meta.motif : '' });
+  if (action === 'urgence') return trCm('activite.urgence', { qui, de: libelleUrgence(meta.de as Urgence | null), vers: libelleUrgence(meta.vers as Urgence | null) });
   const cle = `activite.${action}` as CleCm;
   const t = trCm(cle, { qui });
   return t === cle ? `${qui} : ${action}` : t;

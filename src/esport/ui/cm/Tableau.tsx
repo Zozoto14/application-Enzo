@@ -27,7 +27,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import { PORTEE_CLUB, type ApiCm, type CarteResume, type DetailTableau, type FondTableau, type ListeCm, type SaisieFond, type StatutPost, type TeamCm } from '../../cm/api';
+import { PORTEE_CLUB, type ApiCm, type CarteResume, type DetailTableau, type FondTableau, type ListeCm, type SaisieFond, type StatutPost, type TeamCm, type Urgence } from '../../cm/api';
+import { compterUrgences, couleurUrgence, NIVEAUX_URGENCE, trierParUrgence } from '../../cm/urgence';
 import { FONDS_COULEURS, FONDS_DEGRADES, styleFond } from '../../cm/fonds';
 import { minuscules } from '../../i18n';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
@@ -38,6 +39,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { trDr } from '../../i18n/drive';
 import { ChoixDrive } from './drive/ChoixDrive';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand, signalerEtatCm } from './commun';
+import { Drapeau, SelecteurUrgence, libelleUrgence } from './Drapeau';
 import { FicheCarte } from './FicheCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
 import { AccesTableau } from './AccesTableau';
@@ -51,8 +53,10 @@ interface Filtres {
   echeance: FiltreEcheance;
   type: FiltreType;
   statut: StatutPost | '';
+  /** Niveaux d'urgence retenus ('aucune' : cartes sans drapeau) ; vide : toutes. */
+  urgences?: Array<Urgence | 'aucune'>;
 }
-const FILTRES_VIDES: Filtres = { q: '', etiquettes: [], membres: [], echeance: 'toutes', type: 'tout', statut: '' };
+const FILTRES_VIDES: Filtres = { q: '', etiquettes: [], membres: [], echeance: 'toutes', type: 'tout', statut: '', urgences: [] };
 const PAR_LISTE = 60;
 
 interface Rect {
@@ -113,6 +117,7 @@ export function carteVisible(c: CarteResume, f: Filtres, maintenant: number, nom
   if (f.type === 'posts' && !c.post) return false;
   if (f.type === 'cartes' && c.post) return false;
   if (f.statut && c.statut !== f.statut) return false;
+  if (f.urgences?.length && !f.urgences.includes(c.urgence ?? 'aucune')) return false;
   const date = c.echeance ? Date.parse(c.echeance) : NaN;
   if (f.echeance === 'sans' && c.echeance) return false;
   if (f.echeance === 'retard' && !(date < maintenant && !c.echeanceFaite)) return false;
@@ -160,6 +165,7 @@ export function Tableau({
   const [nouvelleListe, setNouvelleListe] = useState<string | undefined>();
   const [renommer, setRenommer] = useState<{ id: string; nom: string } | undefined>();
   const [deplacer, setDeplacer] = useState<CarteResume | undefined>();
+  const [urgenceCarte, setUrgenceCarte] = useState<string | undefined>();
   const [gestionEtiquettes, setGestionEtiquettes] = useState(false);
   const [choixFond, setChoixFond] = useState(false);
   const [reglageAcces, setReglageAcces] = useState(false);
@@ -239,11 +245,40 @@ export function Tableau({
     for (const l of m.values()) l.sort((a, b) => a.position - b.position);
     return m;
   }, [d]);
-  const visibles = useCallback((listeId: string) => (parListe.get(listeId) ?? []).filter(c => carteVisible(c, filtres, maintenant, d?.noms ?? {})), [parListe, filtres, maintenant, d]);
+  // Colonnes triées par urgence (choix du compte, mémorisé en base) : vue seulement, l'ordre de la colonne n'est pas modifié.
+  const clePreferenceTri = `tableau.${id}.tri_urgence`;
+  const [triees, setTriees] = useState<string[]>([]);
+  useEffect(() => {
+    let vivant = true;
+    api
+      .preferences()
+      .then(p => {
+        const v = p?.preferences?.[clePreferenceTri];
+        if (vivant && Array.isArray(v)) setTriees(v.filter((x): x is string => typeof x === 'string'));
+      })
+      .catch(() => undefined);
+    return () => {
+      vivant = false;
+    };
+  }, [api, clePreferenceTri]);
+  const basculerTri = (listeId: string) => {
+    const suivantes = triees.includes(listeId) ? triees.filter(x => x !== listeId) : [...triees, listeId];
+    setTriees(suivantes);
+    void api.changerPreference(clePreferenceTri, suivantes.length ? suivantes : null).catch(() => undefined);
+  };
+  const visibles = useCallback(
+    (listeId: string) => {
+      const vues = (parListe.get(listeId) ?? []).filter(c => carteVisible(c, filtres, maintenant, d?.noms ?? {}));
+      return triees.includes(listeId) ? trierParUrgence(vues) : vues;
+    },
+    [parListe, filtres, maintenant, d, triees],
+  );
+  /** Cartes critiques / urgentes d'une colonne (archivées exclues), pour son en-tête. */
+  const urgencesListe = (listeId: string) => compterUrgences(parListe.get(listeId) ?? []);
   const listes = useMemo(() => d?.listes ?? [], [d]);
   /** Commentaires non lus d'une colonne : la somme de ceux de ses cartes (archivées exclues). */
   const nonLusListe = (listeId: string) => (parListe.get(listeId) ?? []).reduce((n, c) => n + (c.archive ? 0 : (c.nonLus ?? 0)), 0);
-  const nbFiltres = (filtres.q.trim() ? 1 : 0) + filtres.etiquettes.length + filtres.membres.length + (filtres.echeance !== 'toutes' ? 1 : 0) + (filtres.type !== 'tout' ? 1 : 0) + (filtres.statut ? 1 : 0);
+  const nbFiltres = (filtres.q.trim() ? 1 : 0) + filtres.etiquettes.length + filtres.membres.length + (filtres.echeance !== 'toutes' ? 1 : 0) + (filtres.type !== 'tout' ? 1 : 0) + (filtres.statut ? 1 : 0) + (filtres.urgences?.length ?? 0);
 
   /** Déplace une carte (index parmi toutes les cartes de la liste, sans elle) : local d'abord, puis le serveur. */
   const deplacerCarte = useCallback(
@@ -360,11 +395,12 @@ export function Tableau({
     const li = listes.findIndex(x => x.id === l.id);
     return [
       { titre: trCm('carte.ouvrir'), onPress: () => setOuverte(c.id), testID: `esport-cm-carte-${c.id}-ouvrir` },
-      ...(i > 0 ? [{ titre: trCm('carte.monter'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i - 1)), testID: `esport-cm-carte-${c.id}-monter` }] : []),
-      ...(i < vues.length - 1 ? [{ titre: trCm('carte.descendre'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i + 1)), testID: `esport-cm-carte-${c.id}-descendre` }] : []),
+      ...(i > 0 && !triees.includes(l.id) ? [{ titre: trCm('carte.monter'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i - 1)), testID: `esport-cm-carte-${c.id}-monter` }] : []),
+      ...(i < vues.length - 1 && !triees.includes(l.id) ? [{ titre: trCm('carte.descendre'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i + 1)), testID: `esport-cm-carte-${c.id}-descendre` }] : []),
       ...(li > 0 ? [{ titre: trCm('carte.liste_precedente'), onPress: () => deplacerCarte(c, listes[li - 1].id, (parListe.get(listes[li - 1].id) ?? []).filter(x => !x.archive).length), testID: `esport-cm-carte-${c.id}-gauche` }] : []),
       ...(li < listes.length - 1 ? [{ titre: trCm('carte.liste_suivante'), onPress: () => deplacerCarte(c, listes[li + 1].id, (parListe.get(listes[li + 1].id) ?? []).filter(x => !x.archive).length), testID: `esport-cm-carte-${c.id}-droite` }] : []),
       { titre: trCm('carte.deplacer_vers'), onPress: () => setDeplacer(c), testID: `esport-cm-carte-${c.id}-deplacer` },
+      { titre: trCm('urgence.menu'), onPress: () => setUrgenceCarte(c.id), testID: `esport-cm-carte-${c.id}-urgence` },
       {
         titre: c.archive ? trCm('carte.restaurer') : trCm('carte.archiver'),
         onPress: () =>
@@ -379,6 +415,7 @@ export function Tableau({
 
   const actionsListe = (l: ListeCm, i: number): ActionSecondaire[] => [
     { titre: reduites.includes(l.id) ? trCm('liste.agrandir') : trCm('liste.reduire'), onPress: () => basculerReduite(l.id), testID: `esport-cm-liste-${l.id}-reduire-menu` },
+    { titre: triees.includes(l.id) ? trCm('urgence.tri_annuler') : trCm('urgence.tri'), onPress: () => basculerTri(l.id), testID: `esport-cm-liste-${l.id}-tri-urgence` },
     ...(d?.droits.editer
       ? [
           { titre: trCm('liste.renommer'), onPress: () => setRenommer({ id: l.id, nom: nomListe(l) }), testID: `esport-cm-liste-${l.id}-renommer` },
@@ -511,6 +548,28 @@ export function Tableau({
             })}
           </View>
         ) : null}
+        <View style={{ gap: ESP.xs }} testID="esport-cm-filtre-urgence">
+          <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{trCm('urgence.filtre')}</Text>
+          <View style={[styles.ligne, { gap: ESP.xs }]} accessibilityLabel={trCm('urgence.filtre')}>
+            {([...NIVEAUX_URGENCE].reverse() as Array<Urgence | 'aucune'>).concat('aucune').map(n => {
+              const actif = (filtres.urgences ?? []).includes(n);
+              const couleur = n === 'aucune' ? theme.attenue : couleurUrgence(n, theme.sombre);
+              return (
+                <Pressable
+                  key={n}
+                  testID={`esport-cm-filtre-urgence-${n}`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: actif }}
+                  accessibilityLabel={n === 'aucune' ? trCm('urgence.filtre_aucune') : libelleUrgence(n)}
+                  onPress={() => setFiltres(f => ({ ...f, urgences: actif ? (f.urgences ?? []).filter(x => x !== n) : [...(f.urgences ?? []), n] }))}
+                  style={[styles.choix, { flexDirection: 'row', alignItems: 'center', gap: 6, borderColor: actif ? couleur : theme.ligne, borderWidth: actif ? 2 : 1, borderRadius: 10, backgroundColor: actif ? teinteTransparente(couleur, 0.14) : theme.surface }]}>
+                  {n !== 'aucune' ? <Drapeau theme={theme} niveau={n} taille={14} /> : null}
+                  <Text style={texte(theme, 13)}>{n === 'aucune' ? trCm('urgence.filtre_aucune') : libelleUrgence(n)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
         <Segments
           theme={theme}
           libelle={trCm('filtres.echeance')}
@@ -625,6 +684,17 @@ export function Tableau({
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700', paddingHorizontal: 4 }} accessibilityLabel={trnCm('liste.cartes_n', vues.length)} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
+                  {triees.includes(l.id) ? (
+                    <Text accessibilityLabel={trCm('urgence.tri_actif')} style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }} testID={`esport-cm-liste-${l.id}-tri-actif`}>
+                      ⇅
+                    </Text>
+                  ) : null}
+                  {urgencesListe(l.id).critique ? (
+                    <CompteurUrgence theme={theme} niveau="critique" n={urgencesListe(l.id).critique} testID={`esport-cm-liste-${l.id}-critiques`} />
+                  ) : null}
+                  {urgencesListe(l.id).urgent ? (
+                    <CompteurUrgence theme={theme} niveau="urgent" n={urgencesListe(l.id).urgent} testID={`esport-cm-liste-${l.id}-urgentes`} />
+                  ) : null}
                   {nonLusListe(l.id) ? (
                     <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLusListe(l.id))}>
                       <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
@@ -672,7 +742,7 @@ export function Tableau({
                           maintenant={maintenant}
                           onOuvrir={() => setOuverte(c.id)}
                           actions={actionsCarte(c, l, i, vues)}
-                          glisser={d.droits.editer ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
+                          glisser={d.droits.editer && !triees.includes(l.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
                         />
                       </View>
                     </React.Fragment>
@@ -743,6 +813,26 @@ export function Tableau({
       ) : null}
       {choixFond ? <ChoixFond theme={theme} api={api} tableau={t} enCours={false} onChoisir={changerFond} onFermer={() => setChoixFond(false)} erreur={erreur} /> : null}
 
+      {urgenceCarte && d.cartes.find(x => x.id === urgenceCarte) ? (
+        <Volet theme={theme} visible titre={trCm('urgence.menu_titre', { titre: d.cartes.find(x => x.id === urgenceCarte)!.titre })} onFermer={() => setUrgenceCarte(undefined)} testID="esport-cm-urgence-volet">
+          <SelecteurUrgence
+            theme={theme}
+            valeur={d.cartes.find(x => x.id === urgenceCarte)!.urgence}
+            editer={d.droits.editer}
+            onChoisir={niveau => {
+              const carte = d.cartes.find(x => x.id === urgenceCarte)!;
+              setUrgenceCarte(undefined);
+              setD({ ...d, cartes: d.cartes.map(x => (x.id === carte.id ? { ...x, urgence: niveau } : x)) });
+              setAnnonce(trCm('urgence.annonce', { titre: carte.titre, niveau: libelleUrgence(niveau) }));
+              void agir('urgence', async () => {
+                await api.modifierCarte(carte.id, { urgence: niveau });
+                await recharger();
+              });
+            }}
+            testID="esport-cm-urgence-choix"
+          />
+        </Volet>
+      ) : null}
       {deplacer ? (
         <Volet theme={theme} visible titre={trCm('carte.deplacer_vers')} onFermer={() => setDeplacer(undefined)} testID="esport-cm-deplacer">
           <Text style={texte(theme)}>{deplacer.titre}</Text>
@@ -931,14 +1021,22 @@ function TuileCarte({
   const infos = carteAInfos(c);
   return (
     <View
-      style={{ backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 8), borderWidth: 1, borderColor: theme.ligne, overflow: 'hidden' }}
+      style={{
+        backgroundColor: theme.surface,
+        borderRadius: Math.min(theme.rayonMoyen, 8),
+        borderWidth: 1,
+        borderColor: theme.ligne,
+        overflow: 'hidden',
+        // Urgent / critique : liseré de la couleur du drapeau (en plus du drapeau et de son libellé).
+        ...(c.urgence === 'urgent' || c.urgence === 'critique' ? { borderLeftWidth: 4, borderLeftColor: couleurUrgence(c.urgence, theme.sombre) } : null),
+      }}
       testID={`esport-cm-carte-${c.id}`}>
       {c.couverture?.couleur ? <View style={{ height: 28, backgroundColor: c.couverture.couleur }} testID={`esport-cm-carte-${c.id}-couverture`} /> : null}
       {c.couverture?.image ? <Image source={{ uri: c.couverture.image }} style={{ height: 96, width: '100%' }} resizeMode="cover" accessibilityIgnoresInvertColors testID={`esport-cm-carte-${c.id}-couverture`} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={[c.titre, c.statut ? nomStatut(c.statut) : '', c.archive ? trCm('c.archivee') : ''].filter(Boolean).join(', ')}
+          accessibilityLabel={[c.titre, c.urgence ? trCm('urgence.carte', { niveau: libelleUrgence(c.urgence) }) : '', c.statut ? nomStatut(c.statut) : '', c.archive ? trCm('c.archivee') : ''].filter(Boolean).join(', ')}
           onPress={onOuvrir}
           testID={`esport-cm-carte-${c.id}-tuile`}
           style={(e: EtatPresse) => ({ flex: 1, minWidth: 0, paddingLeft: 10, paddingRight: 2, paddingVertical: 7, gap: 5, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
@@ -955,9 +1053,17 @@ function TuileCarte({
               ))}
             </View>
           ) : null}
-          <Text style={{ ...texte(theme, 14), fontWeight: '500', lineHeight: 19 }} numberOfLines={2}>
-            {c.titre}
-          </Text>
+          {/* Drapeau d'urgence : devant le titre, sur la même ligne (la carte compacte ne grandit pas). */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}>
+            {c.urgence ? (
+              <View style={{ paddingTop: 1 }} testID={`esport-cm-carte-${c.id}-urgence-drapeau`}>
+                <Drapeau theme={theme} niveau={c.urgence} />
+              </View>
+            ) : null}
+            <Text style={{ ...texte(theme, 14), fontWeight: '500', lineHeight: 19, flex: 1, minWidth: 0 }} numberOfLines={2}>
+              {c.titre}
+            </Text>
+          </View>
           {infos ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 8, rowGap: 4, alignItems: 'center' }} testID={`esport-cm-carte-${c.id}-infos`}>
               {c.post ? <BadgeStatut theme={theme} statut={c.statut} testID={`esport-cm-carte-${c.id}-statut`} /> : null}
@@ -1007,6 +1113,16 @@ function TuileCarte({
           {actions.length ? <MenuActions theme={theme} compact actions={actions} testID={`esport-cm-carte-${c.id}-menu`} libelle={trCm('carte.actions', { titre: c.titre })} /> : null}
         </View>
       </View>
+    </View>
+  );
+}
+
+/** Compteur d'en-tête de colonne : drapeau du niveau et nombre de cartes (libellé lu en toutes lettres). */
+function CompteurUrgence({ theme, niveau, n, testID }: { theme: ThemeHub; niveau: 'critique' | 'urgent'; n: number; testID: string }) {
+  return (
+    <View accessible accessibilityLabel={trnCm(niveau === 'critique' ? 'urgence.critiques_n' : 'urgence.urgentes_n', n)} style={{ flexDirection: 'row', alignItems: 'center', gap: 1 }} testID={testID}>
+      <Drapeau theme={theme} niveau={niveau} taille={14} />
+      <Text style={{ color: couleurUrgence(niveau, theme.sombre), fontSize: 12, fontWeight: '800' }}>{String(n)}</Text>
     </View>
   );
 }

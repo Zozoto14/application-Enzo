@@ -55,7 +55,8 @@ function fauxClient(moiCm: MoiCm, superAdmin: boolean, langue: 'fr' | 'en', equi
     const c = chemin.split('?')[0];
     if (c === '/cm/moi') return moiCm as R;
     if (c === '/cm/tableaux') return { tableaux: [], portees: [] } as R;
-    if (c === '/cm/etat') return { versions: {}, aValider: moiCm.gerer ? 3 : 0 } as R;
+    if (c === '/cm/etat') return { versions: {}, aValider: moiCm.gerer ? 3 : 0, urgences: moiCm.gerer ? 2 : 0 } as R;
+    if (c === '/cm/urgences') return { cartes: moiCm.gerer ? [{ id: 'u1', titre: 'Annonce critique', tableauId: 'tb1', tableau: { id: 'tb1', nom: 'Contenus', cleDefaut: null, portee: 'club', team: null }, urgence: 'critique' }, { id: 'u2', titre: 'Visuel urgent', tableauId: 'tb1', tableau: { id: 'tb1', nom: 'Contenus', cleDefaut: null, portee: 'club', team: null }, urgence: 'urgent' }] : [] } as R;
     if (c === '/cm/a-valider') return { cartes: moiCm.gerer ? [{ id: 'c1', titre: 'Annonce du match', tableauId: 'tb1', tableau: { id: 'tb1', nom: 'Contenus', cleDefaut: null, portee: 'club', team: null }, listeId: 'l1', teamId: null, team: null, statut: 'a_valider', post: true, reseaux: [], datePublication: null, soumisPar: null, soumisLe: null, origine: 'manuel', version: 1, droits: { valider: true, editer: true } }] : [], noms: {} } as R;
     if (c === '/cm/calendrier') return { cartes: moiCm.gerer ? [{ id: 'c2', titre: 'Résultat de la finale', tableauId: 'tb1', reseaux: [], post: true, statut: 'valide', datePublication: new Date(Date.now() + 2 * 86_400_000).toISOString(), archive: false }] : [] } as R;
     if (c === '/cm/reunions') return { reunions: moiCm.gerer ? [{ id: 'r1', cle: 'k', titre: 'Point hebdo CM', statut: 'active', debut: new Date(Date.now() + 86_400_000).toISOString(), fin: new Date(Date.now() + 90_000_000).toISOString() }] : [], noms: {}, droits: { voir: true, gerer: true } } as R;
@@ -214,6 +215,11 @@ describe('CM rangé dans Teams', () => {
     await waitFor(() => expect(screen.getByTestId('esport-cm-groupe-contenus').props.accessibilityLabel).toBe('Contenus (3)'));
     expect(screen.getByTestId('esport-cm-groupe-data').props.accessibilityLabel).toBe('DATA');
     await waitFor(() => expect(screen.getByTestId('esport-cm-accueil-valider-n')).toHaveTextContent('3'));
+    // Carte « Urgences » de l'Accueil CM : nombre (/cm/etat) et cartes critiques puis urgentes, drapeau lisible.
+    await waitFor(() => expect(screen.getByTestId('esport-cm-accueil-urgences-n')).toHaveTextContent('2'));
+    expect(await screen.findByText('Annonce critique')).toBeTruthy();
+    expect(screen.getByText('Visuel urgent')).toBeTruthy();
+    expect(screen.getByLabelText('Urgence : Critique')).toBeTruthy();
     // Contenus : sous-onglets Tableaux | À valider | Calendrier en haut de la page, pastille sur « À valider ».
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-contenus'));
     expect(await screen.findByTestId('esport-cm-sous-onglets')).toBeTruthy();
