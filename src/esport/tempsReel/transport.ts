@@ -19,10 +19,25 @@
  */
 
 import { MeneurOnglets, canalDuNavigateur, verrousDuNavigateur, type CanalOnglets, type VerrousWeb } from '../../sync/relais/meneurOnglets';
-import { minuteriesSysteme, type Minuteries } from '../../sync/relais/planificateur';
+import type { Minuteries } from '../../sync/relais/planificateur';
 import { LimiteurRequetes, attenteExponentielle, retryAfterMs } from '../../sync/relais/sobriete';
 
 type Fetch = typeof fetch;
+
+/**
+ * Minuteries du canal : `unref()` là où il existe (Node, tests) — une attente de reconnexion ne garde jamais un
+ * processus en vie ; sans effet dans le navigateur.
+ */
+const sansAttache = <T>(id: T): T => {
+  (id as { unref?: () => void } | undefined)?.unref?.();
+  return id;
+};
+export const minuteriesCanal: Minuteries = {
+  setTimeout: (a, ms) => sansAttache(setTimeout(a, ms)),
+  clearTimeout: id => clearTimeout(id as ReturnType<typeof setTimeout>),
+  setInterval: (a, ms) => sansAttache(setInterval(a, ms)),
+  clearInterval: id => clearInterval(id as ReturnType<typeof setInterval>),
+};
 
 export type ModeCanal = 'flux' | 'attente' | 'sondage';
 /** Ce que voit l'utilisateur : « En direct », « Reconnexion… », sondage (lent), arrêté (page masquée), serveur sans temps réel. */
@@ -115,7 +130,7 @@ export class EcouteurEsport {
   private readonly maintenant: () => number;
 
   constructor(private readonly o: OptionsEcouteur) {
-    this.minuteries = o.minuteries ?? minuteriesSysteme;
+    this.minuteries = o.minuteries ?? minuteriesCanal;
     this.maintenant = o.maintenant ?? Date.now;
     this.mode = o.modeInitial ?? 'flux';
     this.pasSondage = o.pasSondageMs ?? PAS_SONDAGE_MS;

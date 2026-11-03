@@ -36,12 +36,21 @@ function empreinte(texte: string): string {
 
 const canaux = new Map<string, { canal: CanalEsport; disponible?: Promise<boolean> }>();
 
-/** Fabrique remplaçable par les tests. */
+/** Sous Jest : aucun canal (jamais de connexion réseau réelle ni de minuterie qui garde le processus en vie). */
+const sousJest = (): boolean => {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return Boolean(env?.JEST_WORKER_ID) || env?.NODE_ENV === 'test';
+};
+
+/** Fabrique remplaçable par les tests (`actifEnTest` : un test qui fournit son faux réseau l'active). */
 export const fabriqueCanal = {
+  actifEnTest: false,
   creer: (client: ClientEsport, cle: string): CanalEsport =>
     new CanalEsport({
       cle,
       appareil: appareilDuNavigateur(),
+      // Le fetch du client lui-même (jamais le fetch global : un faux serveur de test reste un faux serveur).
+      ...(client.fetchTempsReel ? { requete: client.fetchTempsReel as unknown as typeof fetch } : {}),
       source: { adresse: client.config.adresse, jeton: forcer => client.jetonSession!(forcer) },
     }),
 };
@@ -49,6 +58,7 @@ export const fabriqueCanal = {
 /** Canal partagé de ce client (un par serveur et par compte), ou undefined si le client ne sait pas l'ouvrir. */
 export function canalPour(client: ClientEsport | undefined): { canal: CanalEsport; disponible: Promise<boolean> } | undefined {
   if (!client?.jetonSession) return undefined;
+  if (sousJest() && !fabriqueCanal.actifEnTest) return undefined;
   const cle = empreinte(`${client.config.adresse}|${client.config.jetonRelais}`);
   let e = canaux.get(cle);
   if (!e) {

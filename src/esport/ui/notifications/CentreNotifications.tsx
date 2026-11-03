@@ -58,7 +58,8 @@ export function useCompteurNotifications(client: ClientEsport | undefined): { no
     };
   }, [api, relire]);
   // Temps réel (docs/esport/temps-reel.md) : notification créée ou lue ailleurs → compteur relu aussitôt.
-  useTempsReel(client, 'compte', relire);
+  // Le signal commun relit aussi la page ouverte du centre (pas seulement la cloche).
+  useTempsReel(client, 'compte', () => signalerNotifications());
   return { nonLues, relire };
 }
 

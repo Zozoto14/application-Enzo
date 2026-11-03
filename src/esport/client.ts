@@ -893,6 +893,8 @@ export interface ClientEsport {
   jetonSession?(forcer?: boolean): Promise<string>;
   /** Temps réel : le serveur l'annonce-t-il (fonction « temps-reel » de /session) ? */
   tempsReelDisponible?(): Promise<boolean>;
+  /** Temps réel : le `fetch` de CE client (le canal n'en prend jamais un autre : faux réseau en test). */
+  fetchTempsReel?: Fetch;
   /** Envoi binaire avec la session (morceau d'une vidéo) : réponse JSON. */
   binaire<T>(chemin: string, methode: string, octets: Uint8Array, entetes?: Record<string, string>, options?: { delai?: number; signal?: unknown }): Promise<T>;
 }
@@ -1010,6 +1012,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
   return {
     config,
     jetonSession: forcer => session(forcer),
+    fetchTempsReel: requete,
     tempsReelDisponible: async () => {
       await session();
       return sessions.get(cle)?.fonctions?.includes(FONCTION_TEMPS_REEL) ?? false;

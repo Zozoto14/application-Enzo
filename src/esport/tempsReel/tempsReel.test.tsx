@@ -16,7 +16,7 @@ import type { CanalOnglets, VerrousWeb } from '../../sync/relais/meneurOnglets';
 import { clientEsport, ErreurEsport, noterVersionLue, versionLue } from '../client';
 import { definirLangue } from '../i18n';
 import { CanalEsport, EcouteurEsport, type EtatCanal, type LotTempsReel } from './transport';
-import { concerne, type VerrouOptimiste } from './hooks';
+import { canalPour, concerne, fabriqueCanal, oublierCanaux, type VerrouOptimiste } from './hooks';
 import { BandeauConflit, PastillePresence } from './ui';
 
 const pause = (ms = 0) => new Promise<void>(ok => setTimeout(ok, ms));
@@ -409,5 +409,49 @@ describe('Bandeau de conflit et présence', () => {
     definirLangue('en');
     await rerender(<PastillePresence theme={theme} presences={[{ compte: 'a', pseudo: 'Léa' }, { compte: 'b', pseudo: 'Kai' }]} />);
     expect(screen.getByText('Léa and 1 other person are editing')).toBeTruthy();
+  });
+});
+
+describe('Jamais de vrai réseau en test (CI : réseau sortant ouvert)', () => {
+  afterEach(() => {
+    fabriqueCanal.actifEnTest = false;
+    oublierCanaux();
+  });
+
+  it('sous Jest : aucun canal par défaut (les écrans gardent leur relecture, rien ne reste ouvert)', () => {
+    const client = clientEsport({ adresse: 'https://esport.appdashboard.fr', jetonRelais: 'j' }, (async () => {
+      throw new Error('réseau interdit');
+    }) as never);
+    expect(canalPour(client)).toBeUndefined();
+  });
+
+  it('activé : le canal passe par le fetch DU CLIENT (faux serveur SSE qui ne ferme jamais), jamais par le fetch global ; fermé = coupé', async () => {
+    fabriqueCanal.actifEnTest = true;
+    const globalAvant = globalThis.fetch;
+    const globalAppele = jest.fn();
+    globalThis.fetch = globalAppele as never;
+    const flux: Array<ReturnType<typeof fluxSimule>> = [];
+    const requete = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/session')) return json({ session: 'es1.s', expire: new Date(Date.now() + 3_600_000).toISOString(), fonctions: ['temps-reel'] });
+      const f = fluxSimule(init?.signal ?? undefined);
+      flux.push(f);
+      setTimeout(() => f.pousser('event: bonjour\ndata: {"dernierId":1}\n\n'), 0);
+      return f.reponse;
+    }) as unknown as typeof fetch;
+    try {
+      const client = clientEsport({ adresse: 'https://esport.ouvert', jetonRelais: 'j2' }, requete as never);
+      const e = canalPour(client)!;
+      expect(await e.disponible).toBe(true);
+      const arreter = e.canal.ecouter(() => undefined);
+      await pause(20);
+      expect(flux).toHaveLength(1);
+      expect(flux[0].ouvert).toBe(true);
+      expect(globalAppele).not.toHaveBeenCalled();
+      arreter();
+      await pause(10);
+      expect(flux[0].ouvert).toBe(false);
+    } finally {
+      globalThis.fetch = globalAvant;
+    }
   });
 });
