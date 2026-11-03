@@ -6,11 +6,12 @@
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { themeHub } from '../hub/themes';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { THEMES_HUB, themeHub } from '../hub/themes';
 import { clientEsport, oublierSessions, type ClientEsport } from './client';
 import { apiCm, type CarteResume, type DetailTableau, type ReponseCarte, type Urgence } from './cm/api';
 import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
-import { compterUrgences, couleurUrgence, NIVEAUX_URGENCE, rangUrgence, trierParUrgence } from './cm/urgence';
+import { barresUrgence, compterUrgences, couleurUrgence, fondCarteUrgence, jetonUrgence, NIVEAUX_URGENCE, rangUrgence, trierParUrgence } from './cm/urgence';
 import { contraste } from './contraste';
 import { definirLangue } from './i18n';
 import { Tableau, carteAInfos, carteVisible } from './ui/cm/Tableau';
@@ -90,8 +91,16 @@ const titresColonne = () =>
     .getAllByTestId(/^esport-cm-carte-[0-9a-f-]+-tuile$/)
     .map(n => n.props.accessibilityLabel as string);
 
-beforeEach(() => oublierSessions());
-afterEach(() => definirLangue('fr'));
+const mouvementReduit = (v: boolean) => jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(v);
+beforeEach(() => {
+  oublierSessions();
+  // Pas de pulsation dans les tests de rendu courants (évite les mises à jour d'animation hors act) ; le test dédié la réactive.
+  mouvementReduit(true);
+});
+afterEach(() => {
+  definirLangue('fr');
+  jest.restoreAllMocks();
+});
 
 describe('drapeau d’urgence : niveaux, couleurs, tri', () => {
   it('quatre niveaux ordonnés ; couleurs distinctes et lisibles (AA) en thème clair comme sombre', () => {
@@ -211,5 +220,111 @@ describe('drapeau d’urgence sur le tableau', () => {
     await waitFor(() => expect(appels.some(a => a.xMethode === 'PATCH' && a.corps?.urgence === 'urgent')).toBe(true));
     await fireEvent.press(screen.getByTestId('esport-cm-fiche-urgence-aucune'));
     await waitFor(() => expect(appels.some(a => a.xMethode === 'PATCH' && a.corps?.urgence === null)).toBe(true));
+  });
+});
+
+describe('niveaux d’urgence plus visuels : jetons, pastilles, bande, fiche, légende', () => {
+  const F = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc6';
+  const serveurQuatre = () =>
+    fauxServeur(a => {
+      const c = a.url.split('?')[0];
+      if (c === `/cm/tableaux/${T}`) {
+        const t = tableau();
+        return { corps: { ...t, cartes: [...t.cartes, resume(F, 'Carte moyenne', 6, 'moyen')] } };
+      }
+      if (c === '/cm/preferences') return { corps: { preferences: {} } };
+      if (c === `/cm/cartes/${B}` && a.methode === 'GET') return { corps: { ...reponseCarte('critique'), carte: { ...reponseCarte('critique').carte, id: B, titre: 'Carte critique' } } };
+      return undefined;
+    });
+
+  it('jetons : texte de la pastille AA sur son fond, bande lisible et texte lisible sur le fond teinté, dans les huit thèmes', () => {
+    for (const t of THEMES_HUB) {
+      for (const n of NIVEAUX_URGENCE) {
+        const j = jetonUrgence(n, t.sombre);
+        expect(contraste(j.encre, j.fond)).toBeGreaterThanOrEqual(4.5);
+        expect(contraste(j.trait, t.surface)).toBeGreaterThanOrEqual(4.5);
+        expect(contraste(t.texte, fondCarteUrgence(n, t.surface, t.sombre))).toBeGreaterThanOrEqual(7);
+        expect(contraste(t.attenue, fondCarteUrgence(n, t.surface, t.sombre))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // Moyen et Faible ne teintent pas la carte ; Critique la teinte plus qu'Urgent.
+    expect(fondCarteUrgence('faible', '#ffffff', false)).toBe('#ffffff');
+    expect(fondCarteUrgence('moyen', '#ffffff', false)).toBe('#ffffff');
+    expect(fondCarteUrgence(null, '#ffffff', false)).toBe('#ffffff');
+    expect(contraste(fondCarteUrgence('critique', '#ffffff', false), '#ffffff')).toBeGreaterThan(contraste(fondCarteUrgence('urgent', '#ffffff', false), '#ffffff'));
+    expect(NIVEAUX_URGENCE.map(barresUrgence)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('carte compacte : pastille texte et bande pour les quatre niveaux, forme (barres) en plus de la couleur', async () => {
+    const { client } = serveurQuatre();
+    await render(<Tableau theme={themeHub('nuit')} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${B}`);
+    const attendu: Array<[string, string, Urgence]> = [[A, 'FAIBLE', 'faible'], [F, 'MOYEN', 'moyen'], [D, 'URGENT', 'urgent'], [B, 'CRITIQUE', 'critique']];
+    for (const [id, texte, niveau] of attendu) {
+      const pastille = screen.getByTestId(`esport-cm-carte-${id}-urgence-drapeau`);
+      expect(within(pastille).getByText(texte)).toBeTruthy();
+      expect(within(pastille).getByTestId(`urgence-barres-${niveau}`).props['data-barres']).toBe(barresUrgence(niveau));
+      expect(screen.getByTestId(`esport-cm-carte-${id}-urgence-bande`)).toBeTruthy();
+    }
+    expect(screen.queryByTestId(`esport-cm-carte-${C}-urgence-bande`)).toBeNull();
+    const fond = (id: string) => StyleSheet.flatten(screen.getByTestId(`esport-cm-carte-${id}`).props.style) as { backgroundColor: string; borderColor: string; borderWidth: number };
+    const t = themeHub('nuit');
+    expect(fond(B).backgroundColor).toBe(fondCarteUrgence('critique', t.surface, t.sombre));
+    expect(fond(B).borderColor).toBe(couleurUrgence('critique', t.sombre));
+    expect(fond(D).backgroundColor).not.toBe(t.surface);
+    expect(fond(F).backgroundColor).toBe(t.surface);
+    expect(fond(A).backgroundColor).toBe(t.surface);
+    // La carte reste compacte : le niveau n'ajoute pas de ligne d'informations.
+    expect(screen.queryByTestId(`esport-cm-carte-${B}-infos`)).toBeNull();
+  });
+
+  it('pulsation de la bande Critique seulement (Urgent et les autres ne pulsent pas)', async () => {
+    mouvementReduit(false);
+    const { client } = serveurQuatre();
+    await render(<Tableau theme={themeHub('jour')} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${B}`);
+    await waitFor(() => expect(screen.getByTestId(`esport-cm-carte-${B}-urgence-bande`).props['data-pulsation']).toBe('oui'));
+    expect(screen.getByTestId(`esport-cm-carte-${D}-urgence-bande`).props['data-pulsation']).toBe('non');
+    expect(screen.getByTestId(`esport-cm-carte-${A}-urgence-bande`).props['data-pulsation']).toBe('non');
+  });
+
+  it('prefers-reduced-motion : la bande Critique ne pulse pas', async () => {
+    mouvementReduit(true);
+    const { client } = serveurQuatre();
+    await render(<Tableau theme={themeHub('jour')} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${B}`);
+    await waitFor(() => expect(screen.getByTestId(`esport-cm-carte-${B}-urgence-bande`).props['data-pulsation']).toBe('non'));
+  });
+
+  it('en-tête de colonne : pastilles colorées avec chiffre ; légende des couleurs repliable par le bouton « ? »', async () => {
+    const { client } = serveurQuatre();
+    await render(<Tableau theme={themeHub('nuit')} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${B}`);
+    const critiques = screen.getByTestId(`esport-cm-liste-${L1}-critiques`);
+    expect(within(critiques).getByText('1')).toBeTruthy();
+    expect(critiques.props.accessibilityLabel).toBe('1 carte critique');
+    expect(StyleSheet.flatten(critiques.props.style).backgroundColor).toBe(jetonUrgence('critique', true).fond);
+    expect(screen.queryByTestId('esport-cm-urgence-legende')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-cm-urgence-legende-bouton'));
+    const legende = screen.getByTestId('esport-cm-urgence-legende');
+    for (const n of NIVEAUX_URGENCE) expect(within(legende).getByTestId(`esport-cm-urgence-legende-${n}`)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-cm-urgence-legende-bouton'));
+    expect(screen.queryByTestId('esport-cm-urgence-legende')).toBeNull();
+  });
+
+  it('fiche : bandeau du niveau en grand et sélecteur de gros boutons colorés (+ Aucun)', async () => {
+    const { client } = serveurQuatre();
+    await render(<Tableau theme={themeHub('nuit')} api={apiCm(client)} id={T} large />);
+    await fireEvent.press(await screen.findByTestId(`esport-cm-carte-${B}-tuile`));
+    const bandeau = await screen.findByTestId('esport-cm-fiche-urgence-bandeau');
+    expect(within(bandeau).getByText('CRITIQUE')).toBeTruthy();
+    expect(StyleSheet.flatten(bandeau.props.style).backgroundColor).toBe(jetonUrgence('critique', true).fond);
+    const choix = screen.getByTestId('esport-cm-fiche-urgence');
+    expect(within(choix).getAllByRole('radio')).toHaveLength(5);
+    const actif = screen.getByTestId('esport-cm-fiche-urgence-critique');
+    expect(actif.props.accessibilityState.checked).toBe(true);
+    const style = StyleSheet.flatten(actif.props.style) as { backgroundColor: string; minHeight: number };
+    expect(style.backgroundColor).toBe(jetonUrgence('critique', true).fond);
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
   });
 });

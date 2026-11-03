@@ -299,22 +299,35 @@ ordre dans `esport/noyau/cm/urgence.mjs` (serveur) et `src/esport/cm/urgence.ts`
   lecteur d'écran) et, à l'import, la conversion d'étiquettes Trello (ci-dessous). Chaque changement est inscrit dans le
   **journal d'activité de la carte** (« X a changé l'urgence : Aucune → Faible ») ; un changement vers le même niveau
   n'écrit rien. Pas de raccourci clavier dédié : le menu ⋯ se parcourt déjà au clavier.
-- **Sur la carte** : un **drapeau monochrome** (icône `drapeau`, `src/ui/icones`) **devant le titre**, sur la même ligne :
-  la carte compacte **ne grandit pas** (le drapeau n'est pas une « information » de `carteAInfos`). Couleurs de trait
-  (contraste au moins 4,5:1 sur les surfaces des thèmes clairs et sombres, testé) : Critique rouge, Urgent orange, Moyen
-  ambre, Faible bleu. Urgent et Critique ajoutent un **liseré gauche** de la même couleur. La couleur ne porte jamais
-  seule l'information : le libellé (« Urgence : Critique ») est lu par les lecteurs d'écran (dans le nom de la carte), en
-  infobulle sur le web, et écrit dans la fiche et les filtres.
+- **Sur la carte** (interface seulement, aucune donnée en plus) : une **bande de couleur verticale** (6 px) sur le bord
+  gauche, et une **pastille texte** « CRITIQUE » / « URGENT » / « MOYEN » / « FAIBLE » (fond plein, drapeau monochrome,
+  petites capitales et **barres** : 1 à 4 selon le niveau) sur la ligne des étiquettes : la carte compacte **ne grandit pas**
+  (ce n'est pas une « information » de `carteAInfos`). **Critique** : fond de carte légèrement teinté de rouge (mélange
+  opaque : lisible sur les fonds d'image), bordure rouge de 2 px et **pulsation douce de la bande**, désactivée avec
+  `prefers-reduced-motion` (`AccessibilityInfo.isReduceMotionEnabled`) ; **Urgent** : même principe en orange, plus discret,
+  sans pulsation ; **Moyen** et **Faible** : bande et pastille seulement. La couleur ne porte jamais seule l'information
+  (daltonisme) : texte de la pastille, nombre de barres, et libellé « Urgence : Critique » lu par les lecteurs d'écran
+  (dans le nom de la carte) et en infobulle sur le web.
+- **Jetons de couleur** (`JETONS_URGENCE`, `src/esport/cm/urgence.ts`, repris par le design system sous `URGENCE`) :
+  `urgence.critique|urgent|moyen|faible`, chacun avec `trait` (bande, drapeau, texte), `fond` / `encre` (pastille) et
+  `teinte` (part mélangée au fond de la carte), en clair et en sombre ; contrastes testés dans les huit thèmes (texte de
+  pastille et trait au moins 4,5:1, texte et texte atténué lisibles sur le fond teinté). Briques réutilisées partout
+  (`src/esport/ui/cm/Drapeau.tsx`) : `PastilleUrgence`, `BandeUrgence`, `CompteurUrgence`, `BandeauUrgence`,
+  `LegendeUrgence`.
+- **Légende** : bouton **« ? »** de l'en-tête du tableau (et à côté du filtre d'urgence d'À valider et du calendrier), et
+  rappel sur la carte « Urgences » de l'Accueil CM : une pastille et son sens par niveau, et l'explication des barres.
+- **Fiche de la carte** : **bandeau coloré** en haut avec le niveau en grand ; le sélecteur « Niveau d'urgence » devient
+  quatre **gros boutons colorés** (plus « Aucun »), le niveau actuel plein et coché.
 - **Filtre** : dans **Filtres** du tableau, une rangée de cases Critique / Urgent / Moyen / Faible / **Sans drapeau**
   (plusieurs niveaux possibles) ; un filtre à choix unique dans **À valider** et dans le **calendrier éditorial**, qui
   affichent aussi le drapeau (`/cm/a-valider`, `/cm/calendrier`, `/cm/recherche` rendent `urgence`).
-- **Tri** : menu ⋯ de la colonne › **« Trier la colonne par urgence »** (Critique, Urgent, Moyen, Faible, puis les cartes
+- **Tri** : menu ⋯ de la colonne › **« Critiques en haut »** (Critique, Urgent, Moyen, Faible, puis les cartes
   sans drapeau ; à niveau égal l'ordre de la colonne est conservé). C'est une **vue** : l'ordre réel des cartes n'est pas
   modifié, le choix est **mémorisé par compte** (`cm_preferences`, clé `tableau.<id>.tri_urgence`) et un indicateur ⇅
   l'annonce. Dans une colonne triée, le glisser-déposer, « Monter » et « Descendre » sont masqués (ils n'auraient pas de
   sens) ; « Liste précédente / suivante » et « Déplacer vers… » restent.
 - **Compteurs** : l'en-tête de chaque colonne montre le nombre de cartes **Critique** et **Urgent** (archivées exclues,
-  drapeau coloré + nombre, libellé « 2 cartes critiques » pour les lecteurs d'écran). `GET /cm/tableaux` rend
+  **pastilles colorées** drapeau + nombre, libellé « 2 cartes critiques » pour les lecteurs d'écran). `GET /cm/tableaux` rend
   `urgences: { critique, urgent }` par tableau (puces sur la liste des tableaux) ; `GET /cm/etat` rend `urgences` (total
   sur les tableaux visibles) ; `GET /cm/urgences` rend les cartes critiques puis urgentes (échéance la plus proche en
   premier) des tableaux visibles. L'**Accueil CM** a une carte **« Urgences »** (nombre et cinq premières cartes, qui

@@ -14,12 +14,13 @@ import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { PORTEE_CLUB, type ApiCm, type CalendrierTeam, type CarteTransverse, type EvenementTeam, type Reseau } from '../../cm/api';
 import { CLES_RESEAUX } from '../../cm/reseaux';
+import { couleurUrgence, fondCarteUrgence } from '../../cm/urgence';
 import { formaterDate } from '../../i18n';
 import { trCm, type CleCm } from '../../i18n/cm';
 import { Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, Volet, attenue, texte, type EtatPresse } from '../design';
 import { Aide, FUSEAU_CLUB, PastilleReseau, TON_STATUT, murale, nomStatut, quand } from './commun';
-import { Drapeau, FiltreUrgenceCm, libelleUrgence, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
+import { PastilleUrgence, FiltreUrgenceCm, libelleUrgence, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
 
 type Mode = 'semaine' | 'mois';
 const JOUR = 86_400_000;
@@ -146,7 +147,9 @@ export function Calendrier({
   const titre = mode === 'mois' ? formaterDate(reference, { month: 'long', year: 'numeric', timeZone: 'UTC' }) : trCm('calendrier.semaine_du', { date: formaterDate(`${jours[0]}T12:00:00Z`, { day: 'numeric', month: 'long', timeZone: 'UTC' }) });
   const aujourdhui = murale(new Date().toISOString(), FUSEAU_CLUB).date;
 
-  const element = (c: CarteTransverse) => (
+  const element = (c: CarteTransverse) => {
+    const couleurStatut = c.statut ? (TON_STATUT[c.statut] === 'ok' ? theme.ok : TON_STATUT[c.statut] === 'alerte' ? theme.alerte : TON_STATUT[c.statut] === 'critique' ? theme.critique : theme.accent) : theme.ligne;
+    return (
     <Pressable
       key={c.id}
       accessibilityRole="button"
@@ -154,25 +157,28 @@ export function Calendrier({
       onPress={() => onOuvrirTableau(c.tableauId)}
       testID={`esport-cm-calendrier-${c.id}`}
       style={(e: EtatPresse) => ({
-        borderLeftWidth: 3,
-        borderLeftColor: c.statut ? (TON_STATUT[c.statut] === 'ok' ? theme.ok : TON_STATUT[c.statut] === 'alerte' ? theme.alerte : TON_STATUT[c.statut] === 'critique' ? theme.critique : theme.accent) : theme.ligne,
-        backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.12) : theme.surface,
+        // Bande du niveau d'urgence à gauche ; la couleur du statut passe alors sur le bord droit.
+        borderLeftWidth: c.urgence ? 6 : 3,
+        borderLeftColor: c.urgence ? couleurUrgence(c.urgence, theme.sombre) : couleurStatut,
+        ...(c.urgence ? { borderRightWidth: 3, borderRightColor: couleurStatut } : null),
+        backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.12) : fondCarteUrgence(c.urgence, theme.surface, theme.sombre),
         borderRadius: 6,
         padding: 4,
         gap: 2,
         minHeight: 36,
       })}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 3 }}>
-        {c.urgence ? <Drapeau theme={theme} niveau={c.urgence} taille={13} /> : null}
         <Text style={{ ...texte(theme, 12), fontWeight: '700', flex: 1, minWidth: 0 }} numberOfLines={2}>{`${murale(c.datePublication, FUSEAU_CLUB).heure} · ${c.titre}`}</Text>
       </View>
+      {c.urgence ? <PastilleUrgence theme={theme} niveau={c.urgence} sansLibelleAccessible testID={`esport-cm-calendrier-${c.id}-urgence`} /> : null}
       <View style={{ flexDirection: 'row', gap: 2, flexWrap: 'wrap' }}>
         {c.reseaux.map(r => (
           <PastilleReseau key={r} theme={theme} reseau={r} compact />
         ))}
       </View>
     </Pressable>
-  );
+    );
+  };
 
   const evenement = ({ e, team }: { e: EvenementTeam; team: CalendrierTeam }) => (
     <Pressable

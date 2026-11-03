@@ -27,7 +27,8 @@ import { EntreeLaterale, PageEsport, SiBarreEtendue, useBlocLateral } from '../C
 import { PastilleRole, Retours, styles, useAgir } from '../commun';
 import { Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EtatVide, Grille, MenuActions, Onglets, Squelette, SqueletteCartes, TitreCarte, Volet, attenue, couleurTeam, texte, type ActionSecondaire } from '../design';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PALETTE, PastilleReseau, Teinte, nomTableau, quand, useEtatCm } from './commun';
-import { Drapeau, FiltreUrgenceCm, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
+import { couleurUrgence } from '../../cm/urgence';
+import { CompteurUrgence, FiltreUrgenceCm, LegendeUrgence, PastilleUrgence, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
 import { Tableau } from './Tableau';
 import { Calendrier } from './Calendrier';
 import { GalerieClips } from './Clips';
@@ -471,11 +472,12 @@ function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValide
                 {cartesUrgentes && !cartesUrgentes.length ? vide(trCm('urgence.accueil_vide')) : null}
                 {!cartesUrgentes ? <Squelette theme={theme} lignes={2} hauteur={16} /> : null}
                 {cartesUrgentes?.slice(0, 5).map(c => (
-                  <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
-                    {c.urgence ? <Drapeau theme={theme} niveau={c.urgence} libelle /> : null}
+                  <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs, borderLeftWidth: 6, borderLeftColor: c.urgence ? couleurUrgence(c.urgence, theme.sombre) : 'transparent', paddingLeft: ESP.xs }}>
+                    {c.urgence ? <PastilleUrgence theme={theme} niveau={c.urgence} /> : null}
                     <View style={{ flex: 1, minWidth: 0 }}>{ligne(c.id, c.titre, c.tableau ? nomTableau(c.tableau) : undefined, () => onOuvrirTableau(c.tableauId))}</View>
                   </View>
                 ))}
+                <LegendeUrgence theme={theme} testID="esport-cm-accueil-urgences-legende" />
               </>,
             )
           : null}
@@ -567,8 +569,8 @@ function ListeTableauxCm({ theme, api, large, onOuvrir, nonLus }: { theme: Theme
                 <Badge theme={theme} ton={t.team ? 'neutre' : 'accent'} texte={t.team ? (t.team.nom ?? '') : trCm('portee.club')} />
                 <Badge theme={theme} texte={trnCm('espace.cartes_n', t.cartes ?? 0)} />
                 {t.aValider ? <Badge theme={theme} ton="alerte" texte={trnCm('espace.a_valider_n', t.aValider)} /> : null}
-                {t.urgences?.critique ? <Badge theme={theme} ton="critique" icone="drapeau" texte={trnCm('urgence.critiques_n', t.urgences.critique)} testID={`esport-cm-tableau-${t.id}-critiques`} /> : null}
-                {t.urgences?.urgent ? <Badge theme={theme} ton="alerte" icone="drapeau" texte={trnCm('urgence.urgentes_n', t.urgences.urgent)} testID={`esport-cm-tableau-${t.id}-urgentes`} /> : null}
+                {t.urgences?.critique ? <CompteurUrgence theme={theme} niveau="critique" n={t.urgences.critique} libelle={trnCm('urgence.critiques_n', t.urgences.critique)} testID={`esport-cm-tableau-${t.id}-critiques`} /> : null}
+                {t.urgences?.urgent ? <CompteurUrgence theme={theme} niveau="urgent" n={t.urgences.urgent} libelle={trnCm('urgence.urgentes_n', t.urgences.urgent)} testID={`esport-cm-tableau-${t.id}-urgentes`} /> : null}
                 {(nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0)) ? (
                   <View accessible accessibilityLabel={trnCm('nonlus.carte_n', nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0))}>
                     <Compteur theme={theme} n={nonLus ? (nonLus[t.id] ?? 0) : (t.nonLus ?? 0)} testID={`esport-cm-tableau-${t.cleDefaut && !t.team ? 'club' : t.id}-nonlus`} />
@@ -648,7 +650,7 @@ function FileValidation({ theme, api, large, version, onOuvrir }: { theme: Theme
         <Carte key={c.id} theme={theme} testID={`esport-cm-valider-${c.id}`}>
           <TitreCarte theme={theme} titre={c.titre} sous={[c.tableau ? nomTableau(c.tableau) : '', c.team?.nom ?? '', c.soumisPar ? trCm('valider.par', { qui: noms[c.soumisPar] ?? '?' }) : '', c.datePublication ? trCm('carte.publication_le', { date: quand(c.datePublication) }) : ''].filter(Boolean).join(' · ')} droite={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
-                {c.urgence ? <Drapeau theme={theme} niveau={c.urgence} libelle testID={`esport-cm-valider-${c.id}-urgence`} /> : null}
+                {c.urgence ? <PastilleUrgence theme={theme} niveau={c.urgence} testID={`esport-cm-valider-${c.id}-urgence`} /> : null}
                 <BadgeStatut theme={theme} statut={c.statut} />
               </View>
             }

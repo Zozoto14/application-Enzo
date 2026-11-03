@@ -31,6 +31,9 @@ export type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolea
 
 // ------------------------------------------------------------------ Jetons
 
+/** Jetons de couleur des niveaux d'urgence (`URGENCE.critique|urgent|moyen|faible`, clair et sombre) : voir src/esport/cm/urgence.ts. */
+export { JETONS_URGENCE as URGENCE } from '../cm/urgence';
+
 export const ESP = { xxs: 4, xs: 8, s: 12, m: 16, l: 20, xl: 24, xxl: 32, xxxl: 48 } as const;
 
 /** Tailles de texte (px). Le téléphone ne descend jamais sous 13 px pour une légende. */

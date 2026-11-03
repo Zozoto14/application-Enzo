@@ -38,7 +38,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { ChoixDrive } from './drive/ChoixDrive';
 import { trDr } from '../../i18n/drive';
 import { ouvrirLienDiffere } from '../ouvrirLien';
-import { SelecteurUrgence, libelleUrgence } from './Drapeau';
+import { BandeauUrgence, SelecteurUrgence, libelleUrgence } from './Drapeau';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand, signalerEtatCm } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
@@ -172,6 +172,8 @@ export function FicheCarte({
     <View style={{ gap: ESP.m }} testID="esport-cm-fiche-contenu">
       {/* Messages sans bloc (chargement, copie d'un texte) : en haut. Erreur et « Enregistré » d'une action : dans son bloc. */}
       {groupeDe(derniere) ? null : <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-fiche" />}
+      {/* Niveau d'urgence en grand, tout en haut de la fiche. */}
+      <BandeauUrgence theme={theme} niveau={c.urgence} />
       <PastillePresence theme={theme} presences={verrou.presences} testID="esport-cm-fiche-presence" />
       {/* Conflit : « Recharger » relit la carte ; les saisies non enregistrées restent (brouillons). */}
       <BandeauConflit theme={theme} verrou={verrou} onRecharger={charger} testID="esport-cm-fiche-conflit" />
