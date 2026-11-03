@@ -2,7 +2,8 @@
  * Confidentialité des tâches de l'IA (décision du Fondateur, 30 octobre 2026 : « Non, ce n'est pas OK que ça envoie
  * mes réunions à NVIDIA »). Mode d'emploi : docs/esport/ia-api.md, partie « Confidentialité ».
  *
- * Une tâche CONFIDENTIELLE (contenu des réunions : audio, transcription brute, texte relu, résumés, PDF ; notes du
+ * Une tâche CONFIDENTIELLE (contenu des réunions : audio, transcription brute, texte relu, résumés, PDF ; notes des
+ * réunions de l'équipe CM — ordre du jour, compte rendu, tâches de suivi ; notes du
  * staff et suivi des joueurs ; strats) ne part JAMAIS chez un service externe (moteurs « api » et « api2 », API audio
  * de transcription) : seule l'IA LOCALE du serveur peut la faire, quels que soient IA_ORDRE, IA_ORDRE_LEGER, l'ordre
  * choisi dans l'Administration IA ou un moteur imposé par l'appelant. Si l'IA locale est indisponible, la tâche
@@ -48,6 +49,9 @@ const ALIAS_CONFIDENTIELS = {
   resumes: 'resumes',
   reunion: 'resumes',
   reunions: 'resumes',
+  // Réunions de l'équipe CM (migration 0039) : ordre du jour, compte rendu, tâches de suivi.
+  'cm-reunions': 'resumes',
+  'notes-reunion': 'resumes',
   'pre-resume': 'resumes',
   suivi: 'suivi',
   'suivi-joueurs': 'suivi',

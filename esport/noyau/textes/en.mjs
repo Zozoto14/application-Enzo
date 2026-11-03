@@ -362,4 +362,11 @@ export const EN = {
   'trombi.texte.elo': 'Elo',
   'trombi.texte.palmares': 'Achievements',
   'trombi.texte.structures': 'Former teams',
+  // Réunions de l'équipe CM (migration 0039) : MP du bot (rappel, annulation).
+  'cm.reunion.mp.titre_rappel': '⏰ Meeting reminder',
+  'cm.reunion.mp.titre_annulee': '❌ Meeting cancelled',
+  'cm.reunion.mp.rappel': '**{titre}** starts soon: {quand}.',
+  'cm.reunion.mp.annulee': '**{titre}** ({quand}) has been cancelled.',
+  'cm.reunion.mp.lieu': 'Where: {lieu}',
+  'cm.reunion.mp.motif': 'Reason: {motif}',
 };

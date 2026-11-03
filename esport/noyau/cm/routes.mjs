@@ -34,6 +34,8 @@
  *   GET|POST          /cm/visuels ; GET|PATCH|DELETE /cm/visuels/:id ; POST …/(rendu|carte|lien)
  *   GET               /cm/cartes/:id/visuels                     visuels d'une carte et proposition
  *
+ *   Réunions de l'équipe CM (docs/esport/cm-reunions.md) : /cm/reunions… (reunions/routes.mjs).
+ *
  *   Drive (docs/esport/drive.md) : /cm/drive… (drive/routes.mjs). Pièce jointe d'une carte depuis le Drive :
  *   POST /cm/cartes/:id/pieces { genre: 'drive', fichierId } ; image de l'éditeur : POST /cm/visuels/images { portee, drive }.
  */
@@ -44,6 +46,7 @@ import { lireLangue } from '../langues.mjs';
 import { TAILLE_MAX_TRELLO } from './trello.mjs';
 import { TAILLE_MAX_DOCUMENT } from './visuels/document.mjs';
 import { routesDrive } from './drive/routes.mjs';
+import { routesReunions } from './reunions/routes.mjs';
 
 /** Corps d'un modèle (quatre documents) ou d'un visuel retouché. */
 const TAILLE_CORPS_MODELE = 4 * TAILLE_MAX_DOCUMENT + 64 * 1024;
@@ -85,6 +88,8 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   if (a === 'portees' && b && c === 'envois' && medias) return routesEnvois({ medias, acteur, teamId: b, usage: 'cm', p: p.slice(3), methode: m, requete, lireCorps });
   // Drive de la section (migration 0027, docs/esport/drive.md).
   if (a === 'drive' && cm.drive) return routesDrive({ drive: cm.drive, medias, acteur, p, methode: m, url, requete, lireCorps, limite });
+  // Réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md).
+  if (a === 'reunions' && cm.reunions) return routesReunions({ reunions: cm.reunions, acteur, p, methode: m, url, lireCorps, limite });
 
   if (a === 'tableaux') {
     if (n === 1 && m === 'GET') return tb.tableaux(acteur, { archives: q.get('archives') === '1' });

@@ -52,6 +52,7 @@ import { servicesJeux } from './jeux/service.mjs';
 import { routesJeux } from './jeux/routes.mjs';
 import { servicesCm } from './cm/service.mjs';
 import { routeFichierCm, routesCm } from './cm/routes.mjs';
+import { routePubliqueReunions } from './cm/reunions/routes.mjs';
 import { routeDriveSignee } from './cm/drive/routes.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
 import { servicesSponsors } from './sponsors/service.mjs';
@@ -265,6 +266,9 @@ export function creerApi({
     if (chemin.startsWith('/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierSigne(md, url, requete);
     if (chemin.startsWith('/cm/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierCm(cm, url, requete);
     if ((chemin.startsWith('/cm/drive/contenu/') || chemin.startsWith('/cm/drive/zip/')) && (m === 'GET' || m === 'HEAD')) return routeDriveSignee(cm.drive, url, requete);
+    // Abonnement iCal aux réunions de l'équipe CM (migration 0039) : jeton révocable, sans session.
+    const icalReunions = await routePubliqueReunions(cm.reunions, { chemin, methode: m, url });
+    if (icalReunions !== undefined) return icalReunions;
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
     const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });

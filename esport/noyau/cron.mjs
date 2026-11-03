@@ -1,5 +1,6 @@
 /**
  * Tâches planifiées de l'Esport (toutes les 5 minutes par une tâche cron sur le serveur Node) : rappels de présence, d'échéance des tâches et J-1/H-1 Discord,
+ * rappels des réunions de l'équipe CM (in-app et MP du bot),
  * débuts d'événements, événements en attente (nouvel essai), file d'envoi Discord (réessais), purge de
  * rétention (journal selon la durée de chaque team, événements traités), agrégation journalière et rétention (90 jours)
  * des statistiques d'usage, ménage des compteurs de débit
@@ -29,6 +30,8 @@ import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
 import { purgerCorbeilleDrive, verifierAlerteDrive } from './cm/drive/service.mjs';
 import { purgerCorbeilleStrats } from './strats/service.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
+import { rappelsReunions } from './cm/reunions/rappels.mjs';
+import { traiterMpReunions } from './cm/reunions/mp.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -53,8 +56,11 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     // Réseaux (page de l'espace CM) : relevés automatiques (adaptateurs d'API, aucun en V1), rappels J+1 / J+7.
     ['relevés automatiques des réseaux', () => releverAutomatiquement(base, { adaptateurs: adaptateursReseaux, maintenant: maintenant() })],
     ['rappels Réseaux', () => rappelsReseaux(base, { maintenant: maintenant() })],
+    // Réunions de l'équipe CM (migration 0039) : rappel avant chaque réunion (in-app, puis MP du bot ci-dessous).
+    ['rappels des réunions CM', () => rappelsReunions(base, { maintenant: maintenant() })],
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
+    ['MP des réunions CM', () => traiterMpReunions(base, { maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
     // Devblog : brouillons programmés publiés à l'heure (app, puis file Discord envoyée juste après).
     ['devblog programmé', () => publierProgrammes(base, { maintenant: maintenant() })],

@@ -187,7 +187,7 @@ test('permissions : joueur (clips seulement), correspondant de team, autre team 
   await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'kai12345', roleId: 'cm-role-correspondant', portee: A.teamId } });
   const pageKai = await ok(`/cm/teams/${A.teamId}`, s.kai12345);
   // 0027 : le Correspondant CM voit et alimente le Drive de sa team.
-  assert.deepEqual(pageKai.permissions, ['cm.clips.proposer', 'cm.deposer', 'cm.drive.envoyer', 'cm.drive.voir', 'cm.voir']);
+  assert.deepEqual(pageKai.permissions, ['cm.clips.proposer', 'cm.deposer', 'cm.drive.envoyer', 'cm.drive.voir', 'cm.reunions.voir', 'cm.voir']);
   assert.equal(pageKai.tableaux.length, 1);
   assert.equal((await api(`/cm/tableaux/${club.id}`, s.kai12345)).statut, 404, 'le correspondant ne voit pas le tableau du club');
   const depot = await ok(`/cm/teams/${A.teamId}/depots`, s.kai12345, { methode: 'POST', corps: { genre: 'recrue', titre: 'Nouvelle recrue', description: 'Bienvenue à **Ivy**', liens: ['https://site-exemple.fr/photo'] } });

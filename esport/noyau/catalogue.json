@@ -406,6 +406,8 @@
     "cm.valider": {"categorie":"cm","fr":"CM : valider ou refuser les posts.","en":"CM: approve or refuse posts."},
     "cm.gerer": {"categorie":"cm","fr":"CM : gérer la section (tableaux, équipe CM, import, réglages, réseaux, charte, suppressions définitives).","en":"CM: manage the section (boards, CM team, import, settings, networks, brand kit, permanent deletions).","sensible":true},
     "cm.clips.proposer": {"categorie":"cm","fr":"CM : proposer des clips.","en":"CM: suggest clips."},
+    "cm.reunions.voir": {"categorie":"cm","fr":"CM : réunions de l’équipe CM (voir l’agenda et les disponibilités de l’équipe, créer ses réunions et rendez-vous).","en":"CM: CM team meetings (see the team’s calendar and availability, create your own meetings and appointments)."},
+    "cm.reunions.gerer": {"categorie":"cm","fr":"CM : gérer toutes les réunions de l’équipe CM (modifier, annuler, lire les notes de toutes les réunions).","en":"CM: manage every CM team meeting (edit, cancel, read the notes of every meeting).","sensible":true},
     "cm.drive.voir": {"categorie":"drive","fr":"Drive : voir et télécharger.","en":"Drive: view and download."},
     "cm.drive.envoyer": {"categorie":"drive","fr":"Drive : envoyer des fichiers, créer des dossiers, organiser les siens.","en":"Drive: upload files, create folders, organise your own."},
     "cm.drive.gerer": {"categorie":"drive","fr":"Drive : tout gérer (dossiers restreints, corbeille, suppressions définitives, versions).","en":"Drive: manage everything (restricted folders, bin, permanent deletions, versions).","sensible":true},

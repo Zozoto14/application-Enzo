@@ -363,4 +363,11 @@ export const FR = {
   'trombi.texte.elo': 'Elo',
   'trombi.texte.palmares': 'Palmarès',
   'trombi.texte.structures': 'Anciennes structures',
+  // Réunions de l'équipe CM (migration 0039) : MP du bot (rappel, annulation).
+  'cm.reunion.mp.titre_rappel': '⏰ Rappel de réunion',
+  'cm.reunion.mp.titre_annulee': '❌ Réunion annulée',
+  'cm.reunion.mp.rappel': '**{titre}** commence bientôt : {quand}.',
+  'cm.reunion.mp.annulee': '**{titre}** ({quand}) est annulée.',
+  'cm.reunion.mp.lieu': 'Où : {lieu}',
+  'cm.reunion.mp.motif': 'Motif : {motif}',
 };

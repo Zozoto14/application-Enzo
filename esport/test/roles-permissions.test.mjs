@@ -319,8 +319,10 @@ test('catalogue : un rôle du club porte les permissions du club et du CM ; le S
   assert.deepEqual([...PERMISSIONS_ROLE_GLOBAL].sort(), [...new Set([...PERMISSIONS_GLOBALES, ...PERMISSIONS_ROLES_CM])].sort());
   const sc = permissionsParDefautGlobal('second_ceo');
   assert.deepEqual(PERMISSIONS_ROLE_GLOBAL.filter(p => !sc.includes(p)).sort(), ['deploiement.voir', 'devblog.gerer', 'roles.gerer']);
-  // La migration 0033 pose exactement ces permissions (sinon « Modifié » s'afficherait dès l'installation).
+  // La migration 0033 pose exactement ces permissions (sinon « Modifié » s'afficherait dès l'installation), complétée
+  // par les migrations suivantes (0039 : réunions de l'équipe CM).
   const sql = readFileSync(fileURLToPath(new URL('../migrations/0033_roles_globaux.sql', import.meta.url)), 'utf8');
-  const posees = [...sql.matchAll(/\('role-global-second-ceo', '([a-z_.]+)'\)/g)].map(m => m[1]);
+  const sql38 = readFileSync(fileURLToPath(new URL('../migrations/0039_cm_reunions.sql', import.meta.url)), 'utf8');
+  const posees = [...[...sql.matchAll(/\('role-global-second-ceo', '([a-z_.]+)'\)/g)].map(m => m[1]), ...[...sql38.matchAll(/SELECT id, '([a-z_.]+)' FROM roles_globaux WHERE id = 'role-global-second-ceo'/g)].map(m => m[1])];
   assert.deepEqual(posees.sort(), [...sc].sort());
 });

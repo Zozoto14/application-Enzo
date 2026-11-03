@@ -10,6 +10,7 @@
  *  - rgpd.mjs : export et effacement.
  *
  *  - drive/ : Drive de la section (dossiers, fichiers, versions, corbeille ; docs/esport/drive.md).
+ *  - reunions/ : réunions de l'équipe CM, disponibilités, rendez-vous (docs/esport/cm-reunions.md).
  *
  * Fichiers (pièces jointes, clips) : envoi par morceaux du module médias (usage « cm », portée club ou team),
  * gardés dans `cm_fichiers`, lus par lien signé (`/cm/fichiers/:id`, 2 h) ; le lien ne vaut que tant que le
@@ -30,6 +31,7 @@ import { servicesVisuelsCm } from './visuels/service.mjs';
 import { servicesDriveCm } from './drive/service.mjs';
 import { configDrive } from './drive/regles.mjs';
 import { utiliseHorsDrive, utiliseParDrive } from './utilisations.mjs';
+import { servicesReunionsCm } from './reunions/service.mjs';
 
 export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive: configDuDrive = configDrive() }) {
   // Envois par morceaux de la section : il faut pouvoir écrire quelque chose dans la portée.
@@ -51,6 +53,8 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   const clips = servicesClipsCm({ base, maintenant, medias, cleSession, tableaux, drive });
   const trello = servicesImportTrello({ base, maintenant, tableaux });
   const visuels = servicesVisuelsCm({ base, maintenant, medias, cleSession, stockage, tableaux, drive });
+  // Réunions de l'équipe CM (migration 0039) : une tâche de suivi peut devenir une carte d'un tableau.
+  const reunions = servicesReunionsCm({ base, maintenant, tableaux });
 
   /**
    * Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, image du club — logo, fond — et cm.voir
@@ -110,5 +114,5 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     },
   };
 
-  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive };
+  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive, reunions };
 }

@@ -193,6 +193,21 @@ export const TABLES = [
   ['notifs_centre', 'cree_le, id'],
   ['notifs_lectures', 'compte_id, notif_id'],
   ['notifs_preferences', 'compte_id'],
+  // Réunions de l'équipe CM (migration 0039) : réunions, participants, notes et tâches (confidentielles : restent
+  // dans la base), disponibilités, statuts, rendez-vous, rappels, MP en file, abonnements iCal (empreinte du jeton).
+  ['cm_reunions', 'id'],
+  ['cm_reunion_participants', 'reunion_id, compte_id'],
+  ['cm_reunion_exceptions', 'reunion_id, occurrence'],
+  ['cm_reunion_notes', 'reunion_id'],
+  ['cm_reunion_taches', 'id'],
+  ['cm_dispo_regles', 'id'],
+  ['cm_dispo_exceptions', 'id'],
+  ['cm_reunion_profils', 'compte_id'],
+  ['cm_rdv_offres', 'id'],
+  ['cm_rdv_creneaux', 'id'],
+  ['cm_reunion_rappels', 'reunion_id, occurrence, compte_id'],
+  ['cm_reunion_mp', 'id'],
+  ['cm_reunion_ical', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

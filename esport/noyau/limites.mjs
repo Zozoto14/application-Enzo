@@ -49,6 +49,8 @@ export const LIMITES = {
   cm_import: { max: 20, fenetreS: 3600 },
   cm_clip: { max: 30, fenetreS: 3600 },
   cm_depot: { max: 30, fenetreS: 3600 },
+  // Réunions de l'équipe CM (migration 0039) : réunions et offres de rendez-vous créées.
+  cm_reunion: { max: 60, fenetreS: 3600 },
   // Sponsors : imports CSV de prospects (aperçu compris), par compte.
   sp_import: { max: 30, fenetreS: 3600 },
   // Réseaux : imports CSV de relevés (aperçu compris) ; messages de test Discord.

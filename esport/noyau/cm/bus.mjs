@@ -7,12 +7,15 @@
  * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
  * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
- * du Drive (espace utilisé à 80 %).
+ * du Drive (espace utilisé à 80 %). Réunions de l'équipe CM : invités (créée, modifiée, annulée), organisateur
+ * (réponse, rendez-vous réservé), participants (rappel) ; rappel et annulation partent aussi en MP Discord du bot
+ * (file `cm_reunion_mp`, reunions/rappels.mjs). Le centre de notifications consomme ces événements tels quels.
  *
  * Ce fichier n'importe pas evenements.mjs (c'est lui qui nous importe).
  */
 
 import { comptesClubAvec, comptesTeamAvec } from './commun.mjs';
+import { mettreMpEnFile } from './reunions/mp.mjs';
 
 export const TYPES_CM = [
   'cm.tableau_cree',
@@ -61,6 +64,13 @@ export const TYPES_CM = [
   // Étiquettes (tags) des fichiers du Drive : renommées ou supprimées d'un coup pour toute la portée.
   'cm.drive_tag_renomme',
   'cm.drive_tag_supprime',
+  // Réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md) : SANS team, JAMAIS de notes dans la charge.
+  'cm.reunion_creee',
+  'cm.reunion_modifiee',
+  'cm.reunion_annulee',
+  'cm.reunion_reponse',
+  'cm.reunion_rappel',
+  'cm.rdv_reserve',
 ];
 
 async function notifier(base, ev, compte, type, charge) {
@@ -107,6 +117,24 @@ export async function abonneCm(base, ev) {
       return envoyer([charge.proposePar], 'cm-clip-decide', { titre: charge.titre ?? null, statut: charge.statut ?? null, motif: charge.motif ?? null, clip: ev.entite_id });
     case 'cm.affectation_ajoutee':
       return envoyer([charge.compte], 'cm-affecte', { role: charge.role ?? null, portee: charge.portee ?? null });
+    case 'cm.reunion_creee':
+      return envoyer(charge.participants ?? [], 'cm-reunion-invite', { titre: charge.titre ?? null, reunion: ev.entite_id, debut: charge.debut ?? null, fuseau: charge.fuseau ?? null, membre: ev.acteur_id, genre: charge.genre ?? 'reunion' });
+    case 'cm.reunion_modifiee':
+      return envoyer(charge.participants ?? [], 'cm-reunion-modifiee', { titre: charge.titre ?? null, reunion: ev.entite_id, debut: charge.debut ?? null, fuseau: charge.fuseau ?? null, membre: ev.acteur_id, changements: charge.changements ?? [] });
+    case 'cm.reunion_annulee': {
+      const donnees = { titre: charge.titre ?? null, reunion: ev.entite_id, debut: charge.occurrence ?? charge.debut ?? null, fuseau: charge.fuseau ?? null, membre: ev.acteur_id, motif: charge.motif ?? null, serie: charge.serie !== false };
+      await envoyer(charge.participants ?? [], 'cm-reunion-annulee', donnees);
+      return mettreMpEnFile(base, ev, (charge.participants ?? []).filter(c => c && c !== ev.acteur_id), 'annulee', charge.occurrence ?? null);
+    }
+    case 'cm.reunion_reponse':
+      return envoyer([charge.organisateur], 'cm-reunion-reponse', { titre: charge.titre ?? null, reunion: ev.entite_id, reponse: charge.reponse ?? null, membre: ev.acteur_id, proposition: charge.proposition ?? null });
+    case 'cm.rdv_reserve':
+      return envoyer([charge.proprietaire], 'cm-rdv-reserve', { titre: charge.titre ?? null, debut: charge.debut ?? null, fuseau: charge.fuseau ?? null, membre: ev.acteur_id });
+    case 'cm.reunion_rappel': {
+      if (!charge.compte) return;
+      await notifier(base, ev, charge.compte, 'cm-reunion-rappel', { titre: charge.titre ?? null, reunion: ev.entite_id, debut: charge.debut ?? null, fuseau: charge.fuseau ?? null, minutes: charge.minutes ?? null });
+      return mettreMpEnFile(base, ev, [charge.compte], 'rappel', charge.occurrence ?? null);
+    }
     case 'cm.drive_quota':
       // Drive plein à 80 % (au plus une fois par semaine) : ceux qui gèrent le Drive du club.
       return envoyer([...(await comptesClubAvec(base, 'cm.drive.gerer'))], 'cm-drive-quota', { pourcent: charge.pourcent ?? null, utilise: charge.utilise ?? null, limite: charge.limite ?? null });

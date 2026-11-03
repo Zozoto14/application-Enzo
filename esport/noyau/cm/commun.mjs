@@ -27,8 +27,14 @@ export const MODULE_CM = 'cm';
  * (affectation « club » ou d'une team), jamais par un rôle de team.
  */
 export const PERMISSIONS_DRIVE_CM = Object.freeze(['cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer']);
+/**
+ * Réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md) : voir l'agenda de l'équipe et créer ses
+ * réunions ; gérer toutes les réunions. Portées par les rôles CM (affectation du club OU d'une team : un
+ * correspondant fait partie de l'équipe CM) et les rôles du club, jamais par un rôle de team.
+ */
+export const PERMISSIONS_REUNIONS_CM = Object.freeze(['cm.reunions.voir', 'cm.reunions.gerer']);
 export const PORTEE_CLUB = 'club';
-export const PERMISSIONS_CM = Object.freeze(['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', ...PERMISSIONS_DRIVE_CM]);
+export const PERMISSIONS_CM = Object.freeze(['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', ...PERMISSIONS_DRIVE_CM, ...PERMISSIONS_REUNIONS_CM]);
 /** Permissions CM qu'un rôle de TEAM peut porter (catalogue.json, groupe « cm »). */
 export const PERMISSIONS_EQUIPE = Object.freeze(['cm.voir', 'cm.deposer', 'cm.clips.proposer']);
 export const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

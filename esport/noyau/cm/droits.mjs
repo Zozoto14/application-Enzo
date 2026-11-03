@@ -17,11 +17,12 @@ import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUui
 import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 import { permissionsGlobalesDe } from '../roles/globales.mjs';
+import { droitsReunions } from './reunions/service.mjs';
 
-/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges). */
+/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges ; 0039 : réunions). */
 export const ROLES_CM_SYSTEME = Object.freeze({
-  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer', 'cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer', 'membres.trombi.voir', 'membres.trombi.editer', 'membres.badges.gerer'],
-  correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer', 'cm.drive.voir', 'cm.drive.envoyer', 'membres.trombi.voir'],
+  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer', 'cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer', 'membres.trombi.voir', 'membres.trombi.editer', 'membres.badges.gerer', 'cm.reunions.voir', 'cm.reunions.gerer'],
+  correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer', 'cm.drive.voir', 'cm.drive.envoyer', 'membres.trombi.voir', 'cm.reunions.voir'],
 });
 
 /** Types de suggestions automatiques (cartes brouillon dans « Idées »). */
@@ -310,9 +311,15 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     const sponsors = [...(await droitsSponsors(base, acteur))].sort();
     // Drive (migration 0027) : un compte qui n'a QUE le Drive (cm.drive.voir) ouvre aussi l'espace.
     const voitDrive = s => s.has('cm.drive.voir') || s.has('cm.drive.envoyer') || s.has('cm.drive.gerer');
-    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir') || voitDrive(portees.club) || [...portees.teams.values()].some(voitDrive);
+    // Réunions de l'équipe CM (migration 0039) : l'équipe CM (voir), et tout membre du club invité à une réunion à venir.
+    const reunions = await droitsReunions(base, acteur);
+    const invite = !reunions.voir && acteur.compte
+      ? Boolean(await base.premier("SELECT p.reunion_id FROM cm_reunion_participants p JOIN cm_reunions r ON r.id = p.reunion_id WHERE p.compte_id = ? AND r.statut = 'active' AND (r.recurrence IS NOT NULL OR r.fin > ?) LIMIT 1", [acteur.compte, new Date(maintenant()).toISOString()]))
+      : false;
+    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir') || voitDrive(portees.club) || [...portees.teams.values()].some(voitDrive) || reunions.voir || invite;
     return {
       espace,
+      reunions: { voir: reunions.voir, gerer: reunions.gerer, invite },
       sponsors,
       club: [...portees.club].sort(),
       teams,

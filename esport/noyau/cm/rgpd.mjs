@@ -2,10 +2,13 @@
  * RGPD de la section CM.
  *
  *  - Export (droit d'accès) : rôles CM, cartes créées, cartes où le compte est assigné, commentaires,
- *    clips proposés, fichiers déposés, modèles de visuels et visuels créés, fichiers du Drive et favoris.
+ *    clips proposés, fichiers déposés, modèles de visuels et visuels créés, fichiers du Drive et favoris ; réunions
+ *    de l'équipe CM (organisées ou invitées, sa réponse), ses disponibilités, son statut, ses offres de rendez-vous.
  *  - Suppression du compte : ses affectations et ses assignations disparaissent ; ce qu'il a écrit pour le
  *    club (cartes, commentaires, clips, pièces jointes, modèles et visuels) reste, sans auteur (« Compte
- *    supprimé ») ; il est retiré des membres liés aux posts.
+ *    supprimé ») ; il est retiré des membres liés aux posts. Réunions : il quitte les participants ; ses disponibilités,
+ *    son statut, ses abonnements iCal, ses MP en file disparaissent ; ses offres de rendez-vous ferment (créneaux
+ *    libres retirés) ; les réunions qu'il organisait restent au club, sans organisateur.
  */
 
 import { jsonOu } from '../outils.mjs';
@@ -25,6 +28,13 @@ export async function exportCm(base, compte) {
     // Drive (migration 0027) : fichiers déposés (ou ajoutés en version) et favoris.
     cmDrive: (await q('SELECT nom, type_mime, taille, portee, version, cree_le FROM cm_drive_fichiers WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(f => ({ nom: f.nom, type: f.type_mime, taille: Number(f.taille), version: Number(f.version), portee: f.portee === 'club' ? 'club' : (teams.get(f.portee) ?? f.portee), date: f.cree_le })),
     cmDriveFavoris: (await q('SELECT genre, cree_le FROM cm_drive_favoris WHERE compte_id = ? ORDER BY cree_le')).map(f => ({ genre: f.genre, date: f.cree_le })),
+    cmReunions: (await q("SELECT r.titre, r.genre, r.debut, r.fin, r.fuseau, r.statut, r.organisateur_id, p.reponse, p.commentaire FROM cm_reunion_participants p JOIN cm_reunions r ON r.id = p.reunion_id WHERE p.compte_id = ? ORDER BY r.debut")).map(r => ({ titre: r.titre, genre: r.genre, debut: r.debut, fin: r.fin, fuseau: r.fuseau, statut: r.statut, organisateur: r.organisateur_id === compte, reponse: r.reponse, commentaire: r.commentaire })),
+    cmDisponibilites: {
+      creneaux: (await q('SELECT jour, debut, fin, type, fuseau FROM cm_dispo_regles WHERE compte_id = ? ORDER BY jour, debut')).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau })),
+      exceptions: (await q('SELECT debut, fin, type, note FROM cm_dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(x => ({ debut: x.debut, fin: x.fin, type: x.type, note: x.note })),
+      statut: (await q('SELECT fuseau, statut, message, statut_jusqua FROM cm_reunion_profils WHERE compte_id = ?')).map(x => ({ fuseau: x.fuseau, statut: x.statut, message: x.message, jusqua: x.statut_jusqua }))[0] ?? null,
+    },
+    cmRendezVous: (await q('SELECT titre, description, duree_minutes, ouverte, cree_le FROM cm_rdv_offres WHERE proprietaire_id = ? ORDER BY cree_le')).map(o => ({ titre: o.titre, description: o.description, dureeMinutes: Number(o.duree_minutes), ouverte: Number(o.ouverte) === 1, creeLe: o.cree_le })),
     cmVisuels: (await q('SELECT nom, type, format, langue, portee, cree_le FROM cm_visuels WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(v => ({ nom: v.nom, type: v.type, format: v.format, langue: v.langue, portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), creeLe: v.cree_le })),
   };
 }
@@ -62,6 +72,27 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_drive_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     { sql: 'UPDATE cm_drive_dossiers SET supprime_par = NULL WHERE supprime_par = ?', params: [compte] },
   ];
+  // Réunions de l'équipe CM (migration 0039).
+  lot.push(
+    { sql: 'DELETE FROM cm_reunion_participants WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_reunion_rappels WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_reunion_mp WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_reunion_ical WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_dispo_regles WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_dispo_exceptions WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_reunion_profils WHERE compte_id = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunions SET organisateur_id = NULL WHERE organisateur_id = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunions SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunions SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunions SET annule_par = NULL WHERE annule_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunion_exceptions SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunion_notes SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunion_taches SET assigne_a = NULL WHERE assigne_a = ?', params: [compte] },
+    { sql: 'UPDATE cm_reunion_taches SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_rdv_creneaux WHERE reserve_par IS NULL AND offre_id IN (SELECT id FROM cm_rdv_offres WHERE proprietaire_id = ?)', params: [compte] },
+    { sql: 'UPDATE cm_rdv_creneaux SET reserve_par = NULL WHERE reserve_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_rdv_offres SET ouverte = 0, proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
+  );
   lot.push(
     { sql: 'UPDATE cm_cartes SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_cartes SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
