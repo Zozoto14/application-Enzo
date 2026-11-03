@@ -224,7 +224,8 @@ test('diffusion filtrée : retrait d’un membre ou changement de rôle → plus
 test('notifications : le compteur du compte notifié bouge (sujet « compte »), jamais celui d’un autre', async () => {
   const { b, A, s, ok } = await preparer();
   const lea = await ouvrirFlux(b.traiter, s.lea12345);
-  const kai = await ouvrirFlux(b.traiter, s.kai12345);
+  // Nox (autre team) : ni notification personnelle, ni élément du fil du centre de notifications de cette team.
+  const kai = await ouvrirFlux(b.traiter, s.nox12345);
   await ok(`/teams/${A.teamId}/taches`, s.coach123, { methode: 'POST', corps: { titre: 'Aim 20 min', assigne: 'lea12345' } });
   const n = await lea.attendre(e => e.type === 'maj' && e.data.sujet === 'compte');
   assert.equal(n.data.sujet, 'compte', 'jamais l’identifiant d’un compte dans le sujet');
