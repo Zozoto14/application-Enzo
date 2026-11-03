@@ -26,7 +26,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints ; `0047_cm_urgence.sql`, drapeau d'urgence des cartes). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints ; `0047_cm_urgence.sql`, drapeau d'urgence des cartes ; `0048_cm_liens_acces.sql`, qui voit une ressource de DATA › Ressources). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -111,10 +111,62 @@ Le groupe **DATA** (ex-« Médias ») garde **Clips | Visuels | Drive** et ajout
   `DELETE /cm/liens/:id/liaisons/:genre/:cibleId`, `GET /cm/liens/cible/:genre/:id`.
 - **Bus, notifications, temps réel** : événements `cm.lien_cree`, `cm.lien_modifie`, `cm.lien_supprime`, `cm.lien_lie`,
   `cm.lien_delie` (journal de la section ; fil d'activité de la catégorie CM, lien vers DATA › Ressources ; sujet temps réel
-  `cm` : les listes ouvertes se relisent). Pas de notification personnelle.
+  `cm` : les listes ouvertes se relisent). Pas de notification personnelle, sauf un partage (ci-dessous).
 - **Lien profond** : onglet `ressources` (groupe `data`), ex. `{ vue: 'cm', onglet: 'ressources' }`.
 - **RGPD** : l'export du compte contient `cmLiens` (ses liens) ; à la suppression du compte, ses liens et liaisons restent au
   club, sans auteur. Export / import de la base : tables `cm_liens` et `cm_lien_liaisons`.
+
+### Qui voit la ressource (ressources restreintes, migration 0048)
+
+Exemple du Fondateur : « quand je donne les tâches à Lyna, je veux qu'elle les voie ». Chaque ressource est visible de
+**« Toute l'équipe CM »** (défaut, valeur de toutes les ressources existantes : les règles ci-dessus) ou **« Restreint »** :
+seulement les **personnes** et les **rôles** choisis (rôles CM, du club, de team), chacun **« Peut voir »** (lecture seule :
+ouvrir, voir où elle est liée) ou **« Peut modifier »** (ses permissions CM habituelles : `cm.editer`, `cm.gerer`). Mêmes
+modèle et composants que l'[accès aux tableaux](#accès-au-tableau-tableaux-restreints) (`esport/noyau/cm/acces.mjs`,
+`src/esport/ui/cm/ChoixAcces.tsx`) ; code propre : `esport/noyau/cm/liensAcces.mjs`, `src/esport/ui/cm/liens/AccesRessource.tsx`.
+
+- **Toujours** : son **créateur** et le **Fondateur** la voient (et la modifient, selon leurs permissions). La restriction ne
+  donne jamais rien : elle s'ajoute à la lecture habituelle (`cm.voir`, team de rattachement). Un rôle compte pour qui l'a
+  **aujourd'hui** (relu à chaque requête).
+- **Réglage** : à la **création** (formulaire « Qui voit la ressource ») et dans le menu **⋯** de la ressource, « Qui voit la
+  ressource… » (avec « Qui voit cette ressource aujourd'hui »), réservé au **créateur**, à **`cm.gerer`** (au niveau « peut
+  modifier ») et au **Fondateur**. Garde-fou : hors créateur et Fondateur, on ne se retire pas soi-même « peut modifier »
+  (409 `acces-soi-meme`). Sur la ligne : **cadenas** « Restreint » et **avatars** (initiales) des personnes autorisées (six au plus, puis « +N » ;
+  le Fondateur, toujours autorisé, n'y figure pas).
+- **« Partager avec… »** (menu ⋯) : une ou plusieurs personnes en un clic (celles qui lisent les Ressources de la portée).
+  Ressource restreinte : elles reçoivent l'accès (« peut voir » par défaut, jamais rétrogradées ; réservé à qui règle
+  l'accès) ; ressource ouverte : un éditeur peut aussi la signaler. Elles reçoivent une **notification personnelle**
+  (centre de notifications, catégorie CM, « X a partagé une ressource avec vous : « titre » », lien vers DATA › Ressources),
+  et la ressource s'affiche chez elles avec une pastille **« Nouveau »** jusqu'à son **ouverture** (bouton Ouvrir ou « Voir
+  où il est lié » : `POST /cm/liens/:id/vu`, état en base `cm_lien_partages.vu_le`, la notification passe en lue). Les
+  personnes ajoutées **nommément** dans le réglage (ou à la création) sont prévenues de la même façon ; un rôle, non.
+  Compteur sur le sous-onglet **Ressources** (`GET /cm/etat` → `ressources`).
+- **Filtre « Partagé avec moi »** (ressources partagées avec le compte).
+- **Contrôle serveur partout** (404 pour qui n'en est pas, comme si elle n'existait pas) : liste (étiquettes comprises),
+  « Voir où il est lié », ressources d'une **carte** et d'un **dossier du Drive** (une ressource restreinte liée n'y apparaît
+  que pour qui voit la ressource **et** la carte ou le dossier), modifier, épingler, ordonner, lier, délier, supprimer,
+  réglage, partage, compteur de l'état, **journal** (section et team), **centre de notifications** (fil et
+  personnelles, relues à chaque lecture : `notifications.cm_lien_id`, `liensInterdits` de `notifications/droits.mjs`),
+  annonces en direct, **temps réel** (le sujet `cm` ne transporte aucune donnée : la liste se relit avec les contrôles).
+  **Retrait immédiat** : la ressource, ses liaisons et ses anciennes notifications disparaissent à la requête suivante.
+  **Suppression** d'une ressource restreinte : son fil et ses notifications sont effacés, ses entrées du journal perdent
+  leurs détails (titre, domaine).
+- **API** : `GET /cm/liens/acces?team` (personnes et rôles proposables à la création, `cm.editer`) ;
+  `GET|PUT /cm/liens/:id/acces { acces: 'tous' | 'restreint', regles: [{ genre, cible, niveau }] }` ;
+  `POST /cm/liens/:id/partage { comptes, niveau? }` ; `POST /cm/liens/:id/vu`. `POST /cm/liens` accepte aussi `acces` et
+  `regles`. Chaque ressource de la liste porte `acces`, `autorises`, `nouveau`, `partageAvecMoi` et ses `droits`
+  (`modifier`, `supprimer`, `acces`, `partager`).
+- **Bus** : `cm.lien_acces` (charge : `acces` et nombre de règles, jamais les personnes ; fil des gestionnaires CM qui voient la
+  ressource) et `cm.lien_partage` (notification personnelle `cm-lien-partage` seulement, relue au moment de l'envoi).
+- **Données** (`0048_cm_liens_acces.sql`) : `cm_liens.acces`, `cm_lien_acces` (règles), `cm_lien_partages` (à qui, par qui,
+  quand, `vu_le`), `notifications.cm_lien_id`. Export / import de la base : `cm_lien_acces`, `cm_lien_partages`. **RGPD** :
+  l'export du compte donne `cmLiensAcces` (ressources où il est nommé) et `cmLiensPartages` ; à la suppression du compte, ses
+  accès nominatifs et partages reçus sont effacés, ceux qu'il a donnés restent sans auteur.
+- **Tests** : `esport/test/cm-liens-acces.test.mjs` (SQLite et PostgreSQL : rien par aucune route pour un compte non
+  autorisé — liste, carte et dossier liés, écritures, état, journal, notifications, temps réel —, « Partager avec Lyna »
+  et sa notification, « Nouveau » puis ouverture, retrait immédiat, rôles, garde-fou, création restreinte, suppression,
+  export / import, RGPD) et `src/esport/CmRessourcesAcces.test.tsx` (cadenas, avatars, « Nouveau », filtre, partage, réglage,
+  création, phrase FR/EN).
 
 ## Tableaux façon Trello
 
@@ -492,6 +544,7 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | --- | --- |
 | `GET /cm/moi` ; `GET /cm/etat` | session |
 | `GET\|POST /cm/tableaux` ; `GET\|PATCH\|DELETE /cm/tableaux/:id` (`?archives=1`) | voir ; gerer |
+| `GET\|PUT /cm/liens/:id/acces` ; `POST /cm/liens/:id/partage { comptes, niveau? }` ; `POST /cm/liens/:id/vu` ; `GET /cm/liens/acces?team` | créateur, gerer ou Fondateur ; voir le lien (vu) ; editer (options) |
 | `GET\|PUT /cm/tableaux/:id/acces` (`{ acces: 'tous' \| 'restreint', regles: [{ genre: 'compte' \| 'role_cm' \| 'role_club' \| 'role_team', cible, niveau: 'voir' \| 'modifier' }] }`) | gerer ou créateur du tableau |
 | `POST /cm/tableaux/:id/(listes\|etiquettes\|cartes)` ; `PATCH /cm/listes/:id` ; `POST …/deplacer` ; `PATCH /cm/etiquettes/:id` ; `PUT /cm/tableaux/:id/etiquettes/ordre { ids }` | editer |
 | `DELETE /cm/etiquettes/:id` (définitif, rend `{ cartes }`) ; `POST /cm/etiquettes/:id/fusionner { vers }` | gerer |
@@ -534,6 +587,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
   `tableaux.mjs`, `equipe.mjs`, `clips.mjs`, `droits.mjs`, `trello.mjs` (lecture pure de l'export),
   `importTrello.mjs`, `suggestions.mjs` et `bus.mjs` (abonnés du bus), `calendriers.mjs` (calendriers des teams),
   `acces.mjs` (tableaux restreints : niveaux, tableaux interdits d'un lecteur, condition SQL du journal et du fil),
+  `liens.mjs` et `liensAcces.mjs` (DATA › Ressources et ressources restreintes),
   `rgpd.mjs`, `routes.mjs`, `service.mjs`.
 - App : `src/esport/cm/` (client, règles des réseaux, phrases, `fonds.ts`), `src/esport/ui/cm/` (EspaceCm, Tableau,
   FicheCarte, Calendrier, Clips, ImportTrello, RolesCm, CmTeam), textes `src/esport/i18n/cm.ts`.

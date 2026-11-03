@@ -36,6 +36,16 @@ export const estRestreint = tb => tb?.acces === 'restreint';
  */
 export async function niveauxTableau(base, tb, regles = null) {
   const lignes = regles ?? (await base.tous('SELECT genre, cible, niveau FROM cm_tableau_acces WHERE tableau_id = ?', [tb.id]));
+  return niveauxRegles(base, lignes, { teamId: tb.team_id ?? null });
+}
+
+/**
+ * Niveaux des comptes retenus par des règles d'accès (`[{ genre, cible, niveau }]`), relus aujourd'hui : tableaux
+ * (migration 0046) et ressources de DATA › Ressources (migration 0048, liensAcces.mjs). Rôle CM : affectation « club »,
+ * ou affectation de la team `teamId` (membre actif) ; `toutesTeams` : affectation de n'importe quelle team dont le compte
+ * est membre actif (ressource du club, lisible depuis le CM de chaque team). Le Fondateur n'y figure jamais.
+ */
+export async function niveauxRegles(base, lignes, { teamId = null, toutesTeams = false } = {}) {
   const sortie = new Map();
   const ajouter = (compte, niveau) => {
     if (!compte || !RANG[niveau]) return;
@@ -49,10 +59,16 @@ export async function niveauxTableau(base, tb, regles = null) {
   for (const [compte, niveau] of parGenre('compte')) ajouter(compte, niveau);
   const rolesCm = parGenre('role_cm');
   if (rolesCm.size) {
-    const portees = tb.team_id ? ['club', tb.team_id] : ['club'];
-    const aff = await lignesParIds(base, `SELECT a.compte_id, a.role_id, a.portee FROM cm_affectations a WHERE a.portee IN (${portees.map(() => '?').join(', ')}) AND a.role_id`, [...rolesCm.keys()], { paramsAvant: portees });
-    const actifs = tb.team_id ? new Set((await base.tous("SELECT compte_id FROM membres WHERE team_id = ? AND statut = 'actif'", [tb.team_id])).map(l => l.compte_id)) : new Set();
-    for (const a of aff) if (a.portee === 'club' || actifs.has(a.compte_id)) ajouter(a.compte_id, rolesCm.get(a.role_id));
+    if (toutesTeams) {
+      const aff = await lignesParIds(base, 'SELECT a.compte_id, a.role_id, a.portee FROM cm_affectations a WHERE a.role_id', [...rolesCm.keys()]);
+      const actifs = new Set((await base.tous("SELECT compte_id, team_id FROM membres WHERE statut = 'actif'", [])).map(l => `${l.team_id}|${l.compte_id}`));
+      for (const a of aff) if (a.portee === 'club' || actifs.has(`${a.portee}|${a.compte_id}`)) ajouter(a.compte_id, rolesCm.get(a.role_id));
+    } else {
+      const portees = teamId ? ['club', teamId] : ['club'];
+      const aff = await lignesParIds(base, `SELECT a.compte_id, a.role_id, a.portee FROM cm_affectations a WHERE a.portee IN (${portees.map(() => '?').join(', ')}) AND a.role_id`, [...rolesCm.keys()], { paramsAvant: portees });
+      const actifs = teamId ? new Set((await base.tous("SELECT compte_id FROM membres WHERE team_id = ? AND statut = 'actif'", [teamId])).map(l => l.compte_id)) : new Set();
+      for (const a of aff) if (a.portee === 'club' || actifs.has(a.compte_id)) ajouter(a.compte_id, rolesCm.get(a.role_id));
+    }
   }
   const rolesClub = parGenre('role_club');
   if (rolesClub.size) for (const a of await lignesParIds(base, 'SELECT compte_id, role_id FROM roles_globaux_affectations WHERE role_id', [...rolesClub.keys()])) ajouter(a.compte_id, rolesClub.get(a.role_id));
@@ -115,18 +131,26 @@ export function permissionsAuNiveau(permissions, niveau) {
 
 /**
  * Condition SQL « hors des tableaux interdits » sur des lignes qui désignent une entité (`entite_type`,
- * `entite_id` : journal, fil des notifications) : le tableau, ses cartes et les visuels générés depuis ses cartes.
+ * `entite_id` : journal, fil des notifications) : le tableau, ses cartes et les visuels générés depuis ses cartes ;
+ * `liensInterdits` : ressources restreintes (`cm_lien`, migration 0048) que le lecteur ne voit pas.
  * `{ sql, params }` ; toujours vraie si rien n'est interdit.
  */
-export function horsTableauxInterdits(alias, interdits) {
-  if (!interdits.length) return { sql: '1 = 1', params: [] };
-  const m = interdits.map(() => '?').join(', ');
+export function horsTableauxInterdits(alias, interdits, liensInterdits = []) {
   const a = alias ? `${alias}.` : '';
   // COALESCE : une ligne sans entité (NULL) doit rester visible (NOT NULL serait faux).
   const t = `COALESCE(${a}entite_type, '')`;
   const i = `COALESCE(${a}entite_id, '')`;
-  return {
-    sql: `NOT ((${t} = 'cm_tableau' AND ${i} IN (${m})) OR (${t} = 'cm_carte' AND ${i} IN (SELECT ki.id FROM cm_cartes ki WHERE ki.tableau_id IN (${m}))) OR (${t} = 'cm_visuel' AND ${i} IN (SELECT vi.id FROM cm_visuels vi JOIN cm_cartes kv ON kv.id = vi.carte_id WHERE kv.tableau_id IN (${m}))))`,
-    params: [...interdits, ...interdits, ...interdits],
-  };
+  const parties = [];
+  const params = [];
+  if (interdits.length) {
+    const m = interdits.map(() => '?').join(', ');
+    parties.push(`NOT ((${t} = 'cm_tableau' AND ${i} IN (${m})) OR (${t} = 'cm_carte' AND ${i} IN (SELECT ki.id FROM cm_cartes ki WHERE ki.tableau_id IN (${m}))) OR (${t} = 'cm_visuel' AND ${i} IN (SELECT vi.id FROM cm_visuels vi JOIN cm_cartes kv ON kv.id = vi.carte_id WHERE kv.tableau_id IN (${m}))))`);
+    params.push(...interdits, ...interdits, ...interdits);
+  }
+  // Ressources restreintes de DATA › Ressources (migration 0048) dont le lecteur n'est pas.
+  if (liensInterdits.length) {
+    parties.push(`NOT (${t} = 'cm_lien' AND ${i} IN (${liensInterdits.map(() => '?').join(', ')}))`);
+    params.push(...liensInterdits);
+  }
+  return parties.length ? { sql: parties.join(' AND '), params } : { sql: '1 = 1', params: [] };
 }

@@ -42,6 +42,8 @@
  *   GET|POST          /cm/liens ; PUT /cm/liens/ordre { ids } ; PATCH|DELETE /cm/liens/:id
  *   GET|POST          /cm/liens/:id/liaisons { genre: carte | dossier, cibleId } ; DELETE /cm/liens/:id/liaisons/:genre/:cibleId
  *   GET               /cm/liens/cible/:genre/:id                 liens liés à une carte ou à un dossier du Drive
+ *   Qui voit la ressource (migration 0048) : GET /cm/liens/acces?team (options d'une nouvelle ressource) ;
+ *   GET|PUT           /cm/liens/:id/acces { acces, regles } ; POST /cm/liens/:id/partage { comptes, niveau? } ; POST /cm/liens/:id/vu
  *
  *   Réunions de l'équipe CM (docs/esport/cm-reunions.md) : /cm/reunions… (reunions/routes.mjs).
  *
@@ -89,7 +91,8 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   const { tableaux: tb, droits, equipe, clips, trello, visuels: vi } = cm;
 
   if (n === 1 && a === 'moi' && m === 'GET') return droits.moi(acteur);
-  if (n === 1 && a === 'etat' && m === 'GET') return tb.etat(acteur);
+  // `ressources` : ressources partagées avec le compte, pas encore ouvertes (pastille « Nouveau », migration 0048).
+  if (n === 1 && a === 'etat' && m === 'GET') return { ...(await tb.etat(acteur)), ...(cm.liens ? { ressources: await cm.liens.nouvelles(acteur) } : {}) };
   if (n === 1 && a === 'a-valider' && m === 'GET') return tb.aValider(acteur);
   if (n === 1 && a === 'urgences' && m === 'GET') return tb.urgences(acteur);
   if (n === 1 && a === 'calendrier' && m === 'GET') return tb.calendrier(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, reseau: q.get('reseau') || undefined });
@@ -111,6 +114,11 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 1 && m === 'GET') return li.lister(acteur);
     if (n === 1 && m === 'POST') return li.creer(acteur, await lireCorps());
     if (n === 2 && b === 'ordre' && m === 'PUT') return li.ordonner(acteur, await lireCorps());
+    if (n === 2 && b === 'acces' && m === 'GET') return li.optionsNouveau(acteur, q.get('team'));
+    if (n === 3 && c === 'acces' && m === 'GET') return li.accesLien(acteur, b);
+    if (n === 3 && c === 'acces' && m === 'PUT') return li.changerAcces(acteur, b, await lireCorps());
+    if (n === 3 && c === 'partage' && m === 'POST') return li.partager(acteur, b, await lireCorps());
+    if (n === 3 && c === 'vu' && m === 'POST') return li.vu(acteur, b);
     if (n === 2 && m === 'PATCH') return li.modifier(acteur, b, await lireCorps());
     if (n === 2 && m === 'DELETE') return li.supprimer(acteur, b);
     if (n === 4 && b === 'cible' && m === 'GET') return li.liensDe(acteur, c, d);

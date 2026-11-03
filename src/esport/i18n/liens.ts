@@ -77,6 +77,37 @@ const fr = {
   'jr.supprime': '{qui} a supprimé le lien « {titre} »',
   'jr.lie': '{qui} a lié le lien « {titre} » à une carte ou à un dossier',
   'jr.delie': '{qui} a délié le lien « {titre} »',
+  // Qui voit la ressource (migration 0048).
+  'jr.acces': '{qui} a changé qui voit la ressource « {titre} »',
+  'jr.partage': '{qui} a partagé la ressource « {titre} »',
+  'jr.supprime_restreint': '{qui} a supprimé une ressource restreinte',
+  'nt.partage': '{membre} a partagé une ressource avec vous : « {titre} »',
+  'filtre.partages': 'Partagé avec moi',
+  'nouveau_badge': 'Nouveau',
+  'restreint_badge': 'Restreint',
+  'restreint_libelle': 'Ressource restreinte : seules les personnes et les rôles choisis la voient (avec son créateur et le Fondateur).',
+  'autorises': 'Personnes autorisées : {noms}',
+  'autorises_plus': '+{n}',
+  'acces.menu': 'Qui voit la ressource…',
+  'acces.titre': 'Qui voit la ressource',
+  'acces.aide': 'Par défaut, toute l’équipe CM voit la ressource. « Restreint » : seulement les personnes et les rôles choisis, chacun « peut voir » (lecture seule) ou « peut modifier » (ses permissions CM habituelles). Personne n’y gagne de permission.',
+  'acces.tous': 'Toute l’équipe CM',
+  'acces.restreint': 'Restreint',
+  'acces.toujours': 'Son créateur et le Fondateur la voient toujours. Les personnes ajoutées nommément sont prévenues.',
+  'acces.effectifs': 'Qui voit cette ressource aujourd’hui',
+  'acces.enregistre': 'Accès enregistré.',
+  'acces.form': 'Qui voit la ressource',
+  'partage.menu': 'Partager avec…',
+  'partage.titre': 'Partager la ressource',
+  'partage.aide': 'Les personnes choisies sont prévenues (centre de notifications) et voient la ressource marquée « Nouveau » jusqu’à ce qu’elles l’ouvrent.',
+  'partage.aide_restreint': 'Ressource restreinte : les personnes choisies reçoivent aussi l’accès.',
+  'partage.niveau': 'Accès donné',
+  'partage.choisir': 'Partager avec {nom}',
+  'partage.envoyer': 'Partager',
+  'partage.aucun_choix': 'Choisissez au moins une personne.',
+  'partage.fait.one': 'Partagée avec {n} personne.',
+  'partage.fait.other': 'Partagée avec {n} personnes.',
+  'partage.vide': 'Personne d’autre ne peut recevoir cette ressource.',
 } as const;
 
 const en: Record<keyof typeof fr, string> = {
@@ -151,6 +182,36 @@ const en: Record<keyof typeof fr, string> = {
   'jr.supprime': '{qui} deleted the link “{titre}”',
   'jr.lie': '{qui} attached the link “{titre}” to a card or folder',
   'jr.delie': '{qui} detached the link “{titre}”',
+  'jr.acces': '{qui} changed who sees the resource “{titre}”',
+  'jr.partage': '{qui} shared the resource “{titre}”',
+  'jr.supprime_restreint': '{qui} deleted a restricted resource',
+  'nt.partage': '{membre} shared a resource with you: “{titre}”',
+  'filtre.partages': 'Shared with me',
+  'nouveau_badge': 'New',
+  'restreint_badge': 'Restricted',
+  'restreint_libelle': 'Restricted resource: only the chosen people and roles see it (plus its creator and the Founder).',
+  'autorises': 'Allowed people: {noms}',
+  'autorises_plus': '+{n}',
+  'acces.menu': 'Who sees this resource…',
+  'acces.titre': 'Who sees this resource',
+  'acces.aide': 'By default, the whole CM team sees the resource. “Restricted”: only the chosen people and roles, each one “can view” (read only) or “can edit” (their usual CM permissions). Nobody gains a permission here.',
+  'acces.tous': 'The whole CM team',
+  'acces.restreint': 'Restricted',
+  'acces.toujours': 'Its creator and the Founder always see it. People added by name are notified.',
+  'acces.effectifs': 'Who sees this resource today',
+  'acces.enregistre': 'Access saved.',
+  'acces.form': 'Who sees the resource',
+  'partage.menu': 'Share with…',
+  'partage.titre': 'Share the resource',
+  'partage.aide': 'The chosen people are notified (notification centre) and see the resource marked “New” until they open it.',
+  'partage.aide_restreint': 'Restricted resource: the chosen people also get access.',
+  'partage.niveau': 'Access given',
+  'partage.choisir': 'Share with {nom}',
+  'partage.envoyer': 'Share',
+  'partage.aucun_choix': 'Choose at least one person.',
+  'partage.fait.one': 'Shared with {n} person.',
+  'partage.fait.other': 'Shared with {n} people.',
+  'partage.vide': 'Nobody else can receive this resource.',
 };
 
 export type CleLi = keyof typeof fr;
@@ -162,6 +223,6 @@ export function trLi(cle: CleLi, vars?: Variables): string {
 }
 
 /** Pluriel simple (« .one » / « .other ») : n = 1 → one. */
-export function trnLi(cle: 'compte' | 'lies.n', n: number, vars?: Variables): string {
+export function trnLi(cle: 'compte' | 'lies.n' | 'partage.fait', n: number, vars?: Variables): string {
   return trLi(`${cle}.${n === 1 ? 'one' : 'other'}` as CleLi, { n, ...vars });
 }

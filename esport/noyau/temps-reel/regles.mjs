@@ -85,8 +85,9 @@ const IGNORES = [
   /^\/temps-reel(?:\/.*)?$/,
   /^\/sponsors\/(?:import\/apercu|rgpd\/export)$/,
   /^\/cm\/import\/trello\/apercu$/,
-  // État « lu » et cartes suivies : personnels, rien à relire chez les autres (migration 0045).
-  /^\/cm\/(?:tableaux\/[^/]+\/tout-vu|cartes\/[^/]+\/suivre)$/,
+  // État « lu » et cartes suivies : personnels, rien à relire chez les autres (migration 0045) ; ressource ouverte
+  // (pastille « Nouveau », migration 0048).
+  /^\/cm\/(?:tableaux\/[^/]+\/tout-vu|cartes\/[^/]+\/suivre|liens\/[^/]+\/vu)$/,
   /^\/cm\/reseaux\/import\/apercu$/,
 ];
 

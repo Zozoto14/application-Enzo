@@ -2,12 +2,24 @@
  * Client des liens utiles de l'équipe CM (migration 0044, onglet DATA › Ressources de l'espace CM ; docs/esport/cm.md) :
  * liens https rangés par le club (titre, domaine d'aperçu, description, étiquette, épinglage, ordre), liables à des cartes
  * des tableaux et à des dossiers du Drive. Types miroirs de l'API (esport/noyau/cm/liens.mjs) et règles pures
- * (validation d'adresse, filtre, recherche).
+ * (validation d'adresse, filtre, recherche). Qui voit la ressource (migration 0048) : « toute l'équipe CM » ou
+ * restreinte, « Partager avec… », pastille « Nouveau » jusqu'à l'ouverture.
  */
 
 import type { ClientEsport } from '../client';
+import type { GenreAcces, NiveauAcces, RegleAcces, RoleProposeAcces } from './api';
 
 export type GenreLiaison = 'carte' | 'dossier';
+/** Visibilité d'une ressource (migration 0048) : toute l'équipe CM, ou restreinte aux personnes et rôles choisis. */
+export type AccesLien = 'tous' | 'restreint';
+/** Droits du compte sur une ressource qu'il voit (calculés par le serveur). */
+export interface DroitsLien {
+  modifier: boolean;
+  supprimer: boolean;
+  /** Régler « Qui voit la ressource » (créateur, cm.gerer, Fondateur). */
+  acces: boolean;
+  partager: boolean;
+}
 
 export interface LienCm {
   id: string;
@@ -20,16 +32,36 @@ export interface LienCm {
   epingle: boolean;
   position: number;
   team: { id: string; nom: string } | null;
+  acces?: AccesLien;
   creeLe: string;
   majLe: string;
   /** Nombre de cartes et de dossiers liés que le compte voit (liste seulement). */
   liaisons?: number;
+  /** Restreinte : premières personnes autorisées (le Fondateur, toujours autorisé, n'est pas listé). */
+  autorises?: { total: number; personnes: Array<{ compte: string; pseudo: string }> } | null;
+  /** Partagée avec le compte (« Partager avec… » ou nommé dans l'accès). */
+  partageAvecMoi?: boolean;
+  /** Partagée avec le compte et pas encore ouverte. */
+  nouveau?: boolean;
+  droits?: DroitsLien;
+}
+/** Réglage « Qui voit la ressource » (ou options d'une nouvelle ressource : `lien` null). */
+export interface ReglageAccesLien {
+  lien: { id: string; titre: string; creePar: string | null; team: string | null } | null;
+  acces: AccesLien;
+  regles: RegleAcces[];
+  /** Qui la voit aujourd'hui (restreinte) ; null si elle est ouverte. */
+  effectifs: Array<{ compte: string; pseudo: string; niveau: NiveauAcces }> | null;
+  options: { personnes: Array<{ compte: string; pseudo: string }>; rolesCm: RoleProposeAcces[]; rolesClub: RoleProposeAcces[]; rolesTeam: RoleProposeAcces[] };
+  moi: string;
 }
 export interface ListeLiens {
   liens: LienCm[];
   categories: string[];
   teams: Array<{ id: string; nom: string }>;
   droits: { editer: boolean; gerer: boolean };
+  /** Ressources partagées avec le compte, pas encore ouvertes. */
+  nouveaux?: number;
   max: number;
 }
 export interface CarteLiee {
@@ -59,6 +91,9 @@ export interface SaisieLien {
   categorie?: string | null;
   teamId?: string | null;
   epingle?: boolean;
+  /** Création seulement : visibilité et règles (migration 0048). */
+  acces?: AccesLien;
+  regles?: Array<{ genre: GenreAcces; cible: string; niveau: NiveauAcces }>;
 }
 
 const e = encodeURIComponent;
@@ -76,6 +111,12 @@ export function apiLiens(client: ClientEsport) {
     lier: (id: string, genre: GenreLiaison, cibleId: string) => r<Liaisons>(`/cm/liens/${e(id)}/liaisons`, 'POST', { genre, cibleId }),
     delier: (id: string, genre: GenreLiaison, cibleId: string) => r<Liaisons>(`/cm/liens/${e(id)}/liaisons/${genre}/${e(cibleId)}`, 'DELETE'),
     deLaCible: (genre: GenreLiaison, id: string) => r<{ liens: LienCm[]; droits: { lier: boolean; creer: boolean } }>(`/cm/liens/cible/${genre}/${e(id)}`),
+    /** Qui voit la ressource (migration 0048). */
+    optionsAcces: (teamId?: string | null) => r<ReglageAccesLien>(`/cm/liens/acces${teamId ? `?team=${e(teamId)}` : ''}`),
+    acces: (id: string) => r<ReglageAccesLien>(`/cm/liens/${e(id)}/acces`),
+    changerAcces: (id: string, acces: AccesLien, regles: RegleAcces[]) => r<ReglageAccesLien>(`/cm/liens/${e(id)}/acces`, 'PUT', { acces, regles: regles.map(x => ({ genre: x.genre, cible: x.cible, niveau: x.niveau })) }),
+    partager: (id: string, comptes: string[], niveau: NiveauAcces = 'voir') => r<{ ok: true; partages: number }>(`/cm/liens/${e(id)}/partage`, 'POST', { comptes, niveau }),
+    vu: (id: string) => r<{ ok: true }>(`/cm/liens/${e(id)}/vu`, 'POST', {}),
   };
 }
 export type ApiLiens = ReturnType<typeof apiLiens>;
@@ -108,6 +149,8 @@ export interface FiltreLiens {
   /** Identifiant d'une team, ou `club` : liens sans rattachement. */
   team?: string;
   epingles?: boolean;
+  /** « Partagé avec moi » (migration 0048). */
+  partages?: boolean;
 }
 
 /** Filtre combiné : texte (titre, description, étiquette, domaine, team ; sans accents ni casse), étiquette, team, épinglés. */
@@ -117,6 +160,7 @@ export function filtrerLiens(liens: LienCm[], f: FiltreLiens): LienCm[] {
     if (f.categorie && l.categorie !== f.categorie) return false;
     if (f.team === 'club' ? l.team !== null : f.team && l.team?.id !== f.team) return false;
     if (f.epingles && !l.epingle) return false;
+    if (f.partages && !l.partageAvecMoi) return false;
     if (!mots.length) return true;
     const texte = sansAccents([l.titre, l.description, l.categorie, l.hote, l.team?.nom].filter(Boolean).join(' '));
     return mots.every(m => texte.includes(m));

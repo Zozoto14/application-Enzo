@@ -1,17 +1,21 @@
 /**
  * Formulaire d'un lien utile (volet) : titre, adresse https (validée ici puis par le serveur), description, étiquette,
  * team facultative, épinglage. Sert à l'onglet DATA › Ressources et à « Créer une nouvelle ressource » depuis une carte
- * ou un dossier du Drive.
+ * ou un dossier du Drive. À la création, avec `optionsAcces` : « Qui voit la ressource » (toute l'équipe CM ou
+ * restreinte, migration 0048) ; ensuite, le réglage se fait dans le menu ⋯ de la ressource.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../../hub/themes';
-import { adresseLienValide, type LienCm, type SaisieLien } from '../../../cm/liens';
+import type { NiveauAcces } from '../../../cm/api';
+import { adresseLienValide, type AccesLien, type LienCm, type ReglageAccesLien, type SaisieLien } from '../../../cm/liens';
 import { trLi } from '../../../i18n/liens';
 import { Retours, styles, useAgir } from '../../commun';
 import { ESP, Volet, attenue } from '../../design';
+import { reglesDe } from '../ChoixAcces';
+import { ChoixVisibilite } from './AccesRessource';
 
 export function FormLien({
   theme,
@@ -21,6 +25,7 @@ export function FormLien({
   titreBouton,
   onEnregistrer,
   onFermer,
+  optionsAcces,
   prefixe = 'esport-cm-liens-form',
 }: {
   theme: ThemeHub;
@@ -31,6 +36,8 @@ export function FormLien({
   titreBouton?: string;
   onEnregistrer(s: SaisieLien): Promise<void>;
   onFermer(): void;
+  /** Création : personnes et rôles proposables pour « Qui voit la ressource » (sans lui : toute l'équipe CM). */
+  optionsAcces?(teamId: string | null): Promise<ReglageAccesLien>;
   prefixe?: string;
 }) {
   const [titre, setTitre] = useState(lien?.titre ?? '');
@@ -40,14 +47,35 @@ export function FormLien({
   const [teamId, setTeamId] = useState<string | null>(lien?.team?.id ?? null);
   const [epingle, setEpingle] = useState(lien?.epingle ?? false);
   const [local, setLocal] = useState<string | undefined>();
+  const [reglage, setReglage] = useState<ReglageAccesLien | undefined>();
+  const [acces, setAcces] = useState<AccesLien>('tous');
+  const [niveaux, setNiveaux] = useState<Map<string, NiveauAcces>>(new Map());
   const { erreur, agir } = useAgir();
+  const avecAcces = !lien && Boolean(optionsAcces);
+  // Options relues quand la team change (une ressource de team ne se partage qu'avec qui lit son CM).
+  useEffect(() => {
+    if (!avecAcces || acces !== 'restreint' || !optionsAcces) return;
+    let actif = true;
+    optionsAcces(teamId)
+      .then(r => {
+        if (actif) setReglage(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      actif = false;
+    };
+  }, [avecAcces, acces, optionsAcces, teamId]);
   const envoyer = () => {
     if (!titre.trim()) return setLocal(trLi('form.titre_requis'));
     const adresse = adresseLienValide(url);
     if (!adresse) return setLocal(trLi('form.url_invalide'));
     setLocal(undefined);
     void agir('lien', async () => {
-      await onEnregistrer({ titre: titre.trim(), url: adresse, description: description.trim(), categorie: categorie.trim() || null, teamId, epingle });
+      // Seulement les choix encore proposés (la team a pu changer depuis).
+      const o = reglage?.options;
+      const proposes = new Set(o ? [...o.personnes.map(p => `compte|${p.compte}`), ...o.rolesCm.map(r => `role_cm|${r.id}`), ...o.rolesClub.map(r => `role_club|${r.id}`), ...o.rolesTeam.map(r => `role_team|${r.id}`)] : []);
+      const visibilite = avecAcces ? { acces, regles: acces === 'restreint' ? reglesDe(niveaux).filter(r => proposes.has(`${r.genre}|${r.cible}`)) : [] } : {};
+      await onEnregistrer({ titre: titre.trim(), url: adresse, description: description.trim(), categorie: categorie.trim() || null, teamId, epingle, ...visibilite });
       onFermer();
     });
   };
@@ -80,6 +108,19 @@ export function FormLien({
           </View>
         ) : null}
         <Interrupteur theme={theme} libelle={trLi('form.epingler')} valeur={epingle} onChanger={setEpingle} testID={`${prefixe}-epingle`} />
+        {avecAcces ? (
+          <View style={{ gap: ESP.xs }} testID={`${prefixe}-visibilite`}>
+            <ChoixVisibilite
+              theme={theme}
+              reglage={reglage ?? { lien: null, acces: 'tous', regles: [], effectifs: null, options: { personnes: [], rolesCm: [], rolesClub: [], rolesTeam: [] }, moi: '' }}
+              acces={acces}
+              onAcces={setAcces}
+              niveaux={niveaux}
+              onNiveaux={setNiveaux}
+              testID={`${prefixe}-acces`}
+            />
+          </View>
+        ) : null}
         <View style={[styles.ligne, { gap: ESP.xs }]}>
           <BoutonHub theme={theme} titre={titreBouton ?? (lien ? trLi('form.enregistrer') : trLi('form.ajouter'))} variante="plein" onPress={envoyer} testID={`${prefixe}-ok`} />
           <BoutonHub theme={theme} titre={trLi('form.annuler')} onPress={onFermer} testID={`${prefixe}-annuler`} />

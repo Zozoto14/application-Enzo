@@ -16,7 +16,7 @@ import { trLi } from '../../../i18n/liens';
 import { Icone } from '../../../../ui/icones';
 import { useTempsReel } from '../../../tempsReel/hooks';
 import { Intertitre, Panneau, Retours, styles, useAgir } from '../../commun';
-import { ESP, Volet, attenue, texte } from '../../design';
+import { Badge, ESP, Volet, attenue, texte } from '../../design';
 import { FormLien } from './FormLien';
 import { ouvrirAdresse } from './ouvrirAdresse';
 
@@ -81,15 +81,30 @@ export function LiensLies({
       {liens.map(l => (
         <View key={l.id} style={[styles.ligne, { gap: ESP.xs, flexWrap: 'nowrap' }]} testID={`${prefixe}-${l.id}`}>
           <Icone nom="globe" taille={18} couleur={theme.accent} />
-          <Pressable accessibilityRole="link" accessibilityLabel={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrirAdresse(l.url)} style={{ flex: 1, minWidth: 0 }} testID={`${prefixe}-${l.id}-ouvrir`}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={`${trLi('ouvrir_lien', { titre: l.titre })}${l.acces === 'restreint' ? ` · ${trLi('restreint_badge')}` : ''}${l.nouveau ? ` · ${trLi('nouveau_badge')}` : ''}`}
+            onPress={() => {
+              ouvrirAdresse(l.url);
+              // Partagée et pas encore ouverte : « Nouveau » disparaît (migration 0048).
+              if (l.nouveau) void api.vu(l.id).then(charger).catch(() => undefined);
+            }}
+            style={{ flex: 1, minWidth: 0 }}
+            testID={`${prefixe}-${l.id}-ouvrir`}>
             <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }} numberOfLines={2}>
               {l.titre}
             </Text>
+            {l.acces === 'restreint' || l.nouveau ? (
+              <View style={[styles.ligne, { gap: ESP.xxs, flexWrap: 'wrap' }]}>
+                {l.nouveau ? <Badge theme={theme} texte={trLi('nouveau_badge')} ton="accent" testID={`${prefixe}-${l.id}-nouveau`} /> : null}
+                {l.acces === 'restreint' ? <Badge theme={theme} texte={trLi('restreint_badge')} icone="cadenas" testID={`${prefixe}-${l.id}-restreint`} /> : null}
+              </View>
+            ) : null}
             <Text style={attenue(theme, 12)} numberOfLines={1}>
               {l.hote}
             </Text>
           </Pressable>
-          {droits.lier ? (
+          {droits.lier && (l.droits?.modifier ?? true) ? (
             <BoutonHub theme={theme} titre={trLi('lies.delier')} libelle={trLi('cible.delier', { titre: l.titre })} onPress={() => void agir('delier', async () => { await api.delier(l.id, genre, cibleId); await charger(); return trLi('cible.delie'); })} testID={`${prefixe}-${l.id}-delier`} />
           ) : null}
         </View>
@@ -111,7 +126,7 @@ export function LiensLies({
                 key={l.id}
                 accessibilityRole="button"
                 accessibilityState={{ disabled: dedans.has(l.id) }}
-                disabled={dedans.has(l.id) || !droits.lier}
+                disabled={dedans.has(l.id) || !droits.lier || l.droits?.modifier === false}
                 onPress={() => void lier(l.id)}
                 testID={`${prefixe}-choix-${l.id}`}
                 style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: 10, padding: ESP.s, backgroundColor: dedans.has(l.id) ? teinteTransparente(theme.accent, 0.08) : theme.surface, opacity: droits.lier ? 1 : 0.6 }}>
@@ -135,6 +150,7 @@ export function LiensLies({
           teams={tous.teams}
           titreBouton={droits.lier ? trLi('cible.creer_lier') : undefined}
           prefixe={`${prefixe}-form`}
+          optionsAcces={teamId => api.optionsAcces(teamId)}
           onFermer={() => setCreation(false)}
           onEnregistrer={async s => {
             const { lien } = await api.creer(s);

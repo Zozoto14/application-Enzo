@@ -15,6 +15,8 @@
  */
 
 import { horsTableauxInterdits, lecteurTableaux } from './cm/acces.mjs';
+import { lecteurLiens } from './cm/liensAcces.mjs';
+import { porteesDe } from './cm/commun.mjs';
 import { evenement } from './evenements.mjs';
 import { exigerPeriode } from './periode.mjs';
 import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from './langues.mjs';
@@ -124,7 +126,8 @@ export function servicesJournal({ base, maintenant = () => Date.now(), socle }) 
 
   /** Entrées d'un tableau CM restreint dont l'acteur n'est pas (ou de ses cartes) : jamais montrées (migration 0046). */
   async function horsTableauxCm(acteur, conditions, params) {
-    const h = horsTableauxInterdits(null, await lecteurTableaux(base, acteur).interdits());
+    // Ressources de DATA › Ressources restreintes dont il n'est pas (migration 0048) : idem.
+    const h = horsTableauxInterdits(null, await lecteurTableaux(base, acteur).interdits(), await lecteurLiens(base, acteur, await porteesDe(base, acteur)).interdits());
     conditions.push(h.sql);
     params.push(...h.params);
   }

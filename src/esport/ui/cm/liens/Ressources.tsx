@@ -3,7 +3,9 @@
  * Chaque lien : titre, domaine (aperçu sans aucune image externe : icône locale), description, étiquette, team
  * facultative, épinglage, ordre manuel ; recherche et filtres ; ajout et modification (cm.editer), suppression
  * (cm.gerer) ; ouverture dans un nouvel onglet (`noopener,noreferrer`) ; « où est-il lié » (cartes et dossiers du Drive
- * que le compte voit, avec un raccourci pour y aller). Tout est décidé par le serveur.
+ * que le compte voit, avec un raccourci pour y aller). Qui voit la ressource (migration 0048) : cadenas et personnes
+ * autorisées sur la ligne, « Qui voit la ressource… » et « Partager avec… » dans le menu ⋯, pastille « Nouveau » jusqu'à
+ * l'ouverture, filtre « Partagé avec moi ». Tout est décidé par le serveur.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,7 +18,9 @@ import { trLi, trnLi } from '../../../i18n/liens';
 import { Icone } from '../../../../ui/icones';
 import { useTempsReel } from '../../../tempsReel/hooks';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
-import { Badge, Carte, ESP, EtatVide, Grille, MenuActions, SqueletteCartes, TitreCarte, Volet, attenue, texte } from '../../design';
+import { Badge, Carte, ESP, EtatVide, Grille, MenuActions, SqueletteCartes, TitreCarte, Volet, attenue, initiales, texte } from '../../design';
+import { signalerEtatCm } from '../commun';
+import { AccesRessource, PartageRessource } from './AccesRessource';
 import { FormLien } from './FormLien';
 import { ouvrirAdresse } from './ouvrirAdresse';
 
@@ -39,6 +43,8 @@ export function Ressources({
   const [formulaire, setFormulaire] = useState<{ lien?: LienCm } | undefined>();
   const [ou, setOu] = useState<{ lien: LienCm; liaisons?: Liaisons } | undefined>();
   const [aSupprimer, setASupprimer] = useState<LienCm | undefined>();
+  const [reglageAcces, setReglageAcces] = useState<LienCm | undefined>();
+  const [partage, setPartage] = useState<LienCm | undefined>();
   const { erreur, avis, agir } = useAgir();
   const charger = useCallback(async () => setListe(await api.lister()), [api]);
   useEffect(() => {
@@ -49,7 +55,7 @@ export function Ressources({
 
   const editer = liste?.droits.editer ?? false;
   const gerer = liste?.droits.gerer ?? false;
-  const filtres = Boolean(filtre.q?.trim() || filtre.categorie || filtre.team || filtre.epingles);
+  const filtres = Boolean(filtre.q?.trim() || filtre.categorie || filtre.team || filtre.epingles || filtre.partages);
   const affiches = useMemo(() => filtrerLiens(liste?.liens ?? [], filtre), [liste, filtre]);
   const teamsPresentes = useMemo(() => {
     const m = new Map<string, string>();
@@ -57,7 +63,21 @@ export function Ressources({
     return [...m].map(([id, nom]) => ({ id, nom }));
   }, [liste]);
 
+  // Ressource partagée pas encore ouverte : « Nouveau » disparaît (état en base), pastille de l'onglet relue.
+  const marquerVu = (lien: LienCm) => {
+    if (!lien.nouveau) return;
+    void api
+      .vu(lien.id)
+      .then(charger)
+      .then(signalerEtatCm)
+      .catch(() => undefined);
+  };
+  const ouvrir = (lien: LienCm) => {
+    ouvrirAdresse(lien.url);
+    marquerVu(lien);
+  };
   const ouvrirOu = (lien: LienCm) => {
+    marquerVu(lien);
     setOu({ lien });
     void agir('liaisons', async () => setOu({ lien, liaisons: await api.liaisons(lien.id) }));
   };
@@ -73,6 +93,7 @@ export function Ressources({
   };
 
   const ligne = (l: LienCm) => {
+    const d = l.droits ?? { modifier: editer, supprimer: gerer, acces: false, partager: false };
     const ordre = editer && !filtres;
     const premier = deplacerLien(liste?.liens ?? [], l.id, -1) === null;
     const dernier = deplacerLien(liste?.liens ?? [], l.id, 1) === null;
@@ -83,7 +104,7 @@ export function Ressources({
             <Icone nom="globe" taille={20} couleur={theme.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Pressable accessibilityRole="link" accessibilityLabel={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrirAdresse(l.url)} testID={`esport-cm-lien-${l.id}-ouvrir`}>
+            <Pressable accessibilityRole="link" accessibilityLabel={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-ouvrir`}>
               <Text style={{ ...texte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
                 {l.titre}
               </Text>
@@ -98,24 +119,42 @@ export function Ressources({
             ) : null}
           </View>
         </View>
-        <View style={[styles.ligne, { gap: ESP.xxs }]}>
+        <View style={[styles.ligne, { gap: ESP.xxs, flexWrap: 'wrap' }]}>
+          {l.nouveau ? <Badge theme={theme} texte={trLi('nouveau_badge')} ton="accent" testID={`esport-cm-lien-${l.id}-nouveau`} /> : null}
+          {l.acces === 'restreint' ? (
+            <View accessible accessibilityLabel={`${trLi('restreint_libelle')} ${l.autorises?.personnes.length ? trLi('autorises', { noms: l.autorises.personnes.map(p => p.pseudo).join(', ') }) : ''}`.trim()} style={[styles.ligne, { gap: ESP.xxs, flexWrap: 'wrap', alignItems: 'center' }]} testID={`esport-cm-lien-${l.id}-restreint`}>
+              <Badge theme={theme} texte={trLi('restreint_badge')} icone="cadenas" />
+              {l.autorises?.personnes.length ? (
+                <View style={{ flexDirection: 'row', gap: 2 }} testID={`esport-cm-lien-${l.id}-autorises`}>
+                  {l.autorises.personnes.map(p => (
+                    <View key={p.compte} style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: teinteTransparente(theme.accent, 0.25), alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: theme.texte, fontSize: 9, fontWeight: '800' }}>{initiales(p.pseudo)}</Text>
+                    </View>
+                  ))}
+                  {l.autorises.total > l.autorises.personnes.length ? <Text style={attenue(theme, 12)}>{trLi('autorises_plus', { n: l.autorises.total - l.autorises.personnes.length })}</Text> : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {l.epingle ? <Badge theme={theme} texte={trLi('epingle')} ton="accent" icone="epingle" testID={`esport-cm-lien-${l.id}-epingle`} /> : null}
           {l.categorie ? <Badge theme={theme} texte={l.categorie} testID={`esport-cm-lien-${l.id}-categorie`} /> : null}
           {l.team ? <Badge theme={theme} texte={trLi('form.team_de', { nom: l.team.nom })} testID={`esport-cm-lien-${l.id}-team`} /> : null}
           {l.liaisons ? <Badge theme={theme} texte={trnLi('lies.n', l.liaisons)} icone="lien" testID={`esport-cm-lien-${l.id}-liaisons`} /> : null}
         </View>
         <View style={[styles.ligne, { gap: ESP.xs, justifyContent: 'space-between' }]}>
-          <BoutonHub theme={theme} titre={trLi('ouvrir')} icone="externe" libelle={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrirAdresse(l.url)} testID={`esport-cm-lien-${l.id}-aller`} />
+          <BoutonHub theme={theme} titre={trLi('ouvrir')} icone="externe" libelle={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-aller`} />
           <MenuActions
             theme={theme}
             testID={`esport-cm-lien-${l.id}-menu`}
             actions={[
               { titre: trLi('lies.voir'), onPress: () => ouvrirOu(l), testID: `esport-cm-lien-${l.id}-voir-liaisons` },
-              editer && { titre: trLi('modifier'), onPress: () => setFormulaire({ lien: l }), testID: `esport-cm-lien-${l.id}-modifier` },
-              editer && { titre: l.epingle ? trLi('desepingler') : trLi('epingler'), onPress: () => void agir('epingle', async () => { await api.modifier(l.id, { epingle: !l.epingle }); await charger(); }), testID: `esport-cm-lien-${l.id}-epingler` },
+              d.partager && { titre: trLi('partage.menu'), onPress: () => setPartage(l), testID: `esport-cm-lien-${l.id}-partager` },
+              d.acces && { titre: trLi('acces.menu'), onPress: () => setReglageAcces(l), testID: `esport-cm-lien-${l.id}-acces` },
+              d.modifier && { titre: trLi('modifier'), onPress: () => setFormulaire({ lien: l }), testID: `esport-cm-lien-${l.id}-modifier` },
+              d.modifier && { titre: l.epingle ? trLi('desepingler') : trLi('epingler'), onPress: () => void agir('epingle', async () => { await api.modifier(l.id, { epingle: !l.epingle }); await charger(); }), testID: `esport-cm-lien-${l.id}-epingler` },
               ordre && !premier && { titre: trLi('monter'), onPress: () => deplacer(l.id, -1), testID: `esport-cm-lien-${l.id}-monter` },
               ordre && !dernier && { titre: trLi('descendre'), onPress: () => deplacer(l.id, 1), testID: `esport-cm-lien-${l.id}-descendre` },
-              gerer && { titre: trLi('supprimer'), danger: true, onPress: () => setASupprimer(l), testID: `esport-cm-lien-${l.id}-supprimer` },
+              d.supprimer && { titre: trLi('supprimer'), danger: true, onPress: () => setASupprimer(l), testID: `esport-cm-lien-${l.id}-supprimer` },
             ]}
           />
         </View>
@@ -130,7 +169,7 @@ export function Ressources({
         <Champ theme={theme} libelle={trLi('recherche')} valeur={filtre.q ?? ''} onChanger={q => setFiltre({ ...filtre, q })} maxLength={80} testID="esport-cm-ressources-recherche" style={{ flex: 1, minWidth: 200 }} />
         {editer ? <BoutonHub theme={theme} titre={trLi('nouveau')} variante="plein" onPress={() => setFormulaire({})} testID="esport-cm-ressources-nouveau" /> : null}
       </View>
-      {liste && (liste.categories.length || teamsPresentes.length || liste.liens.some(l => l.epingle)) ? (
+      {liste && (liste.categories.length || teamsPresentes.length || liste.liens.some(l => l.epingle || l.partageAvecMoi)) ? (
         <View style={{ gap: ESP.xs }}>
           {liste.categories.length ? (
             <Choix theme={theme} libelle={trLi('filtre.categorie')} valeur={filtre.categorie ?? ''} options={[{ id: '', nom: trLi('filtre.toutes') }, ...liste.categories.map(c => ({ id: c, nom: c }))]} onChoisir={c => setFiltre({ ...filtre, categorie: c || undefined })} testID="esport-cm-ressources-categorie" />
@@ -139,6 +178,9 @@ export function Ressources({
             <Choix theme={theme} libelle={trLi('filtre.team')} valeur={filtre.team ?? ''} options={[{ id: '', nom: trLi('filtre.toutes') }, { id: 'club', nom: trLi('filtre.club') }, ...teamsPresentes]} onChoisir={t => setFiltre({ ...filtre, team: t || undefined })} testID="esport-cm-ressources-team" />
           ) : null}
           <Interrupteur theme={theme} libelle={trLi('filtre.epingles')} valeur={Boolean(filtre.epingles)} onChanger={v => setFiltre({ ...filtre, epingles: v || undefined })} testID="esport-cm-ressources-epingles" />
+          {liste.liens.some(l => l.partageAvecMoi) || filtre.partages ? (
+            <Interrupteur theme={theme} libelle={trLi('filtre.partages')} valeur={Boolean(filtre.partages)} onChanger={v => setFiltre({ ...filtre, partages: v || undefined })} testID="esport-cm-ressources-partages" />
+          ) : null}
         </View>
       ) : null}
       {!liste && !erreur ? <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} /> : null}
@@ -170,6 +212,7 @@ export function Ressources({
           lien={formulaire.lien}
           categories={liste.categories}
           teams={liste.teams}
+          optionsAcces={formulaire.lien ? undefined : teamId => api.optionsAcces(teamId)}
           onFermer={() => setFormulaire(undefined)}
           onEnregistrer={async s => {
             if (formulaire.lien) await api.modifier(formulaire.lien.id, s);
@@ -191,7 +234,7 @@ export function Ressources({
                 <Pressable accessibilityRole="link" accessibilityLabel={trLi('lies.aller_carte', { titre: c.titre })} onPress={() => onOuvrirTableau?.(c.tableauId)} disabled={!onOuvrirTableau} style={{ flex: 1, minWidth: 0 }} testID={`esport-cm-ressources-carte-${c.id}`}>
                   <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }} numberOfLines={2}>{trLi('lies.carte', { titre: c.titre, tableau: c.tableau ?? '' })}</Text>
                 </Pressable>
-                {editer && c.modifier ? <BoutonHub theme={theme} titre={trLi('lies.delier')} onPress={() => void delier(ou.lien, 'carte', c.id)} testID={`esport-cm-ressources-carte-${c.id}-delier`} /> : null}
+                {ou.liaisons?.droits.editer && c.modifier ? <BoutonHub theme={theme} titre={trLi('lies.delier')} onPress={() => void delier(ou.lien, 'carte', c.id)} testID={`esport-cm-ressources-carte-${c.id}-delier`} /> : null}
               </View>
             ))}
             {ou.liaisons?.dossiers.map(d => (
@@ -200,9 +243,27 @@ export function Ressources({
                 <Pressable accessibilityRole="link" accessibilityLabel={trLi('lies.aller_dossier', { chemin: d.chemin.join(' › ') })} onPress={() => onOuvrirDossier?.(d.portee, d.id)} disabled={!onOuvrirDossier} style={{ flex: 1, minWidth: 0 }} testID={`esport-cm-ressources-dossier-${d.id}`}>
                   <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '600' }} numberOfLines={2}>{trLi('lies.dossier', { chemin: d.chemin.join(' › ') })}</Text>
                 </Pressable>
-                {editer && d.modifier ? <BoutonHub theme={theme} titre={trLi('lies.delier')} onPress={() => void delier(ou.lien, 'dossier', d.id)} testID={`esport-cm-ressources-dossier-${d.id}-delier`} /> : null}
+                {ou.liaisons?.droits.editer && d.modifier ? <BoutonHub theme={theme} titre={trLi('lies.delier')} onPress={() => void delier(ou.lien, 'dossier', d.id)} testID={`esport-cm-ressources-dossier-${d.id}-delier`} /> : null}
               </View>
             ))}
+          </View>
+        </Volet>
+      ) : null}
+
+      {reglageAcces ? (
+        <Volet theme={theme} visible titre={trLi('acces.titre')} onFermer={() => setReglageAcces(undefined)} testID="esport-cm-ressources-acces-volet" largeur={520}>
+          <View style={{ gap: ESP.s, padding: ESP.l }}>
+            <TitreCarte theme={theme} titre={reglageAcces.titre} />
+            <AccesRessource theme={theme} api={api} lien={reglageAcces} onChange={charger} />
+          </View>
+        </Volet>
+      ) : null}
+
+      {partage ? (
+        <Volet theme={theme} visible titre={trLi('partage.titre')} onFermer={() => setPartage(undefined)} testID="esport-cm-ressources-partage-volet" largeur={480}>
+          <View style={{ gap: ESP.s, padding: ESP.l }}>
+            <TitreCarte theme={theme} titre={partage.titre} />
+            <PartageRessource theme={theme} api={api} lien={partage} onChange={charger} />
           </View>
         </Volet>
       ) : null}

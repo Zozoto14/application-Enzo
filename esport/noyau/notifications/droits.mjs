@@ -7,7 +7,8 @@
  *  - accès à toutes les teams (rôle du club « Second CEO » par défaut) : les permissions de team partout, sauf
  *    supprimer une team (comme contexteTeam) ; le reste selon ses permissions du club ;
  *  - membre actif : les permissions de son rôle (toutes pour un Propriétaire), module activé ; suspendu : rien ;
- *  - tableaux CM restreints (migration 0046) : `tableauxInterdits`, ceux dont le lecteur n'est pas.
+ *  - tableaux CM restreints (migration 0046) : `tableauxInterdits`, ceux dont le lecteur n'est pas ;
+ *  - ressources de DATA › Ressources (migration 0048) : `liensInterdits`, celles qu'il ne voit pas.
  */
 
 import { CLE_PROPRIETAIRE, TOUTES_PERMISSIONS, autorise, moduleConnu } from '../permissions.mjs';
@@ -15,13 +16,14 @@ import { permissionsGlobalesDe } from '../roles/globales.mjs';
 import { droitsSponsors } from '../sponsors/commun.mjs';
 import { porteesDe } from '../cm/commun.mjs';
 import { lecteurTableaux } from '../cm/acces.mjs';
+import { lecteurLiens } from '../cm/liensAcces.mjs';
 
 const ACCES_TOTAL = 'teams.acces_total';
 const SAUF_ACCES_TOTAL = new Set(['team.delete']);
 
 /** Droits d'un lecteur : `{ tout }` pour le Fondateur, sinon permissions par team, du club et du CM. */
 export async function droitsLecteur(base, acteur) {
-  if (acteur?.superAdmin) return { tout: true, compte: acteur.compte, tableauxInterdits: [] };
+  if (acteur?.superAdmin) return { tout: true, compte: acteur.compte, tableauxInterdits: [], liensInterdits: [] };
   const club = new Set([...(await permissionsGlobalesDe(base, acteur)), ...(await droitsSponsors(base, acteur))]);
   const accesTotal = club.has(ACCES_TOTAL);
   const teams = await base.tous('SELECT id FROM teams WHERE supprimee_le IS NULL', []);
@@ -50,7 +52,9 @@ export async function droitsLecteur(base, acteur) {
   // Tableaux CM RESTREINTS dont le lecteur n'est pas (migration 0046) : leurs éléments (tableau, cartes) sont masqués
   // du fil et des notifications personnelles, relu à chaque lecture (un retrait vaut tout de suite).
   const tableauxInterdits = await lecteurTableaux(base, acteur).interdits();
-  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, tableauxInterdits };
+  // Ressources de DATA › Ressources qu'il ne voit pas (restreintes dont il n'est pas, team sans accès CM ; migration 0048).
+  const liensInterdits = await lecteurLiens(base, acteur, cm).interdits();
+  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, tableauxInterdits, liensInterdits };
 }
 
 /** Le lecteur voit-il un élément de clé d'accès `acces` (team de l'élément : `teamId`) ? */

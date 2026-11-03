@@ -177,6 +177,9 @@ export const TABLES = [
   // Liens utiles de DATA › Ressources et leurs liaisons avec des cartes et des dossiers du Drive (migration 0044).
   ['cm_liens', 'id'],
   ['cm_lien_liaisons', 'lien_id, genre, cible_id'],
+  // Qui voit une ressource restreinte et à qui elle a été partagée (migration 0048).
+  ['cm_lien_acces', 'lien_id, genre, cible'],
+  ['cm_lien_partages', 'lien_id, compte_id'],
   // Choix d'affichage par compte de la section CM (migration 0042 : colonnes réduites, calendriers des teams).
   ['cm_preferences', 'compte_id, cle'],
   // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).

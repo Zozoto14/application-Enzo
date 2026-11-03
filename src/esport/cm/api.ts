@@ -338,6 +338,8 @@ export interface EtatCm {
   urgences?: number;
   /** Commentaires non lus : total et par tableau (migration 0045). */
   nonLus?: { total: number; tableaux: Record<string, number> };
+  /** Ressources de DATA › Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */
+  ressources?: number;
 }
 export interface PageTeamCm {
   team: TeamCm & { fuseau: string };

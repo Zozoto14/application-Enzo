@@ -136,12 +136,15 @@ async function annoncerEvenement(base, ev, regle) {
   if (regle.acces === 'aucun') return;
   // Tableau CM de l'élément (migration 0046) : jamais annoncé à qui ne voit pas ce tableau restreint.
   const tableau = ev.entite_type === 'cm_tableau' ? ev.entite_id : ev.entite_type === 'cm_carte' && ev.entite_id ? ((await base.premier('SELECT tableau_id FROM cm_cartes WHERE id = ?', [ev.entite_id]))?.tableau_id ?? null) : null;
+  // Ressource de DATA › Ressources (migration 0048) : jamais annoncée à qui ne la voit pas.
+  const lien = ev.entite_type === 'cm_lien' ? (ev.entite_id ?? null) : null;
   const comptes = await base.tous('SELECT id FROM comptes', []);
   for (const { id: compte } of comptes) {
     if (deja.has(compte) || compte === ev.acteur_id) continue;
     const droits = await droitsLecteur(base, { compte, superAdmin: compte === 'principal' });
     if (!voit(droits, regle.acces, ev.team_id)) continue;
     if (tableau && droits.tableauxInterdits?.includes(tableau)) continue;
+    if (lien && droits.liensInterdits?.includes(lien)) continue;
     if (selonPreferences(await lirePreferences(base, compte), regle.categorie, ev.team_id, { annonce: true })) annoncer({ compte, id: ev.id, source: 'fil', categorie: regle.categorie, teamId: ev.team_id ?? null });
   }
 }
@@ -214,6 +217,11 @@ export function filtrePerso(droits) {
     conditions.push(`(p.cm_carte_id IS NULL OR p.cm_carte_id NOT IN (SELECT ki.id FROM cm_cartes ki WHERE ki.tableau_id IN (${droits.tableauxInterdits.map(() => '?').join(', ')})))`);
     params.push(...droits.tableauxInterdits);
   }
+  // Ressource de DATA › Ressources qu'il ne voit pas (ou plus) : masquée (migration 0048).
+  if (droits.liensInterdits?.length) {
+    conditions.push(`(p.cm_lien_id IS NULL OR p.cm_lien_id NOT IN (${droits.liensInterdits.map(() => '?').join(', ')}))`);
+    params.push(...droits.liensInterdits);
+  }
   if (!aCm(droits)) conditions.push("COALESCE(p.categorie, '') NOT IN ('cm', 'drive')");
   return { sql: conditions.join(' AND '), params };
 }
@@ -250,8 +258,9 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     if (!visibles.length) return { c: '1 = 0', e: '1 = 0', params: [] };
     const marques = visibles.map(() => '?').join(', ');
     // Tableaux CM restreints dont le lecteur n'est pas : leur tableau et leurs cartes sont masqués (migration 0046).
-    const hc = horsTableauxInterdits('c', droits.tableauxInterdits ?? []);
-    const he = horsTableauxInterdits('e', droits.tableauxInterdits ?? []);
+    // Ressources (DATA › Ressources) qu'il ne voit pas : masquées aussi (migration 0048).
+    const hc = horsTableauxInterdits('c', droits.tableauxInterdits ?? [], droits.liensInterdits ?? []);
+    const he = horsTableauxInterdits('e', droits.tableauxInterdits ?? [], droits.liensInterdits ?? []);
     return { c: `(c.portee_cle IN (${marques}) AND ${hc.sql})`, e: `(e.portee_cle IN (${marques}) AND ${he.sql})`, params: [...visibles, ...hc.params] };
   }
 

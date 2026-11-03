@@ -81,7 +81,7 @@ export const GROUPE_DE_ONGLET: Record<OngletCm, GroupeCmId> = {
 export interface EntreeCm {
   id: OngletCm;
   libelle: string;
-  /** Compteur (posts à valider, nouveautés du Drive) affiché sur le sous-onglet. */
+  /** Compteur (posts à valider, nouveautés du Drive, ressources partagées non ouvertes) affiché sur le sous-onglet. */
   compteur?: number;
 }
 export interface GroupeCm {
@@ -98,12 +98,12 @@ export interface GroupeCm {
  * Chaque groupe porte ses sous-sections (mêmes conditions qu'avant pour chacune) ; un groupe sans sous-section visible
  * n'apparaît pas. L'accueil (vue d'ensemble) est proposé à qui voit les contenus ; sans lui, l'espace s'ouvre sur le Drive, les Sponsors ou les réunions.
  */
-export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number }): GroupeCm[] {
+export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus, ressourcesNouvelles }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number; /** Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */ ressourcesNouvelles?: number }): GroupeCm[] {
   const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, compteur: compteur || undefined });
   const brut: Array<{ id: GroupeCmId; libelle: string; entrees: EntreeCm[] }> = [
     { id: 'accueil', libelle: trCm('espace.g.accueil'), entrees: voirCm ? [e('accueil', trCm('espace.g.accueil'))] : [] },
     { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux'), commentairesNonLus), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
-    { id: 'data', libelle: trCm('espace.g.data'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : []), ...(voirCm ? [e('ressources', trCm('espace.ressources'))] : [])] },
+    { id: 'data', libelle: trCm('espace.g.data'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : []), ...(voirCm ? [e('ressources', trCm('espace.ressources'), ressourcesNouvelles)] : [])] },
     { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
     { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
     { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...(reunions ? [e('reunions', trRe('onglet'))] : []), ...(gerer ? [e('equipe', trCm('espace.equipe'))] : [])] },
@@ -228,7 +228,7 @@ export function EspaceCm({
       vivant = false;
     };
   }, [client, onOuvrirTeam]);
-  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total });
+  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total, ressourcesNouvelles: etat?.ressources });
   const toutes = groupes.flatMap(g => g.entrees);
   const courante = toutes.find(e => e.id === onglet);
   const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));

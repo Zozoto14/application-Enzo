@@ -806,7 +806,10 @@
   "Personnes ou rôles illisibles.": "Unreadable people or roles.",
   "Gardez au moins une personne qui peut gérer ce tableau (niveau « peut modifier » avec la gestion du CM, ou son créateur).": "Keep at least one person who can manage this board (“can edit” level with CM management, or its creator).",
   "Vous ne pouvez pas vous retirer l’accès « peut modifier » à ce tableau.": "You cannot remove your own “can edit” access to this board.",
-  "Cette personne n’a pas accès au CM de ce tableau.": "This person has no access to this board’s CM area."
+  "Cette personne n’a pas accès au CM de ce tableau.": "This person has no access to this board’s CM area.",
+  "Cette personne n’a pas accès aux ressources du CM.": "This person has no access to the CM resources.",
+  "Vous ne pouvez pas vous retirer l’accès « peut modifier » à cette ressource.": "You cannot remove your own “can edit” access to this resource.",
+  "Personnes illisibles.": "Unreadable people."
  },
  "motifs": [
   [

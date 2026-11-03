@@ -9,7 +9,8 @@
  * nouveau commentaire (assignées, auteur de la carte, suiveurs : `cm-commentaire`, migration 0045), valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
  * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
- * du Drive (espace utilisé à 80 %). Réunions de l'équipe CM : invités (créée, modifiée, annulée), organisateur
+ * du Drive (espace utilisé à 80 %), personnes avec qui une ressource de DATA › Ressources est partagée (`cm-lien-partage`,
+ * migration 0048). Réunions de l'équipe CM : invités (créée, modifiée, annulée), organisateur
  * (réponse, rendez-vous réservé), participants (rappel) ; rappel et annulation partent aussi en MP Discord du bot
  * (file `cm_reunion_mp`, reunions/rappels.mjs). Le centre de notifications consomme ces événements tels quels.
  *
@@ -18,6 +19,7 @@
 
 import { comptesClubAvec, comptesTeamAvec } from './commun.mjs';
 import { estRestreint, niveauxTableau } from './acces.mjs';
+import { niveauLien } from './liensAcces.mjs';
 import { mettreMpEnFile } from './reunions/mp.mjs';
 
 export const TYPES_CM = [
@@ -84,6 +86,10 @@ export const TYPES_CM = [
   'cm.lien_supprime',
   'cm.lien_lie',
   'cm.lien_delie',
+  // Qui voit la ressource (migration 0048) : réglage changé (charge { acces, regles: nombre }, jamais les personnes) ;
+  // « Partager avec… » ou personnes nommées : charge { titre, hote, comptes } → notification `cm-lien-partage`.
+  'cm.lien_acces',
+  'cm.lien_partage',
   // Ajout dans le Drive (migration 0041), pour le centre de notifications : un fichier ou un dossier ajouté, une
   // nouvelle version. Charge : { portee, dossierId, element: 'fichier' | 'dossier', type: 'fichier' | 'dossier' |
   // 'version', genre: 'ajout' | 'copie' | 'version' | 'rangement', nom, version, auteur }. Le destinataire doit VOIR l'élément : drive.destinatairesAjout(ev)
@@ -97,9 +103,11 @@ export const TYPES_HORS_JOURNAL = ['drive.ajout'];
 async function notifier(base, ev, compte, type, charge) {
   // Carte concernée (migration 0046) : la notification se masque dès que le destinataire ne voit plus son tableau.
   const carte = ev.entite_type === 'cm_carte' ? (ev.entite_id ?? null) : null;
+  // Ressource concernée (migration 0048) : idem, dès qu'il ne voit plus la ressource restreinte.
+  const lien = ev.entite_type === 'cm_lien' ? (ev.entite_id ?? null) : null;
   await base.executer(
-    'INSERT INTO notifications (id, compte_id, team_id, type, charge, cree_le, cm_carte_id) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
-    [`${ev.id}:${compte}`, compte, ev.team_id, type, JSON.stringify(charge), ev.cree_le, carte],
+    'INSERT INTO notifications (id, compte_id, team_id, type, charge, cree_le, cm_carte_id, cm_lien_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
+    [`${ev.id}:${compte}`, compte, ev.team_id, type, JSON.stringify(charge), ev.cree_le, carte, lien],
   );
 }
 
@@ -190,6 +198,16 @@ export async function abonneCm(base, ev) {
       if (!charge.compte) return;
       await notifier(base, ev, charge.compte, 'cm-reunion-rappel', { titre: charge.titre ?? null, reunion: ev.entite_id, debut: charge.debut ?? null, fuseau: charge.fuseau ?? null, minutes: charge.minutes ?? null });
       return mettreMpEnFile(base, ev, [charge.compte], 'rappel', charge.occurrence ?? null);
+    }
+    case 'cm.lien_partage': {
+      // Seulement à qui voit (encore) la ressource : relue ici, l'accès a pu être retiré entre-temps.
+      const l = ev.entite_id ? await base.premier('SELECT id, team_id, acces, cree_par, titre FROM cm_liens WHERE id = ?', [ev.entite_id]) : null;
+      if (!l) return;
+      for (const compte of new Set(charge.comptes ?? [])) {
+        if (!compte || compte === ev.acteur_id) continue;
+        if (await niveauLien(base, { compte, superAdmin: compte === 'principal' }, l)) await notifier(base, ev, compte, 'cm-lien-partage', { titre: l.titre, lien: l.id, membre: ev.acteur_id });
+      }
+      return;
     }
     case 'cm.drive_quota':
       // Drive plein à 80 % (au plus une fois par semaine) : ceux qui gèrent le Drive du club.

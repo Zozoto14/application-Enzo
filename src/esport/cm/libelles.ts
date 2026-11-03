@@ -129,7 +129,12 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
     case 'cm.lien_modifie':
       return trLi('jr.modifie', { qui, titre });
     case 'cm.lien_supprime':
-      return trLi('jr.supprime', { qui, titre });
+      // Ressource restreinte supprimée : le titre a été effacé (migration 0048).
+      return typeof m.titre !== 'string' && m.acces === 'restreint' ? trLi('jr.supprime_restreint', { qui }) : trLi('jr.supprime', { qui, titre });
+    case 'cm.lien_acces':
+      return trLi('jr.acces', { qui, titre });
+    case 'cm.lien_partage':
+      return trLi('jr.partage', { qui, titre });
     case 'cm.lien_lie':
       return trLi('jr.lie', { qui, titre });
     case 'cm.lien_delie':
@@ -202,6 +207,8 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
       return trRe('nt.rdv_reserve', { membre: nom(c.membre), titre, quand: quandReunion(c) });
     case 'cm-reunion-rappel':
       return trRe('nt.rappel', { titre, heure: typeof c.debut === 'string' ? formaterDate(c.debut, { hour: '2-digit', minute: '2-digit', timeZone: typeof c.fuseau === 'string' ? c.fuseau : undefined }) : '?' });
+    case 'cm-lien-partage':
+      return trLi('nt.partage', { membre: nom(c.membre), titre });
     case 'cm-releve':
       return tr('cm.nt.releve', { titre, reseau: texte(c.reseau), j: typeof c.j === 'number' ? c.j : '?' });
     default:

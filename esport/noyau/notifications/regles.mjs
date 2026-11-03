@@ -61,6 +61,11 @@ export const REGLES = Object.freeze({
   'cm.charte_modifiee': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('visuels') },
   // Liens utiles (DATA › Ressources, migration 0044).
   'cm.lien_*': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('ressources') },
+  // Qui voit la ressource (migration 0048) : réglage changé pour ceux qui gèrent le CM ; partage : seulement la
+  // notification PERSONNELLE (cm-lien-partage) des personnes choisies. Ressource restreinte : jamais montrée à qui
+  // ne la voit pas (centre.mjs, `liensInterdits`).
+  'cm.lien_acces': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('ressources') },
+  'cm.lien_partage': { categorie: 'cm', acces: 'aucun', lien: CM('ressources') },
   // Accès d'un tableau changé (migration 0046) : ceux qui gèrent le CM (et qui voient le tableau : centre.mjs).
   'cm.tableau_acces': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('tableaux') },
   'cm.reglages_modifies': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('reglages') },
