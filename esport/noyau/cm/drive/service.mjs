@@ -639,11 +639,11 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   }
 
   /**
-   * Événement de bus `drive.ajout` (migration 0038) : signal pour le centre de notifications (format simple,
+   * Événement de bus `drive.ajout` (migration 0039) : signal pour le centre de notifications (format simple,
    * documenté dans docs/esport/drive.md). `acteur` null : rangement automatique sans auteur.
    */
   const evAjout = ({ portee, acteur, element, id, dossierId, genre, nom, version = 1, t }) =>
-    evenement('drive.ajout', { teamId: teamDePortee(portee), acteur: acteur ?? null, entiteType: element === 'dossier' ? 'cm_drive_dossier' : 'cm_drive', entiteId: id, charge: { portee, dossierId: dossierId ?? null, element, genre, nom, version }, maintenant: t });
+    evenement('drive.ajout', { teamId: teamDePortee(portee), acteur: acteur ?? null, entiteType: element === 'dossier' ? 'cm_drive_dossier' : 'cm_drive', entiteId: id, charge: { portee, dossierId: dossierId ?? null, element, type: genre === 'version' ? 'version' : element, genre, nom, version, auteur: acteur ?? null }, maintenant: t });
 
   const tagsInstr = (elementId, tags) => [{ sql: 'DELETE FROM cm_drive_tags WHERE element_id = ?', params: [elementId] }, ...tags.map(tag => ({ sql: 'INSERT INTO cm_drive_tags (element_id, tag) VALUES (?, ?)', params: [elementId, tag] }))];
 
@@ -759,6 +759,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       lot.push(evenement('cm.drive_fichier_modifie', { teamId: teamDePortee(f.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: f.id, charge: { nom: champs.nom ?? f.nom, ancien: champs.nom ? f.nom : null, deplace: champs.dossier_id !== undefined }, maintenant: t }));
     }
     await base.lot(lot);
+    if (champs.dossier_id) await resserrerNotifications(map, null, f.id);
     return detail(acteur, f.id);
   }
 
@@ -928,7 +929,40 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       { sql: `UPDATE cm_drive_dossiers SET ${[...cles.map(k => `${k} = ?`), 'maj_par = ?', 'maj_le = ?'].join(', ')} WHERE id = ?`, params: [...cles.map(k => champs[k]), acteur.compte, iso(t), d.id] },
       evenement('cm.drive_dossier_modifie', { teamId: teamDePortee(d.portee), acteur: acteur.compte, entiteType: 'cm_drive_dossier', entiteId: d.id, charge: { nom: champs.nom === undefined ? nomAffiche(d) : (champs.nom ?? nomAffiche({ cle: d.cle })), restreint: champs.restreint === undefined ? undefined : champs.restreint === 1, deplace: champs.parent_id !== undefined }, maintenant: t }),
     ]);
+    // Restreint (ou rangé dans un dossier restreint) : ses notifications déjà affichées se resserrent aussi.
+    if (champs.restreint === 1 || champs.parent_id !== undefined) await resserrerNotifications(await arbre(d.portee), d.id, null);
     return { ok: true };
+  }
+
+  /**
+   * Centre de notifications (migration 0038) : les notifications des éléments d'un dossier devenu restreint (ou
+   * déplacés dessous) ne restent visibles que de ceux qui gèrent le Drive. Ne fait rien hors d'un dossier
+   * restreint ; ne desserre jamais. Sans le centre (table absente), rien.
+   */
+  async function resserrerNotifications(map, dossierId, fichierId) {
+    const d = dossierId ? map.get(dossierId) : null;
+    const restreint = x => (chaine(map, x) ?? []).some(y => Number(y.restreint) === 1);
+    try {
+      let ids;
+      if (fichierId) {
+        const f = await base.premier('SELECT dossier_id FROM cm_drive_fichiers WHERE id = ?', [fichierId]);
+        if (!f?.dossier_id || !map.get(f.dossier_id) || !restreint(map.get(f.dossier_id))) return;
+        ids = [fichierId];
+      } else {
+        if (!d || !restreint(d)) return;
+        const sous = descendants(map, d.id);
+        ids = [...sous, ...(await lignesParIds(base, 'SELECT id FROM cm_drive_fichiers WHERE dossier_id', sous)).map(l => l.id)];
+      }
+      for (let i = 0; i < ids.length; i += 80) {
+        const p = ids.slice(i, i + 80);
+        await base.executer(
+          `UPDATE notifs_centre SET acces = 'cm:cm.drive.gerer', portee_cle = 'cm:cm.drive.gerer@' || COALESCE(team_id, '') WHERE entite_type IN ('cm_drive', 'cm_drive_dossier') AND entite_id IN (${p.map(() => '?').join(', ')})`,
+          p,
+        );
+      }
+    } catch (e) {
+      if (!/notifs_centre/.test(String(e?.message ?? e))) throw e;
+    }
   }
 
   // ---------------------------------------------------------------- Corbeille
@@ -1077,7 +1111,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return { ok: true, elements: lots.size };
   }
 
-  // ---------------------------------------------------------------- Nouveautés (migration 0038)
+  // ---------------------------------------------------------------- Nouveautés (migration 0039)
 
   /**
    * État « vu » du Drive, par compte et par dossier (`cm_drive_vus`) : un élément est NOUVEAU pour un compte s'il

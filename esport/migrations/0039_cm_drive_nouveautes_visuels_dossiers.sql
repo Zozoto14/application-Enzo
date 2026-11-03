@@ -1,4 +1,4 @@
--- Esport, migration 0038 : nouveautés du Drive par utilisateur et dossiers des visuels (docs/esport/drive.md,
+-- Esport, migration 0039 : nouveautés du Drive par utilisateur et dossiers des visuels (docs/esport/drive.md,
 -- parties « Nouveautés » et « Déplacer à la souris » ; docs/esport/visuels.md, partie « Dossiers »).
 --
 -- 1. `cm_drive_vus` : état « vu » du Drive, PAR COMPTE ET PAR DOSSIER (jamais dans le navigateur). `dossier` :

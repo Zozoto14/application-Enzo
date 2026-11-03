@@ -159,6 +159,18 @@ export function regleDe(type) {
  *    résultat « staff » : resultats.saisir ;
  *  - événement de team sans team : Fondateur seul.
  */
+/** L'élément du Drive (fichier ou dossier) est-il dans un dossier restreint (lui compris) ? */
+export async function sousDossierRestreint(base, entiteType, id) {
+  let dossier = entiteType === 'cm_drive_dossier' ? id : (await base.premier('SELECT dossier_id FROM cm_drive_fichiers WHERE id = ?', [id]))?.dossier_id;
+  for (let n = 0; dossier && n < 20; n++) {
+    const d = await base.premier('SELECT parent_id, restreint FROM cm_drive_dossiers WHERE id = ?', [dossier]);
+    if (!d) return false;
+    if (Number(d.restreint) === 1) return true;
+    dossier = d.parent_id;
+  }
+  return false;
+}
+
 export async function regleEffective(base, ev) {
   const r = regleDe(ev.type);
   let acces = r.acces;
@@ -180,6 +192,10 @@ export async function regleEffective(base, ev) {
     // Résultat « staff » : ceux qui saisissent seulement.
     const l = ev.entite_id ? await base.premier('SELECT visibilite FROM resultats WHERE id = ?', [ev.entite_id]) : null;
     if (!l || l.visibilite !== 'team') acces = 'team:resultats.saisir';
+  }
+  if ((ev.type === 'drive.ajout' || ev.type.startsWith('cm.drive_')) && ['cm_drive', 'cm_drive_dossier'].includes(ev.entite_type) && ev.entite_id) {
+    // Élément du Drive sous un dossier RESTREINT (migration 0027) : ceux qui gèrent le Drive seulement.
+    if (await sousDossierRestreint(base, ev.entite_type, ev.entite_id)) acces = 'cm:cm.drive.gerer';
   }
   if (acces.startsWith('team:') && !ev.team_id) acces = 'fondateur';
   return { categorie: r.categorie, acces, lien: r.lien ?? null };

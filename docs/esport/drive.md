@@ -12,7 +12,7 @@ par le cron du serveur (≤ 5 min) ; **rechargez la page** ensuite (l'app lit vo
 
 Voir aussi : [cm.md](cm.md) (section CM, rôles), [visuels.md](visuels.md), [sponsors.md](sponsors.md).
 
-Migrations : `esport/migrations/0027_cm_drive.sql`, `0038_cm_drive_nouveautes_visuels_dossiers.sql` (nouveautés
+Migrations : `esport/migrations/0027_cm_drive.sql`, `0039_cm_drive_nouveautes_visuels_dossiers.sql` (nouveautés
 par compte, dossiers des visuels). Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
 et `src/esport/ui/cm/drive/` (app), textes `src/esport/i18n/drive.ts`.
 
@@ -108,10 +108,15 @@ ajout, dans le même lot que l'écriture. Il ne va **pas** au journal d'activit�
 | `team_id` | la team de la portée (NULL pour le Drive du club) |
 | `acteur_id` | l'auteur (NULL : rangement automatique sans auteur) |
 | `entite_type`, `entite_id` | `cm_drive` (fichier) ou `cm_drive_dossier` (dossier), et son identifiant |
-| `charge` | `{ portee, dossierId, element: 'fichier' \| 'dossier', genre: 'ajout' \| 'copie' \| 'version' \| 'rangement', nom, version }` |
+| `charge` | `{ portee, dossierId, element: 'fichier' \| 'dossier', type: 'fichier' \| 'dossier' \| 'version', genre: 'ajout' \| 'copie' \| 'version' \| 'rangement', nom, version, auteur }` |
 
 Le consommateur ne prévient que ceux qui **voient** l'élément : `drive.destinatairesAjout(ev)` (service du Drive)
 rend ces comptes, l'auteur exclu ; `drive.elementVisiblePour(compte, element, id)` répond pour un compte.
+Le **centre de notifications** ([notifications.md](notifications.md)) le consomme (catégorie Drive, « Clara a ajouté
+un fichier / créé un dossier / ajouté une nouvelle version dans le Drive : nom ») : visible de qui voit le Drive de
+la portée, et de **ceux qui gèrent le Drive seulement** pour un élément sous un **dossier restreint**
+(`notifications/regles.mjs`, `sousDossierRestreint`) ; un dossier restreint après coup (ou un élément rangé dessous)
+resserre aussitôt les notifications déjà affichées.
 
 ## Fichiers
 
@@ -196,7 +201,7 @@ Rien n'est copié : la pièce, l'image ou le sponsor pointe vers les mêmes octe
 | `cm_drive_fichiers` | fichiers (portée, dossier, nom, version actuelle, type, taille, infos, origine, corbeille) |
 | `cm_drive_versions` | versions (octets dans `cm_fichiers`) |
 | `cm_drive_tags`, `cm_drive_favoris` | étiquettes ; favoris par compte |
-| `cm_drive_vus` (migration 0038) | état « vu » par compte, portée et dossier (`racine`, l'identifiant d'un dossier, ou `*` : tout marqué vu) |
+| `cm_drive_vus` (migration 0039) | état « vu » par compte, portée et dossier (`racine`, l'identifiant d'un dossier, ou `*` : tout marqué vu) |
 
 `envois` est reconstruite (usage « drive »), comme en 0017 et 0023. Les rôles CM système reçoivent leurs permissions
 du Drive. Tout est dans l'**export / import de la base**. **RGPD** : l'export d'un compte liste ses fichiers du Drive

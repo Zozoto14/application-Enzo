@@ -200,7 +200,7 @@ const fr = {
   'jr.tag_renomme': '{qui} a renommé l’étiquette #{tag} en #{nom} dans le Drive ({n} fichiers)',
   'jr.tag_supprime': '{qui} a supprimé définitivement l’étiquette #{tag} du Drive ({n} fichiers)',
   'nt.quota': 'Le Drive CM est rempli à {p} % ({u} sur {l}) : videz la corbeille ou faites du tri.',
-  // Déplacer à la souris et nouveautés (migration 0038).
+  // Déplacer à la souris et nouveautés (migration 0039).
   'glisser.n.one': '{n} élément',
   'glisser.n.other': '{n} éléments',
   'glisser.refus.boucle': 'Un dossier ne se range pas dans lui-même ni dans ses sous-dossiers.',

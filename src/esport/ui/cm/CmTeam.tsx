@@ -38,7 +38,7 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
     void agir('', charger);
   }, [agir, charger]);
   const peut = (p: string) => Boolean(page?.permissions.includes(p as never));
-  // Pastille du Drive de la team : nouveautés depuis la dernière visite (migration 0038).
+  // Pastille du Drive de la team : nouveautés depuis la dernière visite (migration 0039).
   const nouveautesDrive = useNouveautesDrive(client, teamId, Boolean(page && voitDrive(page.permissions)));
   const sections: Array<{ id: Section; libelle: string; pastille?: number }> = [
     ...(peut('cm.deposer') ? [{ id: 'deposer' as const, libelle: trCm('team.deposer') }] : []),

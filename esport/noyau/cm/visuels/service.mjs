@@ -72,7 +72,7 @@ export async function lireDebut(stockage, cle, n) {
 }
 
 export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, tableaux, drive }) {
-  // Dossiers des modèles et visuels (migration 0038).
+  // Dossiers des modèles et visuels (migration 0039).
   const dossiers = servicesDossiersVisuels({ base, maintenant });
   // ---------------------------------------------------------------- Contextes
 
@@ -543,7 +543,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const id = nouvelId();
     const t = iso(maintenant());
     const nom = texteNettoye(corps?.nom, 120) || texteNettoye(d[langue].champs.titre || d[langue].champs.joueur || d[langue].champs.semaine || d[langue].champs.team, 120) || modeleRef.type;
-    // Dossier (migration 0038) : celui choisi (même depuis une carte), sinon celui du genre (annonce → Annonces…).
+    // Dossier (migration 0039) : celui choisi (même depuis une carte), sinon celui du genre (annonce → Annonces…).
     const dossierId = await dossiers.dossierPour(ctx.portee, modeleRef.type, corps?.dossierId);
     await base.executer(
       'INSERT INTO cm_visuels (id, portee, team_id, carte_id, nom, modele, type, format, langue, source, retouche, version, cree_par, cree_le, maj_par, maj_le, dossier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)',

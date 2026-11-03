@@ -1,5 +1,5 @@
 /**
- * Drive (migration 0038) : déplacer à la souris (cycles interdits, permissions, déplacement groupé et annulation,
+ * Drive (migration 0039) : déplacer à la souris (cycles interdits, permissions, déplacement groupé et annulation,
  * POST + X-Methode), nouveautés par compte (permissions, ses propres ajouts exclus, « vu » par dossier, tout marquer
  * comme vu, nouvelles versions, événement `drive.ajout` hors du journal), dossiers des visuels (dossiers par défaut,
  * rangement par genre, dossier choisi, déplacement, cycles, suppression qui fait remonter le contenu), RGPD et
@@ -248,7 +248,8 @@ test('nouveautés : seulement ce que le compte voit (dossier restreint, dépôt 
   const evs = await b.base.tous("SELECT * FROM evenements WHERE type = 'drive.ajout' ORDER BY cree_le, id", []);
   assert.equal(evs.length, 4);
   const charge = JSON.parse(evs[1].charge);
-  assert.deepEqual(Object.keys(charge).sort(), ['dossierId', 'element', 'genre', 'nom', 'portee', 'version']);
+  assert.deepEqual(Object.keys(charge).sort(), ['auteur', 'dossierId', 'element', 'genre', 'nom', 'portee', 'type', 'version']);
+  assert.deepEqual([charge.type, charge.auteur], ['fichier', 'cm123456']);
   assert.deepEqual([charge.element, charge.genre, charge.dossierId, charge.portee, evs[1].acteur_id, evs[1].team_id], ['fichier', 'ajout', prive, p, 'cm123456', p]);
   assert.equal(JSON.parse(evs[0].charge).element, 'dossier');
   const drive = servicesDriveCm({ base: b.base, maintenant: () => b.horloge.t });
@@ -328,4 +329,28 @@ test('dossiers des visuels : par défaut, rangement par genre, dossier choisi, d
   // Un dossier d'une autre portée n'est pas une destination.
   const autre = await ok('/cm/visuels/deplacer', s.cm123456, { methode: 'POST', corps: { elements: [{ genre: 'modele', id: m.id }], dossierId: team.dossiers[0].id } });
   assert.equal(autre.erreurs[0].code, 'dossier-introuvable');
+});
+
+test('centre de notifications : drive.ajout (nom, type, dossier, portée, auteur) ; jamais pour qui ne voit pas un dossier restreint', async () => {
+  const { b, A, s, ok, tic, deposer, dossier } = await preparer();
+  const p = A.teamId;
+  const centre = async jeton => (await ok('/notifications/centre?categories=drive', jeton)).liste.filter(n => (n.evenement ?? n.type) === 'drive.ajout');
+  const ouvert = await dossier(s.cm123456, p, 'Saison');
+  const prive = await dossier(s.cm123456, p, 'Contrats', null, { restreint: true });
+  await deposer(s.cm123456, p, pdf('public'), 'planning.pdf', { dossierId: ouvert });
+  const secret = (await deposer(s.cm123456, p, pdf('contrat'), 'contrat.pdf', { dossierId: prive })).fichier;
+  tic();
+  await distribuer(b.base, { maintenant: b.horloge.t });
+  const kai = await centre(s.kai12345);
+  assert.ok(kai.some(n => n.charge?.nom === 'planning.pdf'), 'le correspondant voit l’ajout public');
+  assert.ok(!kai.some(n => ['contrat.pdf', 'Contrats'].includes(n.charge?.nom)), 'ni le fichier ni le dossier restreints');
+  const f = await centre(s.fondateur);
+  const n = f.find(x => x.charge?.nom === 'contrat.pdf');
+  assert.ok(n, 'le Fondateur (gère le Drive) le voit');
+  assert.deepEqual([n.charge.type, n.charge.dossierId, n.charge.portee, n.charge.auteur], ['fichier', prive, p, 'cm123456']);
+  assert.ok(!(await centre(s.lea12345)).length, 'joueuse sans Drive : rien');
+  // Dossier restreint APRÈS coup : les notifications déjà affichées se resserrent.
+  await ok(`/cm/drive/dossiers/${ouvert}`, s.cm123456, { methode: 'PATCH', corps: { restreint: true } });
+  assert.ok(!(await centre(s.kai12345)).some(x => x.charge?.nom === 'planning.pdf'));
+  void secret;
 });
