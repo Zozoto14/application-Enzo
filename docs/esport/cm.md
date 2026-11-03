@@ -11,7 +11,7 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
 
 **Navigation de l'espace CM du club** (comme une team) : la barre latérale ne liste que des **groupes** — **Accueil CM**
 (vue d'ensemble : posts à valider, prochaines publications, nouveautés du Drive, prochaines réunions ; pour qui a
-`cm.voir`), **Contenus** (sous-onglets Tableaux | À valider | Calendrier), **Médias** (Clips | Visuels | Drive),
+`cm.voir`), **Contenus** (sous-onglets Tableaux | À valider | Calendrier), **DATA** (Clips | Visuels | Drive | Ressources),
 **Diffusion** (Réseaux), **Partenaires** (Sponsors), **Équipe** (Réunions | Équipe CM), **Gestion** (Import Trello |
 Réglages | Journal) — et chaque groupe a ses **sous-onglets en haut de la page** (aucune rangée s'il n'a qu'une
 sous-section). Les compteurs (posts à valider, nouveautés du Drive) sont sur le sous-onglet et, additionnés, sur
@@ -26,7 +26,7 @@ Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stat
 de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
 `cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
 
-Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -76,6 +76,45 @@ scouting détaillé (un adversaire n'apparaît que par son nom), les notes du st
 
 Contrôles d'une route CM : session → team existante → module `cm` activé (404) → appartenance ou affectation
 (404) → permission (403).
+
+## DATA › Ressources : les liens utiles de l'équipe CM
+
+Le groupe **DATA** (ex-« Médias ») garde **Clips | Visuels | Drive** et ajoute **Ressources** : la liste des **liens** utiles du club
+(outils, modèles, banques d'images, tableaux de bord). Elle est visible de qui a `cm.voir`. Code : `esport/noyau/cm/liens.mjs`
+(migration `0044_cm_liens.sql`, tables `cm_liens` et `cm_lien_liaisons`), `src/esport/cm/liens.ts`, `src/esport/ui/cm/liens/`.
+
+- **Un lien** : titre, adresse, description, **étiquette** libre (filtre), **épinglage**, ordre manuel (monter / descendre
+  tant qu'aucun filtre n'est actif ; les épinglés restent en tête), team de rattachement facultative (le lien reste visible
+  de tout le CM du club ; un correspondant d'une team ne voit que les liens du club et ceux de sa team ; si la team disparaît,
+  le lien redevient un lien du club). Recherche sans accents ni casse (titre, description, étiquette, domaine, team) et filtres
+  étiquette / team / épinglés.
+- **Adresse** : **https** obligatoire, hôte public (pas de `localhost`, d'adresse IP ni de réseau local), sans identifiant ;
+  validée par l'écran puis par le serveur (réutilise `verifierAdresse` du module Ressources des teams,
+  `esport/noyau/ressources/apercu.mjs`) et enregistrée normalisée (400 `url`). **Aperçu** : le **domaine** (sans « www. ») et
+  une icône locale ; le serveur ne télécharge rien et l'écran ne charge **aucune image externe** (ni favicon distante).
+  Ouverture dans un **nouvel onglet** avec `noopener,noreferrer`. 500 liens au plus.
+- **Pourquoi pas le module Ressources des teams** : il est lié à une team, à ses rôles (`resources.*`), à sa file de validation
+  et à ses catégories ; l'espace CM est un espace du club sans team. Seule la validation d'adresse est partagée.
+- **Permissions** (aucune nouvelle) : `cm.voir` consulter ; `cm.editer` (du club) ajouter, modifier, épingler, ordonner, lier
+  et délier ; `cm.gerer` (du club) supprimer. Cohérent avec les tableaux (éditer / gérer).
+- **Liaisons** (plusieurs-à-plusieurs, `cm_lien_liaisons`) : un lien peut être **lié** à plusieurs **cartes** des tableaux CM et à
+  plusieurs **dossiers du Drive**. Depuis la **fiche d'une carte** (bloc « Ressources liées ») et depuis un **dossier du Drive**
+  (menu du dossier ou bouton de la barre, pour qui voit la section CM) : liste cliquable, **Lier une ressource** (recherche parmi
+  les ressources existantes, ou **Créer une nouvelle ressource** qui la crée et la lie), **Délier**. Depuis une ressource :
+  « Voir où il est lié » (cartes et dossiers, avec un raccourci vers le tableau ou le dossier du Drive ; délier). Lier ou délier
+  demande `cm.editer` du club **et** le droit d'écrire sur la cible (`cm.editer` de la portée du tableau ; **envoyer** ou **gérer**
+  dans le Drive). **Visibilité** : on ne voit, ne compte et ne peut atteindre que les cartes et dossiers accessibles ; un lien vers
+  un **dossier restreint** n'est donc visible que de ceux qui y ont accès (404 sinon) ; la liaison d'un dossier à la corbeille ou d'une
+  carte supprimée n'apparaît plus. **Suppressions** : supprimer une ressource la délie partout ; supprimer une carte ou un tableau,
+  ou purger un dossier du Drive (corbeille vidée), retire ses liaisons.
+- **API** : `GET|POST /cm/liens`, `PUT /cm/liens/ordre`, `PATCH|DELETE /cm/liens/:id`, `GET|POST /cm/liens/:id/liaisons`,
+  `DELETE /cm/liens/:id/liaisons/:genre/:cibleId`, `GET /cm/liens/cible/:genre/:id`.
+- **Bus, notifications, temps réel** : événements `cm.lien_cree`, `cm.lien_modifie`, `cm.lien_supprime`, `cm.lien_lie`,
+  `cm.lien_delie` (journal de la section ; fil d'activité de la catégorie CM, lien vers DATA › Ressources ; sujet temps réel
+  `cm` : les listes ouvertes se relisent). Pas de notification personnelle.
+- **Lien profond** : onglet `ressources` (groupe `data`), ex. `{ vue: 'cm', onglet: 'ressources' }`.
+- **RGPD** : l'export du compte contient `cmLiens` (ses liens) ; à la suppression du compte, ses liens et liaisons restent au
+  club, sans auteur. Export / import de la base : tables `cm_liens` et `cm_lien_liaisons`.
 
 ## Tableaux façon Trello
 

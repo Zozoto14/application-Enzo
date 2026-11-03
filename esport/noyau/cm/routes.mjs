@@ -37,6 +37,11 @@
  *   GET|POST          /cm/visuels/dossiers ; PATCH|DELETE /cm/visuels/dossiers/:id ; POST /cm/visuels/deplacer ; POST /cm/visuels/defauts/reinitialiser
  *   GET               /cm/cartes/:id/visuels                     visuels d'une carte et proposition
  *
+ *   Liens utiles de DATA › Ressources (migration 0044, docs/esport/cm.md) :
+ *   GET|POST          /cm/liens ; PUT /cm/liens/ordre { ids } ; PATCH|DELETE /cm/liens/:id
+ *   GET|POST          /cm/liens/:id/liaisons { genre: carte | dossier, cibleId } ; DELETE /cm/liens/:id/liaisons/:genre/:cibleId
+ *   GET               /cm/liens/cible/:genre/:id                 liens liés à une carte ou à un dossier du Drive
+ *
  *   Réunions de l'équipe CM (docs/esport/cm-reunions.md) : /cm/reunions… (reunions/routes.mjs).
  *
  *   Drive (docs/esport/drive.md) : /cm/drive… (drive/routes.mjs). Pièce jointe d'une carte depuis le Drive :
@@ -99,6 +104,18 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   // Réunions de l'équipe CM (migration 0039, docs/esport/cm-reunions.md).
   if (a === 'reunions' && cm.reunions) return routesReunions({ reunions: cm.reunions, acteur, p, methode: m, url, lireCorps, limite });
 
+  if (a === 'liens' && cm.liens) {
+    const li = cm.liens;
+    if (n === 1 && m === 'GET') return li.lister(acteur);
+    if (n === 1 && m === 'POST') return li.creer(acteur, await lireCorps());
+    if (n === 2 && b === 'ordre' && m === 'PUT') return li.ordonner(acteur, await lireCorps());
+    if (n === 2 && m === 'PATCH') return li.modifier(acteur, b, await lireCorps());
+    if (n === 2 && m === 'DELETE') return li.supprimer(acteur, b);
+    if (n === 4 && b === 'cible' && m === 'GET') return li.liensDe(acteur, c, d);
+    if (n === 3 && c === 'liaisons' && m === 'GET') return li.liaisons(acteur, b);
+    if (n === 3 && c === 'liaisons' && m === 'POST') return li.lier(acteur, b, await lireCorps());
+    if (n === 5 && c === 'liaisons' && m === 'DELETE') return li.delier(acteur, b, d, p[4]);
+  }
   if (a === 'tableaux') {
     if (n === 1 && m === 'GET') return tb.tableaux(acteur, { archives: q.get('archives') === '1' });
     if (n === 1 && m === 'POST') return tb.creerTableau(acteur, await lireCorps());

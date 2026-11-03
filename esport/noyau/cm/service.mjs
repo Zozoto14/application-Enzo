@@ -10,6 +10,7 @@
  *  - rgpd.mjs : export et effacement.
  *
  *  - drive/ : Drive de la section (dossiers, fichiers, versions, corbeille ; docs/esport/drive.md).
+ *  - liens.mjs : liens utiles de DATA › Ressources, liés à des cartes et des dossiers du Drive (migration 0044).
  *  - reunions/ : réunions de l'équipe CM, disponibilités, rendez-vous (docs/esport/cm-reunions.md).
  *
  * Fichiers (pièces jointes, clips) : envoi par morceaux du module médias (usage « cm », portée club ou team),
@@ -33,6 +34,7 @@ import { servicesCalendriersCm } from './calendriers.mjs';
 import { configDrive } from './drive/regles.mjs';
 import { utiliseHorsDrive, utiliseParDrive } from './utilisations.mjs';
 import { servicesReunionsCm } from './reunions/service.mjs';
+import { servicesLiensCm } from './liens.mjs';
 
 export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive: configDuDrive = configDrive(), planning }) {
   // Envois par morceaux de la section : il faut pouvoir écrire quelque chose dans la portée.
@@ -58,6 +60,8 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   const reunions = servicesReunionsCm({ base, maintenant, tableaux });
   // Calendriers des teams superposés au calendrier éditorial (lecture seule : planning si le compte le voit, sinon compétition publiable).
   const calendriers = servicesCalendriersCm({ base, planning });
+  // Liens utiles de DATA › Ressources (migration 0044), liables à des cartes et à des dossiers du Drive.
+  const liens = servicesLiensCm({ base, maintenant, drive });
 
   /**
    * Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, image du club — logo, fond — et cm.voir
@@ -125,5 +129,5 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     },
   };
 
-  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive, reunions, calendriers };
+  return { tableaux, droits, equipe, clips, trello, fichiers, visuels, drive, reunions, calendriers, liens };
 }

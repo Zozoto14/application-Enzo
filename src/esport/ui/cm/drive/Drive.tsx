@@ -43,6 +43,8 @@ import { choisirFichiers, choixFichierDisponible, type FichierNavigateur } from 
 import { signalerNouveautesDrive } from '../../../cm/nouveautesDrive';
 import { tr } from '../../../i18n';
 import { trDr, trnDr, type CleDr } from '../../../i18n/drive';
+import { trLi } from '../../../i18n/liens';
+import { LiensLies } from '../liens/LiensLies';
 import { Glyphe, Icone } from '../../../../ui/icones';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
 import { Badge, Carte, Compteur, ESP, EtatVide, Grille, MenuActions, Pliable, SqueletteCartes, Volet, attenue, texte, type EtatPresse } from '../../design';
@@ -63,6 +65,7 @@ type Dialogue =
   | { genre: 'renommer'; id: string; nom: string; systeme: boolean }
   | { genre: 'destination'; action: 'deplacer' | 'copier'; elements: ElementDrive[] }
   | { genre: 'tags' }
+  | { genre: 'ressources'; id: string; nom: string }
   | { genre: 'reglages' };
 
 const cle = (e: ElementDrive) => `${e.genre}:${e.id}`;
@@ -73,6 +76,8 @@ export function Drive({
   large,
   porteeFixe,
   onOuvrirTableau,
+  ressources,
+  dossierInitial,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -80,11 +85,25 @@ export function Drive({
   /** Drive d'une seule portée (onglet CM d'une team). */
   porteeFixe?: string;
   onOuvrirTableau?(id: string): void;
+  /** Propose « Ressources liées » (liens de DATA › Ressources) sur les dossiers : pour qui voit la section CM. */
+  ressources?: boolean;
+  /** Dossier à ouvrir d'emblée (depuis une ressource) ; `n` relance l'ouverture du même dossier. */
+  dossierInitial?: { portee: string; id: string; n: number };
 }) {
   const api = useMemo(() => apiDrive(client), [client]);
   const [portees, setPortees] = useState<PorteeDrive[] | undefined>();
-  const [portee, setPortee] = useState<string | undefined>(porteeFixe);
-  const [dossier, setDossier] = useState<string | null>(null);
+  const [portee, setPortee] = useState<string | undefined>(dossierInitial?.portee ?? porteeFixe);
+  const [dossier, setDossier] = useState<string | null>(dossierInitial?.id ?? null);
+  // Ouverture demandée depuis une ressource (« où est-il lié ») : portée et dossier changent.
+  const ouvertureN = dossierInitial?.n;
+  useEffect(() => {
+    if (!dossierInitial) return;
+    setPortee(dossierInitial.portee);
+    setDossier(dossierInitial.id);
+    setResultats(undefined);
+    setCorbeille(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvertureN]);
   const [contenu, setContenu] = useState<ContenuDrive | undefined>();
   const [vue, setVue] = useState<'grille' | 'liste'>(large ? 'grille' : 'liste');
   const [tri, setTri] = useState<TriDrive>('nom');
@@ -374,6 +393,7 @@ export function Drive({
         droits?.voir && { titre: trDr('action.zip'), onPress: () => zip(d) },
         { titre: d.favori ? trDr('action.retirer_favori') : trDr('action.favori'), onPress: () => void action('favori', () => api.favori('dossier', d.id, !d.favori)) },
         { titre: trDr('action.lien_interne'), onPress: () => void lienInterne(d.id) },
+        ressources && { titre: trLi('cible.titre'), onPress: () => setDialogue({ genre: 'ressources', id: d.id, nom: nomDossier(d) }), testID: `esport-drive-dossier-${d.id}-ressources` },
         d.modifiable && { titre: trDr('action.renommer'), onPress: () => setDialogue({ genre: 'renommer', id: d.id, nom: d.nom ?? nomDossier(d), systeme: d.systeme }) },
         d.modifiable && !d.systeme && { titre: trDr('action.deplacer'), onPress: () => setDialogue({ genre: 'destination', action: 'deplacer', elements: [{ genre: 'dossier', id: d.id }] }) },
         droits?.gerer && { titre: d.restreint ? trDr('action.ouvrir_a_tous') : trDr('action.restreindre'), onPress: () => void action('restreint', () => api.modifierDossier(d.id, { restreint: !d.restreint })) },
@@ -502,6 +522,7 @@ export function Drive({
 
       {/* Barre d'outils */}
       <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'flex-end' }]}>
+        {ressources && contenu?.dossier && !corbeille && !resultats ? <BoutonHub theme={theme} titre={trLi('cible.titre')} icone="lien" onPress={() => contenu.dossier && setDialogue({ genre: 'ressources', id: contenu.dossier.id, nom: nomDossier(contenu.dossier) })} testID="esport-drive-ressources" /> : null}
         {droits?.envoyer && !corbeille ? <BoutonHub theme={theme} titre={trDr('barre.nouveau_dossier')} onPress={() => setDialogue({ genre: 'dossier', nom: '', restreint: false })} testID="esport-drive-nouveau-dossier" /> : null}
         {peutDeposer && choixFichierDisponible ? (
           <BoutonHub theme={theme} titre={trDr('barre.envoyer')} variante="plein" desactive={envoi.enCours} onPress={() => void choisirFichiers('', 'esport-drive-fichiers').then(f => (f.length ? envoyer(f) : undefined))} testID="esport-drive-envoyer" />
@@ -677,6 +698,13 @@ export function Drive({
         onOuvrirCarte={onOuvrirTableau}
       />
 
+      {dialogue?.genre === 'ressources' ? (
+        <Volet theme={theme} visible titre={`${trLi('cible.titre')} · ${dialogue.nom}`} onFermer={() => setDialogue(undefined)} testID="esport-drive-volet-ressources" largeur={460}>
+          <View style={{ padding: ESP.l }}>
+            <LiensLies theme={theme} client={client} genre="dossier" cibleId={dialogue.id} enveloppe={false} prefixe="esport-drive-ressources" />
+          </View>
+        </Volet>
+      ) : null}
       {dialogue?.genre === 'dossier' && portee ? (
         <Volet theme={theme} visible titre={trDr('barre.nouveau_dossier')} onFermer={() => setDialogue(undefined)} testID="esport-drive-volet-dossier">
           <Champ theme={theme} libelle={trDr('dialogue.nom')} valeur={dialogue.nom} onChanger={nom => setDialogue({ ...dialogue, nom })} maxLength={140} testID="esport-drive-dossier-nom" />

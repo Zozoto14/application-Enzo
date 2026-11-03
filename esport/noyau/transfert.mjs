@@ -169,6 +169,9 @@ export const TABLES = [
   ['cm_visuels_dossiers', 'id'],
   // Rangement des modèles de visuels par défaut dans les dossiers (migration 0043).
   ['cm_visuels_defauts', 'portee, type'],
+  // Liens utiles de DATA › Ressources et leurs liaisons avec des cartes et des dossiers du Drive (migration 0044).
+  ['cm_liens', 'id'],
+  ['cm_lien_liaisons', 'lien_id, genre, cible_id'],
   // Choix d'affichage par compte de la section CM (migration 0042 : colonnes réduites, calendriers des teams).
   ['cm_preferences', 'compte_id, cle'],
   // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).

@@ -351,6 +351,10 @@
   "WAV non pris en charge (PCM ou flottant attendu).": "Unsupported WAV (PCM or float expected).",
   "Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).": "Unrecognized file: PDF, image (PNG, JPEG, GIF, WebP), video (MP4, MOV, WebM, MKV) or archive (ZIP, 7z, RAR).",
   "Dossier introuvable.": "Folder not found.",
+  "Adresse invalide : un lien https vers un site public est attendu.": "Invalid address: an https link to a public site is expected.",
+  "Titre : obligatoire.": "Title: required.",
+  "Liste d’identifiants invalide.": "Invalid list of identifiers.",
+  "Genre de liaison inconnu : carte ou dossier.": "Unknown link type: card or folder.",
   "L’espace du Drive est plein : videz la corbeille ou supprimez des fichiers.": "The Drive is full: empty the trash or delete files.",
   "Étiquette illisible.": "Unreadable tag.",
   "Auteur inconnu.": "Unknown author.",
@@ -1052,6 +1056,10 @@
   [
    "^Image trop lourde : (\\d+) Mo au plus\\.$",
    "Image too heavy: $1 MB at most."
+  ],
+  [
+   "^(\\d+) liens au plus\\.$",
+   "$1 links at most."
   ],
   [
    "^(\\d+) dossiers au plus\\.$",

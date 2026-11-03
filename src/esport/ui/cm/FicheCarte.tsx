@@ -42,6 +42,7 @@ import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copie
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
+import { LiensLies } from './liens/LiensLies';
 import { useVerrouOptimiste } from '../../tempsReel/hooks';
 import { BandeauConflit, PastillePresence } from '../../tempsReel/ui';
 
@@ -223,6 +224,7 @@ export function FicheCarte({
 
       <Checklists theme={theme} api={api} c={c} editer={dr.editer} faire={faire} retour={retour('checklists')} />
       <Pieces theme={theme} api={api} c={c} portee={tableau.tableau.portee} modifier={dr.modifier} faire={faire} retour={retour('pieces')} />
+      <LiensLies theme={theme} client={api.client} genre="carte" cibleId={c.id} />
       <Commentaires theme={theme} api={api} c={c} commenter={dr.commenter} gerer={dr.gerer} nom={nom} joueurs={tableau.personnes.map(p => p.pseudo)} faire={faire} retour={retour('commentaires')} />
 
       <Panneau theme={theme} testID="esport-cm-fiche-activite">

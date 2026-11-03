@@ -7,6 +7,7 @@ import { langueCourante, tr } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
 import { trDr } from '../i18n/drive';
 import { trRe, type CleRe } from '../i18n/reunions';
+import { trLi } from '../i18n/liens';
 import { formaterDate } from '../i18n';
 import { tailleMedia } from '../medias/envoi';
 
@@ -119,6 +120,17 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return trDr('jr.tag_supprime', { qui, tag: texte(m.tag), n: typeof m.fichiers === 'number' ? m.fichiers : 0 });
     case 'cm.drive_quota':
       return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
+    // Liens utiles de DATA › Ressources (migration 0044).
+    case 'cm.lien_cree':
+      return trLi('jr.cree', { qui, titre });
+    case 'cm.lien_modifie':
+      return trLi('jr.modifie', { qui, titre });
+    case 'cm.lien_supprime':
+      return trLi('jr.supprime', { qui, titre });
+    case 'cm.lien_lie':
+      return trLi('jr.lie', { qui, titre });
+    case 'cm.lien_delie':
+      return trLi('jr.delie', { qui, titre });
     // Réunions de l'équipe CM (migration 0039).
     case 'cm.reunion_creee':
       return trRe('jr.creee', { qui, titre });

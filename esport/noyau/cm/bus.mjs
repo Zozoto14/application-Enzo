@@ -71,6 +71,12 @@ export const TYPES_CM = [
   'cm.reunion_reponse',
   'cm.reunion_rappel',
   'cm.rdv_reserve',
+  // Liens utiles de DATA › Ressources (migration 0044) : charge { titre, hote, portee } (+ { genre } d'une liaison, { epingle }).
+  'cm.lien_cree',
+  'cm.lien_modifie',
+  'cm.lien_supprime',
+  'cm.lien_lie',
+  'cm.lien_delie',
   // Ajout dans le Drive (migration 0041), pour le centre de notifications : un fichier ou un dossier ajouté, une
   // nouvelle version. Charge : { portee, dossierId, element: 'fichier' | 'dossier', type: 'fichier' | 'dossier' |
   // 'version', genre: 'ajout' | 'copie' | 'version' | 'rangement', nom, version, auteur }. Le destinataire doit VOIR l'élément : drive.destinatairesAjout(ev)

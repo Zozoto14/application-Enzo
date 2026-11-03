@@ -444,6 +444,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (tb.cle_defaut) throw echec(409, 'tableau-defaut', 'Le tableau par défaut ne se supprime pas.');
     const t = maintenant();
     await base.lot([
+      { sql: "DELETE FROM cm_lien_liaisons WHERE genre = 'carte' AND cible_id IN (SELECT id FROM cm_cartes WHERE tableau_id = ?)", params: [id] },
       { sql: 'UPDATE cm_tableaux SET supprime_le = ?, version = version + 1, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), id] },
       evenement('cm.tableau_supprime', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: id, charge: { nom: tb.nom ?? null }, maintenant: t }),
     ]);
@@ -1024,6 +1025,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     await base.lot([
       { sql: 'UPDATE cm_cartes SET supprime_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), c.id] },
       { sql: "UPDATE cm_clips SET carte_id = NULL, statut = CASE WHEN statut = 'utilise' THEN 'retenu' ELSE statut END, maj_le = ? WHERE carte_id = ?", params: [iso(t), c.id] },
+      // Liens de DATA › Ressources liés à la carte (migration 0044).
+      { sql: "DELETE FROM cm_lien_liaisons WHERE genre = 'carte' AND cible_id = ?", params: [c.id] },
       evenement('cm.carte_supprimee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id }, maintenant: t }),
       versionTableau(tb.id, t),
     ]);

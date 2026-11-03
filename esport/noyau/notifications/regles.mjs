@@ -54,6 +54,8 @@ export const REGLES = Object.freeze({
   'cm.modele_modifie': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('visuels') },
   'cm.modele_supprime': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('visuels') },
   'cm.charte_modifiee': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('visuels') },
+  // Liens utiles (DATA › Ressources, migration 0044).
+  'cm.lien_*': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('ressources') },
   'cm.reglages_modifies': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('reglages') },
   'cm.import_trello': { categorie: 'cm', acces: 'cm:cm.gerer', lien: CM('import') },
   'cm.reseau_*': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('reseaux') },

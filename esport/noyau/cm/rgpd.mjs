@@ -2,7 +2,7 @@
  * RGPD de la section CM.
  *
  *  - Export (droit d'accès) : rôles CM, cartes créées, cartes où le compte est assigné, commentaires,
- *    clips proposés, fichiers déposés, modèles de visuels et visuels créés, fichiers du Drive et favoris ; réunions
+ *    clips proposés, liens utiles ajoutés, fichiers déposés, modèles de visuels et visuels créés, fichiers du Drive et favoris ; réunions
  *    de l'équipe CM (organisées ou invitées, sa réponse), ses disponibilités, son statut, ses offres de rendez-vous.
  *  - Suppression du compte : ses affectations et ses assignations disparaissent ; ce qu'il a écrit pour le
  *    club (cartes, commentaires, clips, pièces jointes, modèles et visuels) reste, sans auteur (« Compte
@@ -38,6 +38,8 @@ export async function exportCm(base, compte) {
     cmRendezVous: (await q('SELECT titre, description, duree_minutes, ouverte, cree_le FROM cm_rdv_offres WHERE proprietaire_id = ? ORDER BY cree_le')).map(o => ({ titre: o.titre, description: o.description, dureeMinutes: Number(o.duree_minutes), ouverte: Number(o.ouverte) === 1, creeLe: o.cree_le })),
     // Nouveautés du Drive (migration 0041) : dossiers vus et quand (pour les pastilles « nouveau »).
     cmDriveVus: (await q('SELECT portee, dossier, vu_le FROM cm_drive_vus WHERE compte_id = ? ORDER BY vu_le')).map(v => ({ portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), dossier: v.dossier, vuLe: v.vu_le })),
+    // Liens utiles de DATA › Ressources (migration 0044) : ceux qu'il a ajoutés.
+    cmLiens: (await q('SELECT titre, url, categorie, cree_le FROM cm_liens WHERE cree_par = ? ORDER BY cree_le')).map(l => ({ titre: l.titre, url: l.url, categorie: l.categorie ?? null, creeLe: l.cree_le })),
     cmVisuelsDossiers: (await q('SELECT nom, cle, portee, cree_le FROM cm_visuels_dossiers WHERE cree_par = ? ORDER BY cree_le')).map(d => ({ nom: d.nom ?? d.cle, portee: d.portee === 'club' ? 'club' : (teams.get(d.portee) ?? d.portee), creeLe: d.cree_le })),
     cmVisuels: (await q('SELECT nom, type, format, langue, portee, cree_le FROM cm_visuels WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(v => ({ nom: v.nom, type: v.type, format: v.format, langue: v.langue, portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), creeLe: v.cree_le })),
   };
@@ -82,6 +84,10 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_visuels_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     // Migration 0043 : le rangement des modèles par défaut qu'il a fait reste, sans auteur.
     { sql: 'UPDATE cm_visuels_defauts SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    // Migration 0044 : ses liens et leurs liaisons restent au club, sans auteur.
+    { sql: 'UPDATE cm_liens SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_liens SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_lien_liaisons SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
   ];
   // Réunions de l'équipe CM (migration 0039).
   lot.push(

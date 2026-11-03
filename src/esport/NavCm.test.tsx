@@ -61,6 +61,7 @@ function fauxClient(moiCm: MoiCm, superAdmin: boolean, langue: 'fr' | 'en', equi
     if (c === '/cm/reunions') return { reunions: moiCm.gerer ? [{ id: 'r1', cle: 'k', titre: 'Point hebdo CM', statut: 'active', debut: new Date(Date.now() + 86_400_000).toISOString(), fin: new Date(Date.now() + 90_000_000).toISOString() }] : [], noms: {}, droits: { voir: true, gerer: true } } as R;
     if (c === '/cm/reglages') return { suggestions: { actif: true, types: { tournoi: true, j1: true, jourj: true, resultat: true, final: true }, reseaux: [], hashtags: '' } } as R;
     if (c === '/cm/clips') return { clips: [], noms: {} } as R;
+    if (c === '/cm/liens') return { liens: [], categories: [], teams: [], droits: { editer: true, gerer: true }, max: 500 } as R;
     if (c === '/cm/journal') return { entrees: [], noms: {} } as R;
     if (c === '/cm/drive/portees') return { portees: [{ portee: 'club', team: null, droits }], quota, reglages: { rangementVisuels: true, rangementClips: true } } as R;
     if (c === '/cm/drive') return { portee: 'club', team: null, droits, dossier: null, chemin: [], dossiers: [], fichiers: [], noms: {}, tronque: false, quota } as R;
@@ -137,9 +138,9 @@ describe('CM rangé dans Teams', () => {
     // PC : le bloc « CM du club » prend la place de la team dans la barre latérale (« Teams » n'est plus surligné,
     // comme dans une team) ; téléphone : « Teams » reste surligné dans la barre du bas.
     expect(selectionne('esport-nav-teams')).toBe(mode === 'telephone');
-    // Le Drive (groupe Médias) et les Sponsors (groupe Partenaires) sont dans l'espace CM du Fondateur ; il s'ouvre sur l'Accueil CM.
+    // Le Drive (groupe DATA) et les Sponsors (groupe Partenaires) sont dans l'espace CM du Fondateur ; il s'ouvre sur l'Accueil CM.
     await ouvrirSection(mode);
-    expect(screen.getByTestId('esport-cm-groupe-medias')).toBeTruthy();
+    expect(screen.getByTestId('esport-cm-groupe-data')).toBeTruthy();
     expect(screen.getByTestId('esport-cm-groupe-partenaires')).toBeTruthy();
     if (mode === 'large') expect(selectionne('esport-cm-groupe-accueil')).toBe(true);
     await fermerSections(mode);
@@ -150,10 +151,10 @@ describe('CM rangé dans Teams', () => {
     // Raccourci « Drive » : l'espace CM s'ouvre sur le Drive.
     await fireEvent.press(screen.getByTestId('esport-teams-cm-drive'));
     await screen.findByTestId('esport-cm');
-    // Lien profond : bon groupe (Médias) et bon sous-onglet (Drive), sur PC comme sur téléphone.
+    // Lien profond : bon groupe (DATA) et bon sous-onglet (Drive), sur PC comme sur téléphone.
     expect(selectionne('esport-cm-onglet-drive')).toBe(true);
-    if (mode === 'large') expect(selectionne('esport-cm-groupe-medias')).toBe(true);
-    else expect(screen.getByTestId('esport-cm-sections')).toHaveTextContent('Médias ▾');
+    if (mode === 'large') expect(selectionne('esport-cm-groupe-data')).toBe(true);
+    else expect(screen.getByTestId('esport-cm-sections')).toHaveTextContent('DATA ▾');
     await waitFor(() => expect(appels).toContain('/cm/drive/portees'));
   });
 
@@ -176,11 +177,11 @@ describe('CM rangé dans Teams', () => {
     expect(screen.queryByTestId('esport-teams-cm-drive')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-teams-cm-ouvrir'));
     await screen.findByTestId('esport-cm');
-    expect(selectionne('esport-cm-groupe-medias')).toBe(true);
+    expect(selectionne('esport-cm-groupe-data')).toBe(true);
     // Un groupe à une seule sous-section : pas de rangée de sous-onglets.
     expect(screen.queryByTestId('esport-cm-sous-onglets')).toBeNull();
     expect(screen.queryByTestId('esport-cm-groupe-contenus')).toBeNull();
-    expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›Club CM›Media›Drive');
+    expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›Club CM›DATA›Drive');
   });
 
   it('Sponsors seulement (sponsors.voir) : la carte annonce les Sponsors', async () => {
@@ -201,7 +202,7 @@ describe('CM rangé dans Teams', () => {
     expect(screen.getByTestId('esport-cm-role')).toHaveTextContent('Super admin');
     expect(screen.getByTestId('esport-cm-changer')).toHaveTextContent('⇄ Changer');
     // La barre ne garde que les groupes (comme les sections d'une team) ; l'Accueil CM est ouvert d'abord.
-    const groupes = ['accueil', 'contenus', 'medias', 'diffusion', 'partenaires', 'equipe', 'gestion'];
+    const groupes = ['accueil', 'contenus', 'data', 'diffusion', 'partenaires', 'equipe', 'gestion'];
     const barre = within(screen.getByTestId('esport-barre-laterale'));
     for (const g of groupes) expect(barre.getByTestId(`esport-cm-groupe-${g}`)).toBeTruthy();
     for (const id of ['tableaux', 'valider', 'calendrier', 'clips', 'visuels', 'drive', 'reunions', 'equipe', 'import', 'reglages', 'journal']) expect(screen.queryByTestId(`esport-cm-onglet-${id}`)).toBeNull();
@@ -211,7 +212,7 @@ describe('CM rangé dans Teams', () => {
     expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›CM du club›Accueil CM');
     // Compteur des posts à valider (/cm/etat : 3) remonté sur le groupe Contenus (somme), et sur l'Accueil.
     await waitFor(() => expect(screen.getByTestId('esport-cm-groupe-contenus').props.accessibilityLabel).toBe('Contenus (3)'));
-    expect(screen.getByTestId('esport-cm-groupe-medias').props.accessibilityLabel).toBe('Médias');
+    expect(screen.getByTestId('esport-cm-groupe-data').props.accessibilityLabel).toBe('DATA');
     await waitFor(() => expect(screen.getByTestId('esport-cm-accueil-valider-n')).toHaveTextContent('3'));
     // Contenus : sous-onglets Tableaux | À valider | Calendrier en haut de la page, pastille sur « À valider ».
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-contenus'));
@@ -235,9 +236,9 @@ describe('CM rangé dans Teams', () => {
     expect(appels).toContain('/cm/reglages');
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-contenus'));
     expect(await screen.findByTestId('esport-cm-valider')).toBeTruthy();
-    // Médias : Clips | Visuels | Drive.
-    await fireEvent.press(screen.getByTestId('esport-cm-groupe-medias'));
-    expect(within(screen.getByTestId('esport-cm-sous-onglets')).getAllByRole('tab').map(t => t.props.accessibilityLabel)).toEqual(['Clips', 'Visuels', 'Drive']);
+    // DATA : Clips | Visuels | Drive | Ressources.
+    await fireEvent.press(screen.getByTestId('esport-cm-groupe-data'));
+    expect(within(screen.getByTestId('esport-cm-sous-onglets')).getAllByRole('tab').map(t => t.props.accessibilityLabel)).toEqual(['Clips', 'Visuels', 'Drive', 'Ressources']);
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-gestion'));
     // Barre réduite : icônes seules (libellés de groupe masqués), les groupes restent accessibles et nommés.
     await fireEvent.press(screen.getByTestId('esport-barre-bascule'));
@@ -271,7 +272,7 @@ describe('CM rangé dans Teams', () => {
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-accueil'));
     await fireEvent.press(await screen.findByTestId('esport-cm-accueil-drive-voir'));
     expect(selectionne('esport-cm-onglet-drive')).toBe(true);
-    expect(selectionne('esport-cm-groupe-medias')).toBe(true);
+    expect(selectionne('esport-cm-groupe-data')).toBe(true);
   });
 
   it('liens profonds : le bon groupe et le bon sous-onglet (raccourci Drive de la tuile, notification vers « À valider »)', async () => {
@@ -279,11 +280,11 @@ describe('CM rangé dans Teams', () => {
     await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     await fireEvent.press(await screen.findByTestId('esport-teams-cm-drive'));
     await screen.findByTestId('esport-cm');
-    expect(selectionne('esport-cm-groupe-medias')).toBe(true);
+    expect(selectionne('esport-cm-groupe-data')).toBe(true);
     expect(selectionne('esport-cm-onglet-drive')).toBe(true);
-    expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›CM du club›Médias›Drive');
+    expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›CM du club›DATA›Drive');
     // Onglet inconnu ou non permis : retour à l'accueil du CM.
-    for (const onglet of ['valider', 'journal'] as const) {
+    for (const onglet of ['valider', 'journal', 'ressources'] as const) {
       const { unmount } = await render(
         <ModeAffichageForce mode="large">
           <CadreEsport theme={theme} large onglet="teams" onOnglet={() => undefined}>
@@ -292,7 +293,8 @@ describe('CM rangé dans Teams', () => {
         </ModeAffichageForce>,
       );
       expect(selectionne('esport-cm-onglet-' + onglet)).toBe(true);
-      expect(selectionne(`esport-cm-groupe-${onglet === 'valider' ? 'contenus' : 'gestion'}`)).toBe(true);
+      expect(selectionne(`esport-cm-groupe-${onglet === 'valider' ? 'contenus' : onglet === 'ressources' ? 'data' : 'gestion'}`)).toBe(true);
+      if (onglet === 'ressources') expect(await screen.findByTestId('esport-cm-ressources')).toBeTruthy();
       await unmount();
     }
   });
@@ -302,7 +304,7 @@ describe('CM rangé dans Teams', () => {
     await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     await fireEvent.press(await screen.findByTestId('esport-teams-cm-ouvrir'));
     await screen.findByTestId('esport-cm');
-    for (const g of ['accueil', 'contenus', 'medias', 'diffusion', 'partenaires', 'equipe']) expect(screen.getByTestId(`esport-cm-groupe-${g}`)).toBeTruthy();
+    for (const g of ['accueil', 'contenus', 'data', 'diffusion', 'partenaires', 'equipe']) expect(screen.getByTestId(`esport-cm-groupe-${g}`)).toBeTruthy();
     expect(screen.queryByTestId('esport-cm-groupe-gestion')).toBeNull();
     expect(screen.getByTestId('esport-cm-role')).toHaveTextContent('CM editor');
     expect(screen.getAllByText('CM home').length).toBeGreaterThan(0);
@@ -310,8 +312,8 @@ describe('CM rangé dans Teams', () => {
     expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›Club CM›CM home');
     // Équipe : Réunions seul (« Équipe CM » est réservé à cm.gerer).
     expect(screen.queryByTestId('esport-cm-onglet-equipe')).toBeNull();
-    await fireEvent.press(screen.getByTestId('esport-cm-groupe-medias'));
-    expect(within(screen.getByTestId('esport-cm-sous-onglets')).getAllByRole('tab').map(t => t.props.accessibilityLabel)).toEqual(['Clips', 'Visuals', 'Drive']);
+    await fireEvent.press(screen.getByTestId('esport-cm-groupe-data'));
+    expect(within(screen.getByTestId('esport-cm-sous-onglets')).getAllByRole('tab').map(t => t.props.accessibilityLabel)).toEqual(['Clips', 'Visuals', 'Drive', 'Resources']);
     await fireEvent.press(screen.getByTestId('esport-cm-groupe-contenus'));
     expect(screen.getByTestId('esport-cm-fil')).toHaveTextContent('Teams›Club CM›Content›Boards');
   });
@@ -383,6 +385,6 @@ describe('CM rangé dans Teams', () => {
     expect(within(menu).getByText('Club CM')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-changer-cm'));
     expect(await screen.findByTestId('esport-cm')).toBeTruthy();
-    expect(selectionne('esport-cm-groupe-medias')).toBe(true);
+    expect(selectionne('esport-cm-groupe-data')).toBe(true);
   });
 });

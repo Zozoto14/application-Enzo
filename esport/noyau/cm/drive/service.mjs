@@ -129,6 +129,11 @@ async function purgerLot(base, stockage, lot, t) {
     const p = elements.slice(i, i + 80);
     instr.push({ sql: `DELETE FROM cm_drive_tags WHERE element_id IN (${p.map(() => '?').join(', ')})`, params: p }, { sql: `DELETE FROM cm_drive_versions WHERE element_id IN (${p.map(() => '?').join(', ')})`, params: p });
   }
+  // Liens de l'onglet DATA › Ressources liés à ces dossiers (migration 0044) : les liaisons disparaissent avec eux.
+  for (let i = 0; i < dossiers.length; i += 80) {
+    const p = dossiers.slice(i, i + 80);
+    instr.push({ sql: `DELETE FROM cm_lien_liaisons WHERE genre = 'dossier' AND cible_id IN (${p.map(() => '?').join(', ')})`, params: p });
+  }
   instr.push({ sql: 'DELETE FROM cm_drive_fichiers WHERE corbeille = ?', params: [lot] }, { sql: 'DELETE FROM cm_drive_dossiers WHERE corbeille = ?', params: [lot] });
   await base.lot(instr);
   for (const f of fichiers) await effacerFichierCmSiOrphelin(base, stockage, f, t);
@@ -280,6 +285,27 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const d = map.get(id);
     if (!d || !dossierAccessible(dc, map, d)) throw echec(404, 'dossier-introuvable', 'Dossier introuvable.');
     return d;
+  }
+
+  /**
+   * Dossiers que l'acteur peut voir parmi `ids` (liens de DATA › Ressources, migration 0044) : `Map(id → { id, nom, portee,
+   * chemin, modifier })`. Un dossier supprimé, à la corbeille, restreint (pour qui ne gère pas) ou d'une portée fermée
+   * au compte est absent ; `modifier` : peut y ranger (envoyer ou gérer).
+   */
+  async function dossiersAccessibles(acteur, ids) {
+    const sortie = new Map();
+    const lignes = await lignesParIds(base, 'SELECT id, portee FROM cm_drive_dossiers WHERE supprime_le IS NULL AND id', ids);
+    for (const portee of new Set(lignes.map(l => l.portee))) {
+      const dc = await ctxDrive(acteur, portee).catch(() => null);
+      if (!dc?.drive.voir) continue;
+      const map = await arbre(portee);
+      for (const l of lignes) {
+        const d = l.portee === portee ? map.get(l.id) : null;
+        if (!d || !dossierAccessible(dc, map, d)) continue;
+        sortie.set(d.id, { id: d.id, nom: nomAffiche(d), portee, chemin: chaine(map, d).map(nomAffiche), modifier: dc.drive.envoyer });
+      }
+    }
+    return sortie;
   }
 
   /** Descendants d'un dossier (lui compris), dans l'arbre donné. */
@@ -1532,6 +1558,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     },
     quota,
     peutLireFichierCm,
+    dossiersAccessibles,
     utiliseHorsDrive: id => utiliseHorsDrive(base, id),
     CLES_DOSSIERS,
   };
