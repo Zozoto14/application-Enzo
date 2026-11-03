@@ -202,7 +202,16 @@ describe('écran Planning', () => {
     ]);
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('vues mois et semaine, filtre par type', async () => {
+    // La grille du mois suit la date du jour : on fige seulement la date (octobre 2026, mois des occurrences de test).
+    jest.useFakeTimers({
+      now: new Date('2026-10-15T12:00:00Z'),
+      doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'hrtime'],
+    });
     const { appels } = await monter(COACH, 'module:planning');
     await screen.findByTestId('esport-planning-mois');
     await fireEvent.press(screen.getByTestId('esport-mois-2026-10-20'));
