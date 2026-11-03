@@ -23,7 +23,9 @@ export const ENTETES_SECURITE = {
 export const ENTETES_CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept-Language, X-Nom-Fichier, X-Sha256, Range, X-Methode, X-HTTP-Method-Override',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept-Language, X-Nom-Fichier, X-Sha256, Range, X-Methode, X-HTTP-Method-Override, X-Version-Lue',
+  // Verrou optimiste (temps-reel/service.mjs) : version de l'objet après une écriture.
+  'Access-Control-Expose-Headers': 'X-Version-Objet',
   'Access-Control-Max-Age': '86400',
 };
 

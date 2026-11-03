@@ -196,6 +196,8 @@ export async function basePostgres({ connexion, schema, creerSchema = false, max
 
   return {
     dialecte: 'postgres',
+    // Schéma de travail (canal NOTIFY du temps réel : un par schéma).
+    schema: schema ?? null,
     async tous(sql, params) {
       return (await requete(pool, sql, params)).rows;
     },

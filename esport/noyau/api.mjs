@@ -69,10 +69,11 @@ import { traiterDevblogDiscord } from './devblog/discord.mjs';
 import { routesDeploiement } from './deploiement.mjs';
 import { servicesCentre } from './notifications/centre.mjs';
 import { routesNotifications } from './notifications/routes.mjs';
+import { servicesTempsReel } from './temps-reel/service.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications', 'temps-reel'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -161,6 +162,8 @@ export function creerApi({
   devblogSource = null,
   // Suivi des mises à jour (serveur Node seulement : esport/serveur/deploiement.mjs) ; absent : 404.
   deploiement,
+  // Temps réel (docs/esport/temps-reel.md) : { mode: sse|attente|sondage, maxTotal… } (TEMPS_REEL dans esport.env).
+  tempsReel = {},
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -237,7 +240,23 @@ export function creerApi({
     return { compte: session.compte, superAdmin: session.superAdmin, langue: langueDepuisEntete(requete.headers.get('Accept-Language')) ?? LANGUE_DEFAUT };
   }
 
-  async function router(requete) {
+  // Temps réel : diffusion des écritures, verrou optimiste, présence. Contrôle d'accès = la route GET de l'objet,
+  // rejouée au nom du destinataire (`sonder`) : aucune règle recopiée, aucune fuite possible entre rôles.
+  async function sonder(acteur, chemin) {
+    try {
+      const r = await router(new Request(`https://sonde.esport.interne${chemin}`, { method: 'GET' }), acteur);
+      if (r instanceof Response) {
+        r.body?.cancel().catch(() => undefined);
+        return r.ok ? {} : null;
+      }
+      return r ?? {};
+    } catch {
+      return null;
+    }
+  }
+  const tr = servicesTempsReel({ base, maintenant, socle: s, sonder, config: tempsReel });
+
+  async function router(requete, acteurImpose) {
     const url = new URL(requete.url);
     const chemin = url.pathname.replace(/^\/api\/esport(?=\/|$)/, '').replace(/\/+$/, '') || '/';
     const m = requete.method;
@@ -250,6 +269,8 @@ export function creerApi({
         version: VERSION_ESPORT,
         // Fonctions annoncées : « surcharge-methode » = POST + X-Methode accepté (voir entetes.mjs).
         fonctions: FONCTIONS,
+        // Temps réel : mode le plus haut permis (TEMPS_REEL), l'app ne monte jamais au-dessus.
+        tempsReel: tr.mode,
         stockage: Boolean(stockage),
         session: Boolean(cleSession),
         bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot),
@@ -283,8 +304,10 @@ export function creerApi({
       return { session: jeton, expire: new Date(expire).toISOString(), fonctions: FONCTIONS, ...(await s.moi(qui)) };
     }
 
-    // ---- Tout le reste : session Esport obligatoire.
-    const acteur = await acteurDeSession(requete);
+    // ---- Tout le reste : session Esport obligatoire (`acteurImpose` : contrôle d'accès du temps réel).
+    const acteur = acteurImpose ?? (await acteurDeSession(requete));
+    const tempsReel = await tr.routes({ acteur, chemin, methode: m, url, ip, lireCorps: () => lireCorps(requete), limite });
+    if (tempsReel !== undefined) return tempsReel;
 
     if (chemin === '/moi') {
       if (m === 'GET') return s.moi(acteur);
@@ -522,7 +545,7 @@ export function creerApi({
    * la distribution des événements finir après la réponse ; sans lui, elle
    * est attendue avant de répondre (tests, serveur local).
    */
-  return async function traiter(requete, { attendre } = {}) {
+  async function traiter(requete, { attendre } = {}) {
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
     // POST + `X-Methode: PATCH|PUT|DELETE` (frontal mutualisé qui bloque ces méthodes) : la requête
     // devient l'originale, puis suit exactement le même chemin (routeur, contrôles, bus d'événements).
@@ -531,14 +554,39 @@ export function creerApi({
     if (surcharge) requete = new Request(requete, { method: surcharge });
     let reponse;
     let chemin = '';
+    const ecriture = !['GET', 'HEAD', 'OPTIONS'].includes(requete.method);
+    // Temps réel : auteur de l'écriture (session valide) et verrou optimiste de l'objet modifié.
+    let auteur;
+    let verrou;
     try {
       chemin = new URL(requete.url).pathname.replace(/^\/api\/esport(?=\/|$)/, '').replace(/\/+$/, '');
+      if (ecriture && cleSession && chemin !== '/discord/interactions') {
+        const session = await lireSession(cleSession, jetonPorteur(requete), maintenant()).catch(() => undefined);
+        if (session) auteur = { compte: session.compte, superAdmin: session.superAdmin, langue: LANGUE_DEFAUT };
+        // « Le premier qui enregistre a la main » : X-Version-Lue périmée → 409, rien n'est écrit.
+        if (auteur) verrou = await tr.avantEcriture(requete.method, chemin, requete, auteur);
+      }
       // Discord appelle cette adresse (signature Ed25519, pas de session) : le bot répond lui-même.
       const resultat = chemin === '/discord/interactions' && requete.method === 'POST' ? await bot.traiter(requete, { attendre }) : await router(requete);
       // Fichiers (iCal, CSV) : réponse déjà faite par la route.
       reponse = resultat instanceof Response ? resultat : reponseJson(resultat);
     } catch (e) {
       reponse = reponseErreur(e);
+    }
+    if (verrou) {
+      if (reponse.ok) {
+        try {
+          reponse.headers.set('X-Version-Objet', String(verrou.version));
+        } catch {
+          // En-têtes figés (réponse d'une route) : la version arrive aussi par le canal temps réel.
+        }
+      } else await verrou.annuler().catch(e => console.error('[esport] temps réel : version', e));
+    }
+    // Diffusion aux autres navigateurs (après la réponse ; < 1 s de bout en bout).
+    if (ecriture && auteur && reponse.ok) {
+      const diffusion = tr.apresEcriture(requete.method, chemin, auteur, verrou).catch(e => console.error('[esport] temps réel : diffusion', e));
+      if (attendre) attendre(diffusion);
+      else await diffusion;
     }
     // Lots de statistiques d'usage : rien à distribuer (pas d'événement du bus), aucune requête de plus (hébergement mutualisé).
     if (!['GET', 'HEAD', 'OPTIONS'].includes(requete.method) && chemin !== '/usage') {
@@ -554,5 +602,8 @@ export function creerApi({
       else await travail;
     }
     return reponse;
-  };
+  }
+  // Serveur Node : fermeture propre (connexions tenues, écoute PostgreSQL) ; tests : mesures du canal.
+  traiter.tempsReel = tr;
+  return traiter;
 }

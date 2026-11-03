@@ -30,6 +30,7 @@ import { TYPES_SPONSORS, abonneSponsors } from './sponsors/bus.mjs';
 import { TYPES_RESEAUX, abonneReseaux } from './reseaux/bus.mjs';
 import { TYPES_BADGES, TYPES_TROMBI, abonneTrombi } from './trombi/bus.mjs';
 import { abonneCentre } from './notifications/centre.mjs';
+import { abonneTempsReel } from './temps-reel/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -260,7 +261,8 @@ export async function abonneNotifications(base, ev) {
 
 // Centre de notifications (migration 0038) : TOUJOURS le dernier (il relie le fil aux notifications personnelles
 // que les abonnés précédents viennent d'écrire pour le même événement, et les annonce en direct).
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi, abonneCentre];
+// Le temps réel vient juste après : il annonce aussi les notifications que le centre vient d'écrire.
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi, abonneCentre, abonneTempsReel];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

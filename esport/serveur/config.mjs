@@ -33,6 +33,7 @@ import { chargerEnv, fichierEnvParDefaut } from './commun.mjs';
 import { configSmtp } from './courriel-smtp.mjs';
 import { configMedias } from '../noyau/medias/service.mjs';
 import { configDrive } from '../noyau/cm/drive/regles.mjs';
+import { lireModeTempsReel } from '../noyau/temps-reel/service.mjs';
 import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
 import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mjs';
 import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
@@ -98,7 +99,16 @@ export function chargerConfigEsport(env = process.env) {
     ia: connecteurIa.configIa(env),
     // IA locale (llama.cpp) : réglages et état de l'installation (~/.appdashboard/ia-locale).
     iaLocale,
+    // Temps réel (docs/esport/temps-reel.md) : TEMPS_REEL=sse (défaut) | attente | sondage (repli sûr : aucune
+    // connexion tenue) ; TEMPS_REEL_MAX : connexions tenues par processus (30 par défaut).
+    tempsReel: configTempsReel(env),
   };
+}
+
+/** Réglages du temps réel lus dans l'environnement. */
+export function configTempsReel(env = process.env) {
+  const max = Number(env.TEMPS_REEL_MAX);
+  return { mode: lireModeTempsReel(env.TEMPS_REEL), ...(Number.isInteger(max) && max >= 0 && max <= 500 ? { maxTotal: max } : {}) };
 }
 
 /** Problèmes de configuration bloquants (messages en français simple). */

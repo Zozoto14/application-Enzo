@@ -158,6 +158,8 @@
   "Side inconnu (attaque, defense, les_deux).": "Unknown side (attaque, defense, les_deux).",
   "Taux de victoire : un entier de 0 à 100.": "Win rate: an integer from 0 to 100.",
   "Élément introuvable.": "Item not found.",
+  "En-tête X-Version-Lue invalide (entier attendu).": "Invalid X-Version-Lue header (integer expected).",
+  "Quelqu’un a enregistré cet élément entre-temps : vos modifications n’ont pas été enregistrées (rien n’a été écrasé).": "Someone saved this item in the meantime: your changes were not saved (nothing was overwritten).",
   "VOD introuvable.": "VOD not found.",
   "Seules les vidéos YouTube s’ouvrent en review : cette VOD n’est pas une adresse YouTube.": "Only YouTube videos open in review: this VOD isn’t a YouTube address.",
   "Pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).": "Nickname: 2 to 24 characters (letters, digits, space, _ . -).",

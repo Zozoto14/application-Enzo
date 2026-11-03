@@ -73,8 +73,21 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     devblogSource: devblogSource ?? sourceGitDepot(),
     // Suivi des mises à jour (Fondateur) : versions, journal de deployer.sh, état GitHub (docs/mises-a-jour.md).
     deploiement: deploiement ?? creerServiceDeploiement(),
+    // Temps réel (docs/esport/temps-reel.md) : TEMPS_REEL=sse|attente|sondage.
+    ...(config.tempsReel ? { tempsReel: config.tempsReel } : {}),
   });
-  return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
+  if (config.tempsReel) console.log(`[esport] temps réel : mode ${api.tempsReel.mode}`);
+  return {
+    traiter: api,
+    base: b,
+    stockage: st,
+    config,
+    problemes,
+    fermer: async () => {
+      await api.tempsReel?.fermer();
+      if (!base) await b.fermer();
+    },
+  };
 }
 
 /** Démarre le serveur HTTP. Rend `{ url, serveur, esport, fermer }`. */
