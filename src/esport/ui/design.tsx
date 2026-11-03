@@ -48,6 +48,17 @@ export const TYPO = {
 export const LARGEUR_PC = 900;
 /** Largeur maximale du contenu d'une page. */
 export const LARGEUR_CONTENU = 1240;
+/** Largeur de fenêtre sous laquelle la densité passe en « compacte » (iPad paysage, portable 1280). */
+export const LARGEUR_COMPACTE = 1280;
+
+/** Valeur fluide : `valeur` bornée entre `min` et `max` (équivalent d'un clamp() CSS, sur la largeur de fenêtre). */
+export const fluide = (min: number, max: number, valeur: number): number => Math.round(Math.max(min, Math.min(max, valeur)));
+
+/** Densité de l'affichage selon la largeur de la fenêtre : marges, titres et cartes se resserrent sur les écrans moyens. */
+export function useDensite(): { largeur: number; compacte: boolean; marge: number; titrePage: number } {
+  const { width } = useWindowDimensions();
+  return { largeur: width, compacte: width < LARGEUR_COMPACTE, marge: fluide(ESP.m, ESP.xxl, width * 0.024), titrePage: fluide(22, TYPO.titrePage, width / 40) };
+}
 
 export const rayonCarte = (theme: ThemeHub): number => Math.min(theme.rayonGrand, 18);
 export const rayonControle = (theme: ThemeHub): number => (theme.id === 'sauge' ? 999 : Math.min(theme.rayonMoyen, 12));
@@ -153,13 +164,15 @@ export function Carte({
   dense?: boolean;
   desactive?: boolean;
 }) {
+  const { compacte } = useDensite();
+  const serre = dense || compacte;
   const base: ViewStyle = {
     backgroundColor: theme.surface,
     borderWidth: 1,
     borderColor: theme.ligne,
     borderRadius: rayonCarte(theme),
-    padding: dense ? ESP.m : ESP.l,
-    gap: dense ? ESP.s : ESP.m,
+    padding: serre ? ESP.m : ESP.l,
+    gap: serre ? ESP.s : ESP.m,
     minWidth: 0,
     overflow: 'hidden',
     ...ombre(theme),
@@ -240,12 +253,13 @@ export function EnTetePage({
   testID?: string;
 }) {
   const secondaires = (actions ?? []).filter((a): a is ActionSecondaire => Boolean(a));
+  const { titrePage } = useDensite();
   return (
     <View style={{ gap: ESP.xs }} testID={testID}>
       {avant}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, flexWrap: 'wrap', justifyContent: 'space-between' }}>
         <View style={{ gap: ESP.xxs, flexShrink: 1, minWidth: 0, flexBasis: large ? undefined : '100%' }}>
-          <Text accessibilityRole="header" style={titre(theme, large ? TYPO.titrePage : TYPO.titrePageMobile)}>
+          <Text accessibilityRole="header" style={titre(theme, large ? titrePage : TYPO.titrePageMobile)}>
             {t}
           </Text>
           {sous ? <Text style={attenue(theme, TYPO.sousTitre)}>{sous}</Text> : null}
@@ -474,6 +488,7 @@ export function ChiffreCle({
   large?: boolean;
 }) {
   const c = couleurTon(theme, ton === 'neutre' ? 'accent' : ton);
+  const { compacte } = useDensite();
   return (
     <Carte
       theme={theme}
@@ -481,7 +496,7 @@ export function ChiffreCle({
       onPress={onPress}
       libelle={onPress ? `${libelle} : ${valeur}` : undefined}
       dense={!large}
-      style={{ flexGrow: 1, flexBasis: large ? 200 : 150, gap: ESP.xs }}>
+      style={{ flexGrow: 1, flexBasis: large ? 200 : 150, maxWidth: 360, gap: ESP.xs }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xs }}>
         {glyphe ? (
           <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(c, 0.16) }}>
@@ -492,7 +507,7 @@ export function ChiffreCle({
           {libelle}
         </Text>
       </View>
-      <Text testID={testIDValeur} style={{ ...chiffre(theme, large ? TYPO.chiffre : TYPO.chiffreMobile), color: ton === 'neutre' || ton === 'accent' ? theme.texte : couleurLisible(c, theme) }}>{valeur}</Text>
+      <Text testID={testIDValeur} style={{ ...chiffre(theme, large ? (compacte ? 26 : TYPO.chiffre) : TYPO.chiffreMobile), color: ton === 'neutre' || ton === 'accent' ? theme.texte : couleurLisible(c, theme) }}>{valeur}</Text>
       {detail ? <Text style={attenue(theme)}>{detail}</Text> : null}
     </Carte>
   );
@@ -553,10 +568,15 @@ export function SqueletteCartes({ theme, n = 3, large = true }: { theme: ThemeHu
 // ------------------------------------------------------------------ Grille
 
 /** Grille de cartes qui passe à la ligne : `min` = largeur minimale d'une carte. */
-export function Grille({ children, min = 300, gap = ESP.m, testID, style }: { children: React.ReactNode; min?: number; gap?: number; testID?: string; style?: StyleProp<ViewStyle> }) {
+/**
+ * Grille fluide : autant de colonnes que la place le permet (largeur de colonne ≥ `min`), les cartes se partagent
+ * la ligne sans dépasser `max` (par défaut 1,6 × `min`) : deux cartes seules ne s'étirent plus sur toute la page.
+ */
+export function Grille({ children, min = 300, max, etirer = true, gap = ESP.m, testID, style }: { children: React.ReactNode; min?: number; max?: number; etirer?: boolean; gap?: number; testID?: string; style?: StyleProp<ViewStyle> }) {
+  const plafond = max ?? Math.round(min * 1.6);
   return (
     <View testID={testID} style={[{ flexDirection: 'row', flexWrap: 'wrap', gap, alignItems: 'stretch' }, style]}>
-      {React.Children.map(children, c => (c ? <View style={{ flexGrow: 1, flexBasis: min, minWidth: 0, maxWidth: '100%' }}>{c}</View> : null))}
+      {React.Children.map(children, c => (c ? <View style={{ flexGrow: etirer ? 1 : 0, flexShrink: 1, flexBasis: min, minWidth: 0, maxWidth: plafond }}>{c}</View> : null))}
     </View>
   );
 }

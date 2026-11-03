@@ -16,7 +16,7 @@ import type { ClientEsport } from '../../client';
 import { apiTrombi, filtrerCartes, postesAffiches, type CarteTrombi, type FiltresTrombi, type Trombinoscope as Donnees } from '../../trombi/api';
 import { trTb, trnTb, type CleTb } from '../../i18n/trombi';
 import { Choix, Retours, useAgir } from '../commun';
-import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_CONTENU, Pliable, SqueletteCartes, Volet, attenue, couleurTeam, texte, type EtatPresse } from '../design';
+import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_CONTENU, Pliable, SqueletteCartes, Volet, attenue, couleurTeam, texte, useDensite, type EtatPresse } from '../design';
 import { FicheTrombi } from './FicheTrombi';
 import { GestionBadges } from './GestionBadges';
 import { PastilleReseau, PhotoJoueur, PucesBadges } from './commun';
@@ -27,6 +27,7 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
   const api = useMemo(() => apiTrombi(client), [client]);
   const [donnees, setDonnees] = useState<Donnees | undefined>();
   const [filtres, setFiltres] = useState<FiltresTrombi>(FILTRES_VIDES);
+  const { marge } = useDensite();
   const [ouvert, setOuvert] = useState<{ compte: string; edition: boolean } | undefined>();
   const [gestion, setGestion] = useState(false);
   const [selection, setSelection] = useState<Set<string> | undefined>();
@@ -60,7 +61,7 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
 
   return (
     <ScrollView
-      contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}
+      contentContainerStyle={{ paddingHorizontal: large ? marge : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * marge, width: '100%', alignSelf: 'center' }}
       keyboardShouldPersistTaps="handled"
       testID="esport-trombi">
       <EnTetePage
@@ -157,7 +158,7 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
         </Carte>
       ) : null}
       {visibles.length ? (
-        <Grille min={large ? 200 : 150} gap={large ? ESP.m : ESP.s} testID="esport-trombi-grille">
+        <Grille min={large ? 200 : 150} etirer={!large} gap={large ? ESP.m : ESP.s} testID="esport-trombi-grille">
           {visibles.map(c => (
             <CarteJoueur
               key={c.compte}

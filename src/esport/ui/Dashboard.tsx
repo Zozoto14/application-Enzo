@@ -19,7 +19,7 @@ import { phraseJournal, texteAlerte } from '../libelles';
 import { nomJour, typeEvenement } from '../planning/libelles';
 import { PageEsport } from './CadreEsport';
 import { PastilleRole, Retours, useAgir } from './commun';
-import { AvatarTeam, Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte, type EtatPresse } from './design';
+import { AvatarTeam, Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte, useDensite, type EtatPresse } from './design';
 import { tr, trn } from '../i18n';
 import { trDv } from '../i18n/devblog';
 import { nomRole } from '../client';
@@ -69,6 +69,7 @@ export function Dashboard({
   /** Devblog (historique des mises à jour) : bouton « Nouveautés » discret, dans l'en-tête. */
   onNouveautes?(): void;
 }) {
+  const { compacte } = useDensite();
   const [tableau, setTableau] = useState<Tableau | undefined>();
   const { erreur, agir } = useAgir();
   const charger = useCallback(async () => setTableau(await client.tableau()), [client]);
@@ -172,7 +173,7 @@ export function Dashboard({
           <View style={{ gap: ESP.m }}>
             <Text accessibilityRole="header" style={{ ...texte(theme, 20), fontWeight: '700', ...police(theme.policeTitre) }}>
               {tr('dashboard.vos_teams')}</Text>
-            <Grille min={large ? 340 : 280} gap={ESP.m} testID="esport-dashboard-teams">
+            <Grille min={large ? (compacte ? 290 : 340) : 280} max={480} gap={ESP.m} testID="esport-dashboard-teams">
               {tableau.teams.map(c => (
                 <CarteDashboard key={c.team.id} theme={theme} carte={c} onOuvrir={() => onOuvrir(c.team.id)} />
               ))}

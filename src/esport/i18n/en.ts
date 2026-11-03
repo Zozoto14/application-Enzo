@@ -130,6 +130,8 @@ export const en: Record<Cle, string> = {
   'assistant.creer_la_team': 'Create the team',
   'cadreEsport.navigation_de_l_esport': 'Esport navigation',
   'cadreEsport.connecte': 'Signed in: {pseudo}',
+  'cadreEsport.reduire_barre': 'Collapse the sidebar (Ctrl+B)',
+  'cadreEsport.etendre_barre': 'Expand the sidebar (Ctrl+B)',
   'champNote.apercu': 'Preview',
   'champNote.mise_en_forme': 'Formatting: {libelle}',
   'champNote.masquer_l_apercu': 'Hide the preview',

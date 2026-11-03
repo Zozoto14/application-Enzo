@@ -30,7 +30,7 @@ import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
 import { AccueilCompetition } from './AccueilCompetition';
 import { MonSuivi } from './MonSuivi';
-import { CadreEsport, EntreeLaterale, type OngletEsport } from './CadreEsport';
+import { CadreEsport, EntreeLaterale, SiBarreEtendue, type OngletEsport } from './CadreEsport';
 import { Journal } from './Journal';
 import { StatsTeam } from './StatsTeam';
 import { MembresRoles } from './MembresRoles';
@@ -298,14 +298,20 @@ export function PageTeam({
     <View style={{ gap: ESP.xs }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, paddingHorizontal: ESP.xs, paddingBottom: ESP.xs }}>
         <AvatarTeam theme={theme} team={detail.team} taille={40} />
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={{ ...styleTexte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
-            {detail.team.nom}
-          </Text>
-          {detail.moi.role ? <PastilleRole theme={theme} nom={nomRole(detail.moi.role.nom)} couleur={detail.moi.role.couleur} /> : <Text style={styleAttenue(theme, 12)}>{tr('pageTeam.super_admin')}</Text>}
-        </View>
+        <SiBarreEtendue>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text style={{ ...styleTexte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
+              {detail.team.nom}
+            </Text>
+            {detail.moi.role ? <PastilleRole theme={theme} nom={nomRole(detail.moi.role.nom)} couleur={detail.moi.role.couleur} /> : <Text style={styleAttenue(theme, 12)}>{tr('pageTeam.super_admin')}</Text>}
+          </View>
+        </SiBarreEtendue>
       </View>
-      {selecteur ? <View style={{ paddingHorizontal: ESP.xxs, paddingBottom: ESP.xs }}>{selecteur}</View> : null}
+      {selecteur ? (
+        <SiBarreEtendue>
+          <View style={{ paddingHorizontal: ESP.xxs, paddingBottom: ESP.xs }}>{selecteur}</View>
+        </SiBarreEtendue>
+      ) : null}
       <View testID="esport-barre" accessibilityRole="tablist" accessibilityLabel={tr('pageTeam.sections_de', { nom: detail.team.nom })} style={{ gap: ESP.xxs }}>
         {sections.map(g => (
           <EntreeLaterale

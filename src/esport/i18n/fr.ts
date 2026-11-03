@@ -154,6 +154,8 @@ export const fr = {
   // cadreEsport
   'cadreEsport.navigation_de_l_esport': 'Navigation de l’Esport',
   'cadreEsport.connecte': 'Connecté : {pseudo}',
+  'cadreEsport.reduire_barre': 'Réduire la barre latérale (Ctrl+B)',
+  'cadreEsport.etendre_barre': 'Étendre la barre latérale (Ctrl+B)',
 
   // champNote
   'champNote.apercu': 'Aperçu',
