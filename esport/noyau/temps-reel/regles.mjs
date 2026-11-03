@@ -52,12 +52,14 @@ export const LECTURE_PERSONNELLE = Object.freeze({
 export const SONDES_SUJETS = Object.freeze({
   'cm:drive': { chemin: '/cm/drive/portees' },
   'cm:reseaux': { chemin: '/cm/reseaux' },
+  // Réunions de l'équipe CM : équipe CM (voir) ou invité à une réunion à venir.
+  'cm:reunions': { chemin: '/cm/reunions/moi', ok: r => r?.droits?.voir === true || r?.invite === true },
   sponsors: { chemin: '/sponsors/moi', ok: r => r?.voir === true },
   trombi: { chemin: '/trombi' },
 });
 
 /** Sujets connus de l'app (forme), pour refuser tout le reste. */
-export const MOTIF_SUJET = /^(?:team:[0-9a-f-]{36}(?::[a-z_]{2,30})?|cm|cm:drive|cm:reseaux|sponsors|trombi|club|compte:[A-Za-z0-9_-]{1,64})$/;
+export const MOTIF_SUJET = /^(?:team:[0-9a-f-]{36}(?::[a-z_]{2,30})?|cm|cm:drive|cm:reseaux|cm:reunions|sponsors|trombi|club|compte:[A-Za-z0-9_-]{1,64})$/;
 
 const ID = '([^/]+)';
 const dec = s => {
@@ -87,7 +89,7 @@ const IGNORES = [
 ];
 
 /** Sous-chemins d'une collection qui ne sont pas des objets (`/teams/:t/planning/reglages`…). */
-const RESERVES = new Set(['accueil', 'reglages', 'export.ics', 'export.csv', 'ical', 'types', 'miens', 'envois', 'vu', 'apercu', 'categories', 'corbeille', 'supprimer', 'formulaire', 'adversaires', 'matchs', 'moi', 'boite', 'reglages-transcription', 'ordre', 'images', 'donnees', 'fichiers', 'import', 'etat', 'a-valider', 'calendrier', 'recherche', 'stats', 'historique', 'a-marquer', 'joueurs', 'carte', 'multi', 'teams']);
+const RESERVES = new Set(['accueil', 'reglages', 'export.ics', 'export.csv', 'ical', 'types', 'miens', 'envois', 'vu', 'apercu', 'categories', 'corbeille', 'supprimer', 'formulaire', 'adversaires', 'matchs', 'moi', 'boite', 'reglages-transcription', 'ordre', 'images', 'donnees', 'fichiers', 'import', 'etat', 'a-valider', 'calendrier', 'recherche', 'stats', 'historique', 'a-marquer', 'joueurs', 'carte', 'multi', 'teams', 'creneaux', 'equipe', 'comptes', 'statut', 'dispos', 'rdv', 'export.ics', 'taches']);
 
 /**
  * Objet d'une route de team : `[module, prefixe de clé, sous-chemin de l'objet]` (objet = premier segment
@@ -115,6 +117,7 @@ const SECTIONS_DROITS = new Set(['modules', 'roles', 'membres', 'invitations']);
 
 /** Objets de la section CM et des rubriques du club : `[motif, sujet, prefixe de clé, sonde ?]`. */
 const OBJETS_CLUB = [
+  [/^\/cm\/reunions\/([^/]+)/, 'cm:reunions', 'cm-reunion', true],
   [/^\/cm\/cartes\/([^/]+)/, 'cm', 'cm-carte', true],
   [/^\/cm\/tableaux\/([^/]+)/, 'cm', 'cm-tableau', false],
   [/^\/cm\/listes\/([^/]+)/, 'cm', 'cm-liste', false],
@@ -130,6 +133,7 @@ const OBJETS_CLUB = [
 function sujetClub(chemin) {
   if (chemin.startsWith('/cm/drive')) return { sujet: 'cm:drive' };
   if (chemin.startsWith('/cm/reseaux')) return { sujet: 'cm:reseaux' };
+  if (chemin.startsWith('/cm/reunions')) return { sujet: 'cm:reunions' };
   if (/^\/cm\/(?:roles|affectations|reglages)(?:\/|$)/.test(chemin)) return { sujet: 'cm', invalider: true };
   if (chemin === '/cm' || chemin.startsWith('/cm/')) return { sujet: 'cm' };
   if (chemin.startsWith('/sponsors/')) return { sujet: 'sponsors' };
@@ -236,6 +240,7 @@ export function sujetsEvenement(ev) {
   }
   if (type.startsWith('cm.drive_')) return [{ sujet: 'cm:drive' }];
   if (type.startsWith('cm.reseau')) return [{ sujet: 'cm:reseaux' }];
+  if (type.startsWith('cm.reunion')) return [{ sujet: 'cm:reunions' }];
   if (type.startsWith('cm.')) return [{ sujet: 'cm', invalider: droits }];
   if (type.startsWith('sponsors.')) return [{ sujet: 'sponsors' }];
   if (type.startsWith('trombi.')) return [{ sujet: 'trombi' }];

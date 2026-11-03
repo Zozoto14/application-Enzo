@@ -21,6 +21,7 @@ import { DetailReunion } from './DetailReunion';
 import { FormReunion } from './FormReunion';
 import { DisposCm } from './Dispos';
 import { RendezVous } from './RendezVous';
+import { useTempsReel } from '../../../tempsReel/hooks';
 
 type Section = 'agenda' | 'dispos' | 'rdv';
 const DEBUT_GRILLE = 8 * 60;
@@ -120,6 +121,8 @@ function Agenda({ theme, api, client, large, moi, fuseau, onExporter, onRelireMo
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Temps réel : réunion créée, déplacée, annulée ou réponse d'un invité → agenda relu (docs/esport/temps-reel.md).
+  useTempsReel(client, 'cm:reunions', () => void charger().catch(() => undefined));
   const parJour = useMemo(() => {
     const m = new Map<string, Array<{ r: Reunion; debut: ReturnType<typeof murale>; fin: ReturnType<typeof murale> }>>();
     for (const r of reunions ?? []) {

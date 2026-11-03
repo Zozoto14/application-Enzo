@@ -49,7 +49,8 @@ métier**. L'app relit ensuite par les routes habituelles, qui appliquent tous l
 
 Sujets : `team:<id>` (team, membres, rôles), `team:<id>:<module>` (planning, attendance, availability,
 goals_tasks, meeting_summaries, strat_editor, playbook, video_review, scouting, player_notes, resources, tournois,
-resultats, activity_log), `cm` (tableaux, cartes, visuels, clips, réglages), `cm:drive`, `cm:reseaux`, `sponsors`,
+resultats, activity_log), `cm` (tableaux, cartes, visuels, clips, réglages), `cm:drive`, `cm:reseaux`,
+`cm:reunions` (équipe CM ou invité), `sponsors`,
 `trombi`, `club` (rôles du club, comptes) et `compte` (ses propres notifications).
 
 **Contrôle d'accès, pour chaque destinataire et chaque message** (`esport/noyau/temps-reel/regles.mjs`) :
@@ -77,7 +78,7 @@ connectés) : la cloche se met à jour en direct.
 
 ## Plusieurs processus (Passenger)
 
-Le journal `temps_reel_flux` (migration 0039) est la mémoire commune. En **PostgreSQL**, chaque écriture fait
+Le journal `temps_reel_flux` (migration 0040) est la mémoire commune. En **PostgreSQL**, chaque écriture fait
 `pg_notify('esport_tr_<schéma>', message)` ; chaque processus Node qui a au moins un navigateur connecté tient
 **une** connexion `LISTEN` (ouverte à la première connexion, rendue à la dernière, rouverte avec attente
 croissante, puis rattrapage par le journal). Le cron (notifications, rappels) passe par la même base. En SQLite
@@ -109,8 +110,8 @@ Les strats gardent en plus leur `revision` (inchangée), les cartes CM leur `ver
 `useTempsReel(client, sujets, relire)` : tableaux, calendrier et file de validation du CM (`useEtatCm` : plus de
 relecture toutes les 12 s en direct, 60 s de secours sinon), fiche d'une carte CM (verrou, présence, bandeau),
 planning et présences, Drive, Visuels, Sponsors, Réseaux, trombinoscope et badges, tournois, résultats, strats et
-playbook (liste), objectifs et tâches, notifications et teams (accueil, page d'une team). Pastille « En direct » /
-« Reconnexion… » en bas à droite de l'Esport. Les autres écrans (review, scouting, ressources, suivi, réunions CM)
+playbook (liste), objectifs et tâches, agenda des réunions CM, cloche et compteur du centre de notifications, teams (accueil, page d'une team). Pastille « En direct » /
+« Reconnexion… » en bas à droite de l'Esport. Les autres écrans (review, scouting, ressources, suivi)
 reçoivent déjà les messages : un appel à `useTempsReel` suffit pour les brancher.
 
 ## Sobriété côté serveur

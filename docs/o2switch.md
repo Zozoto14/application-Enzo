@@ -897,7 +897,7 @@ Retirez `IA_FOURNISSEUR=local` et les lignes `IA_LOCALE_*` de `~/.appdashboard/e
 
 ## Partie K — Esport en temps réel (moins d'une seconde)
 
-Détails : [esport/temps-reel.md](esport/temps-reel.md). Le cron installe la migration 0039 ; `/sante` de l'Esport
+Détails : [esport/temps-reel.md](esport/temps-reel.md). Le cron installe la migration 0040 ; `/sante` de l'Esport
 annonce `"tempsReel":"sse"` et la fonction `temps-reel`. Rien d'obligatoire à faire.
 
 **Ce que ça change pour l'hébergement** : chaque navigateur ouvert sur l'Esport (page visible) garde **une**

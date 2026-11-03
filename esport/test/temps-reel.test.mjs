@@ -40,6 +40,9 @@ test('règles : sujets et objets des écritures ; envois, liens et exports jamai
   assert.equal(publicationsDe('POST', '/cm/drive/dossiers')[0].sujet, 'cm:drive');
   assert.equal(publicationsDe('PATCH', `/sponsors/prospects/${UUID}`)[0].sonde, `/sponsors/prospects/${UUID}`);
   assert.equal(objetDe(`/teams/${UUID}/planning/reglages`), null);
+  assert.equal(publicationsDe('PUT', `/cm/reunions/${UUID}/reponse`)[0].sonde, `/cm/reunions/${UUID}`);
+  assert.equal(publicationsDe('PUT', '/cm/reunions/statut')[0].sujet, 'cm:reunions');
+  assert.equal(publicationsDe('PUT', '/cm/reunions/statut')[0].cle, undefined);
   assert.equal(objetDe(`/teams/${UUID}/scouting/adversaires/${UUID}/joueurs/x`).exact, false);
   assert.equal(objetDe(`/teams/${UUID}/taches/${UUID}`).objetPublic, true);
   assert.equal(objetDe('/cm/cartes/..%2F..%2Fadmin'), null, 'identifiant hostile refusé');
