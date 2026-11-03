@@ -400,7 +400,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     const parId = new Map(etapesListe.map(e => [e.id, e]));
     const contacts = await base.tous('SELECT * FROM sp_contacts WHERE prospect_id = ? ORDER BY principal DESC, cree_le', [p.id]);
     const echanges = await base.tous('SELECT * FROM sp_echanges WHERE prospect_id = ? AND supprime_le IS NULL ORDER BY date DESC, cree_le DESC LIMIT ?', [p.id, MAX_ECHANGES_FICHE]);
-    const pieces = await piecesDe(true, p.id);
+    const pieces = await piecesDe(true, p.id, acteur);
     const resume = resumeProspect(p, parId, null, aujourdhui());
     const noms = await pseudosDe(base, [p.responsable_id, p.cree_par, ...echanges.map(e => e.auteur_id)].filter(Boolean));
     const teams = await nomsTeams(resume.teams);
@@ -657,13 +657,17 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
 
   // ---------------------------------------------------------------- Pièces jointes
 
-  async function piecesDe(estProspect, id) {
+  async function piecesDe(estProspect, id, acteur) {
     const pieces = await base.tous(`SELECT * FROM sp_pieces WHERE ${estProspect ? 'prospect_id' : 'partenaire_id'} = ? AND supprime_le IS NULL ORDER BY cree_le, id`, [id]);
     const fichiers = new Map((await lignesParIds(base, 'SELECT * FROM cm_fichiers WHERE id', pieces.map(p => p.fichier_id))).map(f => [f.id, f]));
-    return pieces.map(p => {
-      const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
-      return { id: p.id, genre: p.genre, categorie: p.categorie, nom: p.nom, url: p.genre === 'lien' ? p.url : null, contratId: p.contrat_id ?? null, fichier: f && !f.supprime_le ? { id: f.id, type: f.type_mime, taille: Number(f.taille) } : null, creeLe: p.cree_le };
-    });
+    return Promise.all(
+      pieces.map(async p => {
+        const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
+        // Pièce d'un Drive de team : sans accès à ce Drive, ni nom ni lien (migration 0049).
+        if (Number(p.drive_croise) === 1 && !(await (acteur && drive ? drive.peutLireFichierCmActeur(acteur, p.fichier_id) : false))) return { id: p.id, genre: p.genre, categorie: p.categorie, nom: '', url: null, contratId: p.contrat_id ?? null, fichier: null, driveInaccessible: true, creeLe: p.cree_le };
+        return { id: p.id, genre: p.genre, categorie: p.categorie, nom: p.nom, url: p.genre === 'lien' ? p.url : null, contratId: p.contrat_id ?? null, fichier: f && !f.supprime_le ? { id: f.id, type: f.type_mime, taille: Number(f.taille) } : null, ...(Number(p.drive_croise) === 1 ? { driveCroise: true } : {}), creeLe: p.cree_le };
+      }),
+    );
   }
 
   /** Contexte d'envoi d'un fichier (portée « sponsors », table cm_fichiers). */
@@ -696,13 +700,16 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
       const r = await medias.preparerRattachement(contexteEnvoi(acteur), corps?.envoi, 'cm', { entiteType: 'sp_piece', entiteId: id });
       lot.push(...r.instructions, { sql: "INSERT INTO sp_pieces (id, prospect_id, partenaire_id, contrat_id, genre, categorie, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, ?, ?, 'fichier', ?, ?, ?, ?, ?)", params: [id, cible.prospectId, cible.partenaireId, contratId, categorie, texteNettoye(corps?.nom, 140) || r.envoi.nom_original, r.fichierId, acteur.compte, iso(t)] });
     } else if (corps?.genre === 'drive') {
-      // Fichier du Drive du club (migration 0027 : logo, deck…) : aucun octet copié ; le Drive du club doit être visible.
+      // Fichier d'un Drive que l'acteur voit (migration 0027 : logo, deck… ; choix du Drive, migration 0049) : aucun octet
+      // copié. Hors Drive du club, la pièce est « croisée » : elle suit sa source (seuls ceux qui voient le fichier dans
+      // son Drive la lisent, même avec sponsors.voir).
       if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
-      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId, { portees: ['club'] });
-      lot.push({ sql: "INSERT INTO sp_pieces (id, prospect_id, partenaire_id, contrat_id, genre, categorie, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, ?, ?, 'fichier', ?, ?, ?, ?, ?)", params: [id, cible.prospectId, cible.partenaireId, contratId, categorie, texteNettoye(corps?.nom, 140) || f.nom, f.fichierId, acteur.compte, iso(t)] });
+      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId);
+      const croise = f.portee === 'club' ? 0 : 1;
+      lot.push({ sql: "INSERT INTO sp_pieces (id, prospect_id, partenaire_id, contrat_id, genre, categorie, nom, fichier_id, drive_croise, cree_par, cree_le) VALUES (?, ?, ?, ?, 'fichier', ?, ?, ?, ?, ?, ?)", params: [id, cible.prospectId, cible.partenaireId, contratId, categorie, texteNettoye(corps?.nom, 140) || f.nom, f.fichierId, croise, acteur.compte, iso(t)] });
     } else throw echec(400, 'genre', 'Pièce jointe : lien ou fichier.');
     await base.lot(lot);
-    return { pieces: await piecesDe(estProspect, cible.prospectId ?? cible.partenaireId) };
+    return { pieces: await piecesDe(estProspect, cible.prospectId ?? cible.partenaireId, acteur) };
   }
 
   async function pieceLigne(id) {
@@ -737,6 +744,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     await ctxVoir(acteur);
     const p = await pieceLigne(id);
     if (p.genre !== 'fichier' || !p.fichier_id) throw echec(400, 'piece-lien', 'Cette pièce jointe est un lien.');
+    if (Number(p.drive_croise) === 1 && !(drive && (await drive.peutLireFichierCmActeur(acteur, p.fichier_id)))) throw echec(403, 'drive-inaccessible', 'Fichier d’un Drive auquel vous n’avez pas accès.');
     const f = await base.premier('SELECT id FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [p.fichier_id]);
     if (!f) throw echec(404, 'fichier-introuvable', 'Fichier introuvable (supprimé ?).');
     return cheminSigne(cleSession, { fichierId: f.id, compte: acteur.compte, maintenant: maintenant(), duree: DUREE_LIEN_CM_MS, telecharger: corps?.telecharger === true, genre: 'cm' });
@@ -898,7 +906,7 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
       obligations: obligations.map(o => obligationPublique(o, av.get(o.id))),
       contacts: contacts.map(contactPublic),
       echanges: echanges.map(echangePublic),
-      pieces: await piecesDe(false, p.id),
+      pieces: await piecesDe(false, p.id, acteur),
       noms,
       teams: Object.fromEntries(teams),
       gerer: ctx.gerer,

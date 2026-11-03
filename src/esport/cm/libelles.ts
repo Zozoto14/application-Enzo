@@ -81,6 +81,8 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return tr('cm.jr.reseau_rappel', { titre });
     case 'cm.annonce_abandonnee':
       return tr('cm.jr.annonce_abandonnee', { reseau: texte(m.reseau), motif: traduireServeur(texte(m.motif)) });
+    case 'cm.annonce_piece_ecartee':
+      return tr('cm.jr.annonce_piece_ecartee', { reseau: texte(m.reseau), n: Number(m.pieces) || 1 });
     case 'cm.annonce_fil_impossible':
       return tr('cm.jr.annonce_fil', { reseau: texte(m.reseau), motif: traduireServeur(texte(m.motif)) });
     case 'cm.clip_propose':

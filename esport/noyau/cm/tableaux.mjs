@@ -578,7 +578,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const memb = parCarte(await joint('SELECT cm.carte_id, cm.compte_id FROM cm_carte_membres cm JOIN cm_cartes c ON c.id = cm.carte_id WHERE c.tableau_id = ? AND c.supprime_le IS NULL'), l => l.compte_id);
     const com = new Map((await joint('SELECT co.carte_id, COUNT(*) AS n FROM cm_commentaires co JOIN cm_cartes c ON c.id = co.carte_id WHERE c.tableau_id = ? AND co.supprime_le IS NULL GROUP BY co.carte_id')).map(l => [l.carte_id, Number(l.n)]));
     const chk = new Map((await joint('SELECT e.carte_id, COUNT(*) AS total, SUM(e.fait) AS faits FROM cm_checklist_elements e JOIN cm_cartes c ON c.id = e.carte_id WHERE c.tableau_id = ? GROUP BY e.carte_id')).map(l => [l.carte_id, { total: Number(l.total), faits: Number(l.faits ?? 0) }]));
-    const pieces = await joint('SELECT p.id, p.carte_id, p.genre, p.fichier_id FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id WHERE c.tableau_id = ? AND p.supprime_le IS NULL');
+    const pieces = await joint('SELECT p.id, p.carte_id, p.genre, p.fichier_id, p.drive_croise FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id WHERE c.tableau_id = ? AND p.supprime_le IS NULL');
     const nbPieces = new Map();
     for (const p of pieces) nbPieces.set(p.carte_id, (nbPieces.get(p.carte_id) ?? 0) + 1);
     // Couvertures images : lien signé (2 h) vers le fichier de la pièce choisie.
@@ -588,7 +588,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       const couv = jsonOu(c.couverture, null);
       if (couv?.pieceId) {
         const p = pieces.find(x => x.id === couv.pieceId && x.carte_id === c.id && x.genre === 'fichier');
-        if (p?.fichier_id) fichiersCouv.set(c.id, p.fichier_id);
+        // Couverture prise dans le Drive d'une autre team : seulement pour qui voit ce Drive (migration 0049).
+        if (p?.fichier_id && (Number(p.drive_croise) !== 1 || (await pieceVisiblePour(acteur, p)))) fichiersCouv.set(c.id, p.fichier_id);
       }
     }
     const fichiers = new Map((await lignesParIds(base, 'SELECT id, type_mime, supprime_le FROM cm_fichiers WHERE id', [...fichiersCouv.values()])).map(f => [f.id, f]));
@@ -1060,10 +1061,14 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
         vuAvant,
         nonLus: commentaires.filter(x => nouveauPour(x, acteur.compte, vuAvant)).length,
         suivie,
-        pieces: pieces.map(p => {
-          const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
-          return { id: p.id, genre: p.genre, nom: p.nom, url: p.genre === 'lien' ? p.url : null, trello: Number(p.trello) === 1, fichier: f && !f.supprime_le ? { id: f.id, type: f.type_mime, taille: Number(f.taille) } : null, creeLe: p.cree_le };
-        }),
+        pieces: await Promise.all(
+          pieces.map(async p => {
+            const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
+            // Pièce prise dans le Drive d'une autre team : sans accès à ce Drive, ni nom ni lien (migration 0049).
+            if (Number(p.drive_croise) === 1 && !(await pieceVisiblePour(acteur, p))) return { id: p.id, genre: p.genre, nom: '', url: null, trello: false, fichier: null, driveInaccessible: true, creeLe: p.cree_le };
+            return { id: p.id, genre: p.genre, nom: p.nom, url: p.genre === 'lien' ? p.url : null, trello: Number(p.trello) === 1, fichier: f && !f.supprime_le ? { id: f.id, type: f.type_mime, taille: Number(f.taille) } : null, ...(Number(p.drive_croise) === 1 ? { driveCroise: true } : {}), creeLe: p.cree_le };
+          }),
+        ),
         activite: journal.map(a => ({ id: a.id, acteur: a.acteur_id ?? null, action: a.action, meta: jsonOu(a.meta, {}), date: a.cree_le })),
         clips: clips.map(x => ({ id: x.id, titre: x.titre, statut: x.statut, genre: x.genre })),
         // Partenaires mentionnés (nom seulement : rien de la rubrique Sponsors).
@@ -1214,6 +1219,15 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const responsables = niveau === 'critique' ? [...(tb.team_id ? await comptesTeamAvec(base, tb.team_id, 'cm.gerer') : await comptesClubAvec(base, 'cm.gerer'))] : [];
     const concernes = [...new Set([...assignes, ...suiveurs, ...responsables])].filter(x => x && x !== acteur.compte && accessibles.has(x));
     return evenement('cm.carte_urgence', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, niveau, concernes }, maintenant: t });
+  }
+
+  /**
+   * Une pièce « croisée » (fichier d'un autre Drive, migration 0049) est-elle visible de cet acteur ? Elle suit sa
+   * source : il faut voir le fichier dans un Drive (dossier restreint compris). Les autres pièces : toujours.
+   */
+  async function pieceVisiblePour(acteur, p) {
+    if (Number(p.drive_croise) !== 1) return true;
+    return Boolean(drive && p.fichier_id && (await drive.peutLireFichierCmActeur(acteur, p.fichier_id)));
   }
 
   async function lireCouverture(carteId, v) {
@@ -1432,10 +1446,13 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       const r = await medias.preparerRattachement(contexteEnvoi(ctx, tb.portee), corps?.envoi, 'cm', { entiteType: 'cm_piece', entiteId: id });
       lot.push(...r.instructions, { sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?)", params: [id, c.id, r.envoi.nom_original, r.fichierId, acteur.compte, iso(t)] });
     } else if (corps?.genre === 'drive') {
-      // Fichier du Drive (migration 0027) : même portée que le tableau, ou Drive du club ; aucun octet copié.
+      // Fichier du Drive (migration 0027) : aucun octet copié. Tout Drive que l'acteur voit est admis (choix du Drive,
+      // migration 0049) ; hors Drive de la portée du tableau et Drive du club, la pièce est « croisée » : elle suit sa
+      // source (seuls ceux qui voient le fichier dans son Drive la lisent, voir pieceVisiblePour).
       if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
-      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId, { portees: [tb.portee, PORTEE_CLUB] });
-      lot.push({ sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?)", params: [id, c.id, f.nom, f.fichierId, acteur.compte, iso(t)] });
+      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId);
+      const croise = f.portee !== tb.portee && f.portee !== PORTEE_CLUB ? 1 : 0;
+      lot.push({ sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, drive_croise, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?, ?)", params: [id, c.id, f.nom, f.fichierId, croise, acteur.compte, iso(t)] });
     } else throw echec(400, 'genre', 'Pièce jointe : lien ou fichier.');
     if (Number(c.post)) lot.push(...(await invalidationSiBesoin(c, tb, await contenuDe(c, { pieces: [...(await piecesIds(c.id)), id] }), acteur.compte, t)));
     lot.push(activite(c.id, tb.id, acteur.compte, 'piece_ajoutee', { nom: corps?.genre === 'lien' ? texteNettoye(corps?.nom, 140) : null, ...(corps?.genre === 'drive' ? { drive: true } : {}) }, t), { sql: 'UPDATE cm_cartes SET version = version + 1, maj_le = ? WHERE id = ?', params: [iso(t), c.id] }, versionTableau(tb.id, t));
@@ -1504,6 +1521,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
   async function lienPiece(acteur, id, corps) {
     const { p } = await pieceVisible(acteur, id);
     if (p.genre !== 'fichier' || !p.fichier_id) throw echec(400, 'piece-lien', 'Cette pièce jointe est un lien.');
+    if (!(await pieceVisiblePour(acteur, p))) throw echec(403, 'drive-inaccessible', 'Fichier d’un Drive auquel vous n’avez pas accès.');
     const f = await base.premier('SELECT id FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [p.fichier_id]);
     if (!f) throw echec(404, 'fichier-introuvable', 'Fichier introuvable (supprimé ?).');
     return cheminSigne(cleSession, { fichierId: f.id, compte: acteur.compte, maintenant: maintenant(), duree: DUREE_LIEN_CM_MS, telecharger: corps?.telecharger === true, genre: 'cm' });

@@ -99,6 +99,10 @@ export interface Piece {
   url: string | null;
   contratId: string | null;
   fichier: { id: string; type: string; taille: number } | null;
+  /** Fichier d'un Drive de team : la pièce suit sa source (migration 0049). */
+  driveCroise?: boolean;
+  /** Fichier d'un Drive que l'acteur ne voit pas : ni nom ni lien. */
+  driveInaccessible?: boolean;
   creeLe: string;
 }
 export interface FicheProspect {

@@ -900,11 +900,11 @@ function Pieces({ theme, api, c, portee, modifier, faire, retour }: { theme: The
       {c.pieces.map(p => (
         <View key={p.id} style={[styles.ligne, { gap: ESP.xs, justifyContent: 'space-between' }]} testID={`esport-cm-piece-${p.id}`}>
           <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
-            <Text style={{ ...texte(theme), fontWeight: '600' }} numberOfLines={1}>
-              {p.nom}
+            <Text style={{ ...texte(theme), fontWeight: p.driveInaccessible ? '400' : '600' }} numberOfLines={p.driveInaccessible ? 2 : 1} testID={p.driveInaccessible ? `esport-cm-piece-${p.id}-inaccessible` : undefined}>
+              {p.driveInaccessible ? trDr('piece.drive_inaccessible') : p.nom}
             </Text>
             <Text style={attenue(theme, 12)} numberOfLines={1}>
-              {p.fichier ? `${p.fichier.type} · ${tailleMedia(p.fichier.taille, langueCourante())}` : p.trello ? trCm('fiche.piece_trello') : p.url}
+              {p.driveInaccessible ? '' : p.fichier ? `${p.fichier.type} · ${tailleMedia(p.fichier.taille, langueCourante())}${p.driveCroise ? ` · ${trDr('piece.drive_croise')}` : ''}` : p.trello ? trCm('fiche.piece_trello') : p.url}
             </Text>
           </View>
           {p.genre === 'fichier' && p.fichier ? (
@@ -961,7 +961,7 @@ function Pieces({ theme, api, c, portee, modifier, faire, retour }: { theme: The
             ) : (
               <Aide theme={theme}>{trCm('fiche.fichier_depuis_pc')}</Aide>
             )}
-            {/* Drive (migration 0027) : un fichier déjà rangé, du Drive de la portée ou du club (aucun octet copié). */}
+            {/* Drive (migration 0027) : un fichier déjà rangé, dans n'importe quel Drive visible (aucun octet copié ; hors portée et club, la pièce suit sa source, migration 0049). */}
             <BoutonHub theme={theme} titre={trDr('choix.depuis_drive')} onPress={() => setChoixDrive(true)} testID="esport-cm-piece-drive" />
           </View>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-cm-piece-envoi" />
@@ -969,7 +969,9 @@ function Pieces({ theme, api, c, portee, modifier, faire, retour }: { theme: The
             theme={theme}
             client={api.client}
             visible={choixDrive}
-            portees={[portee, PORTEE_CLUB]}
+            defaut={portee}
+            libres={[portee, PORTEE_CLUB]}
+            avisAutreDrive={trDr('choix.autre_drive_pieces')}
             onFermer={() => setChoixDrive(false)}
             onChoisir={f => {
               setChoixDrive(false);

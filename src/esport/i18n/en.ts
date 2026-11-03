@@ -2441,6 +2441,7 @@ export const en: Record<Cle, string> = {
   'cm.jr.reseau_export': '{qui} exported statistics (CSV)',
   'cm.jr.reseau_reglages': '{qui} changed the Social page settings',
   'cm.jr.reseau_rappel': 'Reminder sent: stats to record for “{titre}”',
+  'cm.jr.annonce_piece_ecartee': 'Discord announcement ({reseau}) sent without {n} attachment(s) from a Drive the publisher cannot access',
   'cm.jr.annonce_abandonnee': 'Discord announcement ({reseau}) dropped: {motif}',
   'cm.jr.annonce_fil': 'Discord announcement ({reseau}): {motif}',
   'cm.nt.assigne': '{membre} assigned you the card “{titre}”',

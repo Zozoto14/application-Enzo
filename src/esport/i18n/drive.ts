@@ -172,6 +172,19 @@ const fr = {
   'choix.aucun': 'Aucun fichier utilisable ici.',
   'choix.images': 'Images (PNG, JPEG, GIF, WebP) seulement.',
   'choix.remonter': 'Dossier parent',
+  'choix.drive': 'Drive où chercher',
+  'choix.drive_club': 'Drive du club (CM)',
+  'choix.drive_team': 'Drive de {team}',
+  'choix.recherche': 'Rechercher un fichier',
+  'choix.tous': 'Dans tous mes Drives',
+  'choix.resultats.one': '{n} résultat',
+  'choix.resultats.other': '{n} résultats',
+  'choix.aucun_resultat': 'Aucun fichier utilisable ne correspond.',
+  'choix.autre_drive_pieces': 'Fichier d’un autre Drive : la pièce ne sera visible que des personnes qui ont accès à ce Drive. Les autres verront « Fichier d’un Drive auquel vous n’avez pas accès ».',
+  'choix.autre_drive_sponsor': 'Fichier d’un Drive de team : la pièce ne sera visible que des personnes qui ont accès à ce Drive, même avec l’accès aux sponsors.',
+  'choix.drive_limite': 'Seuls les Drives compatibles sont proposés ici ; pour utiliser un fichier d’un autre Drive, copiez-le d’abord dans celui-ci.',
+  'piece.drive_inaccessible': 'Fichier d’un Drive auquel vous n’avez pas accès',
+  'piece.drive_croise': 'Fichier d’un autre Drive',
   'lien.introuvable': 'Élément introuvable (supprimé, ou vous n’y avez pas accès).',
   'jr.ajoute': '{qui} a ajouté « {nom} » au Drive',
   'jr.modifie': '{qui} a renommé ou déplacé « {nom} » dans le Drive',
@@ -391,6 +404,19 @@ const en: Record<keyof typeof fr, string> = {
   'choix.aucun': 'No usable file here.',
   'choix.images': 'Images (PNG, JPEG, GIF, WebP) only.',
   'choix.remonter': 'Parent folder',
+  'choix.drive': 'Drive to search in',
+  'choix.drive_club': 'Club Drive (CM)',
+  'choix.drive_team': '{team} Drive',
+  'choix.recherche': 'Search for a file',
+  'choix.tous': 'In all my Drives',
+  'choix.resultats.one': '{n} result',
+  'choix.resultats.other': '{n} results',
+  'choix.aucun_resultat': 'No usable file matches.',
+  'choix.autre_drive_pieces': 'File from another Drive: the attachment will only be visible to people who have access to that Drive. Others will see “File from a Drive you do not have access to”.',
+  'choix.autre_drive_sponsor': 'File from a team Drive: the attachment will only be visible to people who have access to that Drive, even with access to sponsors.',
+  'choix.drive_limite': 'Only compatible Drives are offered here; to use a file from another Drive, copy it into this one first.',
+  'piece.drive_inaccessible': 'File from a Drive you do not have access to',
+  'piece.drive_croise': 'File from another Drive',
   'lien.introuvable': 'Item not found (deleted, or you do not have access to it).',
   'jr.ajoute': '{qui} added “{nom}” to the Drive',
   'jr.modifie': '{qui} renamed or moved “{nom}” in the Drive',
@@ -451,6 +477,6 @@ export function trDr(cle: CleDr, vars?: Variables): string {
 }
 
 /** Pluriel simple (« .one » / « .other ») : n = 1 → one. */
-export function trnDr(cle: 'glisser.n' | 'deplace.n' | 'nouveautes.libelle' | 'recherche.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu' | 'tags.fichiers' | 'tags.supprimer_question', n: number, vars?: Variables): string {
+export function trnDr(cle: 'glisser.n' | 'deplace.n' | 'nouveautes.libelle' | 'recherche.resultats' | 'choix.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu' | 'tags.fichiers' | 'tags.supprimer_question', n: number, vars?: Variables): string {
   return trDr(`${cle}.${n === 1 ? 'one' : 'other'}` as CleDr, { n, ...vars });
 }

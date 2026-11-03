@@ -226,6 +226,10 @@ export interface Piece {
   url: string | null;
   trello: boolean;
   fichier: { id: string; type: string; taille: number } | null;
+  /** Fichier d'un autre Drive que celui du tableau ou du club : la pièce suit sa source (migration 0049). */
+  driveCroise?: boolean;
+  /** Fichier d'un Drive que l'acteur ne voit pas : ni nom ni lien. */
+  driveInaccessible?: boolean;
   creeLe: string;
 }
 export interface Commentaire {

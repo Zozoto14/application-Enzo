@@ -13,7 +13,7 @@ par le cron du serveur (≤ 5 min) ; **rechargez la page** ensuite (l'app lit vo
 Voir aussi : [cm.md](cm.md) (section CM, rôles), [visuels.md](visuels.md), [sponsors.md](sponsors.md).
 
 Migrations : `esport/migrations/0027_cm_drive.sql`, `0041_cm_drive_nouveautes_visuels_dossiers.sql` (nouveautés
-par compte, dossiers des visuels). Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
+par compte, dossiers des visuels), `0049_cm_drive_croise.sql` (pièces d'un autre Drive). Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
 et `src/esport/ui/cm/drive/` (app), textes `src/esport/i18n/drive.ts`.
 
 ## Qui fait quoi
@@ -170,11 +170,48 @@ utilisé comme image de l'éditeur reste lisible là-bas même après sa suppres
 
 ## Intégrations
 
-- **Carte CM** : pièces jointes › **Depuis le Drive** (Drive de la portée du tableau ou du club). La personne qui voit
-  la carte lit la pièce, même sans droit sur le Drive.
+Tous les sélecteurs **« Depuis le Drive »** (pièce d'une carte, image de l'éditeur, logo de la charte, pièce d'un
+sponsor, fond d'un tableau) ouvrent le même volet :
+
+- **Choix du Drive** en haut : « Drive du club (CM) » et un **Drive par team** (pastille de la couleur de la team), parmi
+  ceux que **vous voyez** (droit `cm.drive.voir` sur le club ou la team) ; le Drive ouvert au départ est celui de la
+  **portée courante** (celui du tableau, de l'éditeur…). Le fil d'Ariane commence par le nom du Drive.
+- **Recherche** : un champ cherche dans le Drive choisi ; **changer de Drive garde le texte cherché**. L'interrupteur
+  **« Dans tous mes Drives »** cherche dans tous les Drives visibles et **regroupe les résultats par Drive** (un Drive qui
+  répond en erreur ne masque pas les autres).
+- Seuls les dossiers visibles sont parcourus (dossier **restreint** : invisible sans `cm.drive.gerer`) ; le serveur
+  **revérifie** l'accès au fichier au moment de lier (404 sinon), jamais seulement le volet.
+
+### Qui voit un fichier joint depuis un autre Drive (règle de visibilité)
+
+La règle retenue est **« la pièce suit sa source »**, la plus sûre : joindre un fichier ne donne **jamais** accès au fichier.
+
+| Où | Drives admis | Qui lit la pièce |
+| --- | --- | --- |
+| **Carte CM** | tous ceux que l'acteur voit | Drive du tableau ou du club : toute personne qui voit la carte, même sans droit sur le Drive (comme avant). **Drive d'une autre team** (pièce « croisée », `cm_pieces.drive_croise = 1`) : seulement ceux qui voient le fichier dans son Drive (Drive visible, dossier non restreint pour eux) ; les autres voient **« Fichier d'un Drive auquel vous n'avez pas accès »**, sans nom ni lien (ni couverture, ni octets) |
+| **Sponsors** | tous ceux que l'acteur voit | Drive du club : `sponsors.voir` suffit (comme avant). **Drive d'une team** (`sp_pieces.drive_croise = 1`) : seulement ceux qui voient le fichier dans son Drive, `sponsors.voir` ne suffit pas |
+| **Éditeur de visuels**, **charte** | Drive de la portée de l'éditeur et du club | l'image garde la portée de son Drive (inchangé). Pour une image d'un **autre** Drive de team : la copier d'abord dans le Drive voulu (« Copier vers »), le volet l'indique |
+| **Fond d'un tableau** | Drive du tableau et du club | inchangé (celui qui voit le tableau voit le fond) |
+
+La visibilité est évaluée **à chaque lecture** : un rôle retiré, un dossier rendu restreint ou un fichier mis à la
+corbeille referme la pièce aussitôt ; un rôle ajouté la rouvre. Un lien signé forgé ne contourne rien : la lecture des
+octets (`peutLire`) ne compte plus les pièces croisées comme un droit de lecture. Les **octets sont gardés** tant
+qu'une pièce, même invisible, s'en sert. Le volet de choix affiche un avis avant de lier un fichier d'un autre Drive.
+**Annonces Discord** : une pièce d'un Drive croisé n'est jointe à l'annonce d'un post que si la personne qui a publié le
+post (`publie_par`) voit le fichier dans son Drive ; sinon l'annonce part **sans la pièce** et le journal note
+`cm.annonce_piece_ecartee` (« Annonce Discord envoyée sans N pièce(s) d'un Drive auquel la personne qui a publié n'a pas
+accès »). Les autres lectures de pièces (fiche, couverture, lien, lecture des octets, fiche sponsor) appliquent la même règle ;
+notifications, visuels générés et export de la base ne lisent ni nom ni octets des pièces.
+Une carte reste modifiable (retirer la pièce) par qui peut modifier la carte, même s'il ne voit pas le fichier. Le
+journal d'une carte ne cite jamais le nom d'une pièce prise dans le Drive.
+
+- **Carte CM** : pièces jointes › **Depuis le Drive** (Drive de la portée du tableau par défaut ; tout Drive visible).
 - **Éditeur de visuels** : Ajouter une image › **Depuis le Drive** ; **charte** : Logos › **Depuis le Drive** (Drive du
   club ; PNG, JPEG, GIF, WebP de 15 Mo au plus).
-- **Sponsors** : pièces d'un prospect ou partenaire › **Depuis le Drive** (Drive du club ; deck, logo…).
+- **Sponsors** : pièces d'un prospect ou partenaire › **Depuis le Drive** (Drive du club par défaut ; deck, logo…).
+- **Ressources** (DATA › Ressources) : une ressource se lie à un dossier **depuis le dossier du Drive** (menu « ⋯ ›
+  Ressources ») : il n'y a pas de sélecteur de Drive de ce côté ; le serveur exige à la fois la visibilité de la
+  ressource (migration 0048) et l'accès au dossier du Drive (dossier restreint : 404).
 - **Rangement automatique** (réglable : **Drive › Réglages**, gestionnaires du Drive du club) : chaque **visuel généré**
   va dans « Visuels » de sa portée (un nouveau rendu = une nouvelle version du même fichier) ; chaque **clip retenu**
   (fichier déposé) va dans « Clips » de sa team. Mis à la corbeille, il n'y revient pas.
@@ -223,7 +260,7 @@ restent au club sans auteur.
 | `PATCH /cm/drive/tags { portee, tag, nom }` ; `DELETE /cm/drive/tags?portee&tag` (étiquette de tous les fichiers de la portée) | gérer |
 | `GET\|PUT /cm/drive/reglages` | gérer (club) |
 | `GET /cm/drive/contenu/<élément>.<version>?c&exp&sig` ; `GET /cm/drive/zip/<dossier>?c&exp&sig` | lien signé (accès revérifié) |
-| `POST /cm/cartes/:id/pieces { genre: 'drive', fichierId }` ; `POST /cm/visuels/images { portee, drive }` ; `POST /sponsors/pieces { genre: 'drive', fichierId, … }` | intégrations |
+| `POST /cm/cartes/:id/pieces { genre: 'drive', fichierId }` ; `POST /cm/visuels/images { portee, drive }` ; `POST /sponsors/pieces { genre: 'drive', fichierId, … }` | intégrations (tout Drive visible pour les pièces ; la pièce croisée suit sa source) |
 
 Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 20 ZIP.
 
@@ -237,7 +274,8 @@ Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 
   et native ; `glisser.web.ts` / `glisser.ts` : glisser-déposer, cadre, Ctrl / Maj-clic ; `explorateur.tsx` : fil
   d'Ariane, arborescence latérale, choix d'un dossier, aussi utilisés par les dossiers des visuels).
 - Tests : `esport/test/drive.test.mjs` (SQLite et PostgreSQL : règles, formats, ZIP, migration, permissions,
-  fichiers, versions, corbeille et purge, quota, sécurité, intégrations, RGPD, export / import),
+  fichiers, versions, corbeille et purge, quota, sécurité, intégrations, choix du Drive — Drives listés selon les droits,
+  pièces d'un autre Drive qui suivent leur source, liens forgés, sponsors, recherche multi-Drives —, RGPD, export / import),
   `esport/test/drive-deplacer-nouveautes.test.mjs` (SQLite et PostgreSQL : déplacements — cycles, permissions,
   groupé, annulation, POST + X-Methode —, nouveautés — par compte, permissions, ses propres ajouts exclus, versions,
   vu, tout vu, `drive.ajout` —, dossiers des visuels, RGPD), `src/esport/Drive.test.tsx`.

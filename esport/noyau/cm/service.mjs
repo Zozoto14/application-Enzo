@@ -33,7 +33,7 @@ import { servicesVisuelsCm } from './visuels/service.mjs';
 import { servicesDriveCm } from './drive/service.mjs';
 import { servicesCalendriersCm } from './calendriers.mjs';
 import { configDrive } from './drive/regles.mjs';
-import { utiliseHorsDrive, utiliseParDrive } from './utilisations.mjs';
+import { utiliseHorsDriveEnLecture, utiliseParDrive } from './utilisations.mjs';
 import { servicesReunionsCm } from './reunions/service.mjs';
 import { servicesLiensCm } from './liens.mjs';
 
@@ -78,9 +78,9 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     // compte (migration 0046), le fichier ne se lit plus, sauf pour l'auteur du clip ou par la rubrique Sponsors.
     const lecteur = lecteurTableaux(base, acteur);
     const fonds = await base.tous('SELECT id, portee, team_id, acces FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL LIMIT 20', [f.id]);
-    const parPieces = await base.tous('SELECT DISTINCT t.id, t.portee, t.team_id, t.acces FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id JOIN cm_tableaux t ON t.id = c.tableau_id WHERE p.fichier_id = ? AND p.supprime_le IS NULL AND c.supprime_le IS NULL AND t.supprime_le IS NULL LIMIT 20', [f.id]);
+    const parPieces = await base.tous('SELECT DISTINCT t.id, t.portee, t.team_id, t.acces FROM cm_pieces p JOIN cm_cartes c ON c.id = p.carte_id JOIN cm_tableaux t ON t.id = c.tableau_id WHERE p.fichier_id = ? AND p.drive_croise = 0 AND p.supprime_le IS NULL AND c.supprime_le IS NULL AND t.supprime_le IS NULL LIMIT 20', [f.id]);
     if (fonds.length + parPieces.length > 0 && (await lecteur.filtrer([...fonds, ...parPieces])).length === 0) {
-      const ailleurs = (await base.premier('SELECT id FROM cm_clips WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) || (await base.premier('SELECT id FROM sp_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) || f.portee === PORTEE_SPONSORS;
+      const ailleurs = (await base.premier('SELECT id FROM cm_clips WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) || (await base.premier('SELECT id FROM sp_pieces WHERE fichier_id = ? AND drive_croise = 0 AND supprime_le IS NULL', [f.id])) || f.portee === PORTEE_SPONSORS;
       if (!ailleurs) return false;
     }
     // Image de fond d'un tableau (migration 0042) : qui voit le tableau voit son fond, même pris dans le Drive.
@@ -91,10 +91,10 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
         // Tableau d'une portée fermée au compte.
       }
     }
-    if ((await utiliseParDrive(base, f.id)) && !(await utiliseHorsDrive(base, f.id))) return false;
+    if ((await utiliseParDrive(base, f.id)) && !(await utiliseHorsDriveEnLecture(base, f.id))) return false;
     // Fichier de la rubrique Sponsors, ou pièce d'un sponsor prise dans le Drive : sponsors.voir.
     if (f.portee === PORTEE_SPONSORS) return (await droitsSponsors(base, acteur)).has('sponsors.voir');
-    if ((await base.premier('SELECT id FROM sp_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [f.id])) && (await droitsSponsors(base, acteur)).has('sponsors.voir')) return true;
+    if ((await base.premier('SELECT id FROM sp_pieces WHERE fichier_id = ? AND drive_croise = 0 AND supprime_le IS NULL', [f.id])) && (await droitsSponsors(base, acteur)).has('sponsors.voir')) return true;
     try {
       const ctx = await contexteCm(base, acteur, f.portee);
       if (ctx.permissions.has('cm.voir')) return true;

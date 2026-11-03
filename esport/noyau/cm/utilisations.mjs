@@ -18,6 +18,21 @@ const USAGES_HORS_DRIVE = [
   'SELECT 1 AS x FROM cm_tableaux WHERE fond_fichier_id = ? AND supprime_le IS NULL',
 ];
 
+/**
+ * Usages qui OUVRENT la lecture du fichier à qui les voit : comme USAGES_HORS_DRIVE, sans les pièces « croisées » (fichier
+ * d'un autre Drive : la pièce suit sa source, migration 0049) ; elles gardent pourtant les octets (fichierCmUtilise).
+ */
+const USAGES_LECTURE = [
+  'SELECT 1 AS x FROM cm_pieces WHERE fichier_id = ? AND supprime_le IS NULL AND drive_croise = 0',
+  ...USAGES_HORS_DRIVE.slice(1).map(sql => (sql.includes('FROM sp_pieces') ? `${sql} AND drive_croise = 0` : sql)),
+];
+
+/** Le fichier ouvre-t-il sa lecture par un usage hors Drive (pièce croisée exclue) ? */
+export async function utiliseHorsDriveEnLecture(base, fichierId) {
+  for (const sql of USAGES_LECTURE) if (await base.premier(sql, [fichierId])) return true;
+  return false;
+}
+
 /** Le fichier sert-il ailleurs que dans le Drive ? */
 export async function utiliseHorsDrive(base, fichierId) {
   for (const sql of USAGES_HORS_DRIVE) if (await base.premier(sql, [fichierId])) return true;

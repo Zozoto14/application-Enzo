@@ -379,6 +379,7 @@
   "Ce dossier ne contient aucun fichier.": "This folder contains no files.",
   "Fichier du Drive introuvable.": "Drive file not found.",
   "Ce fichier est dans le Drive d’une autre team.": "This file is in another team’s Drive.",
+  "Fichier d’un Drive auquel vous n’avez pas accès.": "File from a Drive you do not have access to.",
   "Type de fichier refusé : images, vidéos, audio, PDF, polices, archives, PSD ou texte (jamais de page web ni de programme).": "File type refused: images, videos, audio, PDF, fonts, archives, PSD or text (never a web page or a program).",
   "Adresse refusée : seules les pages web publiques (http ou https) ont un aperçu.": "Address refused: only public web pages (http or https) get a preview.",
   "Page injoignable : pas d’aperçu.": "Page unreachable: no preview.",

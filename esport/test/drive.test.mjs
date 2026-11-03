@@ -9,6 +9,7 @@
  *  - versions, corbeille et restauration, purge à 30 jours (octets gardés s'ils servent ailleurs), quota et alerte ;
  *  - sécurité des fichiers servis (type, nosniff, Content-Disposition, SVG sans script) ;
  *  - intégrations : pièce jointe d'une carte (club et team), image de l'éditeur, sponsor, clip retenu rangé ;
+ *  - choix du Drive : Drives listés selon les droits, pièces d'un autre Drive qui suivent leur source, recherche multi-Drives ;
  *  - ZIP d'un dossier, RGPD, export / import.
  *
  * Tourne sur SQLite (défaut) et sur PostgreSQL (ESPORT_TEST_PG, esport/test/pg/lancer.mjs).
@@ -26,6 +27,7 @@ import { assainirNom, cleRecherche, configDrive, dimensionsSvg, lireTags, nomPou
 import { crc32, fluxZip, tailleZip } from '../noyau/cm/drive/zip.mjs';
 import { purgerCorbeilleDrive } from '../noyau/cm/drive/service.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
+import { visuelDeCarte } from '../noyau/reseaux/annonces.mjs';
 
 const enc = new TextEncoder();
 const JOUR = 86_400_000;
@@ -588,9 +590,7 @@ test('intégrations : pièce jointe d’une carte depuis le Drive (club et team)
   assert.equal((await b.brut(lienPiece.url)).status, 200);
   // Mais pas le fichier du Drive lui-même (aucun droit sur le Drive du club).
   assert.equal((await api(`/cm/drive/fichiers/${logo.id}`, s.man12345)).statut, 404);
-  // Fichier du Drive d'une AUTRE team : refusé ; fichier inconnu : 404 ; sans droit sur le Drive : 404.
-  const fB = await deposer(s.cm123456, (await ok('/cm/drive/portees', s.cm123456)).portees[2].portee, pdfFactice('b'), 'b.pdf');
-  assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: fB.id } })).corps.code, 'portee');
+  // Fichier inconnu : 404 (le Drive d'une autre team est admis depuis le choix du Drive : voir « choix du Drive » plus bas).
   assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: '00000000-0000-4000-8000-000000000000' } })).statut, 404);
   // Le fichier du Drive part à la corbeille puis est effacé définitivement : la pièce jointe garde ses octets.
   await ok(`/cm/drive/fichiers/${logo.id}`, s.cm123456, { methode: 'DELETE' });
@@ -769,4 +769,172 @@ test('étiquettes du Drive : renommer (fusion si le nom existe), supprimer défi
   // Journal.
   const actions = (await ok('/cm/journal', s.fondateur)).entrees.map(e => e.action);
   assert.ok(actions.includes('cm.drive_tag_renomme') && actions.includes('cm.drive_tag_supprime'));
+});
+
+// ------------------------------------------------------------------ Choix du Drive (migration 0049)
+
+test('choix du Drive : seuls les Drives et dossiers visibles sont listés et liables (restreint, autre team, dépôt joueur)', async () => {
+  const { A, B, s, api, ok, deposer } = await preparer();
+  const visibles = async jeton => (await ok('/cm/drive/portees', jeton)).portees.filter(p => p.droits.voir).map(p => (p.portee === 'club' ? 'club' : p.team.nom));
+  assert.deepEqual(await visibles(s.cm123456), ['club', 'Team Alpha', 'Team Bravo']);
+  assert.deepEqual(await visibles(s.fondateur), ['club', 'Team Alpha', 'Team Bravo']);
+  assert.deepEqual(await visibles(s.kai12345), ['Team Alpha'], 'le Correspondant ne voit que le Drive de sa team');
+  const lea = await api('/cm/drive/portees', s.lea12345);
+  assert.ok(lea.statut === 403 || lea.corps.portees.every(p => !p.droits.voir), 'un joueur ne voit aucun Drive (dépôt seulement)');
+  // Un Drive qu'on ne voit pas : ni contenu, ni recherche, ni liaison à une carte.
+  assert.ok([403, 404].includes((await api(`/cm/drive?portee=${B.teamId}`, s.kai12345)).statut));
+  assert.ok([403, 404].includes((await api(`/cm/drive/recherche?portee=${B.teamId}&q=a`, s.kai12345)).statut));
+  const fB = await deposer(s.cm123456, B.teamId, pdfFactice('b'), 'bravo.pdf');
+  await ok(`/cm/teams/${A.teamId}`, s.cm123456);
+  const tb = (await ok('/cm/tableaux', s.cm123456)).tableaux.find(t => t.team?.id === A.teamId);
+  const carte = (await ok(`/cm/tableaux/${tb.id}/cartes`, s.cm123456, { methode: 'POST', corps: { listeId: (await ok(`/cm/tableaux/${tb.id}`, s.cm123456)).listes[0].id, titre: 'Interdrive' } })).carte;
+  const fA = await deposer(s.cm123456, A.teamId, pdfFactice('a'), 'alpha.pdf');
+  const editeur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Éditeur Drive', couleur: '#556677', permissions: ['cm.voir', 'cm.editer', 'cm.drive.voir'] } });
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'man12345', roleId: editeur.id, portee: A.teamId } });
+  s.kai12345 = s.man12345;
+  assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.kai12345, { methode: 'POST', corps: { genre: 'drive', fichierId: fA.id } })).statut, 200, 'témoin : Kai joint un fichier du Drive de sa team');
+  assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.kai12345, { methode: 'POST', corps: { genre: 'drive', fichierId: fB.id } })).statut, 404, 'Drive de Bravo invisible pour Kai');
+  // Dossier restreint : invisible (404) pour qui ne gère pas le Drive, donc jamais liable.
+  const prive = await ok('/cm/drive/dossiers', s.cm123456, { methode: 'POST', corps: { portee: A.teamId, parentId: null, nom: 'Privé', restreint: true } });
+  const secret = await deposer(s.cm123456, A.teamId, pdfFactice('s'), 'secret.pdf', { dossierId: prive.id });
+  assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.kai12345, { methode: 'POST', corps: { genre: 'drive', fichierId: secret.id } })).statut, 404);
+  assert.ok(!(await ok(`/cm/drive/recherche?portee=${A.teamId}&q=secret`, s.kai12345)).fichiers.length, 'la recherche ne montre pas le dossier restreint');
+  // Fichier déposé par un joueur (dépôt) : pas liable par le joueur (aucun droit de voir le Drive).
+  assert.equal((await api(`/cm/cartes/${carte.id}/pieces`, s.lea12345, { methode: 'POST', corps: { genre: 'drive', fichierId: fB.id } })).statut, 404);
+});
+
+test('choix du Drive : une pièce d’un autre Drive suit sa source (carte de team ou du club, sponsors), jamais d’accès par la pièce', async () => {
+  const { b, A, B, s, api, ok, deposer } = await preparer();
+  const fB = await deposer(s.cm123456, B.teamId, pdfFactice('bravo'), 'plan-bravo.pdf');
+  const octetsB = pdfFactice('bravo');
+  // Lecteur du club (cm.voir seulement) et Correspondant de A (Drive de A) : voient les tableaux, pas le Drive de Bravo.
+  const lecteur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Lecteur CM', couleur: '#445566', permissions: ['cm.voir'] } });
+  const sl = await b.session('lec12345', 'Lou');
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'lec12345', roleId: lecteur.id, portee: 'club' } });
+  await ok(`/cm/teams/${A.teamId}`, s.cm123456);
+  const tableaux = (await ok('/cm/tableaux', s.cm123456)).tableaux;
+  const club = tableaux.find(t => t.portee === 'club');
+  const tbA = tableaux.find(t => t.team?.id === A.teamId);
+  const creer = async tb => (await ok(`/cm/tableaux/${tb.id}/cartes`, s.cm123456, { methode: 'POST', corps: { listeId: (await ok(`/cm/tableaux/${tb.id}`, s.cm123456)).listes[0].id, titre: 'Croisée' } })).carte;
+  const carteClub = await creer(club);
+  const carteA = await creer(tbA);
+  const joindre = async carte => (await ok(`/cm/cartes/${carte.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: fB.id } })).carte.pieces.at(-1);
+  const pClub = await joindre(carteClub);
+  const pA = await joindre(carteA);
+  assert.deepEqual([pClub.nom, pClub.driveCroise], ['plan-bravo.pdf', true], 'l’auteur voit le fichier de Bravo dans une carte du club');
+  assert.equal(Number((await b.base.premier('SELECT drive_croise AS d FROM cm_pieces WHERE id = ?', [pA.id])).d), 1);
+  // Pièce du Drive du club sur une carte de A, ou de A sur A : comportement historique, pas « croisée ».
+  const fA = await deposer(s.cm123456, A.teamId, pdfFactice('alpha'), 'alpha.pdf');
+  const pAA = (await ok(`/cm/cartes/${carteA.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: fA.id } })).carte.pieces.find(p => p.nom === 'alpha.pdf');
+  assert.equal(Number((await b.base.premier('SELECT drive_croise AS d FROM cm_pieces WHERE id = ?', [pAA.id])).d), 0);
+  // Sans accès au Drive de Bravo : ni nom, ni lien, ni octets (le lecteur du club voit la carte, le Manager de A celle de A).
+  const vueLecteur = (await ok(`/cm/cartes/${carteClub.id}`, sl)).carte.pieces.find(p => p.id === pClub.id);
+  assert.deepEqual([vueLecteur.nom, vueLecteur.fichier, vueLecteur.url, vueLecteur.driveInaccessible], ['', null, null, true]);
+  assert.ok(!JSON.stringify(await ok(`/cm/cartes/${carteClub.id}`, sl)).includes('plan-bravo'), 'le nom du fichier ne fuit nulle part dans la carte');
+  const vueManager = (await ok(`/cm/cartes/${carteA.id}`, s.man12345)).carte.pieces;
+  assert.equal(vueManager.find(p => p.id === pA.id).driveInaccessible, true);
+  assert.equal(vueManager.find(p => p.id === pAA.id).nom, 'alpha.pdf', 'les pièces non croisées restent lues comme avant');
+  assert.equal((await api(`/cm/pieces/${pA.id}/lien`, s.man12345, { methode: 'POST', corps: {} })).statut, 403);
+  assert.equal((await api(`/cm/pieces/${pClub.id}/lien`, sl, { methode: 'POST', corps: {} })).statut, 403);
+  // Lien forgé (même signé) pour ces comptes : le serveur de fichiers refuse (la pièce n'ouvre pas la lecture).
+  const { cheminSigne } = await import('../noyau/fichiers.mjs');
+  for (const compte of ['lec12345', 'man12345']) {
+    const forge = await cheminSigne('cle-de-session-esport-de-test-0123456789abcdef', { fichierId: fB.fichierId ?? (await b.base.premier('SELECT fichier_id FROM cm_pieces WHERE id = ?', [pA.id])).fichier_id, compte, maintenant: b.horloge.t, duree: 3600_000, genre: 'cm' });
+    assert.equal((await b.brut(`https://esport.test${forge.chemin}`)).status, 403, `lien forgé pour ${compte}`);
+  }
+  // Qui voit le fichier dans son Drive (Responsable CM, Fondateur) lit la pièce.
+  const lienOk = await ok(`/cm/pieces/${pA.id}/lien`, s.cm123456, { methode: 'POST', corps: {} });
+  assert.deepEqual(new Uint8Array(await (await b.brut(lienOk.url)).arrayBuffer()), octetsB);
+  assert.equal((await ok(`/cm/cartes/${carteA.id}`, s.fondateur)).carte.pieces.find(p => p.id === pA.id).nom, 'plan-bravo.pdf');
+  // La règle suit l'accès EN DIRECT : Lou gagne l'accès aux Drives (club), il voit la pièce ; il le perd, elle se referme.
+  const voirDrive = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Drive seul', couleur: '#556677', permissions: ['cm.drive.voir'] } });
+  const pieceLou = async () => (await ok(`/cm/cartes/${carteClub.id}`, sl)).carte.pieces.find(p => p.id === pClub.id);
+  assert.equal((await pieceLou()).driveInaccessible, true);
+  const affs = await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'lec12345', roleId: voirDrive.id, portee: 'club' } });
+  const aff = affs.affectations.find(a => a.compte === 'lec12345' && a.role.id === voirDrive.id);
+  assert.equal((await pieceLou()).nom, 'plan-bravo.pdf');
+  assert.equal((await b.brut((await ok(`/cm/pieces/${pClub.id}/lien`, sl, { methode: 'POST', corps: {} })).url)).status, 200);
+  // Dossier du fichier rendu restreint après coup : seuls les gestionnaires du Drive de Bravo le voient encore.
+  const priveB = await ok('/cm/drive/dossiers', s.cm123456, { methode: 'POST', corps: { portee: B.teamId, parentId: null, nom: 'Confidentiel', restreint: true } });
+  await ok(`/cm/drive/fichiers/${fB.id}`, s.cm123456, { methode: 'PATCH', corps: { dossierId: priveB.id } });
+  assert.equal((await pieceLou()).driveInaccessible, true, 'dossier restreint : même avec le Drive de Bravo');
+  assert.equal((await ok(`/cm/cartes/${carteClub.id}`, s.cm123456)).carte.pieces.find(p => p.id === pClub.id).nom, 'plan-bravo.pdf');
+  await ok(`/cm/drive/fichiers/${fB.id}`, s.cm123456, { methode: 'PATCH', corps: { dossierId: null } });
+  assert.equal((await pieceLou()).nom, 'plan-bravo.pdf');
+  await ok(`/cm/affectations/${aff.id}`, s.fondateur, { methode: 'DELETE' });
+  assert.equal((await pieceLou()).driveInaccessible, true);
+
+  // Sponsors : un Drive de team est admis, la pièce est croisée ; sponsors.voir seul ne suffit pas à la lire.
+  const prospect = (await ok('/sponsors/prospects', s.cm123456, { methode: 'POST', corps: { nom: 'Brasserie Zéphyr' } })).prospect;
+  const sp = await ok('/sponsors/pieces', s.cm123456, { methode: 'POST', corps: { prospectId: prospect.id, genre: 'drive', fichierId: fB.id, categorie: 'deck' } });
+  assert.deepEqual([sp.pieces[0].nom, sp.pieces[0].driveCroise], ['plan-bravo.pdf', true]);
+  const sponsorsSeuls = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Partenariats', couleur: '#335577', permissions: ['sponsors.voir'] } });
+  const sv = await b.session('spo12345', 'Sam');
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'spo12345', roleId: sponsorsSeuls.id, portee: 'club' } });
+  const fiche = (await ok(`/sponsors/prospects/${prospect.id}`, sv)).pieces;
+  assert.deepEqual([fiche[0].nom, fiche[0].fichier, fiche[0].driveInaccessible], ['', null, true]);
+  assert.equal((await api(`/sponsors/pieces/${sp.pieces[0].id}/lien`, sv, { methode: 'POST', corps: {} })).statut, 403);
+  const forgeSp = await cheminSigne('cle-de-session-esport-de-test-0123456789abcdef', { fichierId: (await b.base.premier('SELECT fichier_id FROM sp_pieces WHERE id = ?', [sp.pieces[0].id])).fichier_id, compte: 'spo12345', maintenant: b.horloge.t, duree: 3600_000, genre: 'cm' });
+  assert.equal((await b.brut(`https://esport.test${forgeSp.chemin}`)).status, 403, 'sponsors.voir seul ne lit pas un fichier d’un Drive de team');
+  assert.equal((await b.brut((await ok(`/sponsors/pieces/${sp.pieces[0].id}/lien`, s.cm123456, { methode: 'POST', corps: {} })).url)).status, 200);
+
+  // Les octets restent gardés tant qu'une pièce croisée s'en sert, même si le fichier quitte le Drive.
+  await ok(`/cm/drive/fichiers/${fB.id}`, s.cm123456, { methode: 'DELETE' });
+  await ok(`/cm/drive/corbeille/${fB.id}`, s.cm123456, { methode: 'DELETE' });
+  const cle = (await b.base.premier('SELECT c.cle_stockage FROM cm_pieces p JOIN cm_fichiers c ON c.id = p.fichier_id WHERE p.id = ?', [pA.id])).cle_stockage;
+  assert.ok(await b.stockage.lire(cle), 'octets gardés');
+  assert.equal((await ok(`/cm/cartes/${carteA.id}`, s.cm123456)).carte.pieces.find(p => p.id === pA.id).driveInaccessible, true, 'source supprimée : plus visible de personne sauf le compte principal');
+});
+
+test('choix du Drive : recherche dans chaque Drive visible (regroupée par Drive côté app), jamais dans un Drive fermé', async () => {
+  const { A, B, s, api, ok, deposer } = await preparer();
+  await deposer(s.cm123456, 'club', pdfFactice('1'), 'brief été.pdf');
+  await deposer(s.cm123456, A.teamId, pdfFactice('2'), 'brief alpha.pdf');
+  await deposer(s.cm123456, B.teamId, pdfFactice('3'), 'brief bravo.pdf');
+  const priveB = await ok('/cm/drive/dossiers', s.cm123456, { methode: 'POST', corps: { portee: B.teamId, parentId: null, nom: 'Privé', restreint: true } });
+  await deposer(s.cm123456, B.teamId, pdfFactice('4'), 'brief secret.pdf', { dossierId: priveB.id });
+  const parDrive = async jeton => {
+    const r = {};
+    for (const p of (await ok('/cm/drive/portees', jeton)).portees.filter(x => x.droits.voir)) r[p.portee === 'club' ? 'club' : p.team.nom] = (await ok(`/cm/drive/recherche?portee=${p.portee}&q=brief`, jeton)).fichiers.map(f => f.nom).sort();
+    return r;
+  };
+  assert.deepEqual(await parDrive(s.cm123456), { club: ['brief été.pdf'], 'Team Alpha': ['brief alpha.pdf'], 'Team Bravo': ['brief bravo.pdf', 'brief secret.pdf'] });
+  assert.deepEqual(await parDrive(s.kai12345), { 'Team Alpha': ['brief alpha.pdf'] });
+  assert.ok([403, 404].includes((await api(`/cm/drive/recherche?portee=${B.teamId}&q=brief`, s.kai12345)).statut));
+});
+
+test('choix du Drive : une annonce Discord ne joint jamais une pièce d’un Drive croisé que celui qui a publié ne voit pas', async () => {
+  const { b, A, B, s, ok, deposer } = await preparer();
+  const png = pngFactice(8, 8, 3);
+  const fB = await deposer(s.cm123456, B.teamId, png, 'visuel-bravo.png');
+  const fA = await deposer(s.cm123456, A.teamId, pngFactice(8, 8, 4), 'visuel-alpha.png');
+  await ok(`/cm/teams/${A.teamId}`, s.cm123456);
+  const tb = (await ok('/cm/tableaux', s.cm123456)).tableaux.find(t => t.team?.id === A.teamId);
+  const carte = (await ok(`/cm/tableaux/${tb.id}/cartes`, s.cm123456, { methode: 'POST', corps: { listeId: (await ok(`/cm/tableaux/${tb.id}`, s.cm123456)).listes[0].id, titre: 'Annonce' } })).carte;
+  const lecteur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Lecteur CM', couleur: '#445566', permissions: ['cm.voir'] } });
+  await b.session('lec12345', 'Lou');
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'lec12345', roleId: lecteur.id, portee: 'club' } });
+  const pieceB = (await ok(`/cm/cartes/${carte.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: fB.id } })).carte.pieces[0];
+  const visuel = async publiePar => {
+    await b.base.executer('UPDATE cm_cartes SET publie_par = ? WHERE id = ?', [publiePar, carte.id]);
+    const rapport = {};
+    const v = await visuelDeCarte(b.base, b.stockage, await b.base.premier('SELECT * FROM cm_cartes WHERE id = ?', [carte.id]), rapport);
+    return { v, rapport };
+  };
+  // Publié par quelqu'un qui ne voit pas le Drive de Bravo (ou par personne) : l'annonce part sans la pièce.
+  for (const quiPublie of ['lec12345', null]) {
+    const r = await visuel(quiPublie);
+    assert.equal(r.v, null, `sans pièce (publié par ${quiPublie})`);
+    assert.equal(r.rapport.ecartees, 1);
+  }
+  // Publié par le Responsable CM, qui voit le Drive de Bravo : la pièce est jointe.
+  const ok1 = await visuel('cm123456');
+  assert.equal(ok1.v.fichier.type, 'image/png');
+  assert.equal(ok1.rapport.ecartees, undefined);
+  // Une pièce du Drive de la team du tableau reste jointe comme avant, même publiée par un compte sans Drive.
+  await ok(`/cm/pieces/${pieceB.id}`, s.cm123456, { methode: 'DELETE' });
+  await ok(`/cm/cartes/${carte.id}/pieces`, s.cm123456, { methode: 'POST', corps: { genre: 'drive', fichierId: fA.id } });
+  const sans = await visuel('lec12345');
+  assert.equal(sans.v.fichier.type, 'image/png');
+  assert.equal(sans.rapport.ecartees, undefined);
 });

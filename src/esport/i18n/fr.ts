@@ -2646,6 +2646,7 @@ export const fr = {
   'cm.jr.reseau_export': '{qui} a exporté des statistiques (CSV)',
   'cm.jr.reseau_reglages': '{qui} a modifié les réglages de la page Réseaux',
   'cm.jr.reseau_rappel': 'Rappel envoyé : statistiques à relever pour « {titre} »',
+  'cm.jr.annonce_piece_ecartee': 'Annonce Discord ({reseau}) envoyée sans {n} pièce(s) d’un Drive auquel la personne qui a publié n’a pas accès',
   'cm.jr.annonce_abandonnee': 'Annonce Discord ({reseau}) abandonnée : {motif}',
   'cm.jr.annonce_fil': 'Annonce Discord ({reseau}) : {motif}',
   'cm.nt.assigne': '{membre} vous a assigné la carte « {titre} »',

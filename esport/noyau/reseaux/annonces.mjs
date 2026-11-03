@@ -32,6 +32,7 @@ import { LONGUEUR_MAX_MODELE, construireCharge, nettoyerTexteDiscord, nettoyerVa
 import { bornerEmbed, couleurEntier } from '../discord/embeds.mjs';
 import { ARCHIVAGE_FIL_MIN, PERIODE_ALERTE_FIL_MS, alerteFilPermise, avecParams, chargeAlerteFil, discordFondateur, motifRefusFil, nomFil, nomPost, nonceEnvoi, texteMotifFil } from '../discord/bilingue.mjs';
 import { RESEAUX_COMPTES, cleUrl, compteDuPost, estVideo, typeContenuDeCarte } from './regles.mjs';
+import { servicesDriveCm } from '../cm/drive/service.mjs';
 
 /** Variables d'un modèle d'annonce. */
 export const VARIABLES_ANNONCE = Object.freeze(['reseau', 'compte', 'url', 'titre', 'team']);
@@ -212,13 +213,21 @@ export async function abonneAnnonces(base, ev) {
 // ------------------------------------------------------------------ Envoi
 
 /** Visuel d'une carte : `{ fichier: { nom, type, octets } }`, `{ url }` ou null. */
-export async function visuelDeCarte(base, stockage, carte) {
+export async function visuelDeCarte(base, stockage, carte, rapport = {}) {
   const pieces = await base.tous(
-    'SELECT p.id, p.genre, p.url, f.type_mime, f.taille, f.cle_stockage, f.supprime_le AS f_supprime FROM cm_pieces p LEFT JOIN cm_fichiers f ON f.id = p.fichier_id WHERE p.carte_id = ? AND p.supprime_le IS NULL ORDER BY p.cree_le, p.id',
+    'SELECT p.id, p.genre, p.url, p.fichier_id, p.drive_croise, f.type_mime, f.taille, f.cle_stockage, f.supprime_le AS f_supprime FROM cm_pieces p LEFT JOIN cm_fichiers f ON f.id = p.fichier_id WHERE p.carte_id = ? AND p.supprime_le IS NULL ORDER BY p.cree_le, p.id',
     [carte.id],
   );
   const couverture = jsonOu(carte.couverture, null)?.pieceId;
+  // « La pièce suit sa source » (docs/esport/drive.md) : une pièce d'un Drive croisé n'est jointe que si celui qui a
+  // publié le post (ou déclenché l'envoi) voit le fichier dans son Drive ; sinon l'annonce part sans elle.
+  const drive = servicesDriveCm({ base });
+  const acteur = carte.publie_par ? { compte: carte.publie_par, superAdmin: carte.publie_par === 'principal' } : null;
   for (const p of [...pieces.filter(x => x.id === couverture), ...pieces.filter(x => x.id !== couverture)]) {
+    if (p.genre === 'fichier' && Number(p.drive_croise) === 1 && !(acteur && p.fichier_id && (await drive.peutLireFichierCmActeur(acteur, p.fichier_id)))) {
+      rapport.ecartees = (rapport.ecartees ?? 0) + 1;
+      continue;
+    }
     const ext = TYPES_IMAGE[p.type_mime];
     if (p.genre === 'fichier' && ext && !p.f_supprime && Number(p.taille) <= TAILLE_MAX_IMAGE && stockage) {
       const f = await stockage.lire(p.cle_stockage).catch(() => null);
@@ -479,7 +488,9 @@ export async function traiterAnnoncesReseaux(base, { cle, fetch: fetchDiscord = 
     let imageUrl = ligne.image_url ?? null;
     let urlAnnoncee = ligne.url_annoncee ?? null;
     if (!messageId) {
-      const visuel = await visuelDeCarte(base, stockage, carte);
+      const rapportVisuel = {};
+      const visuel = await visuelDeCarte(base, stockage, carte, rapportVisuel);
+      if (rapportVisuel.ecartees) await consigner(base, ligne, 'cm.annonce_piece_ecartee', { pieces: rapportVisuel.ecartees }, t);
       const image = visuel?.fichier ? { piece: visuel.fichier.nom } : visuel?.url ? { url: visuel.url } : null;
       const principale = sansNom(charge(langue, { image, mentions: true }));
       const options = { lireCorps: true, ...(visuel?.fichier ? { fichiers: [visuel.fichier] } : {}) };

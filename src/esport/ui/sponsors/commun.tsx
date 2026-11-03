@@ -298,11 +298,11 @@ export function PiecesSp({
       {pieces.map(p => (
         <View key={p.id} style={[styles.ligne, { gap: ESP.xs, justifyContent: 'space-between' }]} testID={`esport-sp-piece-${p.id}`}>
           <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
-            <Text style={{ ...texte(theme), fontWeight: '600' }} numberOfLines={1}>
-              {p.nom}
+            <Text style={{ ...texte(theme), fontWeight: p.driveInaccessible ? '400' : '600' }} numberOfLines={p.driveInaccessible ? 2 : 1} testID={p.driveInaccessible ? `esport-sp-piece-${p.id}-inaccessible` : undefined}>
+              {p.driveInaccessible ? trDr('piece.drive_inaccessible') : p.nom}
             </Text>
             <Text style={attenue(theme, 12)} numberOfLines={1}>
-              {[trSp(`piece.${p.categorie}` as CleSp), p.fichier ? `${p.fichier.type} · ${tailleMedia(p.fichier.taille, langueCourante())}` : (p.url ?? '')].join(' · ')}
+              {[trSp(`piece.${p.categorie}` as CleSp), p.driveInaccessible ? '' : p.fichier ? `${p.fichier.type} · ${tailleMedia(p.fichier.taille, langueCourante())}` : (p.url ?? '')].filter(Boolean).join(' · ')}
             </Text>
           </View>
           {logoPieceId === p.id ? <Badge theme={theme} ton="accent" texte={trSp('pieces.logo_actuel')} /> : null}
@@ -360,7 +360,7 @@ export function PiecesSp({
             ) : (
               <Aide theme={theme}>{trSp('pieces.fichier_depuis_pc')}</Aide>
             )}
-            {/* Drive du club (migration 0027) : logo, deck… déjà rangés, sans copie des octets. */}
+            {/* Drive du club ou d'une team (migration 0027) : logo, deck… déjà rangés, sans copie des octets. */}
             <BoutonHub theme={theme} titre={trDr('choix.depuis_drive')} onPress={() => setChoixDrive(true)} testID="esport-sp-piece-drive" />
           </View>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-sp-piece-envoi" />
@@ -368,7 +368,9 @@ export function PiecesSp({
             theme={theme}
             client={api.client}
             visible={choixDrive}
-            portees={['club']}
+            defaut="club"
+            libres={['club']}
+            avisAutreDrive={trDr('choix.autre_drive_sponsor')}
             onFermer={() => setChoixDrive(false)}
             onChoisir={f => {
               setChoixDrive(false);

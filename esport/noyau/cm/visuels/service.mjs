@@ -161,7 +161,9 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
 
   /**
    * Image prise dans le Drive (migration 0027) : même portée que l'éditeur, ou Drive du club ; aucun octet copié.
-   * L'image garde la portée de son Drive (une image du Drive du club sert à tout le club, logos compris).
+   * L'image garde la portée de son Drive (une image du Drive du club sert à tout le club, logos compris). Le
+   * Drive d'une autre team est refusé (400 `portee`) : une image n'appartient qu'à une portée (verifierImages) ;
+   * pour s'en servir ici, la copier d'abord dans le Drive de cette portée (« Copier vers »).
    */
   async function importerDepuisDrive(acteur, ctx, elementId) {
     if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');

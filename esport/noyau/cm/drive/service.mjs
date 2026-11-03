@@ -1425,12 +1425,13 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
    * de l'acteur, hors corbeille, d'une des `portees` admises. Rend `{ fichierId, nom, type, taille, format, portee }`
    * (la ligne de `cm_fichiers` de la version actuelle : rien n'est copié).
    */
-  async function fichierPourIntegration(acteur, id, { portees: admises = [] } = {}) {
+  async function fichierPourIntegration(acteur, id, { portees: admises = null } = {}) {
     const { f, dc } = await fichierVisible(acteur, id).catch(() => {
       throw echec(404, 'fichier-introuvable', 'Fichier du Drive introuvable.');
     });
     if (!dc.drive.voir) throw echec(404, 'fichier-introuvable', 'Fichier du Drive introuvable.');
-    if (!admises.includes(f.portee)) throw echec(400, 'portee', 'Ce fichier est dans le Drive d’une autre team.');
+    // `portees` : Drives admis ; sans (null), tout Drive que l'acteur voit (choix du Drive, docs/esport/drive.md).
+    if (admises && !admises.includes(f.portee)) throw echec(400, 'portee', 'Ce fichier est dans le Drive d’une autre team.');
     const cm = await base.premier('SELECT id FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [f.fichier_id]);
     if (!cm) throw echec(404, 'fichier-introuvable', 'Fichier du Drive introuvable.');
     return { fichierId: f.fichier_id, nom: f.nom, type: f.type_mime, taille: Number(f.taille), format: jsonOu(f.meta, {}).format ?? null, meta: jsonOu(f.meta, {}), portee: f.portee, elementId: f.id };
@@ -1516,6 +1517,12 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return false;
   }
 
+  /**
+   * Le compte voit-il ce fichier CM dans (au moins) un de ses Drives ? Sert aux pièces « croisées » (fichier d'un autre
+   * Drive) : l'acteur peut être le compte principal (superAdmin).
+   */
+  const peutLireFichierCmActeur = (acteur, fichierId) => (acteur?.superAdmin || acteur?.compte === 'principal' ? Promise.resolve(true) : peutLireFichierCm(acteur?.compte, fichierId));
+
   return {
     config,
     portees,
@@ -1561,6 +1568,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     },
     quota,
     peutLireFichierCm,
+    peutLireFichierCmActeur,
     dossiersAccessibles,
     utiliseHorsDrive: id => utiliseHorsDrive(base, id),
     CLES_DOSSIERS,

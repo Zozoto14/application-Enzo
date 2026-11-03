@@ -282,6 +282,34 @@ describe('Drive CM', () => {
     expect(appels.find(a => a.chemin === `/cm/cartes/${C1}/pieces`)?.corps).toEqual({ genre: 'drive', fichierId: F1 });
   });
 
+  it('choix du Drive : Drive du club ou d’une team, la recherche suit le Drive, « Dans tous mes Drives » regroupe par Drive', async () => {
+    const { client, appels } = fauxClient();
+    await render(<Tableau theme={theme} api={apiCm(client)} id={T} large />);
+    await fireEvent.press(await screen.findByTestId(`esport-cm-carte-${C1}-tuile`));
+    await fireEvent.press(await screen.findByTestId('esport-cm-piece-drive'));
+    // Drive par défaut : celui de la portée du tableau (club) ; fil d'Ariane avec le nom du Drive.
+    expect(await screen.findByTestId('esport-cm-piece-choix-drive-portee-club')).toBeTruthy();
+    expect(screen.getByTestId('esport-cm-piece-choix-drive-chemin').props.children).toContain('Drive du club (CM)');
+    // Changer de Drive : la liste suit.
+    await fireEvent.press(screen.getByTestId('esport-cm-piece-choix-drive-portee-t1'));
+    await waitFor(() => expect(appels.some(a => a.chemin.startsWith('/cm/drive?') && a.chemin.includes('portee=t1'))).toBe(true));
+    expect(screen.getByTestId('esport-cm-piece-choix-drive-chemin').props.children).toContain('Drive de Faucons');
+    // Recherche dans le Drive choisi, gardée quand on change de Drive.
+    await fireEvent.changeText(screen.getByTestId('esport-cm-piece-choix-drive-recherche'), 'blason');
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/drive/recherche?portee=t1&q=blason')).toBe(true));
+    await fireEvent.press(screen.getByTestId('esport-cm-piece-choix-drive-portee-club'));
+    await waitFor(() => expect(appels.some(a => a.chemin === '/cm/drive/recherche?portee=club&q=blason')).toBe(true));
+    expect(screen.getByTestId('esport-cm-piece-choix-drive-recherche').props.value).toBe('blason');
+    // Tous mes Drives : résultats regroupés par Drive.
+    await fireEvent(screen.getByTestId('esport-cm-piece-choix-drive-tous'), 'valueChange', true);
+    expect(await screen.findByTestId('esport-cm-piece-choix-drive-groupe-club')).toBeTruthy();
+    expect(await screen.findByTestId('esport-cm-piece-choix-drive-groupe-t1')).toBeTruthy();
+    // Un fichier d'un autre Drive que celui du tableau ou du club est joint par son identifiant seulement.
+    await fireEvent.press(screen.getAllByTestId(`esport-cm-piece-choix-drive-${F2}`)[1]);
+    await waitFor(() => expect(appels.some(a => a.chemin === `/cm/cartes/${C1}/pieces`)).toBe(true));
+    expect(appels.find(a => a.chemin === `/cm/cartes/${C1}/pieces`)?.corps).toEqual({ genre: 'drive', fichierId: F2 });
+  });
+
   it('journal et notification d’espace, en français et en anglais', () => {
     const e = { id: '1', acteur: 'cm123456', action: 'cm.drive_fichier_ajoute', module: 'cm', entite: 'cm_drive', entiteId: F1, meta: { nom: 'logo.png' }, date: '' };
     const noms = { cm123456: 'Clara' };
