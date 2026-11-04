@@ -20,13 +20,21 @@ const relaisReel = fabrique.relais;
 const clientReel = fabrique.client;
 
 afterEach(() => {
+  jest.useRealTimers();
   fabrique.relais = relaisReel;
   fabrique.client = clientReel;
   oublierSessions();
   definirLangue('fr');
 });
 
-const MAINTENANT = Date.now();
+// Horloge figée à midi UTC : « Aujourd’hui / Hier » ne dépendent plus de l’heure ni du jour d’exécution.
+const MAINTENANT = Date.parse('2026-11-03T12:00:00Z');
+beforeEach(() => {
+  jest.useFakeTimers({
+    now: MAINTENANT,
+    doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'hrtime'],
+  });
+});
 const il = (ms: number) => new Date(MAINTENANT - ms).toISOString();
 
 const N1: NotificationCentre = {

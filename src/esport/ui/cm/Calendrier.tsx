@@ -25,6 +25,8 @@ import { PastilleUrgence, FiltreUrgenceCm, libelleUrgence, passeFiltreUrgence, t
 type Mode = 'semaine' | 'mois';
 const JOUR = 86_400_000;
 
+/** « Maintenant » pour la grille : midi (UTC) du jour calendaire du club, sinon entre minuit et 1 h/2 h à Paris la grille resterait sur la veille UTC. */
+const maintenantClub = (): number => Date.parse(`${murale(new Date().toISOString(), FUSEAU_CLUB).date}T12:00:00Z`);
 /** « AAAA-MM-JJ » d'une date UTC. */
 const jourTexte = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 /** Lundi (UTC) de la semaine d'un jour. */
@@ -73,7 +75,7 @@ export function Calendrier({
   creerPost?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>(large ? 'mois' : 'semaine');
-  const [reference, setReference] = useState(() => Date.now());
+  const [reference, setReference] = useState(maintenantClub);
   const [reseau, setReseau] = useState<Reseau | ''>('');
   const [urgence, setUrgence] = useState<FiltreUrgence>('');
   const [cartes, setCartes] = useState<CarteTransverse[] | undefined>();
@@ -208,7 +210,7 @@ export function Calendrier({
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <View style={[styles.ligne, { gap: ESP.xs, maxWidth: '100%' }]}>
           <BoutonHub theme={theme} titre="‹" libelle={trCm('calendrier.precedent')} onPress={() => decaler(-1)} testID="esport-cm-calendrier-precedent" />
-          <BoutonHub theme={theme} titre={trCm('calendrier.aujourdhui')} onPress={() => setReference(Date.now())} testID="esport-cm-calendrier-aujourdhui" />
+          <BoutonHub theme={theme} titre={trCm('calendrier.aujourdhui')} onPress={() => setReference(maintenantClub())} testID="esport-cm-calendrier-aujourdhui" />
           <BoutonHub theme={theme} titre="›" libelle={trCm('calendrier.suivant')} onPress={() => decaler(1)} testID="esport-cm-calendrier-suivant" />
           <Text accessibilityRole="header" style={{ ...texte(theme, 18), fontWeight: '800', flexShrink: 1 }} testID="esport-cm-calendrier-titre">
             {titre}
