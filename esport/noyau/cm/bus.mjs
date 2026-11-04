@@ -5,7 +5,8 @@
  * par la page Réseaux (reseaux/annonces.mjs : annonce Discord, publications suivies pour les statistiques).
  *
  * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, personnes concernées par un
- * passage d'une carte en urgent / critique (assignées, suiveurs, responsables CM : `cm-urgence`, migration 0047), personnes concernées par un
+ * passage d'une carte en urgent / critique (assignées, suiveurs, responsables CM : `cm-urgence`, migration 0047), créateur et suiveurs d'une carte
+ * terminée (déposée dans une colonne de fin : `cm-carte-terminee`, migration 0050), personnes concernées par un
  * nouveau commentaire (assignées, auteur de la carte, suiveurs : `cm-commentaire`, migration 0045), valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
  * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
@@ -35,6 +36,11 @@ export const TYPES_CM = [
   'cm.carte_assignee',
   // Carte passée en « urgent » ou « critique » (migration 0047) : charge { titre, tableau, niveau, concernes }.
   'cm.carte_urgence',
+  // Carte déposée dans une colonne de fin / sortie d'une colonne de fin (migration 0050) : charge { titre, tableau, liste, cle, concernes }
+  // (concernes : créateur et suiveurs, seulement pour « terminée »). `cm.liste_fin` : une colonne devient (ou cesse d'être) colonne de fin.
+  'cm.carte_terminee',
+  'cm.carte_rouverte',
+  'cm.liste_fin',
   'cm.carte_supprimee',
   'cm.commentaire_ajoute',
   'cm.depot',
@@ -145,6 +151,22 @@ export async function abonneCm(base, ev) {
     case 'cm.carte_urgence':
       // `concernes` : déjà filtrés par le service (assignés, suiveurs, responsables CM pour « critique »; accès au tableau).
       return envoyer(charge.concernes ?? [], 'cm-urgence', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, niveau: charge.niveau ?? null, membre: ev.acteur_id });
+    case 'cm.carte_terminee': {
+      // Créateur et suiveurs (déjà filtrés par le service : accès au tableau, auteur du dépôt exclu). Une seule notification
+      // non lue par carte et par personne : déplacer une carte d'avant en arrière ne spamme pas. Rien pour « rouverte ».
+      for (const compte of new Set(charge.concernes ?? [])) {
+        if (!compte || compte === ev.acteur_id || !voitTableau(compte)) continue;
+        const deja = (await base.tous("SELECT charge FROM notifications WHERE compte_id = ? AND type = 'cm-carte-terminee' AND lue_le IS NULL", [compte])).some(l => {
+          try {
+            return JSON.parse(l.charge).carte === carte;
+          } catch {
+            return false;
+          }
+        });
+        if (!deja) await notifier(base, ev, compte, 'cm-carte-terminee', { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, liste: charge.liste ?? null, cle: charge.cle ?? null, membre: ev.acteur_id });
+      }
+      return;
+    }
     case 'cm.commentaire_ajoute': {
       const donnees = { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id };
       await envoyer(charge.mentions ?? [], 'cm-mention', donnees);

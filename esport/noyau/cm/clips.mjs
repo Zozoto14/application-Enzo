@@ -239,6 +239,7 @@ export function servicesClipsCm({ base, maintenant = () => Date.now(), medias, c
         titre: clip.titre,
         description: clip.description,
         position: await positionFin(base, liste.id),
+        terminee: Number(liste.fin) === 1,
         post: true,
         reseaux: reglages.reseaux,
         liens: { teamId: clip.team_id, clips: [clip.id], ...(clip.resultat_id ? { resultatId: clip.resultat_id } : {}), ...(clip.tournoi_match_id ? { matchId: clip.tournoi_match_id } : {}), ...(clip.propose_par ? { membres: [clip.propose_par] } : {}) },

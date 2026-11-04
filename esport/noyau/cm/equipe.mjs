@@ -90,7 +90,7 @@ export function servicesEquipeCm({ base, maintenant = () => Date.now(), medias }
     const tableau = await assurerTableauDefaut(base, teamId, t);
     const liste = (await listeDeCle(base, tableau.id, 'idees')) ?? (await base.premier('SELECT * FROM cm_listes WHERE tableau_id = ? AND archive_le IS NULL ORDER BY position LIMIT 1', [tableau.id]));
     if (!liste) throw echec(409, 'liste-absente', 'Le tableau de la team n’a plus de liste ouverte.');
-    const { id, instructions } = instructionsCarte({ tableauId: tableau.id, listeId: liste.id, teamId, titre, description, position: await positionFin(base, liste.id), origine: 'depot', depotGenre: genre, acteur: acteur.compte, t });
+    const { id, instructions } = instructionsCarte({ tableauId: tableau.id, listeId: liste.id, teamId, titre, description, position: await positionFin(base, liste.id), origine: 'depot', depotGenre: genre, acteur: acteur.compte, terminee: Number(liste.fin) === 1, t });
     const lot = [...instructions];
     for (const url of liens) lot.push({ sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, url, cree_par, cree_le) VALUES (?, ?, 'lien', ?, ?, ?, ?)", params: [nouvelId(), id, url.slice(0, 140), url, acteur.compte, iso(t)] });
     for (const envoi of envois) {

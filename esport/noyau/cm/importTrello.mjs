@@ -13,6 +13,9 @@
  *  - étiquettes nommées Critique / Urgent / Moyen / Faible (ou Critical / Urgent / Medium / Low) : l'aperçu les signale ;
  *    avec `convertirUrgences`, elles deviennent le DRAPEAU D'URGENCE des cartes (le plus haut niveau si plusieurs ; une
  *    carte qui a déjà un drapeau le garde) et ne sont pas importées comme étiquettes.
+ *  - listes archivées ou nommées Fini / Terminé / Fait / Done / Publié : l'aperçu les propose comme COLONNES DE FIN ; avec
+ *    `listesFin` (identifiants Trello des listes retenues), elles sont marquées colonnes de fin (jamais décochées par un
+ *    nouvel import) et les cartes qui s'y trouvent deviennent terminées (une carte sortie d'une colonne de fin est rouverte).
  * Permission : cm.gerer sur la portée choisie (club ou team).
  */
 
@@ -21,6 +24,7 @@ import { echec, iso, nouvelId } from '../outils.mjs';
 import { PORTEE_CLUB, contexteCm, exiger, lirePortee, porteesDe, teamDePortee, versionTableau } from './commun.mjs';
 import { niveauTableau } from './acces.mjs';
 import { urgenceDepuisNom, rangUrgence } from './urgence.mjs';
+import { nomColonneDeFin } from './colonneFin.mjs';
 import { TrelloInvalide, bilanTrello, lireExportTrello } from './trello.mjs';
 
 const PAQUET = 40;
@@ -111,7 +115,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       correspondances: proposer(m.membres, personnes),
       personnes,
       dejaImporte: existant && !existant.supprime_le ? (ferme ? { restreint: true } : { id: existant.id, nom: existant.nom, portee: existant.portee }) : null,
-      listes: m.listes.slice(0, 50).map(l => ({ nom: l.nom, archivee: l.archivee, cartes: m.cartes.filter(c => c.listeTrelloId === l.trelloId).length })),
+      listes: m.listes.slice(0, 50).map(l => ({ trelloId: l.trelloId, nom: l.nom, archivee: l.archivee, cartes: m.cartes.filter(c => c.listeTrelloId === l.trelloId).length, proposeFin: l.archivee || nomColonneDeFin(l.nom) })),
     };
   }
 
@@ -172,6 +176,10 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     ]);
     const idListe = new Map((await base.tous('SELECT id, trello_id FROM cm_listes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, l.id]));
     const idEtiquette = new Map((await base.tous('SELECT id, trello_id FROM cm_etiquettes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, l.id]));
+    // Colonnes de fin choisies (migration 0050) : listes de l'export seulement.
+    const demandeesFin = Array.isArray(corps?.listesFin) ? new Set(corps.listesFin.filter(x => typeof x === 'string')) : new Set();
+    const idsFin = listes.filter(l => demandeesFin.has(l.trelloId) && idListe.has(l.trelloId)).map(l => idListe.get(l.trelloId));
+    if (idsFin.length) await base.executer(`UPDATE cm_listes SET fin = 1 WHERE tableau_id = ? AND id IN (${idsFin.map(() => '?').join(', ')})`, [tb.id, ...idsFin]);
 
     // 2. Cartes. Une carte devenue post dans l'app n'est plus mise à jour (son contenu suit la validation).
     const cartes = uniques(m.cartes).filter(c => idListe.has(c.listeTrelloId));
@@ -185,6 +193,11 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
            maj_par = excluded.maj_par, maj_le = excluded.maj_le, version = cm_cartes.version + 1 WHERE cm_cartes.post = 0 AND cm_cartes.supprime_le IS NULL`,
       ),
     );
+    // Invariant de la migration 0050 : terminée si et seulement si la colonne est une colonne de fin.
+    await base.lot([
+      { sql: 'UPDATE cm_cartes SET terminee_le = ?, terminee_par = ? WHERE tableau_id = ? AND terminee_le IS NULL AND supprime_le IS NULL AND liste_id IN (SELECT id FROM cm_listes WHERE tableau_id = ? AND fin = 1)', params: [quand, acteur.compte, tb.id, tb.id] },
+      { sql: 'UPDATE cm_cartes SET terminee_le = NULL, terminee_par = NULL WHERE tableau_id = ? AND terminee_le IS NOT NULL AND liste_id IN (SELECT id FROM cm_listes WHERE tableau_id = ? AND fin = 0)', params: [tb.id, tb.id] },
+    ]);
     const idCarte = new Map((await base.tous('SELECT id, trello_id FROM cm_cartes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, l.id]));
 
     // 3. Étiquettes et membres des cartes, checklists, commentaires, pièces jointes (ajouts seulement).
@@ -242,6 +255,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
       membresAssocies: corr.size,
       piecesIgnorees: m.piecesIgnorees,
       urgencesConverties: urgenceParCarte.size,
+      colonnesFin: listes.filter(l => idsFin.includes(idListe.get(l.trelloId))).length,
       couverturesImages: m.cartes.filter(c => c.couverture?.pieceTrelloId).length,
     };
     await base.lot([

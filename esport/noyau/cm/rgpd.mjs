@@ -136,6 +136,8 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_cartes SET valide_par = NULL WHERE valide_par = ?', params: [compte] },
     { sql: 'UPDATE cm_cartes SET refuse_par = NULL WHERE refuse_par = ?', params: [compte] },
     { sql: 'UPDATE cm_cartes SET publie_par = NULL WHERE publie_par = ?', params: [compte] },
+    // Migration 0050 : qui a terminé la carte (déposée dans une colonne de fin).
+    { sql: 'UPDATE cm_cartes SET terminee_par = NULL WHERE terminee_par = ?', params: [compte] },
   );
   // Membres liés aux posts (liens.membres, JSON) : le compte en est retiré.
   for (const c of await base.tous('SELECT id, liens FROM cm_cartes WHERE liens LIKE ?', [`%"${compte}"%`])) {

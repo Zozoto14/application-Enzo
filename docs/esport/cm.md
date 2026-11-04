@@ -360,6 +360,51 @@ ordre dans `esport/noyau/cm/urgence.mjs` (serveur) et `src/esport/cm/urgence.ts`
   `src/esport/CmUrgence.test.tsx` (couleurs AA, tri, filtre, carte compacte, en-tête de colonne, menu ⋯, fiche, phrases
   FR / EN) et `NavCm.test.tsx` (carte « Urgences » de l'Accueil).
 
+### Colonnes de fin : les cartes « Fini » sont terminées (migration 0050)
+
+Une colonne peut être déclarée **colonne de fin** : toute carte déposée dedans est **terminée**. Plusieurs colonnes de fin par
+tableau sont possibles. Code : `esport/noyau/cm/colonneFin.mjs` (détection des noms, semaines), `tableaux.mjs`
+(`instructionsTerminee`, `alignerCartesDeListe`), `src/esport/cm/colonneFin.ts`.
+
+- **Déclarer une colonne de fin** : case **« Colonne de fin (les cartes déposées ici sont terminées) »** à la **création** d'une
+  colonne (`POST /cm/tableaux/:id/listes { nom, fin }`) et dans le menu **⋯** de la colonne (**Colonne de fin : oui / non**,
+  `PATCH /cm/listes/:id { fin }`, permission `cm.editer`). La case est **cochée d'office** quand le nom ressemble à **Fini,
+  Terminé, Fait, Done, Publié** (sans accents ni casse, FR et EN) ; une fois touchée à la main, le nom ne la change plus.
+  Une colonne de fin porte une **icône « terminé »** monochrome dans son en-tête (colonne réduite comprise).
+- **Colonnes existantes** : la migration **ne coche rien**. Une **bannière « Marquer “Fini” comme colonne de fin ? »** (réservée à
+  `cm.gerer`) s'affiche en haut du tableau pour chaque colonne ouverte dont le nom ressemble à Fini / Terminé / Fait / Done /
+  Publié : **Marquer comme colonne de fin** ou **Non merci** (refus mémorisé dans `cm_listes.fin_ignoree`, la bannière ne revient pas).
+- **Effet sur les cartes** : un seul invariant, tenu par le serveur : **une carte est terminée si et seulement si sa colonne est
+  une colonne de fin**. La déposer dans une colonne de fin (glisser-déposer, menu ⋯, création directe, circuit de validation :
+  un post publié rejoint « Publié » et devient terminé si cette colonne est cochée, import Trello, déplacement vers un autre
+  tableau) enregistre la **date et l'auteur** (`cm_cartes.terminee_le`, `terminee_par`) ; la **sortir** d'une colonne de fin la
+  **rouvre** (les deux champs repassent à vide). Cocher ou décocher une colonne qui contient déjà des cartes les termine ou les
+  rouvre d'un coup (une ligne de journal par carte, **un seul** événement `cm.liste_fin`, aucune notification par carte).
+- **Ce qui change pour une carte terminée** : sur la carte compacte, une **coche verte** devant le titre, titre **atténué**,
+  drapeau d'urgence **conservé mais grisé** (plus de bande ni de teinte) ; dans la fiche, la mention **« Terminée le … par … »**
+  (journal : « a terminé la carte », « a rouvert la carte »). Elle est **exclue** : des compteurs d'urgence (en-tête de colonne,
+  liste des tableaux, `/cm/etat`, `GET /cm/urgences`, carte « Urgences » de l'Accueil CM), des alertes d'urgence (monter en
+  critique une carte terminée ne notifie personne), des **échéances en retard** (jamais rouge, absente du filtre « En retard »),
+  de la file **À valider** et de ses compteurs. Les rappels de publication de **Réseaux** ne concernent pas les cartes.
+  Le filtre du tableau gagne **« Masquer les terminées »**.
+- **Statistiques** : `GET /cm/terminees?semaines=8` (26 au plus) : cartes terminées par semaine (lundi à dimanche, UTC) sur les
+  tableaux visibles ; la carte **« Cartes terminées »** de l'Accueil CM affiche la semaine en cours et de petites barres par semaine.
+- **Événements du bus** : `cm.carte_terminee` et `cm.carte_rouverte` (charge `{ titre, tableau, liste, cle, concernes }`), `cm.liste_fin`
+  (colonne cochée ou décochée). Journal d'activité et **temps réel** (sujet `cm`, version du tableau incrémentée : les autres voient
+  la carte se terminer en moins d'une seconde). **Notification** `cm-carte-terminee` (catégorie CM) au **créateur de la carte et à
+  ses suiveurs** (jamais à l'auteur du dépôt) : **une seule non lue par carte et par personne** (aller-retour sans spam),
+  **rien à la réouverture**. **Tableau restreint** : seuls ceux qui voient le tableau sont prévenus (filtre du service et du bus) ;
+  les statistiques, compteurs et listes ignorent les tableaux fermés au compte.
+- **Import Trello** : l'aperçu propose comme colonnes de fin les listes **archivées** ou nommées Fini / Terminé / Fait / Done / Publié
+  (`listes[].proposeFin`) ; les cases (cochées d'office) envoient `listesFin: [identifiants Trello]` ; ces listes deviennent colonnes
+  de fin (jamais décochées par un nouvel import) et leurs cartes sont terminées (bilan `colonnesFin`).
+- **Données et RGPD** : `cm_listes.fin`, `cm_listes.fin_ignoree`, `cm_cartes.terminee_le`, `cm_cartes.terminee_par` (+ index
+  `cm_cartes_terminee`) ; export / import de la base inchangés (toutes les colonnes sont lues). `terminee_par` est mis à vide à la
+  suppression du compte (la carte reste terminée, « Compte supprimé »). Migration SQL standard, identique sur SQLite et PostgreSQL.
+- **Tests** : `esport/test/cm-colonne-fin.test.mjs` (création, réglage, déplacement vers et depuis une colonne de fin, exclusions,
+  notifications, temps réel, tableau restreint, circuit de validation, autre tableau, statistiques, import Trello, RGPD) et
+  `src/esport/CmColonneFin.test.tsx` (noms, case cochée d'office, menu ⋯, bannière, icône, carte terminée, filtres, fiche, phrases FR / EN).
+
 ## Accès au tableau (tableaux restreints)
 
 Un tableau est visible de **« Tous ceux qui ont accès au CM »** de sa portée (défaut : le comportement d'avant, et
@@ -516,7 +561,7 @@ Trello pour les ouvrir (l'app le dit) ; une image de couverture Trello reste une
 
 ## Notifications, journal, Discord
 
-Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), carte passée en urgent ou critique (assignés, suiveurs, responsables CM pour critique ; voir « Urgences »), post à valider (et à valider de nouveau après une
+Notifications : carte assignée, @mention dans un commentaire, nouveau commentaire (assignés, auteur de la carte, suiveurs), carte passée en urgent ou critique (assignés, suiveurs, responsables CM pour critique ; voir « Urgences »), carte terminée dans une colonne de fin (créateur et suiveurs ; voir « Colonnes de fin »), post à valider (et à valider de nouveau après une
 modification), post validé ou refusé (auteur et membres de la carte), dépôt d'une team (CM du club), clip proposé (CM
 de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive). Pour une carte d'un
 **tableau restreint**, seulement ceux qui voient le tableau (voir « Accès au tableau »).
@@ -541,6 +586,7 @@ d'un post publié** part sur Discord, en anglais avec un fil français, réglée
 | `cm_fichiers` | fichiers de la section (club ou team), stockage privé |
 | `cm_clips`, `cm_imports` | clips proposés ; historique des imports Trello |
 | `cm_commentaires_vus`, `cm_carte_suivis` (migration 0045) | commentaires lus par compte, cartes suivies |
+| `cm_listes.fin`, `cm_cartes.terminee_le` (migration 0050) | colonnes de fin, cartes terminées (date, auteur) |
 
 `envois` est reconstruite (comme en 0017) : usage « cm », `team_id` facultatif, colonne `portee`. Les rôles système
 des teams existantes reçoivent `cm.clips.proposer` (et `cm.voir`, `cm.deposer` pour le Manager) ; le module n'est
@@ -565,7 +611,7 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `POST /cm/cartes/:id/(soumettre\|publier\|depublier)` ; `…/(valider\|refuser)` | editer ; valider |
 | `POST /cm/cartes/:id/(checklists\|commentaires\|pieces)` ; `PATCH\|DELETE /cm/(checklists\|elements\|commentaires)/:id` ; `DELETE /cm/pieces/:id` ; `POST /cm/pieces/:id/lien` | editer (commenter : deposer ou editer) |
 | `POST /cm/tableaux/:id/tout-vu` ; `GET /cm/cartes/:id?vu=1` (fiche ouverte : commentaires marqués lus) ; `POST /cm/cartes/:id/suivre { suivre }` | voir (état personnel) |
-| `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` ; `GET /cm/urgences` (cartes critiques et urgentes) | voir |
+| `GET /cm/a-valider` ; `GET /cm/calendrier?du&au&reseau` ; `GET /cm/recherche?q` ; `GET /cm/urgences` (cartes critiques et urgentes) ; `GET /cm/terminees?semaines` (cartes terminées par semaine) | voir |
 | `PATCH /cm/cartes/:id { urgence }` (`null` ou `"aucune"`, `faible`, `moyen`, `urgent`, `critique`) | editer |
 | `PATCH /cm/tableaux/:id { fond }` (fond seul : `null`, `{ genre: 'couleur' \| 'degrade', cle }`, `{ genre: 'image', drive \| envoi }`) | editer |
 | `GET /cm/calendrier/teams?du&au` (calendriers des teams, lecture seule) | voir (et droits de chaque team) |

@@ -44,7 +44,7 @@ async function poser(base, { cle, titre, textes, liens, teamId, datePublication,
   const tableau = await assurerTableauDefaut(base, PORTEE_CLUB, t);
   const liste = (await listeDeCle(base, tableau.id, 'idees')) ?? (await base.premier('SELECT * FROM cm_listes WHERE tableau_id = ? AND archive_le IS NULL ORDER BY position LIMIT 1', [tableau.id]));
   if (!liste) return;
-  const { id, instructions } = instructionsCarte({ tableauId: tableau.id, listeId: liste.id, teamId, titre, position: await positionFin(base, liste.id), post: true, reseaux, textes, liens, datePublication, origine: 'suggestion', origineCle: cle, auto: true, t });
+  const { id, instructions } = instructionsCarte({ tableauId: tableau.id, listeId: liste.id, teamId, titre, position: await positionFin(base, liste.id), post: true, reseaux, textes, liens, datePublication, origine: 'suggestion', origineCle: cle, auto: true, terminee: Number(liste.fin) === 1, t });
   // Insertion seule d'abord (deux distributions du même événement : la seconde ne fait rien).
   const [premiere, ...reste] = instructions;
   const r = await base.executer(`${premiere.sql} ON CONFLICT DO NOTHING`, premiere.params);

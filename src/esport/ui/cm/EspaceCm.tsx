@@ -331,7 +331,7 @@ export function EspaceCm({
           {sousOnglets}
         </View>
       )}
-      {onglet === 'accueil' && accueil ? <AccueilCm theme={theme} api={api} client={client} large={large} voirCm={voirCm} drive={drive} reunions={reunions} aValider={etat?.aValider} urgences={etat?.urgences} nouveautesDrive={nouveautesDrive} onAller={choisir} onOuvrirTableau={ouvrirTableau} /> : null}
+      {onglet === 'accueil' && accueil ? <AccueilCm theme={theme} api={api} client={client} large={large} voirCm={voirCm} drive={drive} reunions={reunions} aValider={etat?.aValider} urgences={etat?.urgences} versions={etat?.versions} nouveautesDrive={nouveautesDrive} onAller={choisir} onOuvrirTableau={ouvrirTableau} /> : null}
       {onglet === 'sponsors' && sponsors ? (
         <EspaceSponsors
           theme={theme}
@@ -378,13 +378,26 @@ export function EspaceCm({
 // ------------------------------------------------------------------ Accueil CM
 
 /** Vue d'ensemble : posts à valider, prochaines publications, nouveautés du Drive, prochaines réunions (selon les droits). */
-function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValider, urgences, nouveautesDrive, onAller, onOuvrirTableau }: { theme: ThemeHub; api: ApiCm; client: ClientEsport; large: boolean; voirCm: boolean; drive: boolean; reunions: boolean; aValider?: number; urgences?: number; nouveautesDrive: number; onAller(o: OngletCm): void; onOuvrirTableau(id: string): void }) {
+function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValider, urgences, versions, nouveautesDrive, onAller, onOuvrirTableau }: { theme: ThemeHub; api: ApiCm; client: ClientEsport; large: boolean; voirCm: boolean; drive: boolean; reunions: boolean; aValider?: number; urgences?: number; versions?: Record<string, number>; nouveautesDrive: number; onAller(o: OngletCm): void; onOuvrirTableau(id: string): void }) {
   const [attente, setAttente] = useState<CarteTransverse[] | undefined>();
   const [publications, setPublications] = useState<CarteTransverse[] | undefined>();
   const [prochaines, setProchaines] = useState<Reunion[] | undefined>();
   // Urgences (cartes critiques et urgentes) : relues quand leur nombre ou une version de tableau change (temps réel).
   const [cartesUrgentes, setCartesUrgentes] = useState<CarteTransverse[] | undefined>();
   const signatureUrgences = urgences ?? -1;
+  // Cartes terminées par semaine (colonnes de fin) : relues quand un tableau change (temps réel).
+  const [terminees, setTerminees] = useState<Array<{ debut: string; n: number }> | undefined>();
+  const signatureVersions = versions ? Object.values(versions).reduce((a, b) => a + b, 0) : -1;
+  useEffect(() => {
+    if (!voirCm) return;
+    let vivant = true;
+    void Promise.resolve()
+      .then(() => api.terminees(8))
+      .then(r => vivant && setTerminees(r?.semaines ?? []), () => vivant && setTerminees([]));
+    return () => {
+      vivant = false;
+    };
+  }, [api, voirCm, signatureVersions]);
   useEffect(() => {
     if (!voirCm) return;
     let vivant = true;
@@ -478,6 +491,37 @@ function AccueilCm({ theme, api, client, large, voirCm, drive, reunions, aValide
                   </View>
                 ))}
                 <LegendeUrgence theme={theme} testID="esport-cm-accueil-urgences-legende" />
+              </>,
+            )
+          : null}
+        {voirCm
+          ? carte(
+              'terminees',
+              trCm('accueil.terminees'),
+              { titre: trCm('accueil.voir'), onPress: () => onAller('tableaux') },
+              <>
+                <Text style={{ ...texte(theme, 28), fontWeight: '800' }} testID="esport-cm-accueil-terminees-n" accessibilityLabel={trnCm('accueil.terminees_n', terminees?.[terminees.length - 1]?.n ?? 0)}>
+                  {terminees?.[terminees.length - 1]?.n ?? 0}
+                </Text>
+                {!terminees ? <Squelette theme={theme} lignes={2} hauteur={16} /> : null}
+                {terminees && !terminees.some(x => x.n) ? vide(trCm('accueil.terminees_vide')) : null}
+                {terminees?.some(x => x.n) ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 44 }} testID="esport-cm-accueil-terminees-barres">
+                    {terminees.map((x, i) => {
+                      const max = Math.max(1, ...terminees.map(y => y.n));
+                      return (
+                        <View
+                          key={x.debut}
+                          accessible
+                          accessibilityLabel={trCm('accueil.terminees_semaine', { date: x.debut, n: x.n })}
+                          style={{ flex: 1, minWidth: 6, height: Math.max(3, Math.round((x.n / max) * 40)), borderRadius: 2, backgroundColor: i === terminees.length - 1 ? theme.ok : theme.attenue, opacity: x.n ? 1 : 0.25 }}
+                          testID={`esport-cm-accueil-terminees-${x.debut}`}
+                        />
+                      );
+                    })}
+                  </View>
+                ) : null}
+                {terminees && terminees.length > 1 && terminees.slice(0, -1).some(x => x.n) ? <Text style={attenue(theme, 13)}>{trCm('accueil.terminees_avant', { liste: terminees.slice(-4, -1).map(x => x.n).join(' · ') })}</Text> : null}
               </>,
             )
           : null}

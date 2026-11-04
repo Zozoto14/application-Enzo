@@ -25,10 +25,12 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
-import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { Icone } from '../../../ui/icones';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { PORTEE_CLUB, type ApiCm, type CarteResume, type DetailTableau, type FondTableau, type ListeCm, type SaisieFond, type StatutPost, type TeamCm, type Urgence } from '../../cm/api';
 import { compterUrgences, couleurUrgence, fondCarteUrgence, melanger, NIVEAUX_URGENCE, trierParUrgence } from '../../cm/urgence';
+import { colonnesAProposer, enRetard, nomColonneDeFin } from '../../cm/colonneFin';
 import { FONDS_COULEURS, FONDS_DEGRADES, styleFond } from '../../cm/fonds';
 import { minuscules } from '../../i18n';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
@@ -55,8 +57,10 @@ interface Filtres {
   statut: StatutPost | '';
   /** Niveaux d'urgence retenus ('aucune' : cartes sans drapeau) ; vide : toutes. */
   urgences?: Array<Urgence | 'aucune'>;
+  /** Masquer les cartes terminées (déposées dans une colonne de fin). */
+  masquerTerminees?: boolean;
 }
-const FILTRES_VIDES: Filtres = { q: '', etiquettes: [], membres: [], echeance: 'toutes', type: 'tout', statut: '', urgences: [] };
+const FILTRES_VIDES: Filtres = { q: '', etiquettes: [], membres: [], echeance: 'toutes', type: 'tout', statut: '', urgences: [], masquerTerminees: false };
 const PAR_LISTE = 60;
 
 interface Rect {
@@ -142,9 +146,11 @@ export function carteVisible(c: CarteResume, f: Filtres, maintenant: number, nom
   if (f.type === 'cartes' && c.post) return false;
   if (f.statut && c.statut !== f.statut) return false;
   if (f.urgences?.length && !f.urgences.includes(c.urgence ?? 'aucune')) return false;
+  if (f.masquerTerminees && c.terminee) return false;
   const date = c.echeance ? Date.parse(c.echeance) : NaN;
   if (f.echeance === 'sans' && c.echeance) return false;
-  if (f.echeance === 'retard' && !(date < maintenant && !c.echeanceFaite)) return false;
+  // Une carte terminée n'est jamais en retard.
+  if (f.echeance === 'retard' && !enRetard(c, maintenant)) return false;
   if (f.echeance === 'semaine' && !(date >= maintenant && date < maintenant + 7 * 86_400_000)) return false;
   return true;
 }
@@ -200,7 +206,8 @@ export function Tableau({
   const minuterieBord = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const [fantomeListe, setFantomeListe] = useState<{ x: number; l: number; liste: ListeCm } | undefined>();
   const [cibleListe, setCibleListe] = useState<number | undefined>();
-  const [nouvelleListe, setNouvelleListe] = useState<string | undefined>();
+  /** Nouvelle colonne : nom, case « colonne de fin », et `manuel` quand la case a été touchée (plus de proposition automatique). */
+  const [nouvelleListe, setNouvelleListe] = useState<{ nom: string; fin: boolean; manuel: boolean } | undefined>();
   const [renommer, setRenommer] = useState<{ id: string; nom: string } | undefined>();
   const [deplacer, setDeplacer] = useState<CarteResume | undefined>();
   const [urgenceCarte, setUrgenceCarte] = useState<string | undefined>();
@@ -321,7 +328,7 @@ export function Tableau({
   const listes = useMemo(() => d?.listes ?? [], [d]);
   /** Commentaires non lus d'une colonne : la somme de ceux de ses cartes (archivées exclues). */
   const nonLusListe = (listeId: string) => (parListe.get(listeId) ?? []).reduce((n, c) => n + (c.archive ? 0 : (c.nonLus ?? 0)), 0);
-  const nbFiltres = (filtres.q.trim() ? 1 : 0) + filtres.etiquettes.length + filtres.membres.length + (filtres.echeance !== 'toutes' ? 1 : 0) + (filtres.type !== 'tout' ? 1 : 0) + (filtres.statut ? 1 : 0) + (filtres.urgences?.length ?? 0);
+  const nbFiltres = (filtres.q.trim() ? 1 : 0) + filtres.etiquettes.length + filtres.membres.length + (filtres.echeance !== 'toutes' ? 1 : 0) + (filtres.type !== 'tout' ? 1 : 0) + (filtres.statut ? 1 : 0) + (filtres.urgences?.length ?? 0) + (filtres.masquerTerminees ? 1 : 0);
 
   /** Déplace une carte (index parmi toutes les cartes de la liste, sans elle) : local d'abord, puis le serveur. */
   const deplacerCarte = useCallback(
@@ -627,6 +634,14 @@ export function Tableau({
     ];
   };
 
+  /** Colonne de fin : coche ou décoche (les cartes déjà dans la colonne deviennent terminées, ou sont rouvertes). */
+  const marquerFin = (l: ListeCm, fin: boolean) =>
+    void agir('liste', async () => {
+      await api.modifierListe(l.id, { fin });
+      setAnnonce(trCm(fin ? 'fin.annonce_marquee' : 'fin.annonce_retiree', { nom: nomListe(l) }));
+      await recharger();
+    });
+
   const actionsListe = (l: ListeCm): ActionSecondaire[] => {
   const rang = actifs.findIndex(x => x.id === l.id);
   return [
@@ -635,6 +650,11 @@ export function Tableau({
     ...(d?.droits.editer
       ? [
           { titre: trCm('liste.renommer'), onPress: () => setRenommer({ id: l.id, nom: nomListe(l) }), testID: `esport-cm-liste-${l.id}-renommer` },
+          {
+            titre: l.fin ? trCm('fin.menu_retirer') : trCm('fin.menu_marquer'),
+            onPress: () => marquerFin(l, !l.fin),
+            testID: `esport-cm-liste-${l.id}-fin`,
+          },
           ...(rang > 0 ? [{ titre: trCm('liste.gauche'), onPress: () => deplacerColonne(l, rang - 1), testID: `esport-cm-liste-${l.id}-gauche` }] : []),
           ...(rang >= 0 && rang < actifs.length - 1 ? [{ titre: trCm('liste.droite'), onPress: () => deplacerColonne(l, rang + 1), testID: `esport-cm-liste-${l.id}-droite` }] : []),
           {
@@ -680,6 +700,7 @@ export function Tableau({
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700' }} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
+                  {l.fin ? <Icone nom="valide" taille={14} couleur={theme.ok} libelle={trCm('fin.icone')} testID={`esport-cm-liste-${l.id}-fin-icone`} /> : null}
                   <Compteur theme={theme} n={nonLusListe(l.id)} testID={`esport-cm-liste-${l.id}-nonlus`} />
                   {/* Nom à la verticale : écriture verticale sur le web, texte tourné sur iPhone / Android. */}
                   {Platform.OS === 'web' ? (
@@ -732,6 +753,7 @@ export function Tableau({
                   <Text style={{ ...attenue(theme, 12), fontWeight: '700', paddingHorizontal: 4 }} accessibilityLabel={trnCm('liste.cartes_n', vues.length)} testID={`esport-cm-liste-${l.id}-compteur`}>
                     {String(vues.length)}
                   </Text>
+                  {l.fin ? <Icone nom="valide" taille={15} couleur={theme.ok} libelle={trCm('fin.icone')} testID={`esport-cm-liste-${l.id}-fin-icone`} /> : null}
                   {triees.includes(l.id) ? (
                     <Text accessibilityLabel={trCm('urgence.tri_actif')} style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }} testID={`esport-cm-liste-${l.id}-tri-actif`}>
                       ⇅
@@ -903,7 +925,7 @@ export function Tableau({
             />
           ) : null}
           <BoutonHub theme={theme} titre="?" libelle={legendeUrgence ? trCm('urgence.legende_masquer') : trCm('urgence.legende')} onPress={() => setLegendeUrgence(v => !v)} testID="esport-cm-urgence-legende-bouton" />
-          {d.droits.editer ? <BoutonHub theme={theme} titre={trCm('liste.nouvelle')} onPress={() => setNouvelleListe('')} testID="esport-cm-liste-nouvelle" /> : null}
+          {d.droits.editer ? <BoutonHub theme={theme} titre={trCm('liste.nouvelle')} onPress={() => setNouvelleListe({ nom: '', fin: false, manuel: false })} testID="esport-cm-liste-nouvelle" /> : null}
           <MenuActions
             theme={theme}
             testID="esport-cm-tableau-menu"
@@ -930,6 +952,32 @@ export function Tableau({
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-tableau" />
       {legendeUrgence ? <LegendeUrgence theme={theme} /> : null}
+      {/* Proposition : « Fini », « Terminé », « Done »… marquées colonne de fin (réservé à qui gère le CM). */}
+      {d.droits.gerer
+        ? colonnesAProposer(listes).map(l => (
+            <View key={l.id} style={{ gap: ESP.xs, padding: ESP.s, borderRadius: rayonCarte(theme), borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }} testID={`esport-cm-liste-${l.id}-fin-banniere`}>
+              <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'center' }]}>
+                <Icone nom="valide" taille={16} couleur={theme.ok} />
+                <Text accessibilityRole="header" style={{ ...texte(theme), fontWeight: '700', flex: 1, minWidth: 0 }}>{trCm('fin.banniere', { nom: nomListe(l) })}</Text>
+              </View>
+              <Aide theme={theme}>{trCm('fin.banniere_aide')}</Aide>
+              <View style={[styles.ligne, { gap: ESP.xs }]}>
+                <BoutonHub theme={theme} titre={trCm('fin.banniere_oui')} variante="plein" onPress={() => marquerFin(l, true)} testID={`esport-cm-liste-${l.id}-fin-oui`} />
+                <BoutonHub
+                  theme={theme}
+                  titre={trCm('fin.banniere_non')}
+                  onPress={() =>
+                    void agir('liste', async () => {
+                      await api.modifierListe(l.id, { finIgnoree: true });
+                      await recharger();
+                    })
+                  }
+                  testID={`esport-cm-liste-${l.id}-fin-non`}
+                />
+              </View>
+            </View>
+          ))
+        : null}
       <Pliable theme={theme} titre={trCm('filtres.titre')} resume={nbFiltres ? trnCm('filtres.actifs', nbFiltres) : undefined} testID="esport-cm-filtres">
         <Champ theme={theme} libelle={trCm('filtres.recherche')} valeur={filtres.q} onChanger={q => setFiltres(f => ({ ...f, q }))} maxLength={80} testID="esport-cm-filtre-q" />
         {d.etiquettes.length ? (
@@ -1019,6 +1067,10 @@ export function Tableau({
           onChoisir={type => setFiltres(f => ({ ...f, type }))}
           testID="esport-cm-filtre-type"
         />
+        <View style={[styles.ligne, { gap: ESP.xs }]}>
+          <Case theme={theme} coche={Boolean(filtres.masquerTerminees)} libelle={trCm('filtres.terminees')} onChanger={masquerTerminees => setFiltres(f => ({ ...f, masquerTerminees }))} testID="esport-cm-filtre-terminees" />
+          <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trCm('filtres.terminees')}</Text>
+        </View>
         {nbFiltres ? <BoutonHub theme={theme} titre={trCm('filtres.effacer')} onPress={() => setFiltres(FILTRES_VIDES)} testID="esport-cm-filtres-effacer" /> : null}
       </Pliable>
       {/* Annonce des déplacements pour les lecteurs d'écran. */}
@@ -1157,15 +1209,28 @@ export function Tableau({
 
       {nouvelleListe !== undefined ? (
         <Volet theme={theme} visible titre={trCm('liste.nouvelle_titre')} onFermer={() => setNouvelleListe(undefined)} testID="esport-cm-liste-volet">
-          <Champ theme={theme} libelle={trCm('c.nom')} valeur={nouvelleListe} onChanger={setNouvelleListe} maxLength={80} testID="esport-cm-liste-nom" />
+          <Champ
+            theme={theme}
+            libelle={trCm('c.nom')}
+            valeur={nouvelleListe.nom}
+            onChanger={nom => setNouvelleListe(n => (n ? { ...n, nom, fin: n.manuel ? n.fin : nomColonneDeFin(nom) } : n))}
+            maxLength={80}
+            testID="esport-cm-liste-nom"
+          />
+          {/* Colonne de fin : les cartes déposées ici sont terminées. Cochée d'office si le nom y ressemble (Fini, Terminé, Done…). */}
+          <View style={[styles.ligne, { gap: ESP.xs }]}>
+            <Case theme={theme} coche={nouvelleListe.fin} libelle={trCm('fin.case')} onChanger={fin => setNouvelleListe(n => (n ? { ...n, fin, manuel: true } : n))} testID="esport-cm-liste-fin" />
+            <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trCm('fin.case')}</Text>
+          </View>
+          {nouvelleListe.fin && !nouvelleListe.manuel ? <Aide theme={theme} testID="esport-cm-liste-fin-suggestion">{trCm('fin.suggestion')}</Aide> : <Aide theme={theme}>{trCm('fin.case_aide')}</Aide>}
           <BoutonHub
             theme={theme}
             titre={trCm('c.creer')}
             variante="plein"
-            desactive={!nouvelleListe.trim()}
+            desactive={!nouvelleListe.nom.trim()}
             onPress={() =>
               void agir('liste', async () => {
-                await api.creerListe(id, nouvelleListe.trim());
+                await api.creerListe(id, nouvelleListe.nom.trim(), nouvelleListe.fin);
                 setNouvelleListe(undefined);
                 await recharger();
               })
@@ -1302,35 +1367,42 @@ function TuileCarte({
   actions: ActionSecondaire[];
   glisser?: { debut(x: number, y: number): void; bouge(x: number, y: number): void; fin(annuler: boolean): void };
 }) {
-  const retard = c.echeance && !c.echeanceFaite && Date.parse(c.echeance) < maintenant;
+  // Carte terminée (colonne de fin) : coche verte, titre atténué, drapeau d'urgence conservé mais grisé, jamais en retard.
+  const terminee = c.terminee === true;
+  const urgence = terminee ? null : c.urgence;
+  const retard = enRetard(c, maintenant);
   const pastilles = c.etiquettes.map(eid => etiquettes.get(eid)).filter((e): e is { nom: string; couleur: string } => Boolean(e));
   const infos = carteAInfos(c);
   return (
     <View
       style={{
         // Fond opaque (la carte reste lisible sur une image de fond) : teinté pour Critique et Urgent.
-        backgroundColor: fondCarteUrgence(c.urgence, theme.surface, theme.sombre),
+        backgroundColor: fondCarteUrgence(urgence, theme.surface, theme.sombre),
         borderRadius: Math.min(theme.rayonMoyen, 8),
-        borderWidth: c.urgence === 'critique' ? 2 : 1,
-        borderColor: c.urgence === 'critique' ? couleurUrgence('critique', theme.sombre) : c.urgence === 'urgent' ? melanger(theme.ligne, couleurUrgence('urgent', theme.sombre), 0.45) : theme.ligne,
+        borderWidth: urgence === 'critique' ? 2 : 1,
+        borderColor: urgence === 'critique' ? couleurUrgence('critique', theme.sombre) : urgence === 'urgent' ? melanger(theme.ligne, couleurUrgence('urgent', theme.sombre), 0.45) : theme.ligne,
         overflow: 'hidden',
       }}
       testID={`esport-cm-carte-${c.id}`}>
       {/* Bande de couleur du niveau, sur le bord gauche (pulsation douce pour Critique). */}
-      {c.urgence ? <BandeUrgence theme={theme} niveau={c.urgence} testID={`esport-cm-carte-${c.id}-urgence-bande`} /> : null}
+      {urgence ? <BandeUrgence theme={theme} niveau={urgence} testID={`esport-cm-carte-${c.id}-urgence-bande`} /> : null}
       {c.couverture?.couleur ? <View style={{ height: 28, backgroundColor: c.couverture.couleur }} testID={`esport-cm-carte-${c.id}-couverture`} /> : null}
       {c.couverture?.image ? <Image source={{ uri: c.couverture.image }} style={{ height: 96, width: '100%' }} resizeMode="cover" accessibilityIgnoresInvertColors testID={`esport-cm-carte-${c.id}-couverture`} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={[c.titre, c.urgence ? trCm('urgence.carte', { niveau: libelleUrgence(c.urgence) }) : '', c.statut ? nomStatut(c.statut) : '', c.archive ? trCm('c.archivee') : ''].filter(Boolean).join(', ')}
+          accessibilityLabel={[c.titre, terminee ? trCm('carte.terminee') : '', c.urgence ? trCm('urgence.carte', { niveau: libelleUrgence(c.urgence) }) : '', c.statut ? nomStatut(c.statut) : '', c.archive ? trCm('c.archivee') : ''].filter(Boolean).join(', ')}
           onPress={onOuvrir}
           testID={`esport-cm-carte-${c.id}-tuile`}
-          style={(e: EtatPresse) => ({ flex: 1, minWidth: 0, paddingLeft: c.urgence ? 16 : 10, paddingRight: 2, paddingVertical: 7, gap: 5, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
+          style={(e: EtatPresse) => ({ flex: 1, minWidth: 0, paddingLeft: urgence ? 16 : 10, paddingRight: 2, paddingVertical: 7, gap: 5, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.06) : 'transparent' })}>
           {pastilles.length || c.urgence ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }} testID={pastilles.length ? `esport-cm-carte-${c.id}-etiquettes` : undefined}>
               {/* Niveau d'urgence : pastille texte (drapeau, libellé, barres) devant les étiquettes. */}
-              {c.urgence ? <PastilleUrgence theme={theme} niveau={c.urgence} sansLibelleAccessible testID={`esport-cm-carte-${c.id}-urgence-drapeau`} /> : null}
+              {c.urgence ? (
+                <View style={terminee ? { opacity: 0.4 } : undefined} testID={terminee ? `esport-cm-carte-${c.id}-urgence-grisee` : undefined}>
+                  <PastilleUrgence theme={theme} niveau={c.urgence} sansLibelleAccessible testID={`esport-cm-carte-${c.id}-urgence-drapeau`} />
+                </View>
+              ) : null}
               {pastilles.map((e, i) => (
                 <View key={i} style={{ backgroundColor: e.couleur, borderRadius: 4, paddingHorizontal: 6, height: 16, minWidth: 36, justifyContent: 'center' }}>
                   {e.nom ? (
@@ -1343,7 +1415,12 @@ function TuileCarte({
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}>
-            <Text style={{ ...texte(theme, 14), fontWeight: '500', lineHeight: 19, flex: 1, minWidth: 0 }} numberOfLines={2}>
+            {terminee ? (
+              <View style={{ paddingTop: 2 }}>
+                <Icone nom="valide" taille={15} couleur={theme.ok} libelle={trCm('carte.terminee')} testID={`esport-cm-carte-${c.id}-terminee`} />
+              </View>
+            ) : null}
+            <Text style={{ ...texte(theme, 14), fontWeight: '500', lineHeight: 19, flex: 1, minWidth: 0, ...(terminee ? { color: theme.attenue } : null) }} numberOfLines={2}>
               {c.titre}
             </Text>
           </View>

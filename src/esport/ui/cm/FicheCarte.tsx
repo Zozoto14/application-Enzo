@@ -23,6 +23,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
+import { Icone } from '../../../ui/icones';
 import { ErreurEsport } from '../../client';
 import { PORTEE_CLUB, type ApiCm, type CarteDetail, type DetailTableau, type LiensCarte, type MatchsTeam, type Personne, type ReponseCarte, type Reseau, type TeamCm, type TextesPost, type Urgence } from '../../cm/api';
 import { CLES_RESEAUX, RESEAUX, analyserTexte } from '../../cm/reseaux';
@@ -210,7 +211,21 @@ export function FicheCarte({
 
       <Panneau theme={theme} testID="esport-cm-fiche-details">
         <Intertitre theme={theme}>{trCm('fiche.details')}</Intertitre>
-        <SelecteurUrgence theme={theme} valeur={c.urgence} editer={dr.editer} onChoisir={urgence => void faire('urgence', () => api.modifierCarte(c.id, { urgence }))} testID="esport-cm-fiche-urgence" />
+        {/* Carte terminée (colonne de fin, migration 0050) : mention et drapeau d'urgence grisé (conservé, plus compté). */}
+        {c.termineeLe ? (
+          <View style={{ gap: 2 }} testID="esport-cm-fiche-terminee">
+            <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'center' }]}>
+              <Icone nom="valide" taille={16} couleur={theme.ok} />
+              <Text style={{ ...texte(theme), fontWeight: '700', flex: 1, minWidth: 0 }} testID="esport-cm-fiche-terminee-texte">
+                {c.termineePar ? trCm('fiche.terminee_le', { date: quand(c.termineeLe, fuseau), nom: nom(c.termineePar) }) : trCm('fiche.terminee_le_sans', { date: quand(c.termineeLe, fuseau) })}
+              </Text>
+            </View>
+            {dr.editer ? <Aide theme={theme}>{trCm('fiche.terminee_aide')}</Aide> : null}
+          </View>
+        ) : null}
+        <View style={c.termineeLe && c.urgence ? { opacity: 0.5 } : undefined} testID={c.termineeLe && c.urgence ? 'esport-cm-fiche-urgence-grisee' : undefined}>
+          <SelecteurUrgence theme={theme} valeur={c.urgence} editer={dr.editer} onChoisir={urgence => void faire('urgence', () => api.modifierCarte(c.id, { urgence }))} testID="esport-cm-fiche-urgence" />
+        </View>
         {dr.editer ? <Aide theme={theme}>{trCm('urgence.regler_aide')}</Aide> : null}
         <Etiquettes theme={theme} api={api} c={c} tableau={tableau} editer={dr.editer} faire={faire} onChangeEtiquettes={() => faire('etiquettes-gestion', async () => undefined)} />
         <Membres theme={theme} c={c} personnes={tableau.personnes} editer={dr.editer} onChanger={membres => faire('membres', () => api.modifierCarte(c.id, { membres }))} />

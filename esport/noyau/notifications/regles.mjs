@@ -46,6 +46,10 @@ export const REGLES = Object.freeze({
   'cm.commentaire_ajoute': AUCUN,
   // Carte passée en urgent / critique : seulement la notification personnelle (cm-urgence) des personnes concernées.
   'cm.carte_urgence': AUCUN,
+  // Carte terminée (colonne de fin) : seulement la notification personnelle (cm-carte-terminee) du créateur et des suiveurs.
+  'cm.carte_terminee': AUCUN,
+  'cm.carte_rouverte': AUCUN,
+  'cm.liste_fin': AUCUN,
   'cm.post_soumis': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_valide': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },
   'cm.post_refuse': { categorie: 'cm', acces: 'cm:cm.voir', lien: CM('valider') },

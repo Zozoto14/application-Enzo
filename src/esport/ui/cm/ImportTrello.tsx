@@ -31,6 +31,8 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
   const [resultat, setResultat] = useState<ResultatImport | undefined>();
   // Étiquettes Critique / Urgent / Moyen / Faible : proposées en drapeau d'urgence (coché par défaut).
   const [convertir, setConvertir] = useState(true);
+  // Listes Trello à marquer colonnes de fin (proposées : archivées ou nommées Fini, Terminé, Done…), cochées d'office.
+  const [listesFin, setListesFin] = useState<string[]>([]);
   const { erreur, avis, agir, enCours, setErreur } = useAgir();
   useEffect(() => {
     void agir('', async () => {
@@ -64,6 +66,7 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
   const voir = async (contenu: unknown, p: string, a: boolean) => {
     const x = await api.apercuTrello(contenu, p, a);
     setApercu(x);
+    setListesFin(x.listes.filter(l => l.proposeFin && l.trelloId).map(l => l.trelloId as string));
     setCorr(x.correspondances);
   };
 
@@ -138,6 +141,23 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
               <Aide theme={theme}>{trCm('trello.urgences_aide')}</Aide>
             </View>
           ) : null}
+          {apercu.listes.some(l => l.proposeFin && l.trelloId) ? (
+            <View style={{ gap: ESP.xs }} testID="esport-cm-trello-fin">
+              <Text style={{ ...texte(theme), fontWeight: '700' }}>{trCm('trello.fin')}</Text>
+              {apercu.listes
+                .filter(l => l.proposeFin && l.trelloId)
+                .map(l => {
+                  const libelle = trnCm('trello.fin_ligne', l.cartes, { nom: l.nom });
+                  return (
+                    <View key={l.trelloId} style={[styles.ligne, { gap: ESP.xs }]}>
+                      <Case theme={theme} coche={listesFin.includes(l.trelloId as string)} libelle={libelle} onChanger={v => setListesFin(x => (v ? [...x, l.trelloId as string] : x.filter(y => y !== l.trelloId)))} testID={`esport-cm-trello-fin-${l.trelloId}`} />
+                      <Text style={{ ...texte(theme, 13), flex: 1, minWidth: 0 }}>{libelle}</Text>
+                    </View>
+                  );
+                })}
+              <Aide theme={theme}>{trCm('trello.fin_aide')}</Aide>
+            </View>
+          ) : null}
           {apercu.bilan.piecesDeposees ? <Aide theme={theme} testID="esport-cm-trello-fichiers">{trCm('trello.fichiers_liens', { n: apercu.bilan.piecesDeposees })}</Aide> : null}
           {apercu.piecesIgnorees ? <Aide theme={theme}>{trCm('trello.pieces_ignorees', { n: apercu.piecesIgnorees })}</Aide> : null}
           {apercu.membresTrello.length ? (
@@ -166,7 +186,7 @@ export function ImportTrello({ theme, api, onOuvrir }: { theme: ThemeHub; api: A
               void agir('importer', async () => {
                 if (!fichier) return;
                 setErreur(undefined);
-                const r = await api.importerTrello(fichier.contenu, portee, archivees, corr, convertir && Boolean(apercu.urgences?.length));
+                const r = await api.importerTrello(fichier.contenu, portee, archivees, corr, convertir && Boolean(apercu.urgences?.length), listesFin);
                 setResultat(r);
                 return trCm('trello.fait', { cartes: r.bilan.cartesCreees, maj: r.bilan.cartesMisesAJour });
               })

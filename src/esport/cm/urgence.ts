@@ -59,10 +59,10 @@ export const fondCarteUrgence = (n: Urgence | null | undefined, surface: string,
 /** Niveaux qui comptent dans les compteurs d'en-tête de colonne et l'Accueil CM. */
 export const estAlerte = (n: Urgence | null | undefined): boolean => n === 'urgent' || n === 'critique';
 
-/** Compteurs d'une liste de cartes (archivées exclues) : { critique, urgent }. */
-export function compterUrgences(cartes: Array<Pick<CarteResume, 'urgence' | 'archive'>>): { critique: number; urgent: number } {
+/** Compteurs d'une liste de cartes (archivées et terminées exclues) : { critique, urgent }. */
+export function compterUrgences(cartes: Array<Pick<CarteResume, 'urgence' | 'archive' | 'terminee'>>): { critique: number; urgent: number } {
   const r = { critique: 0, urgent: 0 };
-  for (const c of cartes) if (!c.archive && estAlerte(c.urgence)) r[c.urgence as 'critique' | 'urgent']++;
+  for (const c of cartes) if (!c.archive && !c.terminee && estAlerte(c.urgence)) r[c.urgence as 'critique' | 'urgent']++;
   return r;
 }
 

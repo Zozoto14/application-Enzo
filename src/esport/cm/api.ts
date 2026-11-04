@@ -166,6 +166,10 @@ export interface ListeCm {
   cle: CleListe | null;
   position: number;
   archive: boolean;
+  /** Colonne de fin (migration 0050) : les cartes déposées ici sont terminées ; absent d'un serveur ancien. */
+  fin?: boolean;
+  /** La proposition « marquer comme colonne de fin » a été refusée pour cette colonne. */
+  finIgnoree?: boolean;
 }
 export interface Etiquette {
   id: string;
@@ -194,6 +198,9 @@ export interface CarteResume {
   membres: string[];
   /** Drapeau d'urgence (migration 0046) ; absent d'un serveur ancien. */
   urgence?: Urgence | null;
+  /** Carte terminée : déposée dans une colonne de fin (migration 0050). */
+  terminee?: boolean;
+  termineeLe?: string | null;
   commentaires: number;
   /** Commentaires de la carte écrits par d'autres depuis la dernière ouverture (migration 0045). */
   nonLus?: number;
@@ -264,6 +271,9 @@ export interface CarteDetail {
   echeanceFaite: boolean;
   datePublication: string | null;
   urgence?: Urgence | null;
+  /** Terminée le … par … (migration 0050) ; null : carte ouverte. */
+  termineeLe?: string | null;
+  termineePar?: string | null;
   post: boolean;
   statut: StatutPost | null;
   reseaux: Reseau[];
@@ -425,7 +435,7 @@ export interface ApercuTrello {
   correspondances: Record<string, string | null>;
   personnes: Personne[];
   dejaImporte: { id: string; nom: string | null; portee: string } | null;
-  listes: Array<{ nom: string; archivee: boolean; cartes: number }>;
+  listes: Array<{ trelloId?: string; nom: string; archivee: boolean; cartes: number; /** Archivée ou nommée Fini / Terminé / Done… : proposée comme colonne de fin. */ proposeFin?: boolean }>;
 }
 export interface ResultatImport {
   tableauId: string;
@@ -485,8 +495,8 @@ export function apiCm(client: ClientEsport) {
     /** Calendriers des teams (planning ou compétition publiable, selon les droits du compte). */
     calendrierTeams: (du: string, au: string) => r<{ du: string; au: string; teams: CalendrierTeam[] }>(`/cm/calendrier/teams${requeteUrl({ du, au })}`),
     supprimerTableau: (id: string) => r<{ ok: true }>(`/cm/tableaux/${e(id)}`, 'DELETE'),
-    creerListe: (tableauId: string, nom: string) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/listes`, 'POST', { nom }),
-    modifierListe: (id: string, l: { nom?: string | null; archive?: boolean }) => r<{ ok: true }>(`/cm/listes/${e(id)}`, 'PATCH', l),
+    creerListe: (tableauId: string, nom: string, fin = false) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/listes`, 'POST', fin ? { nom, fin } : { nom }),
+    modifierListe: (id: string, l: { nom?: string | null; archive?: boolean; fin?: boolean; finIgnoree?: boolean }) => r<{ ok: true }>(`/cm/listes/${e(id)}`, 'PATCH', l),
     deplacerListe: (id: string, index: number) => r<{ ok: true }>(`/cm/listes/${e(id)}/deplacer`, 'POST', { index }),
     creerEtiquette: (tableauId: string, et: { nom: string; couleur: string }) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/etiquettes`, 'POST', et),
     modifierEtiquette: (id: string, et: { nom?: string; couleur?: string }) => r<{ ok: true }>(`/cm/etiquettes/${e(id)}`, 'PATCH', et),
@@ -526,6 +536,8 @@ export function apiCm(client: ClientEsport) {
     aValider: () => r<{ cartes: CarteTransverse[]; noms: Record<string, string | null> }>('/cm/a-valider'),
     /** Cartes critiques et urgentes des tableaux visibles (critiques d'abord). */
     urgences: () => r<{ cartes: CarteTransverse[] }>('/cm/urgences'),
+    /** Cartes terminées par semaine (lundi à dimanche) sur les tableaux visibles, la semaine en cours en dernier. */
+    terminees: (semaines = 8) => r<{ semaines: Array<{ debut: string; n: number }>; total: number }>(`/cm/terminees?semaines=${semaines}`),
     calendrier: (du: string, au: string, reseau?: Reseau) => r<{ cartes: CarteTransverse[] }>(`/cm/calendrier${requeteUrl({ du, au, reseau })}`),
     recherche: (q: string) => r<{ cartes: CarteTransverse[] }>(`/cm/recherche${requeteUrl({ q })}`),
     team: (teamId: string) => r<PageTeamCm>(`/cm/teams/${e(teamId)}`),
@@ -555,8 +567,8 @@ export function apiCm(client: ClientEsport) {
     journal: (avant?: string) => r<{ entrees: EntreeJournalCm[]; noms: Record<string, string | null> }>(`/cm/journal${requeteUrl({ avant })}`),
     porteesImport: () => r<{ portees: Array<{ portee: string; team: TeamCm | null }> }>('/cm/import/portees'),
     apercuTrello: (trello: unknown, portee: string, avecArchivees: boolean) => r<ApercuTrello>('/cm/import/trello/apercu', 'POST', { trello, portee, avecArchivees }),
-    importerTrello: (trello: unknown, portee: string, avecArchivees: boolean, correspondances: Record<string, string | null>, convertirUrgences = false) =>
-      r<ResultatImport>('/cm/import/trello', 'POST', { trello, portee, avecArchivees, correspondances, convertirUrgences }),
+    importerTrello: (trello: unknown, portee: string, avecArchivees: boolean, correspondances: Record<string, string | null>, convertirUrgences = false, listesFin: string[] = []) =>
+      r<ResultatImport>('/cm/import/trello', 'POST', { trello, portee, avecArchivees, correspondances, convertirUrgences, ...(listesFin.length ? { listesFin } : {}) }),
   };
 }
 
