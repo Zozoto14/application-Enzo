@@ -73,6 +73,11 @@ export const LIMITES = {
   trombi_fiche: { max: 120, fenetreS: 3600 },
   // Badges (migration 0032) : créations et attributions, par compte et par heure.
   trombi_badges: { max: 300, fenetreS: 3600 },
+  // Tickets (migration 0054) : lectures du serveur Discord et publications de panneaux (appels à Discord), par compte ;
+  // réponses envoyées depuis l'app ; ouvertures de tickets par utilisateur Discord.
+  tickets_discord: { max: 120, fenetreS: 3600 },
+  tickets_reponse: { max: 300, fenetreS: 3600 },
+  tickets_ouverture: { max: 10, fenetreS: 3600 },
 };
 
 /**

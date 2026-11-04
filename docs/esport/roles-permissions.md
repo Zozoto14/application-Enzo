@@ -29,7 +29,7 @@ système modifié), **Dupliquer** (nouveau rôle avec les mêmes permissions —
 accorder), **Supprimer** (rôle personnalisé), **+ Nouveau rôle**. Recherche par mot ou par clé (`cm.valider`).
 
 La **matrice** range les permissions par catégorie : Membres, Teams, Agenda, Jeu, Compétition, CM, Drive, Sponsors,
-Discord, Jeux & IA, Administration. Chaque ligne donne la description (français ou anglais, selon la langue de
+Discord, Tickets, Jeux & IA, Administration. Chaque ligne donne la description (français ou anglais, selon la langue de
 l'app), la clé technique, et un badge **Sensible** (suppression, données personnelles, gestion des rôles…) ou
 **Fondateur** (permission qu'il est seul à accorder). Accorder une permission sensible demande une confirmation.
 Une case grisée : vous ne pouvez pas l'accorder.
@@ -50,6 +50,10 @@ aussi porter (un rôle du club vaut alors comme une affectation CM « club »).
 | `statistiques.voir` | ouvrir la page Statistiques (activité par membre comprise) ; arrêter ou reprendre la collecte reste au Fondateur |
 | `jeux.gerer` | gérer les profils de jeu et l'assistant IA ; l'**Administration de l'IA** reste au Fondateur. Elle peut aussi être accordée directement depuis Jeux › Administration IA (accord direct, inchangé) |
 | `roles.gerer` | la page Rôles et permissions (Fondateur seul à l'accorder) |
+| `tickets.voir` | la page **Tickets** : les tickets Discord des catégories que le compte traite ([tickets.md](tickets.md)) |
+| `tickets.repondre` | répondre depuis l'app, notes internes, prendre en charge, fermer et rouvrir les tickets qu'il voit |
+| `tickets.gerer` | toutes les catégories de tickets, assigner, transcripts, statistiques |
+| `tickets.configurer` | Tickets › Configuration (serveur, catégories, panneaux, messages, liste noire, horaires, commandes) |
 
 Le Discord **se règle par team** (`discord.manage`) et les salons du club par le CM (`cm.gerer`, page Réseaux) : il
 n'existe pas d'objet « Discord du club » séparé.
@@ -65,7 +69,8 @@ Qui a ce rôle › chercher « Grimm » › + Grimm**). Par défaut : **toutes l
   compléter) et **badges** (`membres.badges.gerer` : catalogue et attributions dans tout le club) ;
 - statistiques ; jeux et assistant IA ;
 - tout le CM : `cm.voir`, `cm.deposer`, `cm.editer`, `cm.valider`, **`cm.gerer`** (équipe CM, tableaux, réglages,
-  suppressions définitives), clips, tout le Drive (`cm.drive.gerer` compris), **Sponsors** (voir et gérer).
+  suppressions définitives), clips, tout le Drive (`cm.drive.gerer` compris), **Sponsors** (voir et gérer) ;
+- les **tickets** Discord : voir, répondre, gérer, configurer (migration 0054).
 
 Le titulaire porte automatiquement le **badge « Second CEO »** du trombinoscope ([trombinoscope.md](trombinoscope.md)).
 

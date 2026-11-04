@@ -47,6 +47,16 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     transcriptionExterne: config.transcriptionExterne,
     ...(config.drive ? { drive: config.drive } : {}),
   });
+  // Tickets Discord : plus aucun processus ne tient la Gateway (app endormie par Passenger, redémarrée…) → l'app est
+  // réveillée (une requête GET /sante), et son superviseur reprend la connexion au passage suivant.
+  if (rapport.tickets?.actif && !rapport.tickets.meneur && config.urlPublique && config.ticketsGateway !== false) {
+    try {
+      await (fetch ?? globalThis.fetch)(`${String(config.urlPublique).replace(/\/+$/, '')}/sante`, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+      rapport.push({ tache: 'tickets : réveil de l’app', ok: true });
+    } catch (e) {
+      rapport.push({ tache: 'tickets : réveil de l’app', ok: false, erreur: String(e?.message ?? e) });
+    }
+  }
   // Récapitulatif e-mail (Node seulement : SMTP de esport.env) ; sans SMTP, rien n'est fait.
   if (config.smtp) {
     const envoyer = await creerEnvoyeur(config.smtp, { creerTransport });

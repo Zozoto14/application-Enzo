@@ -19,9 +19,10 @@ import { Compteur, ESP, attenue, rayonControle, texte, useDensite, type EtatPres
 import { tr } from '../i18n';
 import { BandeauTranscriptions } from './medias/Transcription';
 import { trNf } from '../i18n/notifications';
+import { trTk } from '../i18n/tickets';
 import { Glyphe } from '../../ui/icones';
 
-export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques' | 'jeux';
+export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'tickets' | 'statistiques' | 'jeux' | 'plus';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
   { cle: 'dashboard', get libelle() {
@@ -38,6 +39,12 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
       return tr('dashboard.membres');
     }, glyphe: 'membres', get description() {
       return tr('cadreEsport.membres_tous_les_comptes');
+    } },
+  // Tickets Discord : tickets.voir (catégories traitées) ou tickets.configurer ; compteur des tickets non lus.
+  { cle: 'tickets', get libelle() {
+      return trTk('nav');
+    }, glyphe: 'billets', get description() {
+      return trTk('nav_description');
     } },
   // Profils de jeu (formats, score, maps, personnages…) : le Fondateur et les comptes à qui il confie « jeux.gerer ».
   { cle: 'jeux', get libelle() {
@@ -57,7 +64,24 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
  * Entrées de premier niveau visibles : « Statistiques » pour le Fondateur seulement ; « Jeux » avec la permission
  * jeux.gerer. Cinq au plus : elles tiennent toutes dans la barre du bas du téléphone. Le CM du club est dans Teams.
  */
-export const navEsport = (fondateur?: boolean, gererJeux?: boolean) => NAV_ESPORT.filter(n => (n.cle !== 'statistiques' || fondateur) && (n.cle !== 'jeux' || Boolean(gererJeux)));
+export const navEsport = (fondateur?: boolean, gererJeux?: boolean, tickets?: boolean) => NAV_ESPORT.filter(n => (n.cle !== 'statistiques' || fondateur) && (n.cle !== 'jeux' || Boolean(gererJeux)) && (n.cle !== 'tickets' || Boolean(tickets)));
+
+/** Entrée « Plus » de la barre du bas (téléphone) : les entrées au-delà de la quatrième. */
+export const ENTREE_PLUS = { cle: 'plus' as OngletEsport, glyphe: 'grille', get libelle() {
+    return tr('cadreEsport.plus');
+  }, get description() {
+    return tr('cadreEsport.plus_description');
+  } };
+
+/**
+ * Téléphone : la barre du bas tient cinq entrées. Au-delà (Fondateur avec Tickets, Jeux et Statistiques), les quatre
+ * premières restent et les autres passent dans « Plus » (page qui les liste, RacineEsport.tsx).
+ */
+export function navMobile(fondateur?: boolean, gererJeux?: boolean, tickets?: boolean) {
+  const toutes = navEsport(fondateur, gererJeux, tickets);
+  if (toutes.length <= 5) return { barre: toutes, plus: [] as typeof toutes };
+  return { barre: [...toutes.slice(0, 4), ENTREE_PLUS], plus: toutes.slice(4) };
+}
 
 export const LARGEUR_BARRE_LATERALE = 252;
 /** Barre latérale rangée : une fine colonne d'icônes. */
@@ -282,6 +306,7 @@ export function CadreEsport({
   enTeteMobile,
   fondateur,
   gererJeux,
+  tickets,
   notifications,
   children,
 }: {
@@ -291,6 +316,8 @@ export function CadreEsport({
   fondateur?: boolean;
   /** Permission globale « Gérer les profils de jeu » : l'entrée « Jeux ». */
   gererJeux?: boolean;
+  /** Tickets Discord (tickets.voir ou tickets.configurer) : l'entrée « Tickets ». */
+  tickets?: boolean;
   /** Onglet de premier niveau actif (« teams » dans une team). */
   onglet: OngletEsport;
   onOnglet(o: OngletEsport): void;
@@ -338,12 +365,12 @@ export function CadreEsport({
             testID="esport-nav"
             actif={onglet}
             onChoisir={c => onOnglet(c as OngletEsport)}
-            entrees={navEsport(fondateur, gererJeux).map(n => ({
+            entrees={navMobile(fondateur, gererJeux, tickets).barre.map(n => ({
               cle: n.cle,
               libelle: n.libelle,
               glyphe: n.glyphe,
               description: n.description,
-              pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : undefined,
+              pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : n.cle === 'plus' && navMobile(fondateur, gererJeux, tickets).plus.some(p => compteurs?.[p.cle]) ? '•' : undefined,
             }))}
           />
         )}
@@ -422,7 +449,7 @@ export function CadreEsport({
               jusqu'à treize sections) ; l'en-tête (réduction) et le pseudo restent en place. */}
           <ScrollView testID="esport-barre-defilement" onScroll={cacher} scrollEventThrottle={64} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: ESP.l }} showsVerticalScrollIndicator={false}>
           <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
-            {navEsport(fondateur, gererJeux).map(n => (
+            {navEsport(fondateur, gererJeux, tickets).map(n => (
               <EntreeLaterale
                 key={n.cle}
                 theme={theme}

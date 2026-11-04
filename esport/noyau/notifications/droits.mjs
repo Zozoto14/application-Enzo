@@ -11,7 +11,8 @@
  *  - ressources de DATA › Ressources (migration 0048) : `liensInterdits`, celles qu'il ne voit pas ;
  *  - espace « CM du club » : `cmEspace`, réservé à l'équipe CM (une permission CM d'un rôle de team n'ouvre que
  *    l'onglet CM de cette team) ; sans lui, les personnelles CM / Drive du club (sans team) sont masquées, sauf
- *    les invitations aux réunions et les ressources partagées avec le lecteur.
+ *    les invitations aux réunions et les ressources partagées avec le lecteur ;
+ *  - tickets (migration 0054) : `tickets`, les catégories de tickets qu'il voit (`null` : toutes).
  */
 
 import { CLE_PROPRIETAIRE, TOUTES_PERMISSIONS, autorise, moduleConnu } from '../permissions.mjs';
@@ -20,6 +21,7 @@ import { droitsSponsors } from '../sponsors/commun.mjs';
 import { porteesDe } from '../cm/commun.mjs';
 import { lecteurTableaux } from '../cm/acces.mjs';
 import { lecteurLiens } from '../cm/liensAcces.mjs';
+import { droitsTickets } from '../tickets/acces.mjs';
 
 const ACCES_TOTAL = 'teams.acces_total';
 const SAUF_ACCES_TOTAL = new Set(['team.delete']);
@@ -57,7 +59,10 @@ export async function droitsLecteur(base, acteur) {
   const tableauxInterdits = await lecteurTableaux(base, acteur).interdits();
   // Ressources de DATA › Ressources qu'il ne voit pas (restreintes dont il n'est pas, team sans accès CM ; migration 0048).
   const liensInterdits = await lecteurLiens(base, acteur, cm).interdits();
-  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, cmEspace: cm.club.size > 0 || [...cm.teamsEspace.values()].some(s => s.size > 0), tableauxInterdits, liensInterdits };
+  // Tickets (migration 0054) : catégories de tickets que le lecteur voit aujourd'hui (`null` : toutes).
+  const tk = await droitsTickets(base, acteur);
+  const tickets = !tk.voir ? [] : tk.tout ? null : [...tk.categories];
+  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, cmEspace: cm.club.size > 0 || [...cm.teamsEspace.values()].some(s => s.size > 0), tableauxInterdits, liensInterdits, tickets };
 }
 
 /** Le lecteur voit-il un élément de clé d'accès `acces` (team de l'élément : `teamId`) ? */

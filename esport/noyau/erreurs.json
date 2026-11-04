@@ -819,7 +819,38 @@
   "Cette personne n’a pas accès au CM de ce tableau.": "This person has no access to this board’s CM area.",
   "Cette personne n’a pas accès aux ressources du CM.": "This person has no access to the CM resources.",
   "Vous ne pouvez pas vous retirer l’accès « peut modifier » à cette ressource.": "You cannot remove your own “can edit” access to this resource.",
-  "Personnes illisibles.": "Unreadable people."
+  "Personnes illisibles.": "Unreadable people.",
+  "Couleur : #rrggbb.": "Colour: #rrggbb.",
+  "Langue des messages inconnue.": "Unknown message language.",
+  "Choisissez le serveur et la catégorie Discord des tickets ouverts avant d’activer.": "Pick the server and the Discord category of open tickets before enabling.",
+  "Messages illisibles.": "Unreadable messages.",
+  "Fuseau horaire inconnu.": "Unknown time zone.",
+  "Plage horaire : HH:MM, début avant fin.": "Time slot: HH:MM, start before end.",
+  "Deux champs ont le même identifiant.": "Two fields have the same identifier.",
+  "Chaque champ a un libellé (45 caractères au plus).": "Each field needs a label (45 characters at most).",
+  "Longueur minimale plus grande que la maximale.": "Minimum length greater than the maximum.",
+  "Nom de la catégorie obligatoire (60 caractères au plus).": "Category name required (60 characters at most).",
+  "Icône inconnue.": "Unknown icon.",
+  "Rôles de l’app illisibles.": "Unreadable app roles.",
+  "Rôle de l’app illisible.": "Unreadable app role.",
+  "Rôle de l’app introuvable.": "App role not found.",
+  "Le modèle du nom de salon doit contenir {numero}.": "The channel name template must contain {numero}.",
+  "Choisissez le tableau CM des demandes.": "Pick the CM board for requests.",
+  "Titre du panneau obligatoire (256 caractères au plus).": "Panel title required (256 characters at most).",
+  "Style : boutons ou menu.": "Layout: buttons or menu.",
+  "Image du Drive illisible.": "Unreadable Drive image.",
+  "25 catégories au plus par panneau.": "25 categories at most per panel.",
+  "Identifiant Discord obligatoire.": "Discord ID required.",
+  "Ordre illisible.": "Unreadable order.",
+  "Panneau introuvable.": "Panel not found.",
+  "Drive indisponible.": "Drive unavailable.",
+  "Image PNG, JPEG, GIF ou WebP de 8 Mo au plus.": "PNG, JPEG, GIF or WebP image of 8 MB at most.",
+  "Image du Drive introuvable.": "Drive image not found.",
+  "Bot Discord non configuré (DISCORD_BOT_TOKEN).": "Discord bot not configured (DISCORD_BOT_TOKEN).",
+  "Choisissez le salon de publication.": "Pick the publishing channel.",
+  "Choisissez au moins une catégorie active.": "Pick at least one active category.",
+  "Discord a refusé la publication du panneau.": "Discord refused to publish the panel.",
+  "Liste noire pleine.": "Blacklist full."
  },
  "motifs": [
   [
@@ -1241,6 +1272,34 @@
   [
    "^(\\d+) personnes ou rôles au plus\\.$",
    "$1 people or roles at most."
+  ],
+  [
+   "^Valeur hors limites \\((\\d+) à (\\d+)\\)\\.$",
+   "Value out of range ($1 to $2)."
+  ],
+  [
+   "^Liste d’identifiants Discord invalide \\((\\d+) au plus\\)\\.$",
+   "Invalid list of Discord IDs ($1 at most)."
+  ],
+  [
+   "^(\\d+) catégories au plus \\(limite des menus Discord\\)\\.$",
+   "$1 categories at most (Discord menu limit)."
+  ],
+  [
+   "^Formulaire : (\\d+) champs au plus \\(limite des fenêtres Discord\\)\\.$",
+   "Form: $1 fields at most (Discord form limit)."
+  ],
+  [
+   "^(\\d+) plages au plus\\.$",
+   "$1 slots at most."
+  ],
+  [
+   "^(\\d+) panneaux au plus\\.$",
+   "$1 panels at most."
+  ],
+  [
+   "^(\\d+) caractères au plus\\.$",
+   "$1 characters at most."
   ]
  ]
 }

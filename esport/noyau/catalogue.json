@@ -319,6 +319,7 @@
     {"cle":"drive","fr":"Drive","en":"Drive"},
     {"cle":"sponsors","fr":"Sponsors","en":"Sponsors"},
     {"cle":"discord","fr":"Discord","en":"Discord"},
+    {"cle":"tickets","fr":"Tickets","en":"Tickets"},
     {"cle":"jeux_ia","fr":"Jeux & IA","en":"Games & AI"},
     {"cle":"administration","fr":"Administration","en":"Administration"}
   ],
@@ -333,7 +334,11 @@
     {"cle":"statistiques.voir"},
     {"cle":"jeux.gerer"},
     {"cle":"devblog.gerer"},
-    {"cle":"deploiement.voir"}
+    {"cle":"deploiement.voir"},
+    {"cle":"tickets.voir"},
+    {"cle":"tickets.repondre"},
+    {"cle":"tickets.gerer"},
+    {"cle":"tickets.configurer"}
   ],
   "rolesGlobauxSysteme": [
     {"cle":"second_ceo","nom":"Second CEO","couleur":"#c99a1e","description":"Adjoint du Fondateur : presque tous les droits du club, des teams et du CM, sauf la page Rôles et permissions et ce qui reste au Fondateur.","descriptionEn":"The Founder’s deputy: almost every right over the club, the teams and the CM, except the Roles & permissions page and what stays with the Founder.","sauf":["roles.gerer","devblog.gerer","deploiement.voir"]}
@@ -418,6 +423,10 @@
     "jeux.gerer": {"categorie":"jeux_ia","fr":"Jeux : gérer les profils de jeu et l’assistant IA (l’Administration de l’IA reste au Fondateur).","en":"Games: manage game profiles and the AI assistant (AI administration stays with the Founder)."},
     "devblog.gerer": {"categorie":"administration","fr":"Devblog : rédiger les notes de mise à jour, les publier dans l’app et les annoncer sur Discord.","en":"Devblog: write the release notes, publish them in the app and announce them on Discord."},
     "deploiement.voir": {"categorie":"administration","fr":"Mises à jour : voir l’état des mises à jour du dashboard (versions, journal de déploiement, GitHub) et demander une vérification.","en":"Updates: see the dashboard’s update status (versions, deployment log, GitHub) and request a check."},
+    "tickets.voir": {"categorie":"tickets","fr":"Tickets : voir les tickets Discord des catégories qu’on traite (rôles de la catégorie ; sans rôle réglé, toutes).","en":"Tickets: see the Discord tickets of the categories you handle (the category’s roles; none set: all of them).","sensible":true},
+    "tickets.repondre": {"categorie":"tickets","fr":"Tickets : répondre depuis l’app, notes internes, prendre en charge, mettre en attente, fermer et rouvrir les tickets qu’on voit.","en":"Tickets: reply from the app, internal notes, claim, put on hold, close and reopen the tickets you can see.","sensible":true},
+    "tickets.gerer": {"categorie":"tickets","fr":"Tickets : toutes les catégories, assigner, changer de catégorie, ajouter ou retirer quelqu’un, transcripts, statistiques.","en":"Tickets: every category, assign, change category, add or remove people, transcripts, statistics.","sensible":true},
+    "tickets.configurer": {"categorie":"tickets","fr":"Tickets : configurer le système (serveur, catégories, formulaires, panneaux, messages, liste noire, horaires, commandes).","en":"Tickets: configure the system (server, categories, forms, panels, messages, blacklist, hours, commands).","sensible":true},
     "statistiques.voir": {"categorie":"administration","fr":"Statistiques d’usage : voir la page (activité par membre comprise).","en":"Usage statistics: see the page (per-member activity included).","sensible":true},
     "roles.gerer": {"categorie":"administration","fr":"Rôles et permissions : ouvrir la page et modifier les rôles du club, du CM et le modèle des teams. Seul le Fondateur l’accorde.","en":"Roles & permissions: open the page and edit club and CM roles and the team template. Only the Founder grants it.","sensible":true}
   }

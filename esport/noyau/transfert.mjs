@@ -226,6 +226,18 @@ export const TABLES = [
   ['cm_reunion_rappels', 'reunion_id, occurrence, compte_id'],
   ['cm_reunion_mp', 'id'],
   ['cm_reunion_ical', 'id'],
+  // Tickets Discord (migration 0054) : réglages, catégories, panneaux, liste noire, tickets, conversation (notes
+  // internes comprises), pièces jointes (les octets copiés restent dans le stockage : esport/serveur/importer.mjs),
+  // personnes ajoutées, lectures. Le bail du meneur et l'état de la connexion (passagers) ne sont pas exportés.
+  ['tickets_reglages', 'cle'],
+  ['tickets_categories', 'id'],
+  ['tickets_panneaux', 'id'],
+  ['tickets_liste_noire', 'discord_user_id'],
+  ['tickets', 'numero'],
+  ['tickets_messages', 'cree_le, id'],
+  ['tickets_pieces', 'id'],
+  ['tickets_membres', 'ticket_id, discord_user_id'],
+  ['tickets_lectures', 'compte_id, ticket_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

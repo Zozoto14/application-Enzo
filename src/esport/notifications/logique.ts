@@ -19,6 +19,7 @@ export const ICONES: Record<CategorieNotification, NomIcone> = {
   cm: 'crayon',
   drive: 'dossier',
   sponsors: 'partenaires',
+  tickets: 'billets',
   membres: 'membres',
   discord: 'bulle',
   reunions: 'reunion',

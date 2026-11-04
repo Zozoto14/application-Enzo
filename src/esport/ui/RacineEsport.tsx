@@ -23,7 +23,7 @@ import { fabrique } from '../fabrique';
 import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee, nomRole, nomJeu } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
-import { CadreEsport, PageEsport, type OngletEsport } from './CadreEsport';
+import { CadreEsport, EntreeLaterale, PageEsport, navMobile, type OngletEsport } from './CadreEsport';
 import { Dashboard } from './Dashboard';
 import { PageMembres, type SousOngletMembres } from './membres/PageMembres';
 import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam';
@@ -33,7 +33,8 @@ import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EnTetePage, E
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { EspaceCm, Jeux, PageDevblog, Statistiques } from './differe';
+import { EspaceCm, Jeux, PageDevblog, PageTickets, Statistiques } from './differe';
+import { apiTickets, type MoiTickets } from '../tickets/api';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
 import { useNouveautesDrive } from '../cm/nouveautesDrive';
 import type { OngletCm } from './cm/EspaceCm';
@@ -74,6 +75,8 @@ export function Esport(props: PropsRacineApp) {
   const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
   // Section CM (GET /cm/moi) : carte « CM du club » de la page Teams ; un ancien serveur sans section CM n'affiche rien.
   const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
+  // Tickets Discord (GET /tickets/moi) : entrée « Tickets » pour qui voit les tickets ou les configure.
+  const [moiTickets, setMoiTickets] = useState<MoiTickets | undefined>();
   const { width } = useWindowDimensions();
   const large = width >= LARGEUR_PC;
 
@@ -114,10 +117,18 @@ export function Esport(props: PropsRacineApp) {
         if (vivant) setMoiCm(m);
       })
       .catch(() => undefined);
+    // Un ancien serveur sans tickets répond 404 : pas d'entrée « Tickets ».
+    Promise.resolve()
+      .then(() => apiTickets(clientPret).moi())
+      .then(m => {
+        if (vivant) setMoiTickets(m);
+      })
+      .catch(() => undefined);
     return () => {
       vivant = false;
     };
   }, [clientPret, profilPret]);
+  const tickets = Boolean(moiTickets?.voir || moiTickets?.configurer);
   const cm = Boolean(moiCm?.espace);
   // Fenêtre « Nouveautés » : le dernier devblog publié pas encore vu par ce compte (une fois, marque en base).
   const nouveautes = useNouveautes(clientPret, profilPret);
@@ -230,6 +241,21 @@ export function Esport(props: PropsRacineApp) {
           onNouveautes={() => setVue({ v: 'devblog' })}
         />
       );
+    } else if (vue.v === 'tickets' && tickets && moiTickets) {
+      // Tickets Discord : liste, conversation, configuration (selon les permissions, contrôlées par le serveur).
+      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} />;
+    } else if (vue.v === 'plus') {
+      // Téléphone : les entrées de navigation qui ne tiennent pas dans la barre du bas.
+      page = (
+        <PageEsport large={large} testID="esport-plus">
+          <EnTetePage theme={theme} large={large} titre={tr('cadreEsport.plus')} sous={tr('cadreEsport.plus_description')} />
+          <View style={{ gap: ESP.xxs }}>
+            {navMobile(stats, Boolean(etat.moi.peutGererJeux), tickets).plus.map(n => (
+              <EntreeLaterale key={n.cle} theme={theme} libelle={n.libelle} glyphe={n.glyphe} description={n.description} choisi={false} onPress={() => setVue({ v: n.cle as Exclude<OngletEsport, 'membres'> })} testID={`esport-plus-${n.cle}`} role="link" />
+            ))}
+          </View>
+        </PageEsport>
+      );
     } else if (onglet === 'statistiques' && stats) {
       page = <Statistiques theme={theme} client={etat.client} large={large} onExporter={exporter} />;
     } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
@@ -297,6 +323,7 @@ export function Esport(props: PropsRacineApp) {
         pseudo={etat.moi.profil.pseudo}
         fondateur={stats}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
+        tickets={tickets}
         notifications={{ n: notifs.nonLues, actif: vue.v === 'notifications', onPress: () => setVue({ v: 'notifications' }) }}>
         {page}
       </CadreEsport>

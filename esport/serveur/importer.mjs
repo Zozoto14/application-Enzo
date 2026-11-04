@@ -53,10 +53,12 @@ export async function verifierComptes(base, donnees) {
   return { ecarts, lignes };
 }
 
-/** Copie les fichiers référencés par la table `fichiers` ; rend { copies, deja, absents }. */
+/** Copie les fichiers référencés par la table `fichiers` (et les pièces des tickets) ; rend { copies, deja, absents }. */
 export async function copierFichiers(base, stockage, lireDistant) {
   const bilan = { copies: 0, deja: 0, absents: [] };
-  for (const f of await base.tous('SELECT cle_stockage, type_mime FROM fichiers ORDER BY cree_le', [])) {
+  // Pièces jointes des tickets copiées dans le stockage privé (migration 0054) : même traitement.
+  const pieces = await base.tous('SELECT cle_stockage, type_mime FROM tickets_pieces WHERE cle_stockage IS NOT NULL ORDER BY cree_le', []);
+  for (const f of [...(await base.tous('SELECT cle_stockage, type_mime FROM fichiers ORDER BY cree_le', [])), ...pieces]) {
     if (await stockage.lire(f.cle_stockage)) {
       bilan.deja++;
       continue;

@@ -70,10 +70,13 @@ import { routesDeploiement } from './deploiement.mjs';
 import { servicesCentre } from './notifications/centre.mjs';
 import { routesNotifications } from './notifications/routes.mjs';
 import { servicesTempsReel } from './temps-reel/service.mjs';
+import { servicesConfigTickets } from './tickets/service.mjs';
+import { routesTickets } from './tickets/routes.mjs';
+import { creerBotTickets } from './tickets/bot.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications', 'temps-reel'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications', 'temps-reel', 'tickets'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -221,10 +224,14 @@ export function creerApi({
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
   const lb = servicesLiaisons({ base, maintenant, noyau: s, config: configBot });
+  // Tickets Discord (migration 0054, docs/esport/tickets.md) : configuration, cycle de vie, conversation ; la Gateway
+  // est tenue par le serveur Node (tickets/superviseur.mjs), jamais par l'API elle-même.
+  const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive }) };
+  const botTickets = creerBotTickets({ base, maintenant });
   const bot = creerBot({
     base,
     maintenant,
-    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb },
+    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb, tickets: botTickets },
     config: configBot,
     fetch: envoiDiscord,
     lienApp,
@@ -457,6 +464,8 @@ export function creerApi({
     if (devblog !== undefined) return devblog;
     const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (trombi !== undefined) return trombi;
+    const tickets = await routesTickets({ tk, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
+    if (tickets !== undefined) return tickets;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (sponsors !== undefined) return sponsors;
     const reseaux = await routesReseaux({ rs: rsx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
@@ -606,5 +615,7 @@ export function creerApi({
   }
   // Serveur Node : fermeture propre (connexions tenues, écoute PostgreSQL) ; tests : mesures du canal.
   traiter.tempsReel = tr;
+  // Serveur Node : rappels de la Gateway des tickets (staff reconnu, suites d'un message, salon supprimé).
+  traiter.ticketsGateway = {};
   return traiter;
 }

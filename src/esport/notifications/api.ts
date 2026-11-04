@@ -10,7 +10,7 @@
 
 import { requeteUrl, type ClientEsport } from '../client';
 
-export const CATEGORIES_NOTIFICATIONS = ['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme'] as const;
+export const CATEGORIES_NOTIFICATIONS = ['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'tickets', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme'] as const;
 export type CategorieNotification = (typeof CATEGORIES_NOTIFICATIONS)[number];
 
 /** Où mène une notification (écran de l'app Esport). */
@@ -19,7 +19,8 @@ export type LienNotification =
   | { vue: 'cm'; onglet: string }
   | { vue: 'membres'; sous: 'trombi' | 'tous' | 'roles' }
   | { vue: 'devblog' }
-  | { vue: 'jeux' };
+  | { vue: 'jeux' }
+  | { vue: 'tickets' };
 
 export interface NotificationCentre {
   id: string;

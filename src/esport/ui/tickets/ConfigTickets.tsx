@@ -1,0 +1,572 @@
+/**
+ * Tickets › Configuration (Fondateur et permission tickets.configurer) : connexion Discord (en direct / secours / hors
+ * ligne, permissions du bot et ce qui manque), réglages généraux, catégories (formulaire, rôles, accueil, liaison),
+ * panneaux (aperçu « comme sur Discord », publication), messages, liste noire, horaires, commandes. Tout est validé
+ * par le serveur ; l'écran n'affiche que ce que la réponse permet.
+ */
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Linking, Pressable, Text, View } from 'react-native';
+import { BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
+import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
+import type { ClientEsport } from '../../client';
+import { formaterDate } from '../../i18n';
+import { trTk, type CleTk } from '../../i18n/tickets';
+import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type General, type Horaires, type ModeLangue, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
+import { Glyphe } from '../../../ui/icones';
+import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
+import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
+import { ChoixDrive } from '../cm/drive/ChoixDrive';
+import { ApercuDiscord } from './ApercuDiscord';
+
+type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes';
+const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
+  ['connexion', 'conf.connexion'],
+  ['general', 'conf.general'],
+  ['categories', 'conf.categories'],
+  ['panneaux', 'conf.panneaux'],
+  ['messages', 'conf.messages'],
+  ['liste', 'conf.liste_noire'],
+  ['horaires', 'conf.horaires'],
+  ['commandes', 'conf.commandes'],
+];
+const VIDE: DeuxLangues = { fr: '', en: '' };
+const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
+
+/** Pastille de l'état de la connexion Discord (aussi affichée en tête de la page Tickets). */
+export function PastilleConnexion({ theme, connexion, actif }: { theme: ThemeHub; connexion?: Connexion; actif?: boolean }) {
+  const mode = actif === false ? 'hors_ligne' : (connexion?.mode ?? 'hors_ligne');
+  const ton: Ton = mode === 'direct' ? 'ok' : mode === 'secours' ? 'alerte' : 'critique';
+  return <Badge theme={theme} ton={ton} texte={`${trTk('connexion.titre')} : ${trTk(`connexion.${mode}` as CleTk)}`} testID={`esport-tk-connexion-${mode}`} />;
+}
+
+/** Choix multiple en pastilles (rôles, catégories). */
+function ChoixMultiple({ theme, libelle, valeurs, options, onChanger, max, testID }: { theme: ThemeHub; libelle: string; valeurs: string[]; options: ReadonlyArray<{ id: string; nom: string; couleur?: string | null }>; onChanger(v: string[]): void; max?: number; testID: string }) {
+  return (
+    <View style={{ gap: 6 }}>
+      <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{libelle}</Text>
+      <View style={styles.ligne}>
+        {options.map(o => {
+          const coche = valeurs.includes(o.id);
+          const plein = !coche && max !== undefined && valeurs.length >= max;
+          return (
+            <Pressable
+              key={o.id}
+              testID={`${testID}-${o.id}`}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: coche, disabled: plein }}
+              accessibilityLabel={`${libelle} : ${o.nom}`}
+              disabled={plein}
+              onPress={() => onChanger(coche ? valeurs.filter(v => v !== o.id) : [...valeurs, o.id])}
+              style={[styles.choix, { borderColor: coche ? (o.couleur ?? theme.accent) : theme.ligne, backgroundColor: coche ? teinteTransparente(o.couleur ?? theme.accent, 0.2) : theme.surface, borderRadius: 10, opacity: plein ? 0.4 : 1, maxWidth: '100%' }]}
+            >
+              <Text style={{ ...texte(theme, 13), fontWeight: coche ? '700' : '500', flexShrink: 1 }} numberOfLines={1}>
+                {coche ? '✓ ' : ''}
+                {o.nom}
+              </Text>
+            </Pressable>
+          );
+        })}
+        {!options.length ? <Text style={attenue(theme)}>{trTk('rien')}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function DeuxChamps({ theme, cle, valeur, onChanger, multiligne, max, testID }: { theme: ThemeHub; cle: [CleTk, CleTk]; valeur: DeuxLangues; onChanger(v: DeuxLangues): void; multiligne?: boolean; max?: number; testID: string }) {
+  return (
+    <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
+      <Champ theme={theme} libelle={trTk(cle[0])} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} multiligne={multiligne} maxLength={max} testID={`${testID}-fr`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+      <Champ theme={theme} libelle={trTk(cle[1])} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} multiligne={multiligne} maxLength={max} testID={`${testID}-en`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+    </View>
+  );
+}
+
+const entier = (v: string): number => {
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
+export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; client: ClientEsport; large: boolean }) {
+  const api = useMemo(() => apiTickets(client), [client]);
+  const [conf, setConf] = useState<Config | undefined>();
+  const [serveur, setServeur] = useState<ServeurDiscord | undefined>();
+  const [connexion, setConnexion] = useState<{ actif: boolean; bot: boolean; connexion: Connexion } | undefined>();
+  const [section, setSection] = useState<Section>('connexion');
+  const { erreur, avis, agir, enCours } = useAgir();
+  const relire = useCallback(async () => {
+    const [c, e] = await Promise.all([api.config(), api.etat()]);
+    setConf(c);
+    setConnexion(e);
+  }, [api]);
+  const verifier = useCallback(() => agir('discord', async () => setServeur(await api.discord())), [agir, api]);
+  useEffect(() => {
+    void agir('charger', async () => {
+      await relire();
+      setServeur(await api.discord().catch(() => undefined));
+    });
+  }, [agir, relire, api]);
+  if (!conf) return <Squelette theme={theme} lignes={5} testID="esport-tk-config-chargement" />;
+  const roles = serveur?.roles ?? [];
+  const salons = serveur?.salons ?? [];
+  const props = { theme, api, conf, setConf, agir, large, roles, salons, client };
+  return (
+    <View style={{ gap: ESP.m }} testID="esport-tk-config">
+      <Onglets theme={theme} prefixe="esport-tk-conf-onglet" testID="esport-tk-conf-onglets" actif={section} onChoisir={id => setSection(id as Section)} entrees={SECTIONS.map(([id, cle]) => ({ id, libelle: trTk(cle) }))} defilant={!large} />
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-tk-conf" />
+      {section === 'connexion' ? <SectionConnexion theme={theme} conf={conf} connexion={connexion} serveur={serveur} enCours={enCours === 'discord'} onVerifier={verifier} /> : null}
+      {section === 'general' ? <SectionGeneral {...props} serveur={serveur} onServeur={verifier} /> : null}
+      {section === 'categories' ? <SectionCategories {...props} /> : null}
+      {section === 'panneaux' ? <SectionPanneaux {...props} /> : null}
+      {section === 'messages' ? <SectionMessages {...props} /> : null}
+      {section === 'liste' ? <SectionListeNoire {...props} /> : null}
+      {section === 'horaires' ? <SectionHoraires {...props} /> : null}
+      {section === 'commandes' ? <SectionCommandes {...props} /> : null}
+    </View>
+  );
+}
+
+type Agir = (libelle: string, action: () => Promise<string | void>) => Promise<boolean>;
+interface PropsSection {
+  theme: ThemeHub;
+  api: ApiTickets;
+  conf: Config;
+  setConf(c: Config): void;
+  agir: Agir;
+  large: boolean;
+  roles: Array<{ id: string; nom: string; couleur: string | null }>;
+  salons: Array<{ id: string; nom: string; type: 'categorie' | 'texte'; parent: string | null }>;
+  client: ClientEsport;
+}
+
+// ------------------------------------------------------------------ Connexion
+
+function SectionConnexion({ theme, conf, connexion, serveur, enCours, onVerifier }: { theme: ThemeHub; conf: Config; connexion?: { actif: boolean; bot: boolean; connexion: Connexion }; serveur?: ServeurDiscord; enCours: boolean; onVerifier(): void }) {
+  const c = connexion?.connexion;
+  const mode = connexion?.actif ? (c?.mode ?? 'hors_ligne') : 'hors_ligne';
+  const perms = serveur?.permissions;
+  const liste = (cles: string[]) => cles.map(k => trTk(`perm.${k}` as CleTk)).join(', ');
+  const salonsVerifies = perms ? ([['general.categorie_ouverts', perms.ouverts], ['general.categorie_archives', perms.archives], ['general.salon_journaux', perms.journaux]] as const) : [];
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-connexion">
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <PastilleConnexion theme={theme} connexion={c} actif={connexion?.actif} />
+        <BoutonHub theme={theme} titre={trTk('connexion.verifier')} onPress={onVerifier} desactive={enCours} testID="esport-tk-conf-verifier" />
+      </View>
+      {!conf.bot ? <Text style={texte(theme)}>{trTk('connexion.sans_bot')}</Text> : !connexion?.actif ? <Text style={texte(theme)}>{trTk('connexion.inactif')}</Text> : <Text style={texte(theme)}>{trTk(`connexion.${mode}_aide` as CleTk)}</Text>}
+      {c?.intentRefuse ? <Text style={{ ...texte(theme), fontWeight: '700' }} testID="esport-tk-conf-intent">{trTk('connexion.intent')}</Text> : null}
+      {c?.jetonRefuse ? <Text style={{ ...texte(theme), fontWeight: '700' }}>{trTk('connexion.jeton')}</Text> : null}
+      {c?.depuis ? <Text style={attenue(theme)}>{trTk('connexion.depuis', { quand: quand(c.depuis) })}</Text> : null}
+      {c?.releve ? <Text style={attenue(theme)}>{trTk('connexion.releve', { n: c.releve.salons, m: c.releve.messages })}</Text> : null}
+      <Intertitre theme={theme}>{trTk('connexion.permissions')}</Intertitre>
+      {serveur?.erreur ? <Text style={texte(theme)}>{trTk('connexion.erreur_discord', { code: serveur.erreur })}</Text> : null}
+      {perms && !perms.membreTrouve ? <Text style={texte(theme)}>{trTk('connexion.membre_introuvable')}</Text> : null}
+      {perms ? (
+        <View style={{ gap: ESP.xxs }} testID="esport-tk-conf-permissions">
+          <Text style={texte(theme)}>{perms.serveur.length ? trTk('connexion.permissions_manque', { liste: liste(perms.serveur) }) : trTk('connexion.permissions_ok')}</Text>
+          {salonsVerifies.map(([cle, v]) =>
+            v && (v.introuvable || v.manquantes.length) ? (
+              <Text key={cle} style={texte(theme)}>
+                {v.introuvable ? trTk('connexion.salon_introuvable', { salon: trTk(cle) }) : trTk('connexion.permissions_salon', { salon: `${trTk(cle)} (${v.nom ?? v.id})`, liste: liste(v.manquantes) })}
+              </Text>
+            ) : null,
+          )}
+        </View>
+      ) : null}
+      {conf.lienInvitation ? <BoutonHub theme={theme} titre={trTk('connexion.inviter')} onPress={() => void Linking.openURL(conf.lienInvitation!)} testID="esport-tk-conf-inviter" /> : null}
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Général
+
+function SectionGeneral({ theme, api, conf, setConf, agir, salons, serveur, onServeur }: PropsSection & { serveur?: ServeurDiscord; onServeur(): void }) {
+  const [g, setG] = useState<General>(conf.general);
+  const categoriesDiscord = salons.filter(s => s.type === 'categorie').map(s => ({ id: s.id, nom: s.nom }));
+  const textes = salons.filter(s => s.type === 'texte').map(s => ({ id: s.id, nom: `#${s.nom}` }));
+  const nombre = (cle: keyof General, libelle: CleTk) => <Champ theme={theme} libelle={trTk(libelle)} valeur={String(g[cle] ?? '')} onChanger={v => setG({ ...g, [cle]: entier(v) })} clavier="number-pad" maxLength={4} testID={`esport-tk-general-${cle}`} />;
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-general">
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ ...texte(theme), fontWeight: '700' }}>{trTk('general.actif')}</Text>
+          <Text style={attenue(theme)}>{trTk('general.actif_aide')}</Text>
+        </View>
+        <Interrupteur theme={theme} libelle={trTk('general.actif')} valeur={g.actif} onChanger={actif => setG({ ...g, actif })} testID="esport-tk-general-actif" />
+      </View>
+      <Choix theme={theme} libelle={trTk('general.serveur')} valeur={g.guildId ?? undefined} options={(serveur?.serveurs ?? []).map(s => ({ id: s.id, nom: s.nom }))} onChoisir={id => setG({ ...g, guildId: id, guildNom: serveur?.serveurs?.find(s => s.id === id)?.nom ?? '' })} testID="esport-tk-general-serveur" />
+      <Text style={attenue(theme)}>{trTk('general.serveur_aide')}</Text>
+      {!salons.length ? <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text> : null}
+      {salons.length ? (
+        <>
+          <Choix theme={theme} libelle={trTk('general.categorie_ouverts')} valeur={g.categorieOuverts ?? undefined} options={categoriesDiscord} onChoisir={id => setG({ ...g, categorieOuverts: id })} testID="esport-tk-general-ouverts" />
+          <Choix theme={theme} libelle={trTk('general.categorie_archives')} valeur={g.categorieArchives ?? ''} options={[{ id: '', nom: trTk('rien') }, ...categoriesDiscord]} onChoisir={id => setG({ ...g, categorieArchives: id || null })} testID="esport-tk-general-archives" />
+          <Choix theme={theme} libelle={trTk('general.salon_journaux')} valeur={g.salonJournaux ?? ''} options={[{ id: '', nom: trTk('rien') }, ...textes]} onChoisir={id => setG({ ...g, salonJournaux: id || null })} testID="esport-tk-general-journaux" />
+        </>
+      ) : null}
+      <Choix theme={theme} libelle={trTk('general.langue')} valeur={g.langue} options={conf.choix.langues.map(l => ({ id: l, nom: trTk(`langue.${l}` as CleTk) }))} onChoisir={(langue: ModeLangue) => setG({ ...g, langue })} testID="esport-tk-general-langue" />
+      {nombre('fermetureAutoH', 'general.fermeture')}
+      {nombre('avertissementH', 'general.avertissement')}
+      {nombre('suppressionArchivesJours', 'general.suppression')}
+      {nombre('retentionJours', 'general.retention')}
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('general.copier')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('general.copier')} valeur={g.copierPieces} onChanger={copierPieces => setG({ ...g, copierPieces })} testID="esport-tk-general-copier" />
+      </View>
+      {nombre('pieceMaxMo', 'general.piece_max')}
+      <BoutonHub
+        theme={theme}
+        variante="plein"
+        titre={trTk('enregistrer')}
+        testID="esport-tk-general-enregistrer"
+        onPress={() =>
+          void agir('general', async () => {
+            const serveurChange = g.guildId !== conf.general.guildId;
+            setConf(await api.changerGeneral(g));
+            if (serveurChange) onServeur();
+            return trTk('enregistre');
+          })
+        }
+      />
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Catégories
+
+function SectionCategories(p: PropsSection) {
+  const { theme, api, conf, setConf, agir } = p;
+  const [edite, setEdite] = useState<Categorie | 'nouvelle' | undefined>();
+  const majCategories = (categories: Categorie[]) => setConf({ ...conf, categories });
+  const deplacer = (i: number, d: number) => {
+    const ids = conf.categories.map(c => c.id);
+    const j = i + d;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    void agir('ordre', async () => majCategories((await api.ordonnerCategories(ids)).categories));
+  };
+  return (
+    <View style={{ gap: ESP.s }} testID="esport-tk-conf-categories">
+      <View style={{ alignSelf: 'flex-start' }}>
+        <BoutonHub theme={theme} variante="plein" titre={trTk('cat.nouvelle')} onPress={() => setEdite('nouvelle')} testID="esport-tk-cat-nouvelle" />
+      </View>
+      {!conf.categories.length ? <Text style={attenue(theme)}>{trTk('cat.vide')}</Text> : null}
+      {conf.categories.map((c, i) => (
+        <Bloc key={c.id} theme={theme} testID={`esport-tk-cat-${c.id}`}>
+          <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+            <View style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'center', flex: 1, minWidth: 0 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.couleur }} />
+              <Glyphe valeur={c.icone} taille={16} couleur={theme.texte} />
+              <Text style={{ ...texte(theme), fontWeight: '700', flexShrink: 1 }} numberOfLines={1}>
+                {c.nom.fr} · {c.nom.en}
+              </Text>
+              {!c.actif ? <Badge theme={theme} texte={trTk('cat.inactive')} /> : null}
+            </View>
+            <View style={styles.ligne}>
+              <BoutonHub theme={theme} titre={trTk('monter')} onPress={() => deplacer(i, -1)} desactive={i === 0} testID={`esport-tk-cat-${c.id}-monter`} />
+              <BoutonHub theme={theme} titre={trTk('descendre')} onPress={() => deplacer(i, 1)} desactive={i === conf.categories.length - 1} testID={`esport-tk-cat-${c.id}-descendre`} />
+              <BoutonHub theme={theme} titre={trTk('modifier')} onPress={() => setEdite(c)} testID={`esport-tk-cat-${c.id}-modifier`} />
+              <BoutonConfirme theme={theme} titre={trTk('supprimer')} confirmation={trTk('confirmer_suppression')} onConfirme={() => void agir('suppr', async () => majCategories((await api.supprimerCategorie(c.id)).categories))} testID={`esport-tk-cat-${c.id}-supprimer`} />
+            </View>
+          </View>
+          {c.description.fr || c.description.en ? <Text style={attenue(theme)}>{c.description.fr || c.description.en}</Text> : null}
+          <Text style={attenue(theme)}>
+            {trTk(`priorite.${c.prioriteDefaut}` as CleTk)} · {trTk('cat.formulaire', { n: c.formulaire.length })} · {trTk(`liaison.${c.liaison.type}` as CleTk)}
+          </Text>
+        </Bloc>
+      ))}
+      {edite ? <EditeurCategorie {...p} categorie={edite === 'nouvelle' ? undefined : edite} onFermer={() => setEdite(undefined)} onFait={categories => (majCategories(categories), setEdite(undefined))} /> : null}
+    </View>
+  );
+}
+
+const CATEGORIE_VIDE: Omit<Categorie, 'id' | 'position'> = {
+  nom: VIDE,
+  description: VIDE,
+  icone: 'billets',
+  couleur: '#5865f2',
+  actif: true,
+  rolesDiscord: [],
+  rolesApp: [],
+  formulaire: [],
+  accueil: VIDE,
+  modeleNom: 'ticket-{numero}-{pseudo}',
+  maxOuverts: 1,
+  fermetureAutoH: null,
+  satisfaction: true,
+  prioriteDefaut: 'moyen',
+  mentions: [],
+  liaison: { type: 'aucune' },
+};
+
+function EditeurCategorie({ theme, api, conf, agir, roles, categorie, onFermer, onFait }: PropsSection & { categorie?: Categorie; onFermer(): void; onFait(c: Categorie[]): void }) {
+  const [c, setC] = useState<Omit<Categorie, 'id' | 'position'>>(categorie ?? CATEGORIE_VIDE);
+  const [fermeture, setFermeture] = useState(categorie?.fermetureAutoH === null || categorie?.fermetureAutoH === undefined ? '' : String(categorie.fermetureAutoH));
+  const { erreur, agir: agirLocal } = useAgir();
+  const champ = (i: number, maj: Partial<ChampFormulaire>) => setC({ ...c, formulaire: c.formulaire.map((x, j) => (j === i ? { ...x, ...maj } : x)) });
+  const rolesDiscord = roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }));
+  const enregistrer = () =>
+    agirLocal('enregistrer', async () => {
+      const corps = { ...c, fermetureAutoH: fermeture.trim() === '' ? null : entier(fermeture) };
+      const r = categorie ? await api.modifierCategorie(categorie.id, corps) : await api.creerCategorie(corps);
+      onFait(r.categories);
+    });
+  void agir;
+  return (
+    <Volet theme={theme} visible titre={categorie ? trTk('cat.modifier') : trTk('cat.nouvelle')} onFermer={onFermer} largeur={720} testID="esport-tk-cat-editeur">
+      <Retours theme={theme} erreur={erreur} prefixe="esport-tk-cat-editeur" />
+      <DeuxChamps theme={theme} cle={['cat.nom_fr', 'cat.nom_en']} valeur={c.nom} onChanger={nom => setC({ ...c, nom })} max={60} testID="esport-tk-cat-nom" />
+      <DeuxChamps theme={theme} cle={['cat.description_fr', 'cat.description_en']} valeur={c.description} onChanger={description => setC({ ...c, description })} max={100} testID="esport-tk-cat-description" />
+      <Choix theme={theme} libelle={trTk('cat.icone')} valeur={c.icone} options={conf.choix.icones.map(i => ({ id: i, nom: i }))} onChoisir={icone => setC({ ...c, icone })} testID="esport-tk-cat-icone" />
+      <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
+        <Champ theme={theme} libelle={trTk('cat.couleur')} valeur={c.couleur} onChanger={couleur => setC({ ...c, couleur })} maxLength={7} testID="esport-tk-cat-couleur" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
+        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: /^#[0-9a-fA-F]{6}$/.test(c.couleur) ? c.couleur : theme.ligne, marginBottom: 6 }} />
+      </View>
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('cat.actif')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('cat.actif')} valeur={c.actif} onChanger={actif => setC({ ...c, actif })} testID="esport-tk-cat-actif" />
+      </View>
+      {rolesDiscord.length ? <ChoixMultiple theme={theme} libelle={trTk('cat.roles_discord')} valeurs={c.rolesDiscord} options={rolesDiscord} onChanger={rolesDiscordChoisis => setC({ ...c, rolesDiscord: rolesDiscordChoisis })} max={20} testID="esport-tk-cat-roles-discord" /> : <Text style={attenue(theme)}>{trTk('cat.roles_charger')}</Text>}
+      <ChoixMultiple theme={theme} libelle={trTk('cat.roles_app')} valeurs={c.rolesApp} options={conf.rolesApp.map(r => ({ id: r.cle, nom: r.nom, couleur: r.couleur }))} onChanger={rolesApp => setC({ ...c, rolesApp })} max={20} testID="esport-tk-cat-roles-app" />
+      <Intertitre theme={theme}>{trTk('cat.formulaire', { n: c.formulaire.length })}</Intertitre>
+      <Text style={attenue(theme)}>{trTk('cat.formulaire_aide')}</Text>
+      {c.formulaire.map((f, i) => (
+        <View key={i} style={{ gap: ESP.xs, borderLeftWidth: 3, borderLeftColor: theme.ligne, paddingLeft: ESP.s }} testID={`esport-tk-cat-champ-${i}`}>
+          <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+            <Text style={{ ...texte(theme), fontWeight: '700' }}>{trTk('cat.champ', { n: i + 1 })}</Text>
+            <BoutonHub theme={theme} titre={trTk('supprimer')} variante="danger" onPress={() => setC({ ...c, formulaire: c.formulaire.filter((_, j) => j !== i) })} testID={`esport-tk-cat-champ-${i}-supprimer`} />
+          </View>
+          <DeuxChamps theme={theme} cle={['cat.champ_libelle_fr', 'cat.champ_libelle_en']} valeur={f.libelle} onChanger={libelle => champ(i, { libelle })} max={45} testID={`esport-tk-cat-champ-${i}-libelle`} />
+          <DeuxChamps theme={theme} cle={['cat.champ_placeholder_fr', 'cat.champ_placeholder_en']} valeur={f.placeholder} onChanger={placeholder => champ(i, { placeholder })} max={100} testID={`esport-tk-cat-champ-${i}-placeholder`} />
+          <View style={styles.ligne}>
+            <Text style={texte(theme)}>{trTk('cat.champ_long')}</Text>
+            <Interrupteur theme={theme} libelle={trTk('cat.champ_long')} valeur={f.style === 'long'} onChanger={v => champ(i, { style: v ? 'long' : 'court', max: v ? Math.max(f.max, 1000) : Math.min(f.max, 100) })} testID={`esport-tk-cat-champ-${i}-long`} />
+            <Text style={texte(theme)}>{trTk('cat.champ_requis')}</Text>
+            <Interrupteur theme={theme} libelle={trTk('cat.champ_requis')} valeur={f.requis} onChanger={requis => champ(i, { requis })} testID={`esport-tk-cat-champ-${i}-requis`} />
+          </View>
+          <Champ theme={theme} libelle={trTk('cat.champ_max')} valeur={String(f.max)} onChanger={v => champ(i, { max: entier(v) })} clavier="number-pad" maxLength={4} testID={`esport-tk-cat-champ-${i}-max`} />
+        </View>
+      ))}
+      {c.formulaire.length < 5 ? (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <BoutonHub theme={theme} titre={trTk('cat.champ_ajouter')} onPress={() => setC({ ...c, formulaire: [...c.formulaire, { id: `champ${Date.now() % 100000}`, libelle: VIDE, placeholder: VIDE, style: 'court', requis: true, min: 0, max: 100 }] })} testID="esport-tk-cat-champ-ajouter" />
+        </View>
+      ) : null}
+      <DeuxChamps theme={theme} cle={['cat.accueil_fr', 'cat.accueil_en']} valeur={c.accueil} onChanger={accueil => setC({ ...c, accueil })} multiligne max={1500} testID="esport-tk-cat-accueil" />
+      <Text style={attenue(theme)}>{trTk('cat.variables')}</Text>
+      <Champ theme={theme} libelle={trTk('cat.modele_nom')} valeur={c.modeleNom} onChanger={modeleNom => setC({ ...c, modeleNom })} maxLength={80} testID="esport-tk-cat-modele" />
+      <Champ theme={theme} libelle={trTk('cat.max_ouverts')} valeur={String(c.maxOuverts)} onChanger={v => setC({ ...c, maxOuverts: entier(v) })} clavier="number-pad" maxLength={2} testID="esport-tk-cat-max" />
+      <Champ theme={theme} libelle={trTk('cat.fermeture')} valeur={fermeture} onChanger={setFermeture} clavier="number-pad" maxLength={4} testID="esport-tk-cat-fermeture" />
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('cat.satisfaction')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('cat.satisfaction')} valeur={c.satisfaction} onChanger={satisfaction => setC({ ...c, satisfaction })} testID="esport-tk-cat-satisfaction" />
+      </View>
+      <Choix theme={theme} libelle={trTk('cat.priorite')} valeur={c.prioriteDefaut} options={conf.choix.priorites.map(pr => ({ id: pr, nom: trTk(`priorite.${pr}` as CleTk) }))} onChoisir={(prioriteDefaut: Priorite) => setC({ ...c, prioriteDefaut })} testID="esport-tk-cat-priorite" />
+      {rolesDiscord.length ? <ChoixMultiple theme={theme} libelle={trTk('cat.mentions')} valeurs={c.mentions} options={rolesDiscord} onChanger={mentions => setC({ ...c, mentions })} max={5} testID="esport-tk-cat-mentions" /> : null}
+      <Choix theme={theme} libelle={trTk('cat.liaison')} valeur={c.liaison.type} options={conf.choix.liaisons.map(l => ({ id: l, nom: trTk(`liaison.${l}` as CleTk) }))} onChoisir={(type: TypeLiaison) => setC({ ...c, liaison: { type, ...(type === 'cm' ? { tableauId: c.liaison.tableauId ?? conf.tableauxCm[0]?.id } : {}) } })} testID="esport-tk-cat-liaison" />
+      {c.liaison.type === 'cm' ? <Choix theme={theme} libelle={trTk('cat.tableau')} valeur={c.liaison.tableauId} options={conf.tableauxCm} onChoisir={tableauId => setC({ ...c, liaison: { type: 'cm', tableauId } })} testID="esport-tk-cat-tableau" /> : null}
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={() => void enregistrer()} testID="esport-tk-cat-enregistrer" />
+        <BoutonHub theme={theme} titre={trTk('annuler')} onPress={onFermer} testID="esport-tk-cat-annuler" />
+      </View>
+    </Volet>
+  );
+}
+
+// ------------------------------------------------------------------ Panneaux
+
+function SectionPanneaux(p: PropsSection) {
+  const { theme, conf, setConf } = p;
+  const [edite, setEdite] = useState<Panneau | 'nouveau' | undefined>();
+  const majPanneau = (pan: Panneau) => setConf({ ...conf, panneaux: conf.panneaux.some(x => x.id === pan.id) ? conf.panneaux.map(x => (x.id === pan.id ? pan : x)) : [...conf.panneaux, pan] });
+  return (
+    <View style={{ gap: ESP.s }} testID="esport-tk-conf-panneaux">
+      <View style={{ alignSelf: 'flex-start' }}>
+        <BoutonHub theme={theme} variante="plein" titre={trTk('pan.nouveau')} onPress={() => setEdite('nouveau')} testID="esport-tk-pan-nouveau" />
+      </View>
+      {!conf.panneaux.length ? <Text style={attenue(theme)}>{trTk('pan.vide')}</Text> : null}
+      {conf.panneaux.map(pan => (
+        <Bloc key={pan.id} theme={theme} testID={`esport-tk-pan-${pan.id}`}>
+          <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+            <Text style={{ ...texte(theme), fontWeight: '700', flex: 1, minWidth: 0 }} numberOfLines={1}>
+              {pan.titre.fr || pan.titre.en}
+            </Text>
+            <BoutonHub theme={theme} titre={trTk('modifier')} onPress={() => setEdite(pan)} testID={`esport-tk-pan-${pan.id}-modifier`} />
+          </View>
+          <Text style={attenue(theme)}>{pan.publieLe ? trTk('pan.publie', { quand: quand(pan.publieLe) }) : trTk('pan.jamais')}</Text>
+          {pan.erreur ? <Badge theme={theme} ton="critique" texte={trTk(`pan.erreur.${pan.erreur}` as CleTk)} /> : null}
+        </Bloc>
+      ))}
+      {edite ? (
+        <EditeurPanneau
+          {...p}
+          panneau={edite === 'nouveau' ? undefined : edite}
+          onFermer={() => setEdite(undefined)}
+          onMaj={pan => {
+            majPanneau(pan);
+            setEdite(pan);
+          }}
+          onSupprime={id => (setConf({ ...conf, panneaux: conf.panneaux.filter(x => x.id !== id) }), setEdite(undefined))}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, onMaj, onSupprime }: PropsSection & { panneau?: Panneau; onFermer(): void; onMaj(p: Panneau): void; onSupprime(id: string): void }) {
+  const [s, setS] = useState({ titre: panneau?.titre ?? VIDE, texte: panneau?.texte ?? VIDE, couleur: panneau?.couleur ?? '#5865f2', style: panneau?.style ?? ('boutons' as const), categories: panneau?.categories ?? conf.categories.filter(c => c.actif).map(c => c.id), salonId: panneau?.salonId ?? null, imageElementId: panneau?.imageElementId ?? null });
+  const [apercu, setApercu] = useState<ChargeDiscord | undefined>();
+  const [drive, setDrive] = useState(false);
+  const { erreur, avis, agir } = useAgir();
+  const textes = salons.filter(x => x.type === 'texte').map(x => ({ id: x.id, nom: `#${x.nom}` }));
+  const enregistrer = async () => {
+    const r = panneau ? await api.modifierPanneau(panneau.id, s) : await api.creerPanneau(s);
+    onMaj(r);
+    setApercu((await api.apercuPanneau(r.id)).charge);
+    return r;
+  };
+  return (
+    <Volet theme={theme} visible titre={panneau ? (panneau.titre.fr || panneau.titre.en) : trTk('pan.nouveau')} onFermer={onFermer} largeur={760} testID="esport-tk-pan-editeur">
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-tk-pan-editeur" />
+      <DeuxChamps theme={theme} cle={['pan.titre_fr', 'pan.titre_en']} valeur={s.titre} onChanger={titre => setS({ ...s, titre })} max={256} testID="esport-tk-pan-titre" />
+      <DeuxChamps theme={theme} cle={['pan.texte_fr', 'pan.texte_en']} valeur={s.texte} onChanger={texteP => setS({ ...s, texte: texteP })} multiligne max={1800} testID="esport-tk-pan-texte" />
+      <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
+        <Champ theme={theme} libelle={trTk('cat.couleur')} valeur={s.couleur} onChanger={couleur => setS({ ...s, couleur })} maxLength={7} testID="esport-tk-pan-couleur" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
+        <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: /^#[0-9a-fA-F]{6}$/.test(s.couleur) ? s.couleur : theme.ligne, marginBottom: 6 }} />
+      </View>
+      <Choix theme={theme} libelle={trTk('pan.style')} valeur={s.style} options={[{ id: 'boutons', nom: trTk('pan.boutons') }, { id: 'menu', nom: trTk('pan.menu') }]} onChoisir={(style: 'boutons' | 'menu') => setS({ ...s, style })} testID="esport-tk-pan-style" />
+      <ChoixMultiple theme={theme} libelle={trTk('pan.categories')} valeurs={s.categories} options={conf.categories.map(c => ({ id: c.id, nom: c.nom.fr || c.nom.en, couleur: c.couleur }))} onChanger={categories => setS({ ...s, categories })} max={25} testID="esport-tk-pan-categories" />
+      {textes.length ? <Choix theme={theme} libelle={trTk('pan.salon')} valeur={s.salonId ?? undefined} options={textes} onChoisir={salonId => setS({ ...s, salonId })} testID="esport-tk-pan-salon" /> : <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text>}
+      <View style={styles.ligne}>
+        <Text style={texte(theme)}>{s.imageElementId ? trTk('pan.image_choisie') : trTk('pan.image')}</Text>
+        <BoutonHub theme={theme} titre={trTk('pan.image_choisir')} onPress={() => setDrive(true)} testID="esport-tk-pan-image" />
+        {s.imageElementId ? <BoutonHub theme={theme} titre={trTk('pan.image_retirer')} onPress={() => setS({ ...s, imageElementId: null })} testID="esport-tk-pan-image-retirer" /> : null}
+      </View>
+      <ChoixDrive theme={theme} client={client} visible={drive} accepter={f => /^image\/(png|jpeg|gif|webp)$/.test(f.type) && f.taille <= 8 * 1024 * 1024} onChoisir={f => (setS({ ...s, imageElementId: f.id }), setDrive(false))} onFermer={() => setDrive(false)} testID="esport-tk-pan-drive" />
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} titre={trTk('pan.apercu')} onPress={() => void agir('apercu', async () => void (await enregistrer()))} testID="esport-tk-pan-apercu" />
+        <BoutonHub
+          theme={theme}
+          variante="plein"
+          titre={panneau?.messageId ? trTk('pan.mettre_a_jour') : trTk('pan.publier')}
+          onPress={() =>
+            void agir('publier', async () => {
+              const r = await enregistrer();
+              onMaj(await api.publierPanneau(r.id));
+              return trTk('pan.publie_ok');
+            })
+          }
+          testID="esport-tk-pan-publier"
+        />
+        {panneau ? <BoutonConfirme theme={theme} titre={trTk('supprimer')} confirmation={trTk('confirmer_suppression')} onConfirme={() => void agir('suppr', async () => (await api.supprimerPanneau(panneau.id), onSupprime(panneau.id)))} testID="esport-tk-pan-supprimer" /> : null}
+      </View>
+      {apercu ? <ApercuDiscord charge={apercu} imageUrl={s.imageElementId} /> : null}
+    </Volet>
+  );
+}
+
+// ------------------------------------------------------------------ Messages
+
+const CLES_MESSAGES = ['accueil', 'prise_en_charge', 'liberation', 'attente', 'fermeture', 'reouverture', 'avertissement', 'demande_note', 'merci_note', 'mp_recap', 'hors_horaires'] as const;
+
+function SectionMessages({ theme, api, conf, setConf, agir }: PropsSection) {
+  const [m, setM] = useState<Record<string, DeuxLangues>>(() => Object.fromEntries(CLES_MESSAGES.map(k => [k, { ...VIDE, ...(conf.messages[k] ?? {}) }])));
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-messages">
+      <Text style={attenue(theme)}>{trTk('msg.aide')}</Text>
+      {CLES_MESSAGES.map(k => (
+        <View key={k} style={{ gap: ESP.xs }}>
+          <Intertitre theme={theme}>{trTk(`msg.${k}` as CleTk)}</Intertitre>
+          <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
+            <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
+              <Champ theme={theme} libelle={trTk('francais')} valeur={m[k].fr} placeholder={conf.messagesDefaut[k]?.fr} onChanger={fr => setM({ ...m, [k]: { ...m[k], fr } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-fr`} />
+            </View>
+            <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
+              <Champ theme={theme} libelle={trTk('anglais')} valeur={m[k].en} placeholder={conf.messagesDefaut[k]?.en} onChanger={en => setM({ ...m, [k]: { ...m[k], en } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-en`} />
+            </View>
+          </View>
+        </View>
+      ))}
+      <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={() => void agir('messages', async () => (setConf(await api.changerMessages(m)), trTk('enregistre')))} testID="esport-tk-msg-enregistrer" />
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Liste noire
+
+function SectionListeNoire({ theme, api, conf, setConf, agir }: PropsSection) {
+  const [s, setS] = useState({ discordId: '', nom: '', raison: '' });
+  const relire = async () => setConf(await api.config());
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-liste">
+      <Text style={attenue(theme)}>{trTk('ln.aide')}</Text>
+      <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
+        <Champ theme={theme} libelle={trTk('ln.discord_id')} valeur={s.discordId} onChanger={discordId => setS({ ...s, discordId: discordId.replace(/\D/g, '') })} maxLength={20} clavier="number-pad" testID="esport-tk-ln-id" style={{ flexGrow: 1, flexBasis: 200, minWidth: 0 }} />
+        <Champ theme={theme} libelle={trTk('ln.nom')} valeur={s.nom} onChanger={nom => setS({ ...s, nom })} maxLength={100} testID="esport-tk-ln-nom" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
+        <Champ theme={theme} libelle={trTk('ln.raison')} valeur={s.raison} onChanger={raison => setS({ ...s, raison })} maxLength={300} testID="esport-tk-ln-raison" style={{ flexGrow: 2, flexBasis: 200, minWidth: 0 }} />
+        <BoutonHub theme={theme} variante="plein" titre={trTk('ajouter')} onPress={() => void agir('ln', async () => (await api.ajouterListeNoire(s), setS({ discordId: '', nom: '', raison: '' }), await relire()))} testID="esport-tk-ln-ajouter" />
+      </View>
+      {!conf.listeNoire.length ? <Text style={attenue(theme)}>{trTk('ln.vide')}</Text> : null}
+      {conf.listeNoire.map(l => (
+        <View key={l.discordId} style={[styles.ligne, { justifyContent: 'space-between' }]} testID={`esport-tk-ln-${l.discordId}`}>
+          <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }} numberOfLines={2}>
+            {l.nom || l.discordId} · {l.discordId}
+            {l.raison ? ` · ${l.raison}` : ''}
+          </Text>
+          <BoutonHub theme={theme} titre={trTk('ln.retirer')} onPress={() => void agir('ln', async () => (await api.retirerListeNoire(l.discordId), await relire()))} testID={`esport-tk-ln-${l.discordId}-retirer`} />
+        </View>
+      ))}
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Horaires
+
+function SectionHoraires({ theme, api, conf, setConf, agir }: PropsSection) {
+  const [h, setH] = useState<Horaires>(conf.horaires);
+  const plage = (i: number, maj: Partial<Horaires['plages'][number]>) => setH({ ...h, plages: h.plages.map((p, j) => (j === i ? { ...p, ...maj } : p)) });
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-horaires">
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('h.actif')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('h.actif')} valeur={h.actif} onChanger={actif => setH({ ...h, actif })} testID="esport-tk-h-actif" />
+      </View>
+      <Champ theme={theme} libelle={trTk('h.fuseau')} valeur={h.fuseau} onChanger={fuseau => setH({ ...h, fuseau })} maxLength={60} testID="esport-tk-h-fuseau" />
+      {h.plages.map((p, i) => (
+        <View key={i} style={[styles.ligne, { alignItems: 'flex-end' }]} testID={`esport-tk-h-plage-${i}`}>
+          <Choix theme={theme} libelle={trTk('cat.champ', { n: i + 1 })} valeur={String(p.jour)} options={[1, 2, 3, 4, 5, 6, 7].map(j => ({ id: String(j), nom: trTk(`jour.${j}` as CleTk) }))} onChoisir={j => plage(i, { jour: Number(j) })} testID={`esport-tk-h-plage-${i}-jour`} />
+          <Champ theme={theme} libelle={trTk('h.debut')} valeur={p.debut} onChanger={debut => plage(i, { debut })} maxLength={5} testID={`esport-tk-h-plage-${i}-debut`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
+          <Champ theme={theme} libelle={trTk('h.fin')} valeur={p.fin} onChanger={fin => plage(i, { fin })} maxLength={5} testID={`esport-tk-h-plage-${i}-fin`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
+          <BoutonHub theme={theme} titre={trTk('supprimer')} variante="danger" onPress={() => setH({ ...h, plages: h.plages.filter((_, j) => j !== i) })} testID={`esport-tk-h-plage-${i}-supprimer`} />
+        </View>
+      ))}
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} titre={trTk('h.plage_ajouter')} onPress={() => setH({ ...h, plages: [...h.plages, { jour: 1, debut: '09:00', fin: '18:00' }] })} testID="esport-tk-h-ajouter" />
+        <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={() => void agir('horaires', async () => (setConf(await api.changerHoraires(h)), trTk('enregistre')))} testID="esport-tk-h-enregistrer" />
+      </View>
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Commandes
+
+function SectionCommandes({ theme, api, conf, setConf, agir, roles }: PropsSection) {
+  const [c, setC] = useState(conf.commandes);
+  const rolesDiscord = roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }));
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-commandes">
+      <Text style={attenue(theme)}>{trTk('cmd.aide')}</Text>
+      {conf.choix.commandes.map(nom => (
+        <View key={nom} style={{ gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-tk-cmd-${nom}`}>
+          <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+            <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk(`cmd.${nom}` as CleTk)}</Text>
+            {conf.choix.commandesStaff.includes(nom) ? <Badge theme={theme} texte={trTk('cmd.staff')} /> : null}
+            <Interrupteur theme={theme} libelle={trTk(`cmd.${nom}` as CleTk)} valeur={c[nom]?.actif !== false} onChanger={actif => setC({ ...c, [nom]: { roles: c[nom]?.roles ?? [], actif } })} testID={`esport-tk-cmd-${nom}-actif`} />
+          </View>
+          {rolesDiscord.length && c[nom]?.actif !== false ? <ChoixMultiple theme={theme} libelle={trTk('cmd.roles')} valeurs={c[nom]?.roles ?? []} options={rolesDiscord} onChanger={r => setC({ ...c, [nom]: { actif: true, roles: r } })} max={20} testID={`esport-tk-cmd-${nom}-roles`} /> : null}
+        </View>
+      ))}
+      <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={() => void agir('commandes', async () => (setConf(await api.changerCommandes(c)), trTk('enregistre')))} testID="esport-tk-cmd-enregistrer" />
+    </Bloc>
+  );
+}

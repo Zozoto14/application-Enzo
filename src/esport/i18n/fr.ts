@@ -1232,6 +1232,13 @@ export const fr = {
   'strats.libelles.validee': 'Validée',
 
   // cadreEsport
+  'tk.nt.nouveau': 'Nouveau ticket n° {numero} ({categorie})',
+  'tk.nt.assigne': 'Le ticket n° {numero} vous est confié',
+  'tk.nt.message': 'Nouveau message dans le ticket n° {numero}',
+  'tk.nt.note': 'Ticket n° {numero} noté {note}/5',
+  'tk.nt.ferme': 'Ticket n° {numero} fermé',
+  'cadreEsport.plus': 'Plus',
+  'cadreEsport.plus_description': 'Plus : les autres pages de l’Esport',
   'cadreEsport.dashboard_toutes_vos_teams': 'Dashboard : toutes vos teams',
   'cadreEsport.teams_la_liste_la': 'Teams : la liste, la création, vos notifications',
   'cadreEsport.membres_tous_les_comptes': 'Membres : tous les comptes, les invitations',

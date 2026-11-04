@@ -4,6 +4,7 @@
  * (HORS du dépôt et de public_html ; chemin modifiable par ESPORT_ENV).
  *
  *   CLE_ESPORT        clé de session (obligatoire ; ne pas la changer : sessions et liens de partage en dépendent)
+ *   TICKETS_GATEWAY   « non » : pas de connexion Gateway pour les tickets (relecture de secours par le cron)
  *   DATABASE_URL      postgres://utilisateur:motdepasse@localhost:5432/base (ou PGHOST, PGUSER, PGPASSWORD, PGDATABASE)
  *   RELAIS_URL        adresse du relais qui valide les jetons (https://relais.appdashboard.fr)
  *   FICHIERS_DIR      dossier des PDF et miniatures (défaut ~/esport-fichiers, jamais dans public_html)
@@ -102,6 +103,9 @@ export function chargerConfigEsport(env = process.env) {
     // Temps réel (docs/esport/temps-reel.md) : TEMPS_REEL=sse (défaut) | attente | sondage (repli sûr : aucune
     // connexion tenue) ; TEMPS_REEL_MAX : connexions tenues par processus (30 par défaut).
     tempsReel: configTempsReel(env),
+    // Tickets Discord (docs/esport/tickets.md) : TICKETS_GATEWAY=non coupe la connexion Gateway (relecture REST de
+    // secours par le cron seulement), sans rien changer d'autre.
+    ticketsGateway: !/^(non|0|false|off)$/i.test(String(env.TICKETS_GATEWAY ?? '').trim()),
   };
 }
 

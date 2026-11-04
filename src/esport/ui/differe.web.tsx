@@ -35,3 +35,5 @@ export const MaFicheTrombi = differe<React.ComponentProps<typeof import('./membr
 // Devblog (historique, éditeur, publication Discord) : chargé seulement quand on l'ouvre.
 export const PageDevblog = differe<React.ComponentProps<typeof import('./devblog/PageDevblog').PageDevblog>>(async () => (await import('./devblog/PageDevblog')).PageDevblog);
 export const Jeux = differe<React.ComponentProps<typeof import('./jeux/Jeux').Jeux>>(async () => (await import('./jeux/Jeux')).Jeux);
+// Tickets Discord (liste, conversation, configuration) : chargés seulement quand on les ouvre.
+export const PageTickets = differe<React.ComponentProps<typeof import('./tickets/PageTickets').PageTickets>>(async () => (await import('./tickets/PageTickets')).PageTickets);

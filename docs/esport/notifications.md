@@ -113,3 +113,11 @@ portée ; `entite_type` / `entite_id` du fichier.
 - « Tout marquer comme lu » pose `lu_jusqua` ; sans lui, rien d'avant la création du compte n'est « non lu ».
 - RGPD : l'export du compte contient `centreNotifications` (préférences, lectures) ; la suppression les efface.
 - Export / import de la base : `notifs_centre`, `notifs_lectures`, `notifs_preferences`.
+
+## Tickets Discord
+
+Catégorie **Tickets** (migration 0054, [tickets.md](tickets.md)) : seulement des notifications **personnelles**
+(`tk-nouveau`, `tk-assigne`, `tk-message`, `tk-note`, `tk-ferme`), envoyées à ceux qui voient la catégorie du ticket.
+Leur catégorie de ticket est gardée (`notifications.ticket_categorie_id`) et **relue à chaque lecture** : un compte qui
+ne voit plus cette catégorie ne voit plus ces notifications. Les événements `ticket.*` / `tickets.*` n'entrent jamais
+dans le fil commun (règle « aucun »), ni dans le récapitulatif e-mail.

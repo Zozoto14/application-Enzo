@@ -5,7 +5,7 @@
  * rétention (journal selon la durée de chaque team, événements traités), agrégation journalière et rétention (90 jours)
  * des statistiques d'usage, ménage des compteurs de débit
  * et des tentatives anciennes, envois de vidéos inachevés (plus de 24 h), transcriptions demandées à une
- * API externe (désactivé par défaut). Lancé par esport/serveur/cron.mjs.
+ * API externe (désactivé par défaut), tickets Discord (relecture de secours, cycle de vie). Lancé par esport/serveur/cron.mjs.
  *
  * Chaque étape est isolée : une erreur est consignée (rapport) sans empêcher les suivantes.
  */
@@ -32,6 +32,7 @@ import { purgerCorbeilleStrats } from './strats/service.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
 import { rappelsReunions } from './cm/reunions/rappels.mjs';
 import { traiterMpReunions } from './cm/reunions/mp.mjs';
+import { tachesTickets } from './tickets/cron.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -39,7 +40,8 @@ import { traiterMpReunions } from './cm/reunions/mp.mjs';
  * `fetchTranscription` (API de transcription facultative), `adaptateursReseaux` (relevés automatiques des
  * statistiques des réseaux : aucun en V1, voir reseaux/adaptateurs.mjs), `drive` (quota du Drive CM, regles.mjs).
  */
-export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive() } = {}) {
+export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive(), tickets } = {}) {
+  let rapportTickets = null;
   const transcrire = async () => {
     if (!transcriptionExterne?.actif || !stockage) return 0;
     const socle = { contexteTeam: async () => { throw new Error('Contexte indisponible dans le cron.'); } };
@@ -61,6 +63,9 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
     ['MP des réunions CM', () => traiterMpReunions(base, { maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
+    // Tickets Discord : relecture de secours si aucun processus ne tient la Gateway, puis cycle de vie (avertissements,
+    // fermetures automatiques, salons archivés supprimés, rétention).
+    ['tickets', async () => (rapportTickets = await tachesTickets(base, { jetonBot, maintenant, stockage, ...(fetch ? { fetch } : {}), ...(tickets ? { cycle: tickets(base) } : {}) }))],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
     // Devblog : brouillons programmés publiés à l'heure (app, puis file Discord envoyée juste après).
     ['devblog programmé', () => publierProgrammes(base, { maintenant: maintenant() })],
@@ -91,5 +96,7 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
       rapport.push({ tache, ok: false, erreur: String(e?.message ?? e) });
     }
   }
+  // Tickets : le cron serveur réveille l'app quand plus aucun processus ne tient la Gateway (serveur/cron.mjs).
+  rapport.tickets = rapportTickets;
   return rapport;
 }

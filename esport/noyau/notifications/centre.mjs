@@ -214,6 +214,11 @@ export function filtrePerso(droits) {
   );
   params.push(...PERSO_HORS_TEAM, ...teams, ...teamsCm);
   if (!droits.club.has('sponsors.voir')) conditions.push("COALESCE(p.categorie, '') <> 'sponsors'");
+  // Tickets (migration 0054) : seulement les catégories de tickets que le lecteur voit aujourd'hui.
+  if (Array.isArray(droits.tickets)) {
+    conditions.push(droits.tickets.length ? `(COALESCE(p.categorie, '') <> 'tickets' OR p.ticket_categorie_id IN (${droits.tickets.map(() => '?').join(', ')}))` : "COALESCE(p.categorie, '') <> 'tickets'");
+    params.push(...droits.tickets);
+  }
   // Carte d'un tableau CM restreint dont le lecteur n'est pas (ou plus) : masquée (migration 0046).
   if (droits.tableauxInterdits?.length) {
     conditions.push(`(p.cm_carte_id IS NULL OR p.cm_carte_id NOT IN (SELECT ki.id FROM cm_cartes ki WHERE ki.tableau_id IN (${droits.tableauxInterdits.map(() => '?').join(', ')})))`);

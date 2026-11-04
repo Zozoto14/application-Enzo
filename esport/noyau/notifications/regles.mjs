@@ -19,7 +19,7 @@
  * La charge de l'événement est reprise (sans les champs sensibles : CHAMPS_RETIRES) pour la phrase affichée.
  */
 
-export const CATEGORIES = Object.freeze(['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme']);
+export const CATEGORIES = Object.freeze(['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'tickets', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme']);
 
 const TEAM = section => ({ vue: 'team', section });
 const CM = onglet => ({ vue: 'cm', onglet });
@@ -99,6 +99,10 @@ export const REGLES = Object.freeze({
   'sponsors.import': { categorie: 'sponsors', acces: 'club:sponsors.gerer', lien: CM('sponsors') },
   'sponsors.export': { categorie: 'sponsors', acces: 'club:sponsors.gerer', lien: CM('sponsors') },
   'sponsors.rgpd_contact': { categorie: 'sponsors', acces: 'club:sponsors.gerer', lien: CM('sponsors') },
+  // ---- Tickets Discord (migration 0054) : l'accès dépend de la CATÉGORIE du ticket, que le fil ne sait pas exprimer :
+  // jamais dans le fil ; seules les notifications personnelles `tk-*` (catégorie relue à chaque lecture : droits.mjs).
+  'ticket.*': { categorie: 'tickets', acces: 'aucun', lien: { vue: 'tickets' } },
+  'tickets.*': { categorie: 'tickets', acces: 'aucun', lien: { vue: 'tickets' } },
   // ---- Membres, rôles, invitations, comptes, trombinoscope, badges.
   'team.*': { categorie: 'membres', acces: 'team:*', lien: TEAM('accueil') },
   'modules.changed': { categorie: 'membres', acces: 'team:*', lien: TEAM('accueil') },
@@ -257,6 +261,7 @@ export function categoriePerso(type) {
   if (CATEGORIES_PERSO[type]) return CATEGORIES_PERSO[type];
   const t = String(type);
   if (t.startsWith('sp-')) return 'sponsors';
+  if (t.startsWith('tk-')) return 'tickets';
   if (t.startsWith('cm-drive')) return 'drive';
   if (t.startsWith('cm-') || t.startsWith('reseau')) return 'cm';
   if (t.startsWith('tournoi') || t.startsWith('match')) return /resultat/.test(t) ? 'resultats' : 'competition';
@@ -283,6 +288,7 @@ export function lienDeCategorie(categorie, teamId) {
   if (categorie === 'reunions' && !teamId) return CM('reunions');
   if (categorie === 'drive') return CM('drive');
   if (categorie === 'sponsors') return CM('sponsors');
+  if (categorie === 'tickets') return { vue: 'tickets' };
   if (categorie === 'devblog') return { vue: 'devblog' };
   if (teamId && parTeam[categorie]) return TEAM(parTeam[categorie]);
   if (categorie === 'membres') return { vue: 'membres', sous: 'tous' };

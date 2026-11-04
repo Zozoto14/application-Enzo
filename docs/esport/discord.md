@@ -352,3 +352,10 @@ Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
   `esport/test/discord-api.test.mjs` (API, file, réessais, 429, abandon, journal, permissions, isolation, rappels,
   parcours de bout en bout vers un faux serveur Discord local), `src/esport/Discord.test.tsx` (écran),
   `scripts/e2e-esport-discord.mjs` (navigateur, faux Discord). Aucun test n'appelle le vrai Discord.
+
+## Tickets
+
+Le bot tient aussi un **système de tickets** (salons privés, réponses depuis l'app, transcripts, notes de
+satisfaction), réglé dans **Esport › Tickets › Configuration** : voir [tickets.md](tickets.md). Il demande l'intent
+privilégié **Message Content** et les permissions **Gérer les salons**, **Gérer les rôles** et **Joindre des
+fichiers** en plus de celles des annonces.

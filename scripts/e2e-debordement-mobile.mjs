@@ -1,6 +1,6 @@
 /**
  * Non-régression : aucune page principale de l'Esport ni du hub ne doit défiler horizontalement sur téléphone
- * (390 × 844 et 360 × 800). Parcourt Dashboard, Teams, Membres, Jeux, Notifications, l'espace CM (chaque
+ * (390 × 844 et 360 × 800). Parcourt Dashboard, Teams, Membres, Tickets (et sa configuration), Jeux (dans « Plus »), Notifications, l'espace CM (chaque
  * groupe et chaque sous-onglet), la page de la team (chaque section et chaque module), les Réglages de la team
  * et ceux du hub. Mesure `document.documentElement.scrollWidth > window.innerWidth` ; en cas d'échec, liste les
  * éléments qui dépassent à droite. Code de sortie 1 au moindre débordement.
@@ -117,13 +117,37 @@ async function parcourir(page, taille) {
   await page.setViewportSize({ width: taille[0], height: taille[1] });
   await pause(600);
   await ouvrirEsport(page);
-  for (const onglet of ['dashboard', 'teams', 'membres', 'jeux']) {
+  for (const onglet of ['dashboard', 'teams', 'membres', 'tickets', 'jeux']) {
+    // Téléphone : au-delà de cinq entrées, les dernières (Jeux, Statistiques) sont dans « Plus ».
+    if (!(await present(page, `esport-nav-${onglet}`, 1500)) && (await present(page, 'esport-nav-plus', 500))) {
+      await page.getByTestId('esport-nav-plus').first().click();
+      await controler(page, 'esport-plus', taille);
+      if (await present(page, `esport-plus-${onglet}`, 1500)) {
+        await page.getByTestId(`esport-plus-${onglet}`).first().click();
+        await controler(page, `esport-${onglet}`, taille);
+        continue;
+      }
+    }
     if (!(await present(page, `esport-nav-${onglet}`, 2000))) {
       log(`onglet ${onglet} absent`);
       continue;
     }
     await page.getByTestId(`esport-nav-${onglet}`).first().click();
     await controler(page, `esport-${onglet}`, taille);
+    // Tickets : chaque section de la configuration (docs/esport/tickets.md).
+    if (onglet === 'tickets') {
+      for (const s of ['connexion', 'general', 'categories', 'panneaux', 'messages', 'liste', 'horaires', 'commandes']) {
+        if (!(await present(page, `esport-tk-conf-onglet-${s}`, 2000))) continue;
+        await page.getByTestId(`esport-tk-conf-onglet-${s}`).first().click();
+        await controler(page, `esport-tickets-${s}`, taille);
+      }
+      if (await present(page, 'esport-tk-conf-onglet-categories', 1000)) {
+        await page.getByTestId('esport-tk-conf-onglet-categories').first().click();
+        await page.getByTestId('esport-tk-cat-nouvelle').first().click();
+        await controler(page, 'esport-tickets-categorie-editeur', taille);
+        await page.getByTestId('esport-tk-cat-annuler').first().click();
+      }
+    }
   }
   // Notifications : cloche de l'en-tête (téléphone).
   if (await present(page, 'esport-cloche', 2000)) {

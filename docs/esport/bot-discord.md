@@ -18,7 +18,9 @@ Autres aperçus (rendus avec le vrai code du bot) : [rappel H-1](bot/apercus/02-
 [bot/apercus/index.html](bot/apercus/index.html).
 
 Pas de programme de plus à faire tourner : Discord appelle le serveur Esport (https://esport.appdashboard.fr) quand
-quelqu'un tape une commande ou clique un bouton.
+quelqu'un tape une commande ou clique un bouton. Seuls les **tickets** ([tickets.md](tickets.md)) ouvrent en plus une
+connexion **Gateway** (un seul processus de l'app, relecture de secours sinon) pour lire les messages des salons de
+tickets.
 
 ---
 
@@ -37,8 +39,9 @@ quelqu'un tape une commande ou clique un bouton.
 2. Menu de gauche **Bot** :
    - bouton **Reset Token**, confirmez, puis **Copy** : c'est le **Bot Token**. **C'est un secret** : qui l'a peut
      parler à la place du bot. Ne le collez nulle part ailleurs qu'à l'étape 3.
-   - Laissez **Public Bot** comme vous voulez (désactivé : vous seul pouvez l'inviter). Les « Privileged Gateway
-     Intents » ne servent pas : laissez-les éteints.
+   - Laissez **Public Bot** comme vous voulez (désactivé : vous seul pouvez l'inviter). « Privileged Gateway
+     Intents » : activez **Message Content Intent** si vous utilisez les **tickets** ([tickets.md](tickets.md) : le bot
+     lit alors les messages des salons de tickets) ; laissez **Presence** et **Server Members** éteints.
 
 ### 3. Poser les valeurs (serveur o2switch)
 

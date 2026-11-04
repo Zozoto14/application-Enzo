@@ -49,7 +49,7 @@ import { nettoyerVariable } from '../messages.mjs';
 import { contexteOccurrence, embedOccurrence } from '../occurrence.mjs';
 import { verifierSignature } from './signature.mjs';
 
-const TYPE = { PING: 1, COMMANDE: 2, COMPOSANT: 3, AUTOCOMPLETE: 4 };
+const TYPE = { PING: 1, COMMANDE: 2, COMPOSANT: 3, AUTOCOMPLETE: 4, FENETRE: 5 };
 const REPONSE = { PONG: 1, MESSAGE: 4, DIFFERE: 5, DIFFERE_MAJ: 6, MAJ: 7, CHOIX: 8 };
 const EPHEMERE = 64;
 const TAILLE_MAX = 64 * 1024;
@@ -135,7 +135,8 @@ export function lireHeureSaisie(saisie) {
  * `attenteDiffere()` : promesse au-delà de laquelle la réponse devient différée (≈ 2 s).
  */
 export function creerBot({ base, maintenant = () => Date.now(), services, config = {}, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), lienApp = '', limite = async () => {}, attenteDiffere }) {
-  const { noyau, planning: p, resumes, objectifs, playbook, liaisons } = services;
+  // `tickets` (tickets/bot.mjs) : boutons, menus, fenêtres et commandes des tickets (sans compte lié).
+  const { noyau, planning: p, resumes, objectifs, playbook, liaisons, tickets } = services;
   const lien = /^https:\/\//.test(lienApp) ? lienApp : '';
   const attendreLent = attenteDiffere ?? (() => new Promise(ok => setTimeout(ok, 2000).unref?.()));
 
@@ -605,6 +606,11 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
   async function executer(i) {
     i.langueEsport ??= await resoudreLangue(i);
     try {
+      // Tickets : traités à part (tout membre du serveur du club, compte lié ou non).
+      if (tickets) {
+        const r = await tickets.interaction(i);
+        if (r !== undefined) return r;
+      }
       if (i.type === TYPE.COMMANDE) {
         const f = COMMANDES[i.data?.name];
         return f ? await f(i) : erreur(i, T(lg(i), 'bot.erreur.commande_inconnue'));
@@ -663,6 +669,8 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     i.langueEsport = await resoudreLangue(i);
     if (i.type === TYPE.AUTOCOMPLETE) {
       try {
+        const rt = tickets ? await tickets.interaction(i) : undefined;
+        if (rt !== undefined) return json(rt);
         return json(await autocomplete(i));
       } catch {
         return json({ type: REPONSE.CHOIX, data: { choices: [] } });
@@ -682,7 +690,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const premier = await Promise.race([travail, attendreLent().then(() => LENT)]);
     if (premier !== LENT) return json(premier);
     // Trop lent pour les 3 s de Discord : réponse différée, puis suivi en arrière-plan.
-    const majMessage = i.type === TYPE.COMPOSANT && /^(pg:|rs$)/.test(String(i.data?.custom_id ?? ''));
+    const majMessage = i.type === TYPE.COMPOSANT && /^(pg:|rs$|tk:u)/.test(String(i.data?.custom_id ?? ''));
     const suite = travail.then(r => suivi(i, r)).catch(e => console.error('[esport] bot suivi', e));
     if (attendre) attendre(suite);
     return json(majMessage ? { type: REPONSE.DIFFERE_MAJ } : { type: REPONSE.DIFFERE, data: { flags: EPHEMERE } });

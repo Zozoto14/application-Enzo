@@ -23,12 +23,13 @@ import { etatAdministration } from './transcription/moteur.mjs';
 import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { sourceGitDepot } from './devblog-source.mjs';
 import { creerServiceDeploiement } from './deploiement.mjs';
+import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale, devblogSource, deploiement } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale, devblogSource, deploiement, demarrerTickets = true } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -77,13 +78,22 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     ...(config.tempsReel ? { tempsReel: config.tempsReel } : {}),
   });
   if (config.tempsReel) console.log(`[esport] temps réel : mode ${api.tempsReel.mode}`);
+  // Tickets Discord : connexion Gateway tenue par UN seul processus du compte (bail en base), relecture REST sinon.
+  // Rien n'est ouvert tant que les tickets ne sont pas activés dans l'app (Tickets › Configuration).
+  const superviseur =
+    demarrerTickets && config.ticketsGateway !== false && config.discordBot?.jetonBot
+      ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...api.ticketsGateway })
+      : null;
+  superviseur?.demarrer();
   return {
     traiter: api,
     base: b,
     stockage: st,
     config,
     problemes,
+    superviseurTickets: superviseur,
     fermer: async () => {
+      await superviseur?.arreter();
       await api.tempsReel?.fermer();
       if (!base) await b.fermer();
     },
