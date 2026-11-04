@@ -11,6 +11,7 @@
  */
 
 import { semerCompetition } from './graines-competition.mjs';
+import { semerRessources } from './graines-ressources.mjs';
 import { pathToFileURL } from 'node:url';
 import { servicesComptes } from '../noyau/comptes.mjs';
 import { servicesPlanning } from '../noyau/planning/service.mjs';
@@ -108,6 +109,8 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await semerReview(base, team.id, { maintenant, noyau: s });
   await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
   await semerCompetition(base, team.id, { maintenant, noyau: s });
+  // DATA › Ressources de l'espace CM : un lien et un fichier (migration 0051).
+  await semerRessources(base, { maintenant, stockage });
   // Suivi des joueurs : quelques notes du Coach (une épinglée, une partagée avec Léa).
   const suivi = servicesSuivi({ base, maintenant, socle: s, planning: servicesPlanning({ base, maintenant, noyau: s }) });
   await suivi.creer(zed, team.id, 'lea12345', { contenu: '**Très bon** entry sur Ascent : timings propres, à garder.', categorie: 'performance', ton: 'positif', tags: ['entry', 'ascent'], date: jour(-6), partagee: true });

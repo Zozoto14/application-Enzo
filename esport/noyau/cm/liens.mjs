@@ -22,10 +22,24 @@
  * restreinte supprimée est effacée du fil, des notifications et des détails du journal.
  * Une adresse est toujours en https, sans identifiants, vers un hôte public ; elle est enregistrée normalisée.
  * Aucun aperçu n'est récupéré (pas de requête sortante) : le domaine s'affiche, l'icône est locale.
+ *
+ * FICHIERS (migration 0051, `genre` 'fichier') : une ressource peut être un fichier, au lieu d'une adresse. Le stockage
+ * est celui du Drive (drive/service.mjs) :
+ *  - envoyé depuis Ressources (`source` 'envoi', portée d'envoi « ressources », `cm.editer` du club) : rangé dans le
+ *    dossier système « Ressources » du Drive du club (restreint) et marqué comme appartenant à la ressource ; seuls ceux
+ *    qui voient la ressource le voient (dans le Drive aussi) ; versions, quota et corbeille du Drive ;
+ *  - choisi dans un Drive (`source` 'drive') : simple référence, rien n'est copié ; la ressource suit sa source : qui la
+ *    voit sans voir le fichier dans son Drive lit « Fichier d'un Drive auquel vous n'avez pas accès » (ni nom, ni lien).
+ * Aperçu et téléchargement par lien signé (`/cm/liens/contenu/<ressource>.<version>`, 2 h) : chaque lecture revérifie la
+ * visibilité de la ressource ET l'accès au fichier source. Suppression d'une ressource ouverte : son fichier envoyé part à
+ * la corbeille du Drive ; d'une ressource restreinte : il est effacé tout de suite.
  */
 
 import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
 import { evenement } from '../evenements.mjs';
+import { cheminSigne, verifierLien } from '../fichiers.mjs';
+import { reponseFichierStocke } from '../medias/lecture.mjs';
+import { DUREE_LIEN_DRIVE_MS, VIGNETTE_TAILLE_MAX } from './drive/regles.mjs';
 import { verifierAdresse } from '../ressources/apercu.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { GENRES_ACCES, MAX_REGLES_ACCES, NIVEAUX_ACCES, lecteurTableaux, permissionsAuNiveau } from './acces.mjs';
@@ -40,6 +54,10 @@ export const URL_MAX = 2048;
 export const GENRES_LIAISON = Object.freeze(['carte', 'dossier']);
 export const PARTAGE_MAX = 50;
 const AUTORISES_AFFICHES = 6;
+export const GENRES_RESSOURCE = Object.freeze(['lien', 'fichier']);
+/** Formats affichés en vignette (balise <img>) : comme le Drive. */
+const FORMATS_VIGNETTE = ['png', 'jpeg', 'gif', 'webp', 'svg', 'avif'];
+const MOTIF_CONTENU = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(\d{1,6})$/;
 
 /** Adresse saisie → `{ url, hote }` (https, hôte public, sans identifiants) ou erreur 400 `url`. */
 export function validerLien(brut) {
@@ -59,9 +77,10 @@ export function validerLien(brut) {
 
 const publier = (l, teams) => ({
   id: l.id,
+  genre: l.genre === 'fichier' ? 'fichier' : 'lien',
   titre: l.titre,
-  url: l.url,
-  hote: l.hote,
+  url: l.genre === 'fichier' ? '' : l.url,
+  hote: l.genre === 'fichier' ? '' : l.hote,
   description: l.description ?? '',
   categorie: l.categorie ?? null,
   epingle: Number(l.epingle) === 1,
@@ -72,8 +91,8 @@ const publier = (l, teams) => ({
   majLe: l.maj_le,
 });
 
-/** `drive` : service du Drive (dossiers que le compte voit). */
-export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) {
+/** `drive` : service du Drive (dossiers et fichiers que le compte voit, stockage des fichiers des ressources). */
+export function servicesLiensCm({ base, maintenant = () => Date.now(), drive, cleSession, stockage }) {
   /** Lecture : `cm.voir` du club ou d'une team ; rend ce que le compte voit. */
   async function lecture(acteur) {
     const x = await porteesDe(base, acteur);
@@ -152,8 +171,66 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     return (await personnesPortee(l.team_id ?? null, cache)).filter(p => niveaux.has(p.compte) && p.compte !== 'principal').map(p => ({ ...p, niveau: niveaux.get(p.compte) }));
   }
 
+  // ---------------------------------------------------------------- Fichiers (migration 0051)
+
+  /**
+   * Fichier d'une ressource 'fichier' que l'acteur peut LIRE : `{ f, modifier }` (ligne du Drive), ou `{ etat }` :
+   * 'inaccessible' (choisi dans un Drive que le compte ne voit pas, ou dans un dossier qui lui est fermé), 'supprime'
+   * (à la corbeille ou effacé). `lisibles` : résultat de `drive.fichiersLisibles` déjà calculé (liste).
+   */
+  async function fichierDe(acteur, l, lisibles = null) {
+    if (!drive || !l.element_id) return { etat: 'supprime' };
+    if (l.source === 'envoi') {
+      // Envoyé depuis Ressources : il appartient à la ressource, qui en règle seule la visibilité.
+      const f = await drive.ligneFichier(l.element_id);
+      return f && f.ressource_id === l.id ? { f, modifier: true } : { etat: 'supprime' };
+    }
+    const x = (lisibles ?? (await drive.fichiersLisibles(acteur, [l.element_id]))).get(l.element_id);
+    if (x) return x;
+    return (await drive.ligneFichier(l.element_id)) ? { etat: 'inaccessible' } : { etat: 'supprime' };
+  }
+
+  const signer = (compte, l, version, telecharger = false) => cheminSigne(cleSession, { fichierId: `${l.id}.${version}`, compte, maintenant: maintenant(), duree: DUREE_LIEN_DRIVE_MS, telecharger, genre: 'ressource' });
+
+  /** Partie publique du fichier d'une ressource (nom, taille, type, vignette…) ; jamais rien d'un fichier inaccessible. */
+  async function fichierPublic(acteur, l, droits, { lisibles = null, origine = '' } = {}) {
+    const x = await fichierDe(acteur, l, lisibles);
+    const source = l.source === 'drive' ? 'drive' : 'envoi';
+    if (!x.f) return { source, etat: x.etat };
+    const { f } = x;
+    const meta = drive.metaPublique(f);
+    const vignette = FORMATS_VIGNETTE.includes(meta.format) && Number(f.taille) <= VIGNETTE_TAILLE_MAX && cleSession ? `${origine}${(await signer(acteur.compte, l, Number(f.version))).chemin}` : null;
+    return {
+      source,
+      etat: 'ok',
+      id: f.id,
+      nom: f.nom,
+      genre: f.genre,
+      type: f.type_mime,
+      taille: Number(f.taille),
+      version: Number(f.version),
+      meta,
+      majLe: f.maj_le,
+      vignette,
+      // Choisi dans un Drive : de quel Drive (le compte le voit).
+      portee: source === 'drive' ? f.portee : null,
+      // Remplacer (nouvelle version) : modifier la ressource ET, pour un fichier choisi dans un Drive, le fichier source.
+      remplacer: Boolean(droits?.modifier && x.modifier),
+    };
+  }
+
+  /** Fichiers publics de plusieurs ressources : `Map(lienId → fichier)`. */
+  async function fichiersPublics(acteur, lignes, droitsDe, origine = '') {
+    const sortie = new Map();
+    const fichiers = lignes.filter(l => l.genre === 'fichier');
+    if (!fichiers.length) return sortie;
+    const lisibles = drive ? await drive.fichiersLisibles(acteur, fichiers.filter(l => l.source === 'drive' && l.element_id).map(l => l.element_id)) : new Map();
+    for (const l of fichiers) sortie.set(l.id, await fichierPublic(acteur, l, droitsDe(l), { lisibles, origine }));
+    return sortie;
+  }
+
   /** `GET /cm/liens` : les liens visibles (épinglés d'abord, puis ordre manuel), les étiquettes en usage, les teams proposables. */
-  async function lister(acteur) {
+  async function lister(acteur, { origine = '' } = {}) {
     const c = await lecture(acteur);
     const lignes = await filtrer(c, await base.tous('SELECT * FROM cm_liens ORDER BY epingle DESC, position, cree_le, id LIMIT ?', [LIENS_MAX]));
     const teams = new Map([...c.noms].map(([id, t]) => [id, { id, nom: t.nom }]));
@@ -161,6 +238,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     const liaisons = await liaisonsVisibles(acteur, c, lignes.map(l => l.id));
     const partages = await partagesDe(acteur.compte);
     const cache = new Map();
+    const fichiers = await fichiersPublics(acteur, lignes, l => droitsLien(c, l, l.niveau), origine);
     const liens = [];
     for (const l of lignes) {
       const v = liaisons.get(l.id) ?? { cartes: [], dossiers: [] };
@@ -168,6 +246,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
       const autorises = lienRestreint(l) ? await autorisesDe(l, cache) : null;
       liens.push({
         ...publier(l, teams),
+        ...(fichiers.has(l.id) ? { fichier: fichiers.get(l.id) } : {}),
         liaisons: v.cartes.length + v.dossiers.length,
         // Restreinte : cadenas et premières personnes autorisées (le Fondateur voit toujours, il n'est pas listé).
         autorises: autorises ? { total: autorises.length, personnes: autorises.slice(0, AUTORISES_AFFICHES).map(x => ({ compte: x.compte, pseudo: x.pseudo })) } : null,
@@ -186,43 +265,73 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     };
   }
 
-  async function relire(id) {
+  /** Ressource relue après une écriture (avec son fichier, tel que l'acteur le voit). */
+  async function relire(id, acteur, origine = '') {
     const l = await base.premier('SELECT * FROM cm_liens WHERE id = ?', [id]);
     const teams = new Map((await base.tous('SELECT id, nom FROM teams', [])).map(t => [t.id, { id: t.id, nom: t.nom }]));
-    return publier(l, teams);
+    if (l.genre !== 'fichier') return publier(l, teams);
+    const c = await lecture(acteur);
+    const niveau = await niveauVu(c, l);
+    return { ...publier(l, teams), fichier: await fichierPublic(acteur, l, niveau ? droitsLien(c, l, niveau) : null, { origine }) };
   }
 
-  const evt = (type, acteur, l, t, extra = {}) => evenement(type, { teamId: l.team_id ?? null, acteur: acteur.compte, entiteType: 'cm_lien', entiteId: l.id, charge: { titre: l.titre, hote: l.hote, portee: PORTEE_CLUB, ...extra }, maintenant: t });
+  const evt = (type, acteur, l, t, extra = {}) =>
+    evenement(type, { teamId: l.team_id ?? null, acteur: acteur.compte, entiteType: 'cm_lien', entiteId: l.id, charge: { titre: l.titre, hote: l.hote, portee: PORTEE_CLUB, ...(l.genre === 'fichier' ? { genre: 'fichier' } : {}), ...extra }, maintenant: t });
 
   /**
-   * `POST /cm/liens { titre, url, description?, categorie?, teamId?, epingle?, acces?, regles? }` (cm.editer). `acces`
+   * `POST /cm/liens { genre?, titre, url, description?, categorie?, teamId?, epingle?, acces?, regles? }` (cm.editer). `acces`
    * 'restreint' : visible des seules personnes et rôles de `regles` (et du créateur) ; les personnes nommées sont
    * prévenues (« X a partagé une ressource avec vous ») et la voient « Nouveau ».
+   * Fichier (`genre` 'fichier', migration 0051) : `envoi` (envoi terminé, portée d'envoi « ressources ») OU `elementId`
+   * (fichier d'un Drive que l'acteur voit, jamais copié) ; `titre` facultatif (par défaut, le nom du fichier).
    */
-  async function creer(acteur, corps) {
+  async function creer(acteur, corps, { origine = '' } = {}) {
     await ecriture(acteur, 'cm.editer');
-    const titre = titreDe(corps?.titre);
-    const { url, hote } = validerLien(corps?.url);
+    const genre = corps?.genre ?? 'lien';
+    if (!GENRES_RESSOURCE.includes(genre)) throw echec(400, 'genre', 'Ressource : lien ou fichier.');
+    const fichier = genre === 'fichier';
+    const titreSaisi = fichier ? texteNettoye(corps?.titre, TITRE_MAX) : titreDe(corps?.titre);
+    const { url, hote } = fichier ? { url: '', hote: '' } : validerLien(corps?.url);
     const teamId = await teamValide(corps?.teamId);
     const acces = corps?.acces ?? 'tous';
     if (!ACCES_LIEN.includes(acces)) throw echec(400, 'acces', 'Accès : tous ou restreint.');
     const regles = acces === 'restreint' ? await reglesValides(teamId, corps?.regles) : [];
     const { n, haut } = (await base.premier('SELECT COUNT(*) AS n, MAX(position) AS haut FROM cm_liens', [])) ?? {};
     if (Number(n ?? 0) >= LIENS_MAX) throw echec(409, 'trop-de-liens', `${LIENS_MAX} liens au plus.`);
-    const ligne = { id: nouvelId(), team_id: teamId, titre, url, hote, acces, cree_par: acteur.compte };
+    const id = nouvelId();
+    // Fichier : envoyé (rangé dans le dossier « Ressources », il appartient à la ressource) ou choisi dans un Drive.
+    let source = null;
+    let elementId = null;
+    let nomFichier = '';
+    const rangement = [];
+    if (fichier) {
+      if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      if (corps?.envoi !== undefined && corps?.envoi !== null) {
+        const r = await drive.preparerFichierRessource(acteur, { envoi: corps.envoi, ressourceId: id });
+        rangement.push(...r.instructions);
+        [source, elementId, nomFichier] = ['envoi', r.elementId, r.nom];
+      } else if (typeof corps?.elementId === 'string') {
+        const f = await drive.fichierPourIntegration(acteur, corps.elementId);
+        [source, elementId, nomFichier] = ['drive', f.elementId, f.nom];
+      } else throw echec(400, 'fichier', 'Fichier : un envoi ou un fichier du Drive est attendu.');
+    }
+    const titre = fichier ? titreSaisi || texteNettoye(nomFichier, TITRE_MAX) || 'Fichier' : titreSaisi;
+    const ligne = { id, team_id: teamId, titre, url, hote, acces, cree_par: acteur.compte, genre, element_id: elementId, source };
     const tt = maintenant();
     const t = iso(tt);
     const nommes = regles.filter(r => r.genre === 'compte' && r.cible !== acteur.compte).map(r => r.cible);
     await base.lot([
+      ...rangement,
       {
-        sql: 'INSERT INTO cm_liens (id, team_id, titre, url, hote, description, categorie, epingle, position, cree_par, cree_le, maj_par, maj_le, acces) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [ligne.id, teamId, titre, url, hote, descriptionDe(corps?.description) || null, categorieDe(corps?.categorie), corps?.epingle === true ? 1 : 0, Number(haut ?? 0) + 1024, acteur.compte, t, acteur.compte, t, acces],
+        sql: 'INSERT INTO cm_liens (id, team_id, titre, url, hote, description, categorie, epingle, position, cree_par, cree_le, maj_par, maj_le, acces, genre, element_id, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [ligne.id, teamId, titre, url, hote, descriptionDe(corps?.description) || null, categorieDe(corps?.categorie), corps?.epingle === true ? 1 : 0, Number(haut ?? 0) + 1024, acteur.compte, t, acteur.compte, t, acces, genre, elementId, source],
       },
       ...regles.map(r => ({ sql: 'INSERT INTO cm_lien_acces (lien_id, genre, cible, niveau, ajoute_par, ajoute_le) VALUES (?, ?, ?, ?, ?, ?)', params: [ligne.id, r.genre, r.cible, r.niveau, acteur.compte, t] })),
       evt('cm.lien_cree', acteur, ligne, tt, acces === 'restreint' ? { acces } : {}),
       ...instructionsPartage(acteur, ligne, nommes, tt),
     ]);
-    return { lien: await relire(ligne.id) };
+    if (source === 'envoi') await drive.apresEnvoi();
+    return { lien: await relire(ligne.id, acteur, origine) };
   }
 
   /** Partage : lignes « Nouveau » (remises à neuf) et événement de notification des personnes (`comptes`, sans l'auteur). */
@@ -251,14 +360,18 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
   const refus = () => echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
 
   /** `PATCH /cm/liens/:id { titre?, url?, description?, categorie?, teamId?, epingle? }` (cm.editer). */
-  async function modifier(acteur, id, corps) {
+  async function modifier(acteur, id, corps, { origine = '' } = {}) {
     await ecriture(acteur, 'cm.editer');
     const { l, droits } = await lienVisible(acteur, id);
     // « Peut voir » une ressource restreinte : lecture seule.
     if (!droits.modifier) throw refus();
     const champs = {};
     if (corps?.titre !== undefined) champs.titre = titreDe(corps.titre);
-    if (corps?.url !== undefined) Object.assign(champs, validerLien(corps.url));
+    if (corps?.url !== undefined) {
+      // Un fichier n'a pas d'adresse : il se remplace (nouvelle version), il ne devient pas un lien.
+      if (l.genre === 'fichier') throw echec(400, 'url', 'Une ressource fichier n’a pas d’adresse : remplacez le fichier.');
+      Object.assign(champs, validerLien(corps.url));
+    }
     if (corps?.description !== undefined) champs.description = descriptionDe(corps.description) || null;
     if (corps?.categorie !== undefined) champs.categorie = categorieDe(corps.categorie);
     if (corps?.teamId !== undefined) champs.team_id = await teamValide(corps.teamId);
@@ -272,11 +385,68 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
         evt('cm.lien_modifie', acteur, apres, tt, champs.epingle !== undefined && Number(l.epingle) !== champs.epingle ? { epingle: champs.epingle === 1 } : {}),
       ]);
     }
-    return { lien: await relire(l.id) };
+    return { lien: await relire(l.id, acteur, origine) };
+  }
+
+  /**
+   * `POST /cm/liens/:id/fichier { envoi, version? }` : remplace le fichier d'une ressource (nouvelle version, l'ancienne
+   * reste dans l'historique du Drive). Droit de modifier la ressource ; fichier choisi dans un Drive : aussi le droit de
+   * le modifier dans son Drive. `version` : version attendue (conflit si le fichier a changé entre-temps).
+   */
+  async function remplacerFichier(acteur, id, corps, { origine = '' } = {}) {
+    await ecriture(acteur, 'cm.editer');
+    const { l, droits } = await lienVisible(acteur, id);
+    if (l.genre !== 'fichier') throw echec(400, 'genre', 'Cette ressource est un lien, pas un fichier.');
+    if (!droits.modifier) throw refus();
+    if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+    const r = await drive.versionRessource(acteur, { elementId: l.element_id, ressourceId: l.id, source: l.source, envoi: corps?.envoi, version: corps?.version });
+    const tt = maintenant();
+    await base.lot([{ sql: 'UPDATE cm_liens SET maj_par = ?, maj_le = ? WHERE id = ?', params: [acteur.compte, iso(tt), l.id] }, evt('cm.lien_version', acteur, l, tt, { version: r.version })]);
+    return { lien: await relire(l.id, acteur, origine) };
+  }
+
+  /** Fichier d'une ressource que l'acteur lit (404 / 403 sinon) : `{ l, f }`. */
+  async function fichierLisible(acteur, id) {
+    const { l } = await lienVisible(acteur, id);
+    if (l.genre !== 'fichier') throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    const x = await fichierDe(acteur, l);
+    if (x.etat === 'inaccessible') throw echec(403, 'drive-inaccessible', 'Fichier d’un Drive auquel vous n’avez pas accès.');
+    if (!x.f) throw echec(404, 'fichier-introuvable', 'Fichier introuvable (supprimé du Drive).');
+    return { l, f: x.f };
+  }
+
+  /** `POST /cm/liens/:id/fichier/lien { telecharger?, version? }` : lien signé (2 h) vers le fichier (aperçu ou téléchargement). */
+  async function lienFichier(acteur, id, corps) {
+    const { l, f } = await fichierLisible(acteur, id);
+    const version = corps?.version === undefined || corps?.version === null ? Number(f.version) : Number(corps.version);
+    if (!Number.isSafeInteger(version) || !(await drive.versionStockee(f.id, version))) throw echec(404, 'version-introuvable', 'Version introuvable.');
+    return signer(acteur.compte, l, version, corps?.telecharger === true);
+  }
+
+  /**
+   * `GET /cm/liens/contenu/<ressource>.<version>?c&exp&sig` (sans session) : le fichier. Signature, PUIS visibilité de la
+   * ressource ET accès au fichier source revérifiés pour le compte du lien (retrait immédiat : 403).
+   */
+  async function servirContenu(cle, params, requete) {
+    const m = MOTIF_CONTENU.exec(String(cle));
+    if (!m) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    const { compte, telecharger } = await verifierLien(cleSession, cle, params, maintenant(), { genre: 'ressource' });
+    let f;
+    try {
+      f = (await fichierLisible({ compte, superAdmin: compte === 'principal' }, m[1])).f;
+    } catch {
+      throw echec(403, 'lien-invalide', 'Lien de fichier invalide.');
+    }
+    const v = await drive.versionStockee(f.id, Number(m[2]));
+    if (!v) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    if (!stockage) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché.');
+    const reponse = await reponseFichierStocke({ stockage, f: v.f, requete, telecharger, nom: Number(v.version.version) === Number(f.version) ? f.nom : v.version.nom });
+    if (!reponse) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    return reponse;
   }
 
   /** `PUT /cm/liens/ordre { ids }` (cm.editer) : nouvel ordre manuel (les liens non cités gardent leur rang, après). */
-  async function ordonner(acteur, corps) {
+  async function ordonner(acteur, corps, { origine = '' } = {}) {
     await ecriture(acteur, 'cm.editer');
     const ids = Array.isArray(corps?.ids) ? corps.ids : null;
     if (!ids || ids.length > LIENS_MAX || new Set(ids).size !== ids.length) throw echec(400, 'ordre', 'Liste d’identifiants invalide.');
@@ -289,7 +459,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     await base.lot([
       ...ids.map((i, k) => ({ sql: 'UPDATE cm_liens SET position = ?, maj_par = ?, maj_le = ? WHERE id = ?', params: [(k + 1) * 1024, acteur.compte, iso(tt), i] })),
     ]);
-    return lister(acteur);
+    return lister(acteur, { origine });
   }
 
 
@@ -372,15 +542,16 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
   }
 
   /** `GET /cm/liens/cible/:genre/:id` : liens liés à une carte ou à un dossier que le compte voit (et peut-il en lier). */
-  async function liensDe(acteur, genre, cibleId) {
+  async function liensDe(acteur, genre, cibleId, { origine = '' } = {}) {
     const c = await lecture(acteur);
     const cible = await cibleVisible(acteur, c, genre, cibleId);
     // Ressource restreinte : seulement pour qui la voit (accès à la ressource ET à la cible).
     const lignes = await filtrer(c, await base.tous('SELECT l.* FROM cm_liens l JOIN cm_lien_liaisons x ON x.lien_id = l.id WHERE x.genre = ? AND x.cible_id = ? ORDER BY l.epingle DESC, l.position, l.cree_le, l.id', [genre, cible.id]));
     const teams = new Map([...c.noms].map(([i, t]) => [i, { id: i, nom: t.nom }]));
     const partages = await partagesDe(acteur.compte);
+    const fichiers = await fichiersPublics(acteur, lignes, l => droitsLien(c, l, l.niveau), origine);
     return {
-      liens: lignes.map(l => ({ ...publier(l, teams), nouveau: Boolean(partages.get(l.id) && !partages.get(l.id).vu), droits: droitsLien(c, l, l.niveau) })),
+      liens: lignes.map(l => ({ ...publier(l, teams), ...(fichiers.has(l.id) ? { fichier: fichiers.get(l.id) } : {}), nouveau: Boolean(partages.get(l.id) && !partages.get(l.id).vu), droits: droitsLien(c, l, l.niveau) })),
       droits: { lier: c.editer && cible.modifier, creer: c.editer },
     };
   }
@@ -394,8 +565,11 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     const { l, droits } = await lienVisible(acteur, id);
     if (!droits.supprimer) throw refus();
     const restreint = lienRestreint(l);
+    // Fichier envoyé depuis Ressources : à la corbeille du Drive (ressource ouverte), effacé (restreinte).
+    const retrait = l.genre === 'fichier' && l.source === 'envoi' && drive ? await drive.retraitFichierRessource(acteur, { elementId: l.element_id, ressourceId: l.id, definitif: restreint }) : { instructions: [], fichiers: [] };
     const tt = maintenant();
     await base.lot([
+      ...retrait.instructions,
       { sql: 'DELETE FROM cm_lien_liaisons WHERE lien_id = ?', params: [l.id] },
       { sql: 'DELETE FROM cm_lien_acces WHERE lien_id = ?', params: [l.id] },
       { sql: 'DELETE FROM cm_lien_partages WHERE lien_id = ?', params: [l.id] },
@@ -411,6 +585,7 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
         ? evenement('cm.lien_supprime', { teamId: l.team_id ?? null, acteur: acteur.compte, entiteType: 'cm_lien', entiteId: l.id, charge: { acces: 'restreint', portee: PORTEE_CLUB }, maintenant: tt })
         : evt('cm.lien_supprime', acteur, l, tt),
     ]);
+    if (retrait.fichiers.length) await drive.effacerOctetsRessource(retrait.fichiers);
     return { ok: true };
   }
 
@@ -558,5 +733,5 @@ export function servicesLiensCm({ base, maintenant = () => Date.now(), drive }) 
     return (await filtrer(c, lignes)).length;
   }
 
-  return { lister, creer, modifier, ordonner, supprimer, liaisons, lier, delier, liensDe, optionsNouveau, accesLien, changerAcces, partager, vu, nouvelles };
+  return { lister, creer, modifier, ordonner, supprimer, liaisons, lier, delier, liensDe, optionsNouveau, accesLien, changerAcces, partager, vu, nouvelles, remplacerFichier, lienFichier, servirContenu };
 }

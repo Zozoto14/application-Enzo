@@ -44,6 +44,9 @@
  *   GET               /cm/liens/cible/:genre/:id                 liens liés à une carte ou à un dossier du Drive
  *   Qui voit la ressource (migration 0048) : GET /cm/liens/acces?team (options d'une nouvelle ressource) ;
  *   GET|PUT           /cm/liens/:id/acces { acces, regles } ; POST /cm/liens/:id/partage { comptes, niveau? } ; POST /cm/liens/:id/vu
+ *   Fichiers (migration 0051) : POST /cm/liens { genre: 'fichier', envoi | elementId, … } ; POST /cm/liens/:id/fichier
+ *   { envoi, version? } (remplacer) ; POST /cm/liens/:id/fichier/lien { telecharger?, version? } ; envois par morceaux :
+ *   /cm/drive/portees/ressources/envois… ; lecture sans session : GET /cm/liens/contenu/<ressource>.<version>?c&exp&sig
  *
  *   Réunions de l'équipe CM (docs/esport/cm-reunions.md) : /cm/reunions… (reunions/routes.mjs).
  *
@@ -80,6 +83,13 @@ export async function routeFichierCm(cm, url, requete) {
   return cm.fichiers.servir(f[1], url.searchParams, requete);
 }
 
+/** Fichier d'une ressource de DATA › Ressources par lien signé (sans session, migration 0051). */
+export async function routeRessourceSignee(cm, url, requete) {
+  const f = /^\/cm\/liens\/contenu\/([^/]+)$/.exec(url.pathname.replace(/^\/api\/esport(?=\/|$)/, ''));
+  if (!f || !cm.liens) throw echec(404, 'route', 'Adresse inconnue.');
+  return cm.liens.servirContenu(segment(f[1]), url.searchParams, requete);
+}
+
 export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, requete, lireCorps, limite }) {
   if (chemin !== '/cm' && !chemin.startsWith('/cm/')) return undefined;
   const p = chemin.split('/').slice(2).map(segment);
@@ -112,17 +122,29 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
 
   if (a === 'liens' && cm.liens) {
     const li = cm.liens;
-    if (n === 1 && m === 'GET') return li.lister(acteur);
-    if (n === 1 && m === 'POST') return li.creer(acteur, await lireCorps());
-    if (n === 2 && b === 'ordre' && m === 'PUT') return li.ordonner(acteur, await lireCorps());
+    if (n === 1 && m === 'GET') return li.lister(acteur, { origine });
+    if (n === 1 && m === 'POST') {
+      const corps = await lireCorps();
+      // Fichier (migration 0051) : même limite que les dépôts du Drive.
+      if (corps?.genre === 'fichier') await limite('cm_drive', acteur.compte);
+      return li.creer(acteur, corps, { origine });
+    }
+    if (n === 2 && b === 'ordre' && m === 'PUT') return li.ordonner(acteur, await lireCorps(), { origine });
+    // Fichier d'une ressource (migration 0051) : remplacer (nouvelle version), lien signé (aperçu, téléchargement).
+    if (n === 3 && c === 'fichier' && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('cm_drive', acteur.compte);
+      return li.remplacerFichier(acteur, b, corps, { origine });
+    }
+    if (n === 4 && c === 'fichier' && d === 'lien' && m === 'POST') return lienComplet(url, await li.lienFichier(acteur, b, await lireCorps()));
     if (n === 2 && b === 'acces' && m === 'GET') return li.optionsNouveau(acteur, q.get('team'));
     if (n === 3 && c === 'acces' && m === 'GET') return li.accesLien(acteur, b);
     if (n === 3 && c === 'acces' && m === 'PUT') return li.changerAcces(acteur, b, await lireCorps());
     if (n === 3 && c === 'partage' && m === 'POST') return li.partager(acteur, b, await lireCorps());
     if (n === 3 && c === 'vu' && m === 'POST') return li.vu(acteur, b);
-    if (n === 2 && m === 'PATCH') return li.modifier(acteur, b, await lireCorps());
+    if (n === 2 && m === 'PATCH') return li.modifier(acteur, b, await lireCorps(), { origine });
     if (n === 2 && m === 'DELETE') return li.supprimer(acteur, b);
-    if (n === 4 && b === 'cible' && m === 'GET') return li.liensDe(acteur, c, d);
+    if (n === 4 && b === 'cible' && m === 'GET') return li.liensDe(acteur, c, d, { origine });
     if (n === 3 && c === 'liaisons' && m === 'GET') return li.liaisons(acteur, b);
     if (n === 3 && c === 'liaisons' && m === 'POST') return li.lier(acteur, b, await lireCorps());
     if (n === 5 && c === 'liaisons' && m === 'DELETE') return li.delier(acteur, b, d, p[4]);

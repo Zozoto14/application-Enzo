@@ -6,21 +6,32 @@
  * que le compte voit, avec un raccourci pour y aller). Qui voit la ressource (migration 0048) : cadenas et personnes
  * autorisées sur la ligne, « Qui voit la ressource… » et « Partager avec… » dans le menu ⋯, pastille « Nouveau » jusqu'à
  * l'ouverture, filtre « Partagé avec moi ». Tout est décidé par le serveur.
+ * Fichiers (migration 0051) : « + Ajouter » → Lien ou Fichier (FormFichier.tsx : envoi depuis l'appareil, plusieurs à la
+ * fois, ou choix dans un Drive) ; icône du type, taille, vignette, aperçu au clic (aperçus du Drive : image, vidéo, son,
+ * PDF…), Télécharger, Remplacer le fichier (nouvelle version), filtre par type. Fichier d'un Drive que le compte ne voit
+ * pas : « Fichier d'un Drive auquel vous n'avez pas accès », sans nom ni lien.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../../hub/themes';
 import type { ClientEsport } from '../../../client';
-import { apiLiens, deplacerLien, filtrerLiens, type FiltreLiens, type LienCm, type Liaisons, type ListeLiens } from '../../../cm/liens';
+import { TYPES_RESSOURCE, apiLiens, deplacerLien, fichierLisible, fichierPourApercu, filtrerLiens, type FiltreLiens, type LienCm, type Liaisons, type ListeLiens } from '../../../cm/liens';
+import { GLYPHES_DRIVE, PORTEE_CLUB } from '../../../cm/drive';
+import { choisirFichier, choixFichierDisponible } from '../../../medias/choixFichier';
 import { trLi, trnLi } from '../../../i18n/liens';
 import { Icone } from '../../../../ui/icones';
 import { useTempsReel } from '../../../tempsReel/hooks';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../../commun';
 import { Badge, Carte, ESP, EtatVide, Grille, MenuActions, SqueletteCartes, TitreCarte, Volet, attenue, initiales, texte } from '../../design';
 import { signalerEtatCm } from '../commun';
+import { BarreEnvoi, useEnvoi } from '../../medias/EnvoiMedia';
+import { ouvrirLienDiffere } from '../../ouvrirLien';
+import { ApercuDrive } from '../drive/ApercuDrive';
+import { infosFichier } from '../drive/commun';
 import { AccesRessource, PartageRessource } from './AccesRessource';
+import { FormFichier, PORTEE_ENVOI_RESSOURCES } from './FormFichier';
 import { FormLien } from './FormLien';
 import { ouvrirAdresse } from './ouvrirAdresse';
 
@@ -45,6 +56,9 @@ export function Ressources({
   const [aSupprimer, setASupprimer] = useState<LienCm | undefined>();
   const [reglageAcces, setReglageAcces] = useState<LienCm | undefined>();
   const [partage, setPartage] = useState<LienCm | undefined>();
+  const [ajoutFichiers, setAjoutFichiers] = useState(false);
+  const [apercu, setApercu] = useState<LienCm | undefined>();
+  const envoi = useEnvoi();
   const { erreur, avis, agir } = useAgir();
   const charger = useCallback(async () => setListe(await api.lister()), [api]);
   useEffect(() => {
@@ -55,7 +69,8 @@ export function Ressources({
 
   const editer = liste?.droits.editer ?? false;
   const gerer = liste?.droits.gerer ?? false;
-  const filtres = Boolean(filtre.q?.trim() || filtre.categorie || filtre.team || filtre.epingles || filtre.partages);
+  const filtres = Boolean(filtre.q?.trim() || filtre.categorie || filtre.team || filtre.epingles || filtre.partages || filtre.type);
+  const avecFichiers = Boolean(liste?.liens.some(l => l.genre === 'fichier'));
   const affiches = useMemo(() => filtrerLiens(liste?.liens ?? [], filtre), [liste, filtre]);
   const teamsPresentes = useMemo(() => {
     const m = new Map<string, string>();
@@ -72,10 +87,31 @@ export function Ressources({
       .then(signalerEtatCm)
       .catch(() => undefined);
   };
+  // Fichier : aperçu (volet) ; lien : nouvel onglet.
   const ouvrir = (lien: LienCm) => {
-    ouvrirAdresse(lien.url);
+    if (lien.genre === 'fichier') {
+      if (fichierLisible(lien)) setApercu(lien);
+    } else ouvrirAdresse(lien.url);
     marquerVu(lien);
   };
+  const urlFichier = (lien: LienCm, telecharger = false) => async () => (await api.lienFichier(lien.id, { telecharger })).url;
+  const telecharger = (lien: LienCm) => {
+    marquerVu(lien);
+    void ouvrirLienDiffere(urlFichier(lien, true));
+  };
+  // Remplacer le fichier : envoi (portée « ressources »), puis nouvelle version (le serveur revérifie les droits).
+  const remplacer = (lien: LienCm) =>
+    agir('remplacer', async () => {
+      const f = fichierLisible(lien);
+      const fichier = await choisirFichier('', 'esport-cm-ressources-remplacer-champ');
+      if (!fichier || !f) return undefined;
+      const { etat, oublier } = await envoi.lancer({ client, teamId: PORTEE_ENVOI_RESSOURCES, section: 'drive', fichier });
+      await api.remplacerFichier(lien.id, etat.id, f.version);
+      oublier();
+      envoi.effacer();
+      await charger();
+      return trLi('fichier.remplace');
+    });
   const ouvrirOu = (lien: LienCm) => {
     marquerVu(lien);
     setOu({ lien });
@@ -94,6 +130,7 @@ export function Ressources({
 
   const ligne = (l: LienCm) => {
     const d = l.droits ?? { modifier: editer, supprimer: gerer, acces: false, partager: false };
+    const fichier = fichierLisible(l);
     const ordre = editer && !filtres;
     const premier = deplacerLien(liste?.liens ?? [], l.id, -1) === null;
     const dernier = deplacerLien(liste?.liens ?? [], l.id, 1) === null;
@@ -101,17 +138,32 @@ export function Ressources({
       <Carte key={l.id} theme={theme} dense testID={`esport-cm-lien-${l.id}`} accent={l.epingle ? theme.accent : undefined}>
         <View style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', minWidth: 0 }}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.accent, 0.12) }}>
-            <Icone nom="globe" taille={20} couleur={theme.accent} />
+            <Icone nom={fichier ? GLYPHES_DRIVE[fichier.genre] : l.genre === 'fichier' ? 'document' : 'globe'} taille={20} couleur={theme.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Pressable accessibilityRole="link" accessibilityLabel={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-ouvrir`}>
+            <Pressable
+              accessibilityRole={l.genre === 'fichier' ? 'button' : 'link'}
+              accessibilityLabel={l.genre === 'fichier' ? trLi('fichier.apercu_de', { titre: l.titre }) : trLi('ouvrir_lien', { titre: l.titre })}
+              disabled={l.genre === 'fichier' && !fichier}
+              onPress={() => ouvrir(l)}
+              testID={`esport-cm-lien-${l.id}-ouvrir`}>
               <Text style={{ ...texte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
                 {l.titre}
               </Text>
             </Pressable>
-            <Text style={{ ...attenue(theme, 13), color: theme.accent }} numberOfLines={1} testID={`esport-cm-lien-${l.id}-hote`}>
-              {l.hote}
-            </Text>
+            {l.genre === 'fichier' ? (
+              <Text style={{ ...attenue(theme, 13), color: fichier ? theme.accent : theme.attenue }} numberOfLines={2} testID={`esport-cm-lien-${l.id}-fichier`}>
+                {fichier
+                  ? [fichier.nom, infosFichier(fichierPourApercu(l, fichier)), fichier.source === 'drive' ? `${trLi('fichier.depuis_drive')} (${fichier.portee === PORTEE_CLUB ? trLi('fichier.drive_club') : trLi('fichier.drive_team')})` : ''].filter(Boolean).join(' · ')
+                  : l.fichier?.etat === 'supprime'
+                    ? trLi('fichier.supprime')
+                    : trLi('fichier.inaccessible')}
+              </Text>
+            ) : (
+              <Text style={{ ...attenue(theme, 13), color: theme.accent }} numberOfLines={1} testID={`esport-cm-lien-${l.id}-hote`}>
+                {l.hote}
+              </Text>
+            )}
             {l.description ? (
               <Text style={attenue(theme, 14)} numberOfLines={3}>
                 {l.description}
@@ -119,6 +171,11 @@ export function Ressources({
             ) : null}
           </View>
         </View>
+        {fichier?.vignette && fichier.genre === 'image' ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={trLi('fichier.apercu_de', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-vignette`}>
+            <Image source={{ uri: fichier.vignette }} resizeMode="contain" accessibilityIgnoresInvertColors style={{ width: '100%', height: 120, borderRadius: 10, backgroundColor: teinteTransparente(theme.accent, 0.06) }} />
+          </Pressable>
+        ) : null}
         <View style={[styles.ligne, { gap: ESP.xxs, flexWrap: 'wrap' }]}>
           {l.nouveau ? <Badge theme={theme} texte={trLi('nouveau_badge')} ton="accent" testID={`esport-cm-lien-${l.id}-nouveau`} /> : null}
           {l.acces === 'restreint' ? (
@@ -142,7 +199,16 @@ export function Ressources({
           {l.liaisons ? <Badge theme={theme} texte={trnLi('lies.n', l.liaisons)} icone="lien" testID={`esport-cm-lien-${l.id}-liaisons`} /> : null}
         </View>
         <View style={[styles.ligne, { gap: ESP.xs, justifyContent: 'space-between' }]}>
-          <BoutonHub theme={theme} titre={trLi('ouvrir')} icone="externe" libelle={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-aller`} />
+          {l.genre !== 'fichier' ? (
+            <BoutonHub theme={theme} titre={trLi('ouvrir')} icone="externe" libelle={trLi('ouvrir_lien', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-aller`} />
+          ) : fichier ? (
+            <View style={[styles.ligne, { gap: ESP.xs, flexShrink: 1 }]}>
+              <BoutonHub theme={theme} titre={trLi('fichier.apercu')} icone="oeil" libelle={trLi('fichier.apercu_de', { titre: l.titre })} onPress={() => ouvrir(l)} testID={`esport-cm-lien-${l.id}-apercu`} />
+              <BoutonHub theme={theme} titre={trLi('fichier.telecharger')} libelle={trLi('fichier.telecharger_de', { titre: l.titre })} onPress={() => telecharger(l)} testID={`esport-cm-lien-${l.id}-telecharger`} />
+            </View>
+          ) : (
+            <View />
+          )}
           <MenuActions
             theme={theme}
             testID={`esport-cm-lien-${l.id}-menu`}
@@ -151,6 +217,7 @@ export function Ressources({
               d.partager && { titre: trLi('partage.menu'), onPress: () => setPartage(l), testID: `esport-cm-lien-${l.id}-partager` },
               d.acces && { titre: trLi('acces.menu'), onPress: () => setReglageAcces(l), testID: `esport-cm-lien-${l.id}-acces` },
               d.modifier && { titre: trLi('modifier'), onPress: () => setFormulaire({ lien: l }), testID: `esport-cm-lien-${l.id}-modifier` },
+              fichier?.remplacer && choixFichierDisponible && !envoi.enCours && { titre: trLi('fichier.remplacer'), onPress: () => void remplacer(l), testID: `esport-cm-lien-${l.id}-remplacer` },
               d.modifier && { titre: l.epingle ? trLi('desepingler') : trLi('epingler'), onPress: () => void agir('epingle', async () => { await api.modifier(l.id, { epingle: !l.epingle }); await charger(); }), testID: `esport-cm-lien-${l.id}-epingler` },
               ordre && !premier && { titre: trLi('monter'), onPress: () => deplacer(l.id, -1), testID: `esport-cm-lien-${l.id}-monter` },
               ordre && !dernier && { titre: trLi('descendre'), onPress: () => deplacer(l.id, 1), testID: `esport-cm-lien-${l.id}-descendre` },
@@ -167,10 +234,25 @@ export function Ressources({
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-ressources" />
       <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'flex-end' }]}>
         <Champ theme={theme} libelle={trLi('recherche')} valeur={filtre.q ?? ''} onChanger={q => setFiltre({ ...filtre, q })} maxLength={80} testID="esport-cm-ressources-recherche" style={{ flex: 1, minWidth: 200 }} />
-        {editer ? <BoutonHub theme={theme} titre={trLi('nouveau')} variante="plein" onPress={() => setFormulaire({})} testID="esport-cm-ressources-nouveau" /> : null}
+        {editer ? (
+          <MenuActions
+            theme={theme}
+            titreBouton={trLi('ajouter')}
+            libelle={trLi('ajouter_libelle')}
+            testID="esport-cm-ressources-nouveau"
+            actions={[
+              { titre: trLi('ajouter.lien'), onPress: () => setFormulaire({}), testID: 'esport-cm-ressources-nouveau-lien' },
+              { titre: trLi('ajouter.fichier'), onPress: () => setAjoutFichiers(true), testID: 'esport-cm-ressources-nouveau-fichier' },
+            ]}
+          />
+        ) : null}
       </View>
-      {liste && (liste.categories.length || teamsPresentes.length || liste.liens.some(l => l.epingle || l.partageAvecMoi)) ? (
+      <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-cm-ressources-envoi" />
+      {liste && (avecFichiers || filtre.type || liste.categories.length || teamsPresentes.length || liste.liens.some(l => l.epingle || l.partageAvecMoi)) ? (
         <View style={{ gap: ESP.xs }}>
+          {avecFichiers || filtre.type ? (
+            <Choix theme={theme} libelle={trLi('filtre.type')} valeur={filtre.type ?? ''} options={[{ id: '', nom: trLi('type.tous') }, ...TYPES_RESSOURCE.map(t => ({ id: t, nom: trLi(`type.${t}`) }))]} onChoisir={t => setFiltre({ ...filtre, type: (t || undefined) as FiltreLiens['type'] })} testID="esport-cm-ressources-type" />
+          ) : null}
           {liste.categories.length ? (
             <Choix theme={theme} libelle={trLi('filtre.categorie')} valeur={filtre.categorie ?? ''} options={[{ id: '', nom: trLi('filtre.toutes') }, ...liste.categories.map(c => ({ id: c, nom: c }))]} onChoisir={c => setFiltre({ ...filtre, categorie: c || undefined })} testID="esport-cm-ressources-categorie" />
           ) : null}
@@ -221,6 +303,10 @@ export function Ressources({
           }}
         />
       ) : null}
+
+      {ajoutFichiers && liste ? <FormFichier theme={theme} client={client} api={api} liste={liste} onFini={charger} onFermer={() => setAjoutFichiers(false)} /> : null}
+
+      {apercu && fichierLisible(apercu) ? <ApercuRessource theme={theme} lien={apercu} obtenirUrl={urlFichier(apercu)} onTelecharger={() => telecharger(apercu)} onFermer={() => setApercu(undefined)} /> : null}
 
       {ou ? (
         <Volet theme={theme} visible titre={trLi('lies.titre')} onFermer={() => setOu(undefined)} testID="esport-cm-ressources-liaisons-volet" largeur={460}>
@@ -291,5 +377,25 @@ export function Ressources({
         </Volet>
       ) : null}
     </View>
+  );
+}
+
+/** Aperçu du fichier d'une ressource (volet) : aperçus du Drive (image, vidéo, son, police, texte, PDF), Télécharger. */
+function ApercuRessource({ theme, lien, obtenirUrl, onTelecharger, onFermer }: { theme: ThemeHub; lien: LienCm; obtenirUrl(): Promise<string>; onTelecharger(): void; onFermer(): void }) {
+  const f = fichierLisible(lien);
+  // Lien signé stable pour le lecteur (un nouvel objet à chaque rendu relancerait le chargement).
+  const [obtenir] = useState(() => obtenirUrl);
+  if (!f) return null;
+  const pourApercu = fichierPourApercu(lien, f);
+  return (
+    <Volet theme={theme} visible titre={lien.titre} onFermer={onFermer} testID="esport-cm-ressources-apercu-volet" largeur={620}>
+      <View style={{ gap: ESP.s, padding: ESP.l }}>
+        <ApercuDrive theme={theme} fichier={pourApercu} obtenirUrl={obtenir} />
+        <Text style={attenue(theme, 13)} testID="esport-cm-ressources-apercu-infos">
+          {[f.nom, infosFichier(pourApercu)].join(' · ')}
+        </Text>
+        <BoutonHub theme={theme} titre={trLi('fichier.telecharger')} variante="plein" onPress={onTelecharger} testID="esport-cm-ressources-apercu-telecharger" />
+      </View>
+    </Volet>
   );
 }

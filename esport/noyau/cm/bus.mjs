@@ -96,6 +96,8 @@ export const TYPES_CM = [
   // « Partager avec… » ou personnes nommées : charge { titre, hote, comptes } → notification `cm-lien-partage`.
   'cm.lien_acces',
   'cm.lien_partage',
+  // Fichier d'une ressource remplacé (migration 0051) : charge { titre, hote: '', portee, genre: 'fichier', version }.
+  'cm.lien_version',
   // Ajout dans le Drive (migration 0041), pour le centre de notifications : un fichier ou un dossier ajouté, une
   // nouvelle version. Charge : { portee, dossierId, element: 'fichier' | 'dossier', type: 'fichier' | 'dossier' |
   // 'version', genre: 'ajout' | 'copie' | 'version' | 'rangement', nom, version, auteur }. Le destinataire doit VOIR l'élément : drive.destinatairesAjout(ev)

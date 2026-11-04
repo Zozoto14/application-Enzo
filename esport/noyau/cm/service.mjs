@@ -10,7 +10,8 @@
  *  - rgpd.mjs : export et effacement.
  *
  *  - drive/ : Drive de la section (dossiers, fichiers, versions, corbeille ; docs/esport/drive.md).
- *  - liens.mjs : liens utiles de DATA › Ressources, liés à des cartes et des dossiers du Drive (migration 0044).
+ *  - liens.mjs : liens utiles de DATA › Ressources, liés à des cartes et des dossiers du Drive (migration 0044) ;
+ *    fichiers des ressources (migration 0051), stockés par le Drive.
  *  - reunions/ : réunions de l'équipe CM, disponibilités, rendez-vous (docs/esport/cm-reunions.md).
  *
  * Fichiers (pièces jointes, clips) : envoi par morceaux du module médias (usage « cm », portée club ou team),
@@ -62,7 +63,7 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   // Calendriers des teams superposés au calendrier éditorial (lecture seule : planning si le compte le voit, sinon compétition publiable).
   const calendriers = servicesCalendriersCm({ base, planning });
   // Liens utiles de DATA › Ressources (migration 0044), liables à des cartes et à des dossiers du Drive.
-  const liens = servicesLiensCm({ base, maintenant, drive });
+  const liens = servicesLiensCm({ base, maintenant, drive, cleSession, stockage });
 
   /**
    * Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, image du club — logo, fond — et cm.voir

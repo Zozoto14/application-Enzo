@@ -411,9 +411,9 @@ export function Drive({
         { titre: f.favori ? trDr('action.retirer_favori') : trDr('action.favori'), onPress: () => void action('favori', () => api.favori('fichier', f.id, !f.favori)) },
         { titre: trDr('action.lien_interne'), onPress: () => void lienInterne(f.id) },
         f.modifiable && { titre: trDr('action.renommer'), onPress: () => setDialogue({ genre: 'renommer', id: f.id, nom: f.nom, systeme: false }) },
-        f.modifiable && !droits?.depot && { titre: trDr('action.deplacer'), onPress: () => setDialogue({ genre: 'destination', action: 'deplacer', elements: [{ genre: 'fichier', id: f.id }] }) },
-        droits?.envoyer && { titre: trDr('action.copier'), onPress: () => setDialogue({ genre: 'destination', action: 'copier', elements: [{ genre: 'fichier', id: f.id }] }) },
-        f.modifiable && { titre: trDr('action.corbeille'), danger: true, onPress: () => void action('corbeille', () => api.corbeilleFichier(f.id)) },
+        f.modifiable && !droits?.depot && !f.ressource && { titre: trDr('action.deplacer'), onPress: () => setDialogue({ genre: 'destination', action: 'deplacer', elements: [{ genre: 'fichier', id: f.id }] }) },
+        droits?.envoyer && !f.ressource && { titre: trDr('action.copier'), onPress: () => setDialogue({ genre: 'destination', action: 'copier', elements: [{ genre: 'fichier', id: f.id }] }) },
+        f.modifiable && !f.ressource && { titre: trDr('action.corbeille'), danger: true, onPress: () => void action('corbeille', () => api.corbeilleFichier(f.id)) },
       ]}
     />
   );

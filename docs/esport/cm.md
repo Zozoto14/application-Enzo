@@ -168,6 +168,74 @@ modèle et composants que l'[accès aux tableaux](#accès-au-tableau-tableaux-re
   export / import, RGPD) et `src/esport/CmRessourcesAcces.test.tsx` (cadenas, avatars, « Nouveau », filtre, partage, réglage,
   création, phrase FR/EN).
 
+### Fichiers dans les ressources (migration 0051)
+
+Demande du Fondateur : « qu'on puisse mettre des fichiers dans l'onglet Ressources ». Une ressource est un **lien**
+(ci-dessus) **ou un fichier**. Bouton **« + Ajouter »** → **Lien** ou **Fichier**. Code : `esport/noyau/cm/liens.mjs`
+(partie « Fichiers ») et `esport/noyau/cm/drive/service.mjs` (partie « Fichiers de DATA › Ressources »),
+`src/esport/ui/cm/liens/FormFichier.tsx`, `Ressources.tsx`, `LiensLies.tsx`.
+
+- **Ajouter un fichier** : **depuis l'appareil** (site et app PC ; plusieurs fichiers d'un coup ou **glisser-déposer** : une
+  ressource par fichier, envoi **par morceaux avec reprise** et barre de progression, comme le Drive ; sur l'app iPhone,
+  pas de sélecteur : on choisit dans un Drive) **ou depuis un Drive** (sélecteur « Depuis le Drive » avec le choix du Drive).
+  Titre (par défaut le **nom du fichier** ; un titre saisi ne vaut que pour un fichier seul), description, étiquette, team,
+  épinglage, ordre, **« Qui voit la ressource »** : les mêmes règles que les liens.
+- **Stockage — choix retenu** : on réutilise le **stockage du Drive** (aucun second stockage, aucun second quota).
+  - Fichier **envoyé depuis Ressources** : rangé dans le **dossier système « Ressources »** du **Drive du club**, créé au
+    premier envoi. Il est géré comme un fichier du Drive (**versions**, **quota** du Drive, alerte à 80 %, **corbeille**) et
+    **appartient à sa ressource** (`cm_drive_fichiers.ressource_id`). **Approche la plus sûre, double** : le dossier
+    « Ressources » est **toujours restreint** (seuls les gestionnaires du Drive l'ouvrent ; il ne se rouvre pas : 409
+    `dossier-systeme`) **et** chaque fichier n'existe, dans tout le Drive, que pour qui **voit sa ressource** (liste, compteur
+    du dossier, recherche, filtres, détail, ZIP, nouveautés, corbeille, favoris, lien interne, lien signé du Drive, lien
+    `/cm/fichiers`). Un gestionnaire du Drive qui n'est pas d'une ressource restreinte ne voit donc pas son fichier. Le fichier
+    ne se **déplace**, ne se **copie**, ne se **joint** ailleurs (carte, visuel, sponsor, autre ressource) ni ne part à la
+    **corbeille** par le Drive (409 `fichier-ressource`) : tout passe par la ressource ; il peut être renommé et recevoir une
+    version. Aucun événement du Drive (fil, journal, nouveautés) ne le nomme : la ressource a les siens.
+  - Fichier **choisi dans un Drive** : simple **référence** (rien n'est copié). **La ressource suit sa source** : la voir ne
+    donne jamais accès au fichier ; qui la voit sans voir le fichier dans son Drive lit « **Fichier d'un Drive auquel vous
+    n'avez pas accès** » (ni nom, ni taille, ni lien ; 403 `drive-inaccessible`). Source à la corbeille : « Fichier supprimé
+    du Drive ». Restreindre la ressource ne cache pas le fichier dans son Drive (il ne lui appartient pas). Attention : le
+    **titre** de la ressource (par défaut le nom du fichier) est visible de tous ceux qui la voient ; pour un fichier d'un
+    dossier restreint, donnez-lui un titre neutre.
+- **Affichage** : icône du type (image, vidéo, son, document, archive…), nom, format, dimensions, durée, taille, Drive
+  d'origine, **vignette** d'une image ; **aperçu au clic** (les aperçus du Drive : image, SVG sans script, vidéo, son, police,
+  texte, PDF dans un nouvel onglet), **Télécharger**, **Remplacer le fichier** (menu ⋯ : nouvelle version, l'ancienne reste
+  dans l'historique du Drive ; pour un fichier choisi dans un Drive, il faut aussi pouvoir le modifier dans son Drive),
+  **filtre par type** (Liens, Fichiers, Images, Documents, Vidéos), recherche dans le nom du fichier. Liaison aux cartes et
+  aux dossiers comme les liens (dans une carte, le fichier s'ouvre par lien signé).
+- **Contrôle serveur** : aperçu et téléchargement par **lien signé** (2 h) `GET /cm/liens/contenu/<ressource>.<version>`,
+  chaque lecture revérifie la **visibilité de la ressource ET l'accès au fichier source** pour le compte du lien (un lien
+  forgé ou conservé par un compte non autorisé : 403 ; **retrait immédiat**). Types dangereux refusés **comme dans le Drive**
+  (octets vérifiés, HTML et exécutables refusés, nom assaini, extension forcée, `nosniff`, SVG et texte en `sandbox`) ;
+  **quota** du Drive (413 `quota-drive`), plafond par fichier.
+- **Envoi** : `/cm/drive/portees/ressources/envois…` (usage « drive », portée d'envoi « ressources », `cm.editer` du club suffit,
+  sans droit sur le Drive : le fichier ne peut aller que dans le dossier « Ressources »). Un envoi du Drive ne sert pas pour une
+  ressource, ni l'inverse.
+- **Suppression** : ressource ouverte à toute l'équipe CM → son fichier envoyé part à la **corbeille du Drive** (30 jours,
+  restaurable par un gestionnaire du Drive, il n'appartient plus à aucune ressource) ; ressource **restreinte** → son fichier
+  est **effacé tout de suite** (lignes et octets s'ils ne servent plus), pour ne jamais réapparaître chez qui ne la voyait pas.
+  Un fichier choisi dans un Drive n'est jamais touché.
+- **API** : `POST /cm/liens { genre: 'fichier', envoi | elementId, titre?, description?, categorie?, teamId?, epingle?, acces?, regles? }` ;
+  `POST /cm/liens/:id/fichier { envoi, version? }` (remplacer ; 409 `conflit` si la version a changé) ;
+  `POST /cm/liens/:id/fichier/lien { telecharger?, version? }` ; `GET /cm/liens/contenu/<ressource>.<version>?c&exp&sig` (sans
+  session). Chaque ressource porte `genre` et, pour un fichier, `fichier` (`source`, `etat` : `ok` | `inaccessible` |
+  `supprime` ; nom, genre, type, taille, version, infos, vignette, Drive d'origine, `remplacer`). Limite de débit : celle des
+  dépôts du Drive.
+- **Bus** : `cm.lien_cree`, `cm.lien_modifie`, `cm.lien_supprime` portent `genre: 'fichier'` ; nouveau `cm.lien_version`
+  (fichier remplacé). Mêmes contrôles de visibilité que les autres événements de ressources.
+- **Données** (`0051_cm_ressources_fichiers.sql`) : `cm_liens.genre` ('lien' par défaut), `cm_liens.element_id`,
+  `cm_liens.source` ('envoi' | 'drive'), `cm_drive_fichiers.ressource_id` ; `url` et `hote` d'un fichier valent ''. Export /
+  import de la base : colonnes comprises. **RGPD** : `cmLiens` donne le genre et, pour un fichier envoyé, son nom (les
+  octets sont dans `cmDrive`) ; à la suppression du compte, ressources et fichiers restent au club sans auteur.
+- **Graines** : `esport/outils/graines-ressources.mjs` (un lien et un fichier au nom long, pour l'écran et le contrôle de
+  débordement sur téléphone).
+- **Tests** : `esport/test/cm-ressources-fichiers.test.mjs` (SQLite et PostgreSQL : envoi d'un et de plusieurs fichiers,
+  dossier « Ressources » restreint, aperçu et téléchargement, types refusés, ressource restreinte invisible par le Drive et
+  par liens signés forgés — ressource, Drive, `/cm/fichiers` —, retrait immédiat, gestion par la ressource seulement, choix
+  depuis un Drive sans copie et « suit sa source », remplacer, suppression vers la corbeille ou effacement, quota, cartes
+  liées, export / import, RGPD) et `src/esport/CmRessourcesFichiers.test.tsx` (filtre par type, ligne, fichier inaccessible,
+  aperçu et téléchargement, ajout depuis un Drive, carte liée, anglais).
+
 ## Tableaux façon Trello
 
 - **Mise en page** (comme le Trello de la CM) : les colonnes sont **côte à côte** et le **tableau défile

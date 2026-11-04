@@ -10,7 +10,8 @@ import { PORTEE_CLUB, type TeamCm } from './api';
 
 export type GenreDrive = 'image' | 'video' | 'audio' | 'document' | 'archive' | 'police' | 'creation' | 'texte';
 export const GENRES_DRIVE: readonly GenreDrive[] = ['image', 'video', 'audio', 'document', 'archive', 'police', 'creation', 'texte'];
-export type CleDossier = 'logos' | 'photos' | 'clips' | 'visuels' | 'sponsors' | 'bruts' | 'depot';
+/** « ressources » : dossier système du Drive du club, fichiers de DATA › Ressources (migration 0051, restreint). */
+export type CleDossier = 'logos' | 'photos' | 'clips' | 'visuels' | 'sponsors' | 'bruts' | 'depot' | 'ressources';
 
 export interface DroitsDrive {
   voir: boolean;
@@ -58,7 +59,9 @@ export interface FichierDrive {
   meta: MetaDrive;
   tags: string[];
   favori: boolean;
-  origine: 'envoi' | 'copie' | 'visuel' | 'clip';
+  origine: 'envoi' | 'copie' | 'visuel' | 'clip' | 'ressource';
+  /** Fichier d'une ressource de DATA › Ressources (migration 0051) : il se gère depuis la ressource (ni déplacé, ni copié, ni jeté ici). */
+  ressource?: boolean;
   creePar: string | null;
   creeLe: string;
   majPar: string | null;

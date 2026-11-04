@@ -49,9 +49,15 @@ export const DOSSIERS_DEFAUT = Object.freeze({
   club: ['logos', 'photos', 'clips', 'visuels', 'sponsors', 'bruts'],
   team: ['logos', 'photos', 'clips', 'visuels', 'bruts', 'depot'],
 });
-export const CLES_DOSSIERS = Object.freeze(['logos', 'photos', 'clips', 'visuels', 'sponsors', 'bruts', 'depot']);
+export const CLES_DOSSIERS = Object.freeze(['logos', 'photos', 'clips', 'visuels', 'sponsors', 'bruts', 'depot', 'ressources']);
+/**
+ * Dossier système « Ressources » du Drive du club (migration 0051) : les fichiers envoyés depuis DATA › Ressources. Créé
+ * au premier envoi, RESTREINT (gestionnaires du Drive seulement) et chaque fichier n'y est visible que de ceux qui voient
+ * sa ressource (`cm_drive_fichiers.ressource_id`). Il ne se rouvre pas à tous, ne se déplace pas et ne se supprime pas.
+ */
+export const CLE_DOSSIER_RESSOURCES = 'ressources';
 /** Nom d'un dossier par défaut dans les fichiers ZIP et les journaux (l'app, elle, traduit). */
-export const NOMS_DOSSIERS_DEFAUT = Object.freeze({ logos: 'Logos', photos: 'Photos joueurs', clips: 'Clips', visuels: 'Visuels', sponsors: 'Sponsors', bruts: 'Bruts', depot: 'Dépôt joueurs' });
+export const NOMS_DOSSIERS_DEFAUT = Object.freeze({ logos: 'Logos', photos: 'Photos joueurs', clips: 'Clips', visuels: 'Visuels', sponsors: 'Sponsors', bruts: 'Bruts', depot: 'Dépôt joueurs', ressources: 'Ressources' });
 
 export const GENRES = Object.freeze(['image', 'video', 'audio', 'document', 'archive', 'police', 'creation', 'texte']);
 

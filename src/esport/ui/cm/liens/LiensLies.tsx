@@ -3,7 +3,9 @@
  * liste des liens liés (ouverture dans un nouvel onglet), « Lier une ressource » (recherche parmi les ressources
  * existantes, ou « Créer une nouvelle ressource »), délier. Le serveur ne rend que ce que le compte voit ; sans le droit
  * de lier (cm.editer du club et droit d'écriture sur la cible), la liste reste en lecture seule. Un compte qui n'a pas
- * accès aux ressources ne voit rien (le bloc se masque).
+ * accès aux ressources ne voit rien (le bloc se masque). Ressource « fichier » (migration 0051) : icône de son type,
+ * ouverture par lien signé (nouvel onglet) ; fichier d'un Drive que le compte ne voit pas : la mention « Fichier d'un
+ * Drive auquel vous n'avez pas accès », sans lien.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -11,7 +13,9 @@ import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../../hub/themes';
 import type { ClientEsport } from '../../../client';
-import { apiLiens, filtrerLiens, type GenreLiaison, type LienCm, type ListeLiens } from '../../../cm/liens';
+import { apiLiens, fichierLisible, filtrerLiens, type GenreLiaison, type LienCm, type ListeLiens } from '../../../cm/liens';
+import { GLYPHES_DRIVE } from '../../../cm/drive';
+import { ouvrirLienDiffere } from '../../ouvrirLien';
 import { trLi } from '../../../i18n/liens';
 import { Icone } from '../../../../ui/icones';
 import { useTempsReel } from '../../../tempsReel/hooks';
@@ -80,12 +84,15 @@ export function LiensLies({
       {!liens.length ? <Text style={attenue(theme, 14)} testID={`${prefixe}-vide`}>{trLi('cible.vide')}</Text> : null}
       {liens.map(l => (
         <View key={l.id} style={[styles.ligne, { gap: ESP.xs, flexWrap: 'nowrap' }]} testID={`${prefixe}-${l.id}`}>
-          <Icone nom="globe" taille={18} couleur={theme.accent} />
+          <Icone nom={fichierLisible(l) ? GLYPHES_DRIVE[fichierLisible(l)!.genre] : l.genre === 'fichier' ? 'document' : 'globe'} taille={18} couleur={theme.accent} />
           <Pressable
             accessibilityRole="link"
-            accessibilityLabel={`${trLi('ouvrir_lien', { titre: l.titre })}${l.acces === 'restreint' ? ` · ${trLi('restreint_badge')}` : ''}${l.nouveau ? ` · ${trLi('nouveau_badge')}` : ''}`}
+            accessibilityLabel={`${l.genre === 'fichier' ? trLi('fichier.apercu_de', { titre: l.titre }) : trLi('ouvrir_lien', { titre: l.titre })}${l.acces === 'restreint' ? ` · ${trLi('restreint_badge')}` : ''}${l.nouveau ? ` · ${trLi('nouveau_badge')}` : ''}`}
+            disabled={l.genre === 'fichier' && !fichierLisible(l)}
             onPress={() => {
-              ouvrirAdresse(l.url);
+              // Fichier (migration 0051) : lien signé revérifié par le serveur ; lien : nouvel onglet.
+              if (l.genre === 'fichier') void ouvrirLienDiffere(async () => (await api.lienFichier(l.id)).url);
+              else ouvrirAdresse(l.url);
               // Partagée et pas encore ouverte : « Nouveau » disparaît (migration 0048).
               if (l.nouveau) void api.vu(l.id).then(charger).catch(() => undefined);
             }}
@@ -101,7 +108,7 @@ export function LiensLies({
               </View>
             ) : null}
             <Text style={attenue(theme, 12)} numberOfLines={1}>
-              {l.hote}
+              {l.genre !== 'fichier' ? l.hote : (fichierLisible(l)?.nom ?? (l.fichier?.etat === 'supprime' ? trLi('fichier.supprime') : trLi('fichier.inaccessible')))}
             </Text>
           </Pressable>
           {droits.lier && (l.droits?.modifier ?? true) ? (
@@ -134,7 +141,7 @@ export function LiensLies({
                   {l.titre}
                 </Text>
                 <Text style={attenue(theme, 12)} numberOfLines={1}>
-                  {dedans.has(l.id) ? `${l.hote} · ${trLi('cible.deja')}` : l.hote}
+                  {[l.genre === 'fichier' ? (fichierLisible(l)?.nom ?? trLi('type.fichiers')) : l.hote, dedans.has(l.id) ? trLi('cible.deja') : ''].filter(Boolean).join(' · ')}
                 </Text>
               </Pressable>
             ))}

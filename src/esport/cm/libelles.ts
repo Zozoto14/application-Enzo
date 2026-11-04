@@ -132,13 +132,16 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
     case 'cm.drive_quota':
       return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
     // Liens utiles de DATA › Ressources (migration 0044).
+    // Ressource « fichier » (migration 0051) : charge { genre: 'fichier' }.
     case 'cm.lien_cree':
-      return trLi('jr.cree', { qui, titre });
+      return trLi(m.genre === 'fichier' ? 'jr.cree_fichier' : 'jr.cree', { qui, titre });
     case 'cm.lien_modifie':
-      return trLi('jr.modifie', { qui, titre });
+      return trLi(m.genre === 'fichier' ? 'jr.modifie_fichier' : 'jr.modifie', { qui, titre });
+    case 'cm.lien_version':
+      return trLi('jr.version', { qui, titre });
     case 'cm.lien_supprime':
       // Ressource restreinte supprimée : le titre a été effacé (migration 0048).
-      return typeof m.titre !== 'string' && m.acces === 'restreint' ? trLi('jr.supprime_restreint', { qui }) : trLi('jr.supprime', { qui, titre });
+      return typeof m.titre !== 'string' && m.acces === 'restreint' ? trLi('jr.supprime_restreint', { qui }) : trLi(m.genre === 'fichier' ? 'jr.supprime_fichier' : 'jr.supprime', { qui, titre });
     case 'cm.lien_acces':
       return trLi('jr.acces', { qui, titre });
     case 'cm.lien_partage':

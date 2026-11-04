@@ -115,9 +115,10 @@ export function ChoixDrive({
   }, [api, recherche, ciblesCle, visible]);
   if (!visible) return null;
   const courant = portees?.find(p => p.portee === portee);
-  const fichiers = (contenu?.fichiers ?? []).filter(accepter);
+  // Fichiers d'une ressource de DATA › Ressources (migration 0051) : jamais joints ailleurs (le serveur refuse aussi).
+  const fichiers = (contenu?.fichiers ?? []).filter(f => !f.ressource && accepter(f));
   const parPortee = new Map((portees ?? []).map(p => [p.portee, p]));
-  const groupes = (resultats ?? []).map(r => ({ ...r, fichiers: r.fichiers.filter(accepter) })).filter(r => r.fichiers.length);
+  const groupes = (resultats ?? []).map(r => ({ ...r, fichiers: r.fichiers.filter(f => !f.ressource && accepter(f)) })).filter(r => r.fichiers.length);
   const total = groupes.reduce((n, g) => n + g.fichiers.length, 0);
   const choisir = (f: FichierDrive) => onChoisir(f);
   const ligne = (cle: string, glyphe: string, nom: string, sous: string, onPress: () => void, id: string) => (

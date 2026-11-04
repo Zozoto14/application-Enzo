@@ -106,8 +106,8 @@ export function DetailFichier({
             <BoutonHub theme={theme} titre={trDr('action.telecharger')} variante="plein" onPress={() => telecharger()} testID="esport-drive-detail-telecharger" />
             {!f.supprimeLe ? <BoutonHub theme={theme} titre={f.favori ? trDr('action.retirer_favori') : trDr('action.favori')} onPress={() => void faire('favori', () => api.favori('fichier', f.id, !f.favori))} testID="esport-drive-detail-favori" /> : null}
             {!f.supprimeLe ? <BoutonHub theme={theme} titre={trDr('action.lien_interne')} onPress={() => void lienInterne()} testID="esport-drive-detail-lien" /> : null}
-            {modifier ? <BoutonHub theme={theme} titre={trDr('action.deplacer')} onPress={() => onDeplacer(f.id)} testID="esport-drive-detail-deplacer" /> : null}
-            {!f.supprimeLe && d.droits.envoyer ? <BoutonHub theme={theme} titre={trDr('action.copier')} onPress={() => onCopier(f.id)} testID="esport-drive-detail-copier" /> : null}
+            {modifier && !f.ressource ? <BoutonHub theme={theme} titre={trDr('action.deplacer')} onPress={() => onDeplacer(f.id)} testID="esport-drive-detail-deplacer" /> : null}
+            {!f.supprimeLe && d.droits.envoyer && !f.ressource ? <BoutonHub theme={theme} titre={trDr('action.copier')} onPress={() => onCopier(f.id)} testID="esport-drive-detail-copier" /> : null}
             {modifier && choixFichierDisponible ? <BoutonHub theme={theme} titre={trDr('action.nouvelle_version')} desactive={envoi.enCours} onPress={() => void remplacer()} testID="esport-drive-detail-version" /> : null}
           </View>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-drive-detail-envoi" />
@@ -181,7 +181,7 @@ export function DetailFichier({
             {d.utilisations.sponsors ? <Text style={texte(theme, 13)}>{trDr('detail.utilisations_sponsors', { n: d.utilisations.sponsors })}</Text> : null}
           </Panneau>
 
-          {modifier ? (
+          {modifier && !f.ressource ? (
             <BoutonConfirme
               theme={theme}
               titre={trDr('action.corbeille')}

@@ -51,7 +51,7 @@ import { exigerLecteur, servicesStatistiques } from './usage/statistiques.mjs';
 import { servicesJeux } from './jeux/service.mjs';
 import { routesJeux } from './jeux/routes.mjs';
 import { servicesCm } from './cm/service.mjs';
-import { routeFichierCm, routesCm } from './cm/routes.mjs';
+import { routeFichierCm, routeRessourceSignee, routesCm } from './cm/routes.mjs';
 import { routePubliqueReunions } from './cm/reunions/routes.mjs';
 import { routeDriveSignee } from './cm/drive/routes.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
@@ -287,6 +287,7 @@ export function creerApi({
     if (chemin.startsWith('/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierSigne(md, url, requete);
     if (chemin.startsWith('/cm/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierCm(cm, url, requete);
     if ((chemin.startsWith('/cm/drive/contenu/') || chemin.startsWith('/cm/drive/zip/')) && (m === 'GET' || m === 'HEAD')) return routeDriveSignee(cm.drive, url, requete);
+    if (chemin.startsWith('/cm/liens/contenu/') && (m === 'GET' || m === 'HEAD')) return routeRessourceSignee(cm, url, requete);
     // Abonnement iCal aux réunions de l'équipe CM (migration 0039) : jeton révocable, sans session.
     const icalReunions = await routePubliqueReunions(cm.reunions, { chemin, methode: m, url });
     if (icalReunions !== undefined) return icalReunions;

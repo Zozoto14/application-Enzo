@@ -68,7 +68,7 @@ describe('onglet Ressources', () => {
     expect(screen.getByTestId('esport-cm-lien-canva-hote')).toHaveTextContent('canva.com');
     expect(screen.getByTestId('esport-cm-lien-canva-epingle')).toBeTruthy();
     expect(screen.getByTestId('esport-cm-lien-canva-liaisons')).toHaveTextContent(/Lié 2 fois/);
-    expect(screen.getByTestId('esport-cm-ressources-compte')).toHaveTextContent('3 liens');
+    expect(screen.getByTestId('esport-cm-ressources-compte')).toHaveTextContent('3 ressources');
     await fireEvent.changeText(screen.getByTestId('esport-cm-ressources-recherche'), 'elements');
     expect(screen.queryByTestId('esport-cm-lien-canva')).toBeNull();
     expect(screen.getByTestId('esport-cm-lien-analytics')).toBeTruthy();
@@ -88,6 +88,7 @@ describe('onglet Ressources', () => {
     const { c, appels } = client();
     await render(<Ressources theme={theme} client={c} large />);
     await fireEvent.press(await screen.findByTestId('esport-cm-ressources-nouveau'));
+    await fireEvent.press(await screen.findByTestId('esport-cm-ressources-nouveau-lien'));
     await fireEvent.changeText(screen.getByTestId('esport-cm-liens-form-titre'), 'Nouveau');
     await fireEvent.changeText(screen.getByTestId('esport-cm-liens-form-url'), 'http://exemple.fr');
     await fireEvent.press(screen.getByTestId('esport-cm-liens-form-ok'));
@@ -128,7 +129,7 @@ describe('onglet Ressources', () => {
     definirLangue('en');
     const { c } = client();
     await render(<Ressources theme={theme} client={c} large />);
-    expect(await screen.findByTestId('esport-cm-ressources-compte')).toHaveTextContent('3 links');
+    expect(await screen.findByTestId('esport-cm-ressources-compte')).toHaveTextContent('3 resources');
   });
 });
 

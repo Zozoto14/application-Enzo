@@ -372,8 +372,10 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
   /**
    * Rattache un envoi terminé (à soi, de la team, pour cet usage, pas encore utilisé) à une entité :
    * rend `{ fichierId, instructions, analyse }` (instructions SQL à mettre dans le lot de la création).
+   * `porteeFichier` (usages externes) : portée enregistrée pour le fichier, si elle diffère de celle de l'envoi (envoi
+   * de DATA › Ressources, portée « ressources », rangé dans le Drive du club).
    */
-  async function preparerRattachement(ctx, envoiId, usage, { entiteType, entiteId }) {
+  async function preparerRattachement(ctx, envoiId, usage, { entiteType, entiteId, porteeFichier }) {
     const e = await envoiDe(ctx, usage, envoiId);
     if (e.statut !== 'termine') throw echec(409, 'envoi-incomplet', 'Il manque des morceaux : reprenez l’envoi.');
     if (e.fichier_id) throw echec(409, 'envoi-rattache', 'Ce fichier est déjà utilisé.');
@@ -389,7 +391,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
           {
             sql: `INSERT INTO cm_fichiers (id, portee, team_id, cle_stockage, type_mime, taille, nom_original, empreinte, depose_par, meta, cree_le)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            params: [fichierId, portee(ctx), ctx.team.id ?? null, e.cle_stockage, FORMATS[analyse?.format]?.mime ?? 'application/octet-stream', Number(e.taille), e.nom_original, e.empreinte, ctx.acteur.compte, JSON.stringify(analyse), t],
+            params: [fichierId, porteeFichier ?? portee(ctx), ctx.team.id ?? null, e.cle_stockage, FORMATS[analyse?.format]?.mime ?? 'application/octet-stream', Number(e.taille), e.nom_original, e.empreinte, ctx.acteur.compte, JSON.stringify(analyse), t],
           },
           { sql: 'UPDATE envois SET fichier_id = ?, maj_le = ? WHERE id = ? AND fichier_id IS NULL', params: [fichierId, t, e.id] },
         ],

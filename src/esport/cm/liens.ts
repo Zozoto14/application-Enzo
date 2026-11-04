@@ -3,11 +3,14 @@
  * liens https rangés par le club (titre, domaine d'aperçu, description, étiquette, épinglage, ordre), liables à des cartes
  * des tableaux et à des dossiers du Drive. Types miroirs de l'API (esport/noyau/cm/liens.mjs) et règles pures
  * (validation d'adresse, filtre, recherche). Qui voit la ressource (migration 0048) : « toute l'équipe CM » ou
- * restreinte, « Partager avec… », pastille « Nouveau » jusqu'à l'ouverture.
+ * restreinte, « Partager avec… », pastille « Nouveau » jusqu'à l'ouverture. Fichiers (migration 0051) : une ressource est
+ * un lien OU un fichier (envoyé depuis l'appareil, rangé dans le dossier « Ressources » du Drive du club, ou choisi dans
+ * un Drive : la ressource suit sa source) ; aperçu et téléchargement par lien signé.
  */
 
 import type { ClientEsport } from '../client';
 import type { GenreAcces, NiveauAcces, RegleAcces, RoleProposeAcces } from './api';
+import type { FichierDrive, GenreDrive, MetaDrive } from './drive';
 
 export type GenreLiaison = 'carte' | 'dossier';
 /** Visibilité d'une ressource (migration 0048) : toute l'équipe CM, ou restreinte aux personnes et rôles choisis. */
@@ -21,8 +24,41 @@ export interface DroitsLien {
   partager: boolean;
 }
 
+/** Ressource : un lien (adresse https) ou un fichier (migration 0051). */
+export type GenreRessource = 'lien' | 'fichier';
+/**
+ * Fichier d'une ressource, tel que le compte peut le voir. `etat` 'inaccessible' : choisi dans un Drive que le compte ne
+ * voit pas (« Fichier d'un Drive auquel vous n'avez pas accès » : ni nom, ni lien) ; 'supprime' : à la corbeille du Drive.
+ */
+export type FichierRessource =
+  | { source: 'envoi' | 'drive'; etat: 'inaccessible' | 'supprime' }
+  | {
+      source: 'envoi' | 'drive';
+      etat: 'ok';
+      /** Élément du Drive. */
+      id: string;
+      nom: string;
+      genre: GenreDrive;
+      type: string;
+      taille: number;
+      version: number;
+      meta: MetaDrive;
+      majLe: string;
+      /** Lien signé (2 h) vers l'image, pour la vignette (images légères seulement). */
+      vignette: string | null;
+      /** Drive d'origine (choisi dans un Drive). */
+      portee: string | null;
+      /** Remplacer le fichier (nouvelle version) : droit sur la ressource et, choisi dans un Drive, sur sa source. */
+      remplacer: boolean;
+    };
+export type FichierRessourceLisible = Extract<FichierRessource, { etat: 'ok' }>;
+
 export interface LienCm {
   id: string;
+  /** Absent (anciennes réponses) : un lien. */
+  genre?: GenreRessource;
+  /** Ressource « fichier » : son fichier (url et hote sont vides). */
+  fichier?: FichierRessource;
   titre: string;
   url: string;
   /** Domaine affiché (sans « www. »). Aucune image externe n'est chargée : l'icône est locale. */
@@ -85,6 +121,10 @@ export interface Liaisons {
   droits: { editer: boolean };
 }
 export interface SaisieLien {
+  /** Création : 'fichier' avec `envoi` (envoi terminé, portée « ressources ») ou `elementId` (fichier d'un Drive). */
+  genre?: GenreRessource;
+  envoi?: string;
+  elementId?: string;
   titre?: string;
   url?: string;
   description?: string;
@@ -117,6 +157,9 @@ export function apiLiens(client: ClientEsport) {
     changerAcces: (id: string, acces: AccesLien, regles: RegleAcces[]) => r<ReglageAccesLien>(`/cm/liens/${e(id)}/acces`, 'PUT', { acces, regles: regles.map(x => ({ genre: x.genre, cible: x.cible, niveau: x.niveau })) }),
     partager: (id: string, comptes: string[], niveau: NiveauAcces = 'voir') => r<{ ok: true; partages: number }>(`/cm/liens/${e(id)}/partage`, 'POST', { comptes, niveau }),
     vu: (id: string) => r<{ ok: true }>(`/cm/liens/${e(id)}/vu`, 'POST', {}),
+    /** Fichiers (migration 0051) : remplacer (nouvelle version) ; lien signé (2 h) pour l'aperçu ou le téléchargement. */
+    remplacerFichier: (id: string, envoi: string, version?: number) => r<{ lien: LienCm }>(`/cm/liens/${e(id)}/fichier`, 'POST', { envoi, version }),
+    lienFichier: (id: string, o: { telecharger?: boolean; version?: number } = {}) => r<{ url: string; expire: string }>(`/cm/liens/${e(id)}/fichier/lien`, 'POST', o),
   };
 }
 export type ApiLiens = ReturnType<typeof apiLiens>;
@@ -143,7 +186,33 @@ export function adresseLienValide(brut: string): string | null {
 
 const sansAccents = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
+/** Filtre par type (migration 0051). Documents : PDF, textes, archives, polices, créations (PSD). */
+export type TypeRessource = 'liens' | 'fichiers' | 'images' | 'documents' | 'videos';
+export const TYPES_RESSOURCE: readonly TypeRessource[] = ['liens', 'fichiers', 'images', 'documents', 'videos'];
+
+/** La ressource est-elle de ce type ? Un fichier inaccessible n'est que « Fichiers » (son genre n'est pas connu). */
+export function estDeType(l: LienCm, t: TypeRessource): boolean {
+  const fichier = l.genre === 'fichier';
+  if (t === 'liens') return !fichier;
+  if (!fichier) return false;
+  if (t === 'fichiers') return true;
+  const g = l.fichier?.etat === 'ok' ? l.fichier.genre : null;
+  if (t === 'images') return g === 'image';
+  if (t === 'videos') return g === 'video' || g === 'audio';
+  return g !== null && g !== 'image' && g !== 'video' && g !== 'audio';
+}
+
+/** Fichier lisible d'une ressource, ou undefined. */
+export const fichierLisible = (l: LienCm): FichierRessourceLisible | undefined => (l.genre === 'fichier' && l.fichier?.etat === 'ok' ? l.fichier : undefined);
+
+/** Fichier d'une ressource sous la forme attendue par l'aperçu du Drive (image, vidéo, PDF, son…). */
+export function fichierPourApercu(l: LienCm, f: FichierRessourceLisible): FichierDrive {
+  return { id: `${l.id}-${f.id}`, portee: f.portee ?? 'club', dossierId: null, nom: f.nom, genre: f.genre, type: f.type, taille: f.taille, version: f.version, meta: f.meta, tags: [], favori: false, origine: 'envoi', creePar: null, creeLe: f.majLe, majPar: null, majLe: f.majLe, vignette: f.vignette, modifiable: false };
+}
+
 export interface FiltreLiens {
+  /** Liens, fichiers, images, documents, vidéos (migration 0051). */
+  type?: TypeRessource;
   q?: string;
   categorie?: string;
   /** Identifiant d'une team, ou `club` : liens sans rattachement. */
@@ -153,7 +222,7 @@ export interface FiltreLiens {
   partages?: boolean;
 }
 
-/** Filtre combiné : texte (titre, description, étiquette, domaine, team ; sans accents ni casse), étiquette, team, épinglés. */
+/** Filtre combiné : texte (titre, description, étiquette, domaine, team, nom du fichier ; sans accents ni casse), étiquette, team, épinglés, type. */
 export function filtrerLiens(liens: LienCm[], f: FiltreLiens): LienCm[] {
   const mots = sansAccents(f.q ?? '').split(/\s+/).filter(Boolean);
   return liens.filter(l => {
@@ -161,8 +230,9 @@ export function filtrerLiens(liens: LienCm[], f: FiltreLiens): LienCm[] {
     if (f.team === 'club' ? l.team !== null : f.team && l.team?.id !== f.team) return false;
     if (f.epingles && !l.epingle) return false;
     if (f.partages && !l.partageAvecMoi) return false;
+    if (f.type && !estDeType(l, f.type)) return false;
     if (!mots.length) return true;
-    const texte = sansAccents([l.titre, l.description, l.categorie, l.hote, l.team?.nom].filter(Boolean).join(' '));
+    const texte = sansAccents([l.titre, l.description, l.categorie, l.hote, l.team?.nom, fichierLisible(l)?.nom].filter(Boolean).join(' '));
     return mots.every(m => texte.includes(m));
   });
 }

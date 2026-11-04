@@ -106,6 +106,7 @@ it('création restreinte : visibilité choisie dans le formulaire', async () => 
   const { c, appels } = client();
   await render(<Ressources theme={theme} client={c} large />);
   await fireEvent.press(await screen.findByTestId('esport-cm-ressources-nouveau'));
+  await fireEvent.press(await screen.findByTestId('esport-cm-ressources-nouveau-lien'));
   await fireEvent.changeText(screen.getByTestId('esport-cm-liens-form-titre'), 'Tâches');
   await fireEvent.changeText(screen.getByTestId('esport-cm-liens-form-url'), 'https://exemple.fr/taches');
   await fireEvent.press(screen.getByTestId('esport-cm-liens-form-acces-mode-restreint'));

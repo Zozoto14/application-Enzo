@@ -17,6 +17,12 @@
  * Un dossier RESTREINT (et tout ce qu'il contient) n'existe que pour ceux qui gèrent le Drive : 404 pour les
  * autres. Un fichier n'est lisible que par lien signé (2 h) et chaque lecture revérifie l'accès.
  *
+ * Fichiers de DATA › Ressources (migration 0051) : un fichier envoyé depuis l'onglet Ressources est rangé dans le
+ * dossier système « Ressources » du Drive du club (restreint, créé au premier envoi) et APPARTIENT à sa ressource
+ * (`ressource_id`) : partout dans le Drive (liste, recherche, ZIP, nouveautés, corbeille, liens signés, pièces), il
+ * n'existe que pour ceux qui voient la ressource ; il ne se déplace, ne se copie, ne se joint ailleurs et ne part à la
+ * corbeille que par elle ; aucun événement du Drive (fil, journal) ne le nomme.
+ *
  * Sécurité des fichiers : type reconnu par les OCTETS (medias/formats.mjs, usage « drive » : jamais de HTML
  * ni d'exécutable), nom assaini et extension cohérente avec le type (regles.mjs), servi avec nosniff et
  * Content-Disposition, SVG et texte avec une politique « sandbox » (medias/lecture.mjs).
@@ -30,12 +36,14 @@ import { ENTETES_LIEN, reponseFichierStocke } from '../../medias/lecture.mjs';
 import { disposition } from '../../entetes.mjs';
 import { echec, iso, jsonOu, nouvelId } from '../../outils.mjs';
 import { lignesParIds, pseudosDe } from '../../requetes.mjs';
-import { MOTIF_COMPTE, PORTEE_CLUB, comptesClubAvec, comptesTeamAvec, contexteCm, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
+import { MOTIF_COMPTE, PORTEE_CLUB, comptesClubAvec, comptesTeamAvec, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
+import { lecteurLiens, voitPortee } from '../liensAcces.mjs';
 import { effacerFichierCmSiOrphelin, utiliseHorsDrive } from '../utilisations.mjs';
 import { lireDebut } from '../visuels/service.mjs';
 import { OCTETS_ENTETE, dimensionsImage } from '../visuels/images.mjs';
 import {
   CLES_DOSSIERS,
+  CLE_DOSSIER_RESSOURCES,
   DOSSIERS_DEFAUT,
   DOSSIERS_MAX,
   DUREE_CORBEILLE_MS,
@@ -70,6 +78,10 @@ const CLE_RACINE = 'racine';
 const CLE_TOUT = '*';
 const MOTIF_JOUR = /^\d{4}-\d{2}-\d{2}$/;
 const REGLAGES_DEFAUT = Object.freeze({ rangementVisuels: true, rangementClips: true });
+/** Portée des envois de DATA › Ressources (usage « drive ») : rangés dans le Drive du club, dossier « Ressources ». */
+export const PORTEE_ENVOI_RESSOURCES = 'ressources';
+const AUCUNE = new Set();
+const estFondateur = acteur => Boolean(acteur?.superAdmin) || acteur?.compte === 'principal';
 
 // ------------------------------------------------------------------ Hors service (cron, alertes)
 
@@ -171,7 +183,26 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const ctx = await contexteCm(base, acteur, lirePortee(portee ?? PORTEE_CLUB));
     const drive = droitsDe(ctx.permissions, ctx.portee, ctx.membre);
     if (!drive.voir && !drive.depot) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
-    return { ...ctx, drive };
+    // Fichiers de ressources (Drive du club seulement) que le compte ne voit pas : absents de tout le Drive.
+    return { ...ctx, drive, ressourcesInterdites: ctx.portee === PORTEE_CLUB ? await ressourcesInterditesDe(acteur) : AUCUNE };
+  }
+
+  /**
+   * Ressources de DATA › Ressources (migration 0051) dont le compte ne voit PAS le fichier : ressource restreinte dont il
+   * n'est pas, rattachée à une team dont il ne lit pas le CM, ou disparue. Relu à chaque requête (retrait immédiat).
+   */
+  async function ressourcesInterditesDe(acteur) {
+    const ids = (await base.tous('SELECT DISTINCT ressource_id FROM cm_drive_fichiers WHERE ressource_id IS NOT NULL', [])).map(l => l.ressource_id);
+    if (!ids.length || estFondateur(acteur)) return AUCUNE;
+    const lignes = new Map((await lignesParIds(base, 'SELECT id, team_id, acces, cree_par FROM cm_liens WHERE id', ids)).map(l => [l.id, l]));
+    const portees = await porteesDe(base, acteur);
+    const lecteur = lecteurLiens(base, acteur);
+    const sortie = new Set();
+    for (const id of ids) {
+      const l = lignes.get(id);
+      if (!l || !voitPortee(portees, l) || !(await lecteur.niveau(l))) sortie.add(id);
+    }
+    return sortie;
   }
 
   const exigerEnvoi = dc => {
@@ -227,6 +258,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   }
 
   function fichierAccessible(dc, map, f) {
+    if (f.ressource_id && dc.ressourcesInterdites?.has(f.ressource_id)) return false;
     if (f.dossier_id) {
       if (!dossierAccessible(dc, map, map.get(f.dossier_id))) return false;
     } else if (dc.drive.depot) return false;
@@ -234,6 +266,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return true;
   }
 
+  const refusRessource = () => echec(409, 'fichier-ressource', 'Ce fichier appartient à une ressource de DATA › Ressources : il se gère depuis la ressource.');
   const peutModifierFichier = (dc, f) => dc.drive.gerer || ((dc.drive.envoyer || dc.drive.depot) && f.cree_par === dc.acteur.compte);
   const peutModifierDossier = (dc, d) => dc.drive.gerer || (dc.drive.envoyer && d.cree_par === dc.acteur.compte && !d.cle);
 
@@ -309,6 +342,22 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return sortie;
   }
 
+  /**
+   * Fichiers du Drive (hors corbeille) que l'acteur voit parmi `ids`, comme dans le Drive lui-même (ressources de DATA ›
+   * Ressources choisies dans un Drive : la ressource suit sa source) : `Map(id → { f, modifier })`.
+   */
+  async function fichiersLisibles(acteur, ids) {
+    const sortie = new Map();
+    const lignes = await lignesParIds(base, 'SELECT * FROM cm_drive_fichiers WHERE supprime_le IS NULL AND id', ids);
+    for (const portee of new Set(lignes.map(l => l.portee))) {
+      const dc = await ctxDrive(acteur, portee).catch(() => null);
+      if (!dc) continue;
+      const map = await arbre(portee);
+      for (const f of lignes) if (f.portee === portee && fichierAccessible(dc, map, f)) sortie.set(f.id, { f, modifier: peutModifierFichier(dc, f) });
+    }
+    return sortie;
+  }
+
   /** Descendants d'un dossier (lui compris), dans l'arbre donné. */
   function descendants(map, id) {
     const enfants = new Map();
@@ -329,22 +378,31 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
 
   const contexteEnvoi = dc => ({ acteur: dc.acteur, team: { id: teamDePortee(dc.portee) }, portee: dc.portee });
 
+  const avantEnvoi = async taille => {
+    const u = await espaceDrive(base);
+    if (u.fichiers + u.envois + taille > config.quota) {
+      const e = echec(413, 'quota-drive', 'L’espace du Drive est plein : videz la corbeille ou supprimez des fichiers.');
+      e.details = { utilise: u.fichiers, enCours: u.envois, limite: config.quota };
+      throw e;
+    }
+  };
+
+  /**
+   * Envoi depuis DATA › Ressources (portée d'envoi « ressources ») : `cm.editer` du club suffit (le fichier ira dans le
+   * dossier « Ressources », jamais ailleurs) ; même plafond, mêmes formats et même quota que le Drive.
+   */
+  async function contexteEnvoiRessources(acteur) {
+    const ctx = await contexteCm(base, acteur, PORTEE_CLUB);
+    exiger(ctx, 'cm.editer');
+    return { acteur, team: { id: null }, portee: PORTEE_ENVOI_RESSOURCES };
+  }
+
   // Envois par morceaux du Drive (usage « drive ») : déposer dans la portée, plafond par fichier, quota.
   medias?.brancherContexte('drive', async (acteur, portee) => {
+    if (portee === PORTEE_ENVOI_RESSOURCES) return { ...(await contexteEnvoiRessources(acteur)), plafond: config.fichierMax, avantEnvoi };
     const dc = await ctxDrive(acteur, portee);
     exigerEnvoi(dc);
-    return {
-      ...contexteEnvoi(dc),
-      plafond: config.fichierMax,
-      avantEnvoi: async taille => {
-        const u = await espaceDrive(base);
-        if (u.fichiers + u.envois + taille > config.quota) {
-          const e = echec(413, 'quota-drive', 'L’espace du Drive est plein : videz la corbeille ou supprimez des fichiers.');
-          e.details = { utilise: u.fichiers, enCours: u.envois, limite: config.quota };
-          throw e;
-        }
-      },
-    };
+    return { ...contexteEnvoi(dc), plafond: config.fichierMax, avantEnvoi };
   });
 
   // ---------------------------------------------------------------- Présentation
@@ -407,6 +465,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
         majLe: f.maj_le,
         vignette,
         modifiable: peutModifierFichier(dc, f),
+        // Fichier d'une ressource de DATA › Ressources (migration 0051) : il se gère depuis la ressource.
+        ...(f.ressource_id ? { ressource: true } : {}),
         ...(f.supprime_le ? { supprimeLe: f.supprime_le, supprimePar: f.supprime_par ?? null } : {}),
       });
     }
@@ -417,7 +477,10 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const ids = lignes.map(d => d.id);
     const favoris = new Set((await lignesParIds(base, 'SELECT element_id FROM cm_drive_favoris WHERE compte_id = ? AND element_id', ids, { paramsAvant: [dc.acteur.compte] })).map(l => l.element_id));
     const n = new Map();
-    for (const l of await lignesParIds(base, 'SELECT dossier_id, COUNT(*) AS n FROM cm_drive_fichiers WHERE supprime_le IS NULL AND dossier_id', ids, { apres: 'GROUP BY dossier_id' })) n.set(l.dossier_id, Number(l.n));
+    for (const l of await lignesParIds(base, 'SELECT dossier_id, ressource_id, COUNT(*) AS n FROM cm_drive_fichiers WHERE supprime_le IS NULL AND dossier_id', ids, { apres: 'GROUP BY dossier_id, ressource_id' })) {
+      if (l.ressource_id && dc.ressourcesInterdites?.has(l.ressource_id)) continue;
+      n.set(l.dossier_id, (n.get(l.dossier_id) ?? 0) + Number(l.n));
+    }
     return lignes.map(d => ({
       id: d.id,
       portee: d.portee,
@@ -478,7 +541,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       params.push(acteur.compte);
     }
     const lignes = await base.tous(`SELECT * FROM cm_drive_fichiers WHERE ${conditions.join(' AND ')} ORDER BY nom_cle, id LIMIT ?`, [...params, FICHIERS_LISTE_MAX]);
-    const fichiers = await fichiersPublics(dc, lignes, { origine });
+    // Fichiers d'une ressource que le compte ne voit pas (migration 0051) : absents.
+    const fichiers = await fichiersPublics(dc, lignes.filter(f => !(f.ressource_id && dc.ressourcesInterdites.has(f.ressource_id))), { origine });
     const dossiers = await dossiersPublics(dc, sousDossiers);
     const noms = await pseudosDe(base, [...fichiers.flatMap(f => [f.creePar, f.majPar]), ...dossiers.map(d => d.creePar)].filter(Boolean));
     const c = courant ? (chaine(map, courant) ?? []) : [];
@@ -516,7 +580,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   async function filtres(acteur, { portee } = {}) {
     const dc = await ctxDrive(acteur, portee);
     const map = await arbre(dc.portee);
-    const lignes = (await base.tous('SELECT id, dossier_id, cree_par FROM cm_drive_fichiers WHERE portee = ? AND supprime_le IS NULL LIMIT 20000', [dc.portee])).filter(f => fichierAccessible(dc, map, f));
+    const lignes = (await base.tous('SELECT id, dossier_id, cree_par, ressource_id FROM cm_drive_fichiers WHERE portee = ? AND supprime_le IS NULL LIMIT 20000', [dc.portee])).filter(f => fichierAccessible(dc, map, f));
     const ids = new Set(lignes.map(f => f.id));
     const compte = new Map();
     for (const l of await base.tous('SELECT t.element_id, t.tag FROM cm_drive_tags t JOIN cm_drive_fichiers f ON f.id = t.element_id WHERE f.portee = ? AND f.supprime_le IS NULL', [dc.portee])) {
@@ -773,6 +837,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     }
     if (corps?.dossierId !== undefined) {
       if (dc.drive.depot) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+      if (f.ressource_id) throw refusRessource();
       champs.dossier_id = dossierCible(dc, map, corps.dossierId)?.id ?? null;
     }
     const lot = [];
@@ -784,7 +849,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     const t = maintenant();
     const cles = Object.keys(champs);
     lot.unshift({ sql: `UPDATE cm_drive_fichiers SET ${[...cles.map(k => `${k} = ?`), 'maj_par = ?', 'maj_le = ?'].join(', ')} WHERE id = ?`, params: [...cles.map(k => champs[k]), acteur.compte, iso(t), f.id] });
-    if (champs.nom !== undefined || champs.dossier_id !== undefined) {
+    if ((champs.nom !== undefined || champs.dossier_id !== undefined) && !f.ressource_id) {
       lot.push(evenement('cm.drive_fichier_modifie', { teamId: teamDePortee(f.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: f.id, charge: { nom: champs.nom ?? f.nom, ancien: champs.nom ? f.nom : null, deplace: champs.dossier_id !== undefined }, maintenant: t }));
     }
     await base.lot(lot);
@@ -795,6 +860,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   /** Copie (même octets, nouvel élément) dans un dossier de la même portée ou d'une autre où l'on peut déposer. */
   async function copierFichier(acteur, id, corps) {
     const { f } = await fichierVisible(acteur, id);
+    if (f.ressource_id) throw refusRessource();
     const dest = await ctxDrive(acteur, corps?.portee ?? f.portee);
     if (!dest.drive.envoyer) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     await assurerDossiers(dest.portee);
@@ -846,8 +912,13 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
         sql: 'UPDATE cm_drive_fichiers SET fichier_id = ?, version = ?, nom = ?, nom_cle = ?, type_mime = ?, genre = ?, taille = ?, meta = ?, maj_par = ?, maj_le = ? WHERE id = ? AND version = ?',
         params: [fichierId, v, nom, cleRecherche(nom), mime, genre, taille, meta, acteur?.compte ?? null, iso(t), f.id, Number(f.version)],
       },
-      evenement('cm.drive_version_ajoutee', { teamId: teamDePortee(f.portee), acteur: acteur?.compte ?? null, entiteType: 'cm_drive', entiteId: f.id, charge: { nom, version: v, restauree }, maintenant: t }),
-      evAjout({ portee: f.portee, acteur: acteur?.compte, element: 'fichier', id: f.id, dossierId: f.dossier_id, genre: 'version', nom, version: v, t }),
+      // Fichier d'une ressource (migration 0051) : aucun événement du Drive ne le nomme (la ressource a les siens).
+      ...(f.ressource_id
+        ? []
+        : [
+            evenement('cm.drive_version_ajoutee', { teamId: teamDePortee(f.portee), acteur: acteur?.compte ?? null, entiteType: 'cm_drive', entiteId: f.id, charge: { nom, version: v, restauree }, maintenant: t }),
+            evAjout({ portee: f.portee, acteur: acteur?.compte, element: 'fichier', id: f.id, dossierId: f.dossier_id, genre: 'version', nom, version: v, t }),
+          ]),
     ]);
     if (res[instructions.length + 1]?.changements !== 1) throw echec(409, 'conflit', 'Ce fichier a changé entre-temps : rechargez-le.');
     // Historique borné : les plus anciennes versions partent (leurs octets aussi s'ils ne servent plus).
@@ -949,6 +1020,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     }
     if (corps?.restreint !== undefined) {
       exigerGerer(dc);
+      // Dossier « Ressources » (migration 0051) : toujours restreint (chaque fichier suit en plus sa ressource).
+      if (d.cle === CLE_DOSSIER_RESSOURCES && corps.restreint !== true) throw echec(409, 'dossier-systeme', 'Le dossier « Ressources » reste restreint : ses fichiers suivent la visibilité de leur ressource.');
       champs.restreint = corps.restreint === true ? 1 : 0;
     }
     const cles = Object.keys(champs);
@@ -999,6 +1072,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
   async function mettreFichierALaCorbeille(acteur, id) {
     const { f, dc } = await fichierVisible(acteur, id);
     if (!peutModifierFichier(dc, f)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (f.ressource_id) throw refusRessource();
     const t = maintenant();
     const lot = nouvelId();
     await base.lot([
@@ -1049,6 +1123,7 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
 
   /** La racine de corbeille est-elle visible (pas sous un dossier restreint pour qui ne gère pas) ? */
   function racineVisible(dc, mapTout, r) {
+    if (r.genre === 'fichier' && r.ligne.ressource_id && dc.ressourcesInterdites?.has(r.ligne.ressource_id)) return false;
     if (dc.drive.gerer) return true;
     if (dc.drive.depot) return false;
     const depart = r.genre === 'dossier' ? r.ligne : r.ligne.dossier_id ? mapTout.get(r.ligne.dossier_id) : null;
@@ -1168,11 +1243,11 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       return v && v > base0 ? v : base0;
     };
     const nouveaux = new Map();
-    for (const f of await base.tous('SELECT id, dossier_id, cree_par, cree_le FROM cm_drive_fichiers WHERE portee = ? AND supprime_le IS NULL AND cree_le > ? AND (cree_par IS NULL OR cree_par <> ?) LIMIT 5000', [dc.portee, base0, compte])) {
+    for (const f of await base.tous('SELECT id, dossier_id, cree_par, cree_le, ressource_id FROM cm_drive_fichiers WHERE portee = ? AND supprime_le IS NULL AND cree_le > ? AND (cree_par IS NULL OR cree_par <> ?) LIMIT 5000', [dc.portee, base0, compte])) {
       if (f.cree_le > seuil(f.dossier_id)) nouveaux.set(f.id, f);
     }
     const versions = await base.tous(
-      'SELECT v.element_id, v.cree_le, f.id, f.dossier_id, f.cree_par FROM cm_drive_versions v JOIN cm_drive_fichiers f ON f.id = v.element_id WHERE f.portee = ? AND f.supprime_le IS NULL AND v.version > 1 AND v.cree_le > ? AND (v.cree_par IS NULL OR v.cree_par <> ?) LIMIT 5000',
+      'SELECT v.element_id, v.cree_le, f.id, f.dossier_id, f.cree_par, f.ressource_id FROM cm_drive_versions v JOIN cm_drive_fichiers f ON f.id = v.element_id WHERE f.portee = ? AND f.supprime_le IS NULL AND v.version > 1 AND v.cree_le > ? AND (v.cree_par IS NULL OR v.cree_par <> ?) LIMIT 5000',
       [dc.portee, base0, compte],
     );
     for (const v of versions) if (v.cree_le > seuil(v.dossier_id) && !nouveaux.has(v.id)) nouveaux.set(v.id, v);
@@ -1432,6 +1507,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     if (!dc.drive.voir) throw echec(404, 'fichier-introuvable', 'Fichier du Drive introuvable.');
     // `portees` : Drives admis ; sans (null), tout Drive que l'acteur voit (choix du Drive, docs/esport/drive.md).
     if (admises && !admises.includes(f.portee)) throw echec(400, 'portee', 'Ce fichier est dans le Drive d’une autre team.');
+    // Fichier d'une ressource (migration 0051) : il ne se joint nulle part ailleurs (il ne suivrait plus sa ressource).
+    if (f.ressource_id) throw refusRessource();
     const cm = await base.premier('SELECT id FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [f.fichier_id]);
     if (!cm) throw echec(404, 'fichier-introuvable', 'Fichier du Drive introuvable.');
     return { fichierId: f.fichier_id, nom: f.nom, type: f.type_mime, taille: Number(f.taille), format: jsonOu(f.meta, {}).format ?? null, meta: jsonOu(f.meta, {}), portee: f.portee, elementId: f.id };
@@ -1477,6 +1554,138 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
       console.error('[esport] Drive : rangement automatique impossible', e?.message ?? e);
       return null;
     }
+  }
+
+  // ---------------------------------------------------------------- Fichiers de DATA › Ressources (migration 0051)
+
+  /**
+   * Dossier système « Ressources » du Drive du club, créé au premier envoi (sans doublon : index unique portée + clé),
+   * toujours RESTREINT (gestionnaires du Drive) : un fichier envoyé depuis Ressources n'est jamais exposé par le Drive à
+   * qui ne gère pas le Drive, et en plus jamais à qui ne voit pas sa ressource (`ressource_id`).
+   */
+  async function dossierRessources() {
+    const lire = () => base.premier('SELECT * FROM cm_drive_dossiers WHERE portee = ? AND cle = ?', [PORTEE_CLUB, CLE_DOSSIER_RESSOURCES]);
+    let d = await lire();
+    if (!d) {
+      const t = iso(maintenant());
+      await base.executer('INSERT INTO cm_drive_dossiers (id, portee, team_id, parent_id, nom, cle, restreint, cree_le, maj_le) VALUES (?, ?, NULL, NULL, NULL, ?, 1, ?, ?) ON CONFLICT DO NOTHING', [nouvelId(), PORTEE_CLUB, CLE_DOSSIER_RESSOURCES, t, t]);
+      d = await lire();
+    }
+    // Défense en profondeur : jamais ouvert, jamais à la corbeille, toujours à la racine.
+    if (Number(d.restreint) !== 1 || d.supprime_le || d.parent_id) {
+      await base.executer('UPDATE cm_drive_dossiers SET restreint = 1, supprime_le = NULL, supprime_par = NULL, corbeille = NULL, corbeille_racine = 0, parent_id = NULL WHERE id = ?', [d.id]);
+      d = await lire();
+    }
+    return d;
+  }
+
+  /** Un envoi terminé de DATA › Ressources (portée d'envoi « ressources ») : `{ r, format, meta }` ; 415 si le type est refusé. */
+  async function envoiRessource(acteur, envoiId, elementId) {
+    if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+    const ctx = await contexteEnvoiRessources(acteur);
+    const r = await medias.preparerRattachement(ctx, envoiId, 'drive', { entiteType: 'cm_drive', entiteId: elementId, porteeFichier: PORTEE_CLUB });
+    const format = r.analyse?.format;
+    if (!FORMATS_PERMIS.drive.includes(format)) throw echec(415, 'format-fichier', 'Type de fichier refusé.');
+    return { r, format, meta: JSON.stringify(await metaDe(r.envoi.cle_stockage, format, r.analyse)) };
+  }
+
+  /**
+   * Prépare le rangement d'un fichier envoyé depuis DATA › Ressources pour la ressource `ressourceId` (créée dans le même
+   * lot par liens.mjs) : `{ elementId, nom, instructions }`. Le fichier appartient à la ressource ; aucun événement du
+   * Drive (la ressource a les siens). Le quota a été vérifié au début de l'envoi (comme pour le Drive).
+   */
+  async function preparerFichierRessource(acteur, { envoi, ressourceId, nom: voulu }) {
+    const dossier = await dossierRessources();
+    const id = nouvelId();
+    const { r, format, meta } = await envoiRessource(acteur, envoi, id);
+    const nom = nomPourFormat(typeof voulu === 'string' && voulu.trim() ? voulu : r.envoi.nom_original, format);
+    const mime = FORMATS[format].mime;
+    const t = iso(maintenant());
+    return {
+      elementId: id,
+      nom,
+      instructions: [
+        ...r.instructions,
+        {
+          sql: `INSERT INTO cm_drive_fichiers (id, portee, team_id, dossier_id, nom, nom_cle, fichier_id, version, type_mime, genre, taille, meta, origine, origine_id, ressource_id, cree_par, cree_le, maj_par, maj_le)
+                VALUES (?, ?, NULL, ?, ?, ?, ?, 1, ?, ?, ?, ?, 'ressource', ?, ?, ?, ?, ?, ?)`,
+          params: [id, PORTEE_CLUB, dossier.id, nom, cleRecherche(nom), r.fichierId, mime, genreDe(format), Number(r.envoi.taille), meta, ressourceId, ressourceId, acteur.compte, t, acteur.compte, t],
+        },
+        { sql: 'INSERT INTO cm_drive_versions (id, element_id, version, fichier_id, nom, type_mime, taille, meta, cree_par, cree_le) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), id, r.fichierId, nom, mime, Number(r.envoi.taille), meta, acteur.compte, t] },
+      ],
+    };
+  }
+
+  /** Après un envoi : alerte d'espace (80 % du quota), comme pour le Drive. */
+  const apresEnvoi = () => verifierAlerteDrive(base, { quota: config.quota, maintenant: maintenant() }).catch(() => false);
+
+  /**
+   * « Remplacer le fichier » d'une ressource (nouvelle version, l'ancienne reste dans l'historique du Drive). Fichier
+   * envoyé depuis Ressources (`source` 'envoi') : liens.mjs a vérifié le droit de modifier la ressource. Fichier choisi
+   * dans un Drive : il faut AUSSI pouvoir le modifier dans son Drive (la ressource ne donne aucun droit sur sa source).
+   */
+  async function versionRessource(acteur, { elementId, ressourceId, source, envoi, version }) {
+    let f;
+    if (source === 'envoi') {
+      f = await base.premier('SELECT * FROM cm_drive_fichiers WHERE id = ? AND ressource_id = ? AND supprime_le IS NULL', [elementId, ressourceId]);
+      if (!f) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    } else {
+      const v = await fichierVisible(acteur, elementId).catch(() => {
+        throw echec(403, 'drive-inaccessible', 'Fichier d’un Drive auquel vous n’avez pas accès.');
+      });
+      if (!peutModifierFichier(v.dc, v.f)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+      f = v.f;
+    }
+    if (version !== undefined && version !== null && Number(version) !== Number(f.version)) throw echec(409, 'conflit', 'Ce fichier a changé entre-temps : rechargez-le.');
+    const { r, format, meta } = await envoiRessource(acteur, envoi, f.id);
+    const nom = nomVersion(f.nom, jsonOu(f.meta, {}).format, format);
+    const v = await enregistrerVersion(acteur, f, { fichierId: r.fichierId, nom, mime: FORMATS[format].mime, genre: genreDe(format), taille: Number(r.envoi.taille), meta, instructions: r.instructions });
+    await apresEnvoi();
+    return { version: v, nom };
+  }
+
+  /**
+   * Retrait du fichier d'une ressource supprimée (dans le lot de la suppression) : ressource ouverte à toute l'équipe CM,
+   * le fichier part à la corbeille du Drive (30 jours, gestionnaires du Drive : restaurable) et n'appartient plus à
+   * personne ; ressource RESTREINTE, il est effacé tout de suite (lignes, puis octets s'ils ne servent plus :
+   * `effacerOctetsRessource`), pour ne jamais réapparaître chez qui ne la voyait pas. Rend `{ instructions, fichiers }`.
+   */
+  async function retraitFichierRessource(acteur, { elementId, ressourceId, definitif }) {
+    const f = elementId ? await base.premier('SELECT * FROM cm_drive_fichiers WHERE id = ? AND ressource_id = ?', [elementId, ressourceId]) : null;
+    if (!f) return { instructions: [], fichiers: [] };
+    const t = iso(maintenant());
+    if (!definitif) {
+      return {
+        instructions: [{ sql: 'UPDATE cm_drive_fichiers SET ressource_id = NULL, supprime_le = COALESCE(supprime_le, ?), supprime_par = COALESCE(supprime_par, ?), corbeille = COALESCE(corbeille, ?), corbeille_racine = 1 WHERE id = ?', params: [t, acteur.compte, nouvelId(), f.id] }],
+        fichiers: [],
+      };
+    }
+    const fichiers = (await base.tous('SELECT fichier_id FROM cm_drive_versions WHERE element_id = ?', [f.id])).map(v => v.fichier_id);
+    return {
+      instructions: [
+        { sql: 'DELETE FROM cm_drive_favoris WHERE element_id = ?', params: [f.id] },
+        { sql: 'DELETE FROM cm_drive_tags WHERE element_id = ?', params: [f.id] },
+        { sql: 'DELETE FROM cm_drive_versions WHERE element_id = ?', params: [f.id] },
+        { sql: 'DELETE FROM cm_drive_fichiers WHERE id = ?', params: [f.id] },
+      ],
+      fichiers,
+    };
+  }
+
+  /** Octets des versions d'un fichier de ressource effacé, s'ils ne servent plus à rien. */
+  async function effacerOctetsRessource(fichiers) {
+    const t = maintenant();
+    for (const id of new Set(fichiers)) await effacerFichierCmSiOrphelin(base, stockage, id, t);
+  }
+
+  /** Lignes d'un fichier du Drive (`cm_drive_fichiers`, hors corbeille), sans contrôle : liens.mjs a vérifié l'accès. */
+  const ligneFichier = id => base.premier('SELECT * FROM cm_drive_fichiers WHERE id = ? AND supprime_le IS NULL', [id]);
+
+  /** Version d'un fichier du Drive et ses octets (`cm_fichiers`) : `{ version, f }` ou null. */
+  async function versionStockee(elementId, version) {
+    const v = await base.premier('SELECT * FROM cm_drive_versions WHERE element_id = ? AND version = ?', [elementId, Number(version)]);
+    const f = v ? await base.premier('SELECT * FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [v.fichier_id]) : null;
+    return f ? { version: v, f } : null;
   }
 
   // ---------------------------------------------------------------- Réglages, accès des liens CM
@@ -1561,6 +1770,16 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     servirContenu,
     fichierPourIntegration,
     ranger,
+    // DATA › Ressources (migration 0051).
+    fichiersLisibles,
+    preparerFichierRessource,
+    apresEnvoi,
+    versionRessource,
+    retraitFichierRessource,
+    effacerOctetsRessource,
+    ligneFichier,
+    versionStockee,
+    metaPublique,
     changerReglages,
     reglages: async acteur => {
       exigerGerer(await ctxDrive(acteur, PORTEE_CLUB));

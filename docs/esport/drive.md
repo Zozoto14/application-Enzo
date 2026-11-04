@@ -53,6 +53,20 @@ Drive (404 pour les autres, recherche et ZIP compris) ; un lien obtenu avant la 
   serveur ; pas de compression : les médias le sont déjà). Limite `ESPORT_DRIVE_ZIP_MAX` (2 Go par défaut) et 2 000
   fichiers ; au-delà, téléchargez les sous-dossiers. 20 ZIP par heure et par compte.
 
+### Dossier « Ressources » (migration 0051)
+
+Les fichiers envoyés depuis l'onglet **DATA › Ressources** de l'espace CM (voir [cm.md](cm.md#fichiers-dans-les-ressources-migration-0051))
+sont rangés dans le dossier système **« Ressources »** du **Drive du club**, créé au premier envoi. Il est **toujours
+restreint** (gestionnaires du Drive seulement ; il ne se rouvre pas, ne se déplace pas, ne se supprime pas) et, en plus,
+chaque fichier qu'il contient **appartient à une ressource** (`cm_drive_fichiers.ressource_id`, origine « Ressource ») : il
+n'apparaît (liste, compteur, recherche, filtres, détail, ZIP, nouveautés, corbeille, favoris, liens signés, `/cm/fichiers`)
+que pour qui voit cette ressource. Il compte dans l'**espace** du Drive, garde ses **versions**, et se gère depuis la
+ressource : ni déplacé, ni copié, ni joint ailleurs, ni mis à la corbeille par le Drive (409 `fichier-ressource` ; l'app
+masque ces actions) ; il peut être renommé ou recevoir une version. Supprimer une ressource ouverte met son fichier à la
+corbeille du Drive (restaurable, il n'appartient plus à aucune ressource) ; supprimer une ressource restreinte l'efface tout
+de suite. Une ressource peut aussi **désigner** un fichier de n'importe quel Drive visible (aucune copie : la ressource suit
+sa source, comme les pièces « croisées » ci-dessous) ; ce fichier reste un fichier ordinaire de son Drive.
+
 ## Déplacer à la souris
 
 Sur le **site** et l'**app PC** :
@@ -239,6 +253,7 @@ Rien n'est copié : la pièce, l'image ou le sponsor pointe vers les mêmes octe
 | `cm_drive_versions` | versions (octets dans `cm_fichiers`) |
 | `cm_drive_tags`, `cm_drive_favoris` | étiquettes ; favoris par compte |
 | `cm_drive_vus` (migration 0041) | état « vu » par compte, portée et dossier (`racine`, l'identifiant d'un dossier, ou `*` : tout marqué vu) |
+| `cm_drive_fichiers.ressource_id` (migration 0051) | fichier qui appartient à une ressource de DATA › Ressources (dossier « Ressources ») |
 
 `envois` est reconstruite (usage « drive »), comme en 0017 et 0023. Les rôles CM système reçoivent leurs permissions
 du Drive. Tout est dans l'**export / import de la base**. **RGPD** : l'export d'un compte liste ses fichiers du Drive
@@ -260,6 +275,7 @@ restent au club sans auteur.
 | `PATCH /cm/drive/tags { portee, tag, nom }` ; `DELETE /cm/drive/tags?portee&tag` (étiquette de tous les fichiers de la portée) | gérer |
 | `GET\|PUT /cm/drive/reglages` | gérer (club) |
 | `GET /cm/drive/contenu/<élément>.<version>?c&exp&sig` ; `GET /cm/drive/zip/<dossier>?c&exp&sig` | lien signé (accès revérifié) |
+| `/cm/drive/portees/ressources/envois…` (fichiers de DATA › Ressources, migration 0051) | `cm.editer` du club (rangés dans le dossier « Ressources ») |
 | `POST /cm/cartes/:id/pieces { genre: 'drive', fichierId }` ; `POST /cm/visuels/images { portee, drive }` ; `POST /sponsors/pieces { genre: 'drive', fichierId, … }` | intégrations (tout Drive visible pour les pièces ; la pièce croisée suit sa source) |
 
 Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 20 ZIP.

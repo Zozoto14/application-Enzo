@@ -44,7 +44,8 @@ export async function exportCm(base, compte) {
     // Nouveautés du Drive (migration 0041) : dossiers vus et quand (pour les pastilles « nouveau »).
     cmDriveVus: (await q('SELECT portee, dossier, vu_le FROM cm_drive_vus WHERE compte_id = ? ORDER BY vu_le')).map(v => ({ portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), dossier: v.dossier, vuLe: v.vu_le })),
     // Liens utiles de DATA › Ressources (migration 0045) : ceux qu'il a ajoutés.
-    cmLiens: (await q('SELECT titre, url, categorie, cree_le, acces FROM cm_liens WHERE cree_par = ? ORDER BY cree_le')).map(l => ({ titre: l.titre, url: l.url, categorie: l.categorie ?? null, acces: l.acces ?? 'tous', creeLe: l.cree_le })),
+    // Fichiers des ressources (migration 0051) : genre et nom du fichier (ses octets sont dans `cmDrive` s'il les a envoyés).
+    cmLiens: (await q('SELECT l.titre, l.url, l.categorie, l.cree_le, l.acces, l.genre, l.source, f.nom AS fichier FROM cm_liens l LEFT JOIN cm_drive_fichiers f ON f.id = l.element_id WHERE l.cree_par = ? ORDER BY l.cree_le')).map(l => ({ titre: l.titre, genre: l.genre ?? 'lien', ...(l.genre === 'fichier' ? { fichier: l.source === 'envoi' ? (l.fichier ?? null) : null, source: l.source ?? null } : { url: l.url }), categorie: l.categorie ?? null, acces: l.acces ?? 'tous', creeLe: l.cree_le })),
     // Ressources restreintes où le compte figure nommément, et ressources partagées avec lui (migration 0048).
     cmLiensAcces: (await q("SELECT a.niveau, a.ajoute_le, l.titre FROM cm_lien_acces a JOIN cm_liens l ON l.id = a.lien_id WHERE a.genre = 'compte' AND a.cible = ? ORDER BY a.ajoute_le")).map(a => ({ ressource: a.titre, niveau: a.niveau, depuis: a.ajoute_le })),
     cmLiensPartages: (await q('SELECT p.partage_le, p.vu_le, l.titre FROM cm_lien_partages p JOIN cm_liens l ON l.id = p.lien_id WHERE p.compte_id = ? ORDER BY p.partage_le')).map(p => ({ ressource: p.titre, date: p.partage_le, vu: p.vu_le ?? null })),

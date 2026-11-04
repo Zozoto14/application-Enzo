@@ -113,6 +113,9 @@ const GENRES_LIEN = {
   // Drive CM (migration 0027) : une version d'un fichier du Drive (`<élément>.<version>`), et un dossier en ZIP.
   drive: { signature: 'cm-drive', chemin: '/cm/drive/contenu/' },
   'drive-zip': { signature: 'cm-drive-zip', chemin: '/cm/drive/zip/' },
+  // Fichier d'une ressource de DATA › Ressources (migration 0051) : `<ressource>.<version>`, visibilité de la ressource
+  // ET accès au fichier source revérifiés à chaque lecture.
+  ressource: { signature: 'cm-ressource', chemin: '/cm/liens/contenu/' },
 };
 
 /** Chemin signé `/fichiers/<id>?c=<compte>&exp=<ms>&sig=…` (à préfixer par l'adresse du serveur). */
