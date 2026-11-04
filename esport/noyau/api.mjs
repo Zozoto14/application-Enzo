@@ -15,7 +15,7 @@ import { servicesDiscord, routerDiscord } from './discord/routes.mjs';
 import { traiterFile } from './discord/file.mjs';
 import { creerBot } from './discord/bot/interactions.mjs';
 import { routesLiaisons, servicesLiaisons } from './discord/bot/liaisons.mjs';
-import { distribuer } from './evenements.mjs';
+import { distribuer, evenement } from './evenements.mjs';
 import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
 import { catalogue } from './permissions.mjs';
@@ -73,6 +73,9 @@ import { servicesTempsReel } from './temps-reel/service.mjs';
 import { servicesConfigTickets } from './tickets/service.mjs';
 import { routesTickets } from './tickets/routes.mjs';
 import { creerBotTickets } from './tickets/bot.mjs';
+import { servicesCycleTickets } from './tickets/cycle.mjs';
+import { servicesRgpdTickets } from './tickets/rgpd.mjs';
+import { contexteTickets } from './tickets/acces.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
@@ -226,8 +229,9 @@ export function creerApi({
   const lb = servicesLiaisons({ base, maintenant, noyau: s, config: configBot });
   // Tickets Discord (migration 0054, docs/esport/tickets.md) : configuration, cycle de vie, conversation ; la Gateway
   // est tenue par le serveur Node (tickets/superviseur.mjs), jamais par l'API elle-même.
-  const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive }) };
-  const botTickets = creerBotTickets({ base, maintenant });
+  const cycleTickets = servicesCycleTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, lienApp });
+  const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive }), cycle: cycleTickets, rgpd: servicesRgpdTickets({ base, maintenant, contexteTickets, evenement }) };
+  const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets });
   const bot = creerBot({
     base,
     maintenant,
@@ -616,6 +620,8 @@ export function creerApi({
   // Serveur Node : fermeture propre (connexions tenues, écoute PostgreSQL) ; tests : mesures du canal.
   traiter.tempsReel = tr;
   // Serveur Node : rappels de la Gateway des tickets (staff reconnu, suites d'un message, salon supprimé).
-  traiter.ticketsGateway = {};
+  traiter.ticketsGateway = cycleTickets.contexteIngestion;
+  // Cron : cycle de vie des tickets (fermeture automatique, archives, rétention), avec les mêmes réglages réseau.
+  traiter.ticketsCycle = cycleTickets;
   return traiter;
 }

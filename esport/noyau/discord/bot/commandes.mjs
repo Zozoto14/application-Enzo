@@ -7,7 +7,7 @@
  * /delier et /aide, aussi permises en message privé avec le bot.
  */
 
-const T = { CHAINE: 3, ENTIER: 4, SALON: 7 };
+const T = { SOUS_COMMANDE: 1, CHAINE: 3, ENTIER: 4, UTILISATEUR: 6, SALON: 7 };
 const SERVEUR = [0];
 const PARTOUT = [0, 1];
 
@@ -109,6 +109,19 @@ export const COMMANDES = [
     ],
   },
 ];
+
+/**
+ * Tickets (docs/esport/tickets.md) : /ticket <sous-commande>. Ouvertes à tout membre du serveur du club ; chaque
+ * sous-commande peut être coupée ou réservée à des rôles dans l'app (Tickets › Configuration › Commandes), et les
+ * actions du staff sont revérifiées par le serveur (rôles de la catégorie, compte lié). Après un changement : relancer
+ * esport/outils/discord-commandes.mjs.
+ */
+const optionCategorie = { type: T.CHAINE, name: 'categorie', ...desc('La catégorie du ticket', 'The ticket category'), autocomplete: true };
+export const SOUS_COMMANDES_TICKET = [
+  { type: T.SOUS_COMMANDE, name: 'ouvrir', ...desc('Ouvrir un ticket (salon privé avec le staff)', 'Open a ticket (private channel with the staff)'), options: [{ ...optionCategorie, required: false }] },
+  { type: T.SOUS_COMMANDE, name: 'fermer', ...desc('Fermer ce ticket', 'Close this ticket'), options: [{ type: T.CHAINE, name: 'raison', ...desc('Raison (facultative)', 'Reason (optional)'), required: false, max_length: 300 }] },
+];
+COMMANDES.push({ name: 'ticket', ...desc('Tickets du support', 'Support tickets'), contexts: SERVEUR, options: SOUS_COMMANDES_TICKET });
 
 /** Définitions telles que Discord les attend (commandes de type 1, « chat input »). */
 export function definitionsCommandes() {

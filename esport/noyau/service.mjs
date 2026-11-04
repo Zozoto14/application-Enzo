@@ -41,6 +41,7 @@ import { PERMISSIONS_GLOBALES, aGlobale, permissionsGlobalesDe } from './roles/g
 import { modeleRolesTeam } from './roles/modele.mjs';
 import { effacementRoles, exportRoles } from './roles/rgpd.mjs';
 import { effacementDevblog, exportDevblog } from './devblog/rgpd.mjs';
+import { effacementTickets, exportTickets } from './tickets/rgpd.mjs';
 import { effacementCentre, exportCentre, personnellesVisibles } from './notifications/centre.mjs';
 import { PERMISSION_DEVBLOG } from './devblog/regles.mjs';
 
@@ -935,6 +936,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...(await exportTrombi(base, compte)),
       // Devblog (migration 0036) : les devblogs qu'il a vus.
       ...(await exportDevblog(base, compte)),
+      // Tickets Discord (migration 0054) : tickets qu'il a ouverts (sans les notes internes), messages qu'il a écrits.
+      ...(await exportTickets(base, compte)),
       // Centre de notifications (migration 0038) : préférences et éléments du fil marqués lus.
       centreNotifications: await exportCentre(base, compte),
     };
@@ -1039,6 +1042,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementTrombi(compte),
       // Devblog (migration 0036) : ses marques « vu » effacées.
       ...effacementDevblog(compte),
+      // Tickets Discord (migration 0054) : ses tickets anonymisés (ses messages, réponses et pièces effacés) ; ce qu'il a
+      // écrit pour le club reste, sans auteur.
+      ...(await effacementTickets(base, compte, t)),
       // Centre de notifications (migration 0038) : préférences et lectures.
       ...effacementCentre(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },

@@ -9,8 +9,8 @@ Décisions : connexion **Gateway** permanente du bot (messages reçus en temps r
 anonyme, messages du bot **bilingues** (langue de la personne d'abord, l'autre dessous), **un seul serveur** Discord
 (celui du club), fermeture automatique après **7 jours** d'inactivité (réglable, avertissement 24 h avant).
 
-Livraison par étapes : **1. socle et configuration** (ce document, à jour) · 2. cycle de vie des tickets · 3. tickets
-dans l'app · 4. commandes utiles.
+Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · 3. tickets dans l'app ·
+4. commandes utiles.
 
 ---
 
@@ -85,6 +85,52 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
 
 ---
 
+## Cycle de vie d'un ticket (sur Discord)
+
+1. **Ouverture** : bouton (ou menu) d'un panneau, ou **`/ticket ouvrir [categorie]`** (sans catégorie : menu des
+   catégories, ou directement la seule active). Contrôles : tickets activés, serveur du club, catégorie active, **liste
+   noire**, **plafond** de tickets ouverts par personne dans la catégorie (le bot rappelle le salon déjà ouvert), au
+   plus 10 ouvertures par heure et par personne. Si la catégorie a un **formulaire**, une fenêtre Discord s'ouvre
+   (5 champs au plus, libellés dans la langue de la personne).
+2. Le bot crée un **salon privé** `ticket-0012-lea` dans la catégorie Discord des tickets ouverts : `@everyone` ne le
+   voit pas ; l'auteur, les **rôles Discord de la catégorie** et le bot y ont accès. Message d'**accueil** (mention de
+   l'auteur et des rôles à prévenir), bilingue, avec les **réponses du formulaire**, la priorité, la catégorie et quatre
+   boutons : **Prendre en charge · Ajouter quelqu'un · Priorité · Fermer**. Hors des horaires du support (s'ils sont
+   réglés) : réponse automatique. Une ligne part dans le **salon des journaux**. Numéro **séquentiel** (n° 1, 2, 3…).
+3. **Statuts** : ouvert → pris en charge → en attente (de la réponse de l'auteur) → résolu → fermé. Quand l'auteur
+   répond à un ticket « en attente », il repasse « ouvert » (ou « pris en charge »).
+4. **Staff** d'un ticket (boutons et commandes du staff) : un membre qui a un des rôles Discord de la catégorie, un
+   administrateur du serveur, ou une personne dont le **compte Esport lié** (`/lier`) a `tickets.repondre` et voit la
+   catégorie. **Prendre en charge** (refusé si quelqu'un l'a déjà), **Ajouter quelqu'un** (choix d'un membre : droits sur
+   le salon), **Priorité** (4 niveaux d'urgence). L'auteur peut **fermer** son propre ticket.
+5. **Fermeture** (bouton **Fermer** puis **Confirmer**, ou **Fermer avec une raison**, ou `/ticket fermer [raison]`) :
+   - les derniers messages du salon sont relus (le transcript est complet même si la connexion en direct était coupée) ;
+   - message de fermeture (raison) avec un bouton **Rouvrir** ; le salon est **verrouillé** (l'auteur et les personnes
+     ajoutées lisent seulement) et **déplacé dans la catégorie des archives** ;
+   - **MP récapitulatif** à l'auteur (numéro, catégorie, serveur, raison, dates) avec la **demande de note** (boutons
+     1 à 5, si la catégorie la demande) ; un clic enregistre la note et ouvre une fenêtre de **commentaire facultatif** ;
+     une nouvelle note remplace la précédente. MP impossibles (l'auteur les a fermés) : rien d'autre ne bloque ;
+   - le **transcript** est la conversation gardée dans l'app (messages, auteurs, pièces jointes, messages du bot ;
+     les notes internes ne sont jamais envoyées sur Discord) ;
+   - le salon archivé est **supprimé** après N jours (défaut 7).
+6. **Réouverture** (bouton **Rouvrir**, staff) : le salon revient dans les tickets ouverts, l'auteur peut écrire ; si le
+   salon a été supprimé, un nouveau est créé.
+7. **Fermeture automatique** (cron, toutes les 5 min) : après le délai sans message (défaut 7 jours, réglable par
+   catégorie ; 0 = jamais), avec un **avertissement** dans le salon 24 h avant (réglable). Tout message (de l'auteur ou
+   du staff) repousse l'échéance et efface l'avertissement. Raison : « Fermeture automatique : inactivité ».
+8. **Salon supprimé à la main** sur Discord : le ticket est fermé (sans message ni MP).
+9. **Rétention** : après N jours (défaut 365) un ticket fermé perd sa conversation, ses pièces (octets compris), ses
+   réponses et ses personnes ajoutées ; la ligne reste pour les statistiques (numéro, catégorie, dates, note).
+
+### RGPD
+
+- Compte de l'app : **Mes données** (et l'export par le Fondateur) contient les tickets que la personne a ouverts (par
+  son compte Discord lié ou son Discord ID) avec leur conversation **sans les notes internes**, et les messages qu'elle a
+  écrits. La **suppression du compte** anonymise ses tickets (nom, réponses, ses messages et leurs pièces effacés) ; ce
+  qu'elle a écrit pour le club (réponses du staff, notes) reste, sans auteur.
+- Personne **sans compte** (seulement Discord) : `POST /tickets/rgpd/export` et `POST /tickets/rgpd/effacer`
+  `{ discordId }`, réservés au Fondateur.
+
 ## Connexion Discord : un seul processus, et un secours
 
 L'app Esport tourne sous **Passenger** chez o2switch : plusieurs processus Node possibles, qui peuvent être arrêtés
@@ -138,7 +184,7 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
   seulement **référencées** (adresse Discord, qui expire). Choix fait plutôt qu'un dossier du Drive : le Drive est
   partagé par l'équipe CM, les pièces d'un ticket ne doivent être vues que par ceux qui voient le ticket. Lecture par
   lien signé de quelques minutes, délivré après contrôle d'accès.
-- **Rétention** réglable (défaut 365 jours) ; RGPD : export et effacement (étape 2).
+- **Rétention** réglable (défaut 365 jours) ; RGPD : export et effacement (voir « RGPD » plus haut).
 - Export / import de la base : les tables des tickets suivent (sauf le bail et l'état de la connexion, passagers) ;
   `esport/serveur/importer.mjs` copie aussi les pièces stockées.
 
@@ -155,21 +201,30 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `POST /tickets/config/panneaux` ; `PATCH\|DELETE …/panneaux/:id` ; `GET …/:id/apercu` ; `POST …/:id/publier` | panneaux |
 | `POST /tickets/config/liste-noire` ; `DELETE …/liste-noire/:discordId` | liste noire |
 
+| `POST /tickets/rgpd/(export\|effacer)` `{ discordId }` | RGPD d'une personne sans compte (Fondateur) |
+
 Discord appelle toujours `POST /discord/interactions` (signature Ed25519) : les boutons, menus et fenêtres des tickets
 (`custom_id` commençant par `tk:`) et les commandes `/ticket`, `/tickets` y sont traités **sans compte lié**.
+Identifiants : `tk:o:<catégorie>` (bouton d'un panneau), `tk:s` (menu), `tk:f:<catégorie>` (fenêtre du formulaire),
+`tk:c|a|p|x|r:<ticket>` (prendre, ajouter, priorité, fermer, rouvrir), `tk:as|ps:<ticket>` (choix d'un membre, d'une
+priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `tk:n:<ticket>:<1-5>` et
+`tk:nc:<ticket>:<note>` (note et commentaire, dans le MP).
 
 ## Pour les développeurs
 
 - Code : `esport/noyau/tickets/` — `acces.mjs` (droits), `reglages.mjs` (réglages, validations), `textes.mjs`
   (messages FR / EN, composition bilingue), `panneaux.mjs` (charges Discord), `discord.mjs` (REST, permissions),
   `gateway.mjs` (client Gateway), `superviseur.mjs` (bail, secours, état), `conversation.mjs` (messages reçus,
-  pièces jointes, temps réel), `service.mjs` (configuration), `routes.mjs`, `bot.mjs` (interactions), `bus.mjs`
-  (événements, notifications), `cron.mjs`.
+  pièces jointes, temps réel), `service.mjs` (configuration), `cycle.mjs` (cycle de vie : ouverture, staff,
+  fermeture, note, réouverture, cron), `rgpd.mjs`, `routes.mjs`, `bot.mjs` (interactions), `bus.mjs` (événements,
+  notifications), `cron.mjs`. Commande `/ticket` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migration `0054_tickets.sql` ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
 - Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `ConfigTickets.tsx`, `ApercuDiscord.tsx`), API
   `src/esport/tickets/api.ts`, textes `src/esport/i18n/tickets.ts`.
 - Tests : `esport/test/tickets-gateway.test.mjs` (faux serveur Gateway WebSocket : HELLO, battements, RESUME,
   zombie, INVALID_SESSION, 4014, budget ; bail entre deux processus simulés ; relecture de secours ; cron),
-  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `src/esport/Tickets.test.tsx`
+  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-cycle.test.mjs`
+  (cycle de vie complet avec interactions signées : formulaire, salon et droits, staff, fermeture, MP, note,
+  réouverture, fermeture automatique, archives, rétention, RGPD), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

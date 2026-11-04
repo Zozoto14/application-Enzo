@@ -32,6 +32,7 @@ import { distribuer } from '../noyau/evenements.mjs';
 import { executerDevblogAuto } from '../noyau/devblog/auto.mjs';
 import { traiterDevblogDiscord } from '../noyau/devblog/discord.mjs';
 import { sourceGitDepot } from './devblog-source.mjs';
+import { servicesCycleTickets } from '../noyau/tickets/cycle.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
 export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale, devblogSource } = {}) {
@@ -46,6 +47,8 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     cleSession: config.cleSession,
     transcriptionExterne: config.transcriptionExterne,
     ...(config.drive ? { drive: config.drive } : {}),
+    // Tickets Discord : cycle de vie (fermeture automatique, avertissement, archives, rétention).
+    tickets: b => servicesCycleTickets({ base: b, stockage: fichiers, jetonBot: config.discordBot?.jetonBot, applicationId: config.discordBot?.applicationId, lienApp: config.lienApp, ...(fetch ? { fetch } : {}), ...(maintenant ? { maintenant } : {}) }),
   });
   // Tickets Discord : plus aucun processus ne tient la Gateway (app endormie par Passenger, redémarrée…) → l'app est
   // réveillée (une requête GET /sante), et son superviseur reprend la connexion au passage suivant.

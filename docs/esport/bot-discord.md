@@ -214,6 +214,7 @@ Réponses visibles **par vous seul** (éphémères).
 | `/evenement-creer` | staff (créer au planning) | type, titre, date (`24/10`, `demain`…), heure (`20h30`), convoqués, durée |
 | `/relancer evenement:` | staff (marquer la présence) | relance groupée des convoqués sans réponse |
 | `/esport-lier-serveur code:` | admin du serveur Discord | lier le serveur à une team |
+| `/ticket ouvrir [categorie]` · `/ticket fermer [raison]` | tout membre du serveur du club (sans compte lié) | tickets : ouvrir un ticket, fermer le sien (ou, pour le staff, celui du salon) — voir [tickets.md](tickets.md) |
 
 Chaque commande fait **les mêmes contrôles que l'app** avec le compte lié : membre de la team, module activé, bon
 droit. Un joueur qui tape `/evenement-creer` reçoit « Tu n'as pas la permission ». Une commande ne touche **que

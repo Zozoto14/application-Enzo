@@ -10,6 +10,7 @@
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
  *   GET           /tickets/config/panneaux/:id/apercu ; POST …/:id/publier
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
+ *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
  */
 
 const segment = s => {
@@ -30,6 +31,12 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, lireCorps,
   if (n === 1 && a === 'moi' && m === 'GET') return cf.moi(acteur);
   if (n === 1 && a === 'etat' && m === 'GET') return cf.etat(acteur);
 
+  // RGPD d'une personne sans compte (Discord ID) : le Fondateur seul.
+  if (n === 2 && a === 'rgpd' && m === 'POST') {
+    await limite('export', acteur.compte);
+    if (b === 'export') return tk.rgpd.exporter(acteur, await lireCorps());
+    if (b === 'effacer') return tk.rgpd.effacer(acteur, await lireCorps());
+  }
   if (a === 'config') {
     if (n === 1 && m === 'GET') return cf.config(acteur);
     if (n === 2 && b === 'discord' && m === 'GET') {

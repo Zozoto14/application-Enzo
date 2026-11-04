@@ -19,7 +19,7 @@ export async function tachesTickets(base, { jetonBot, fetch: fetchDiscord = (...
   const meneur = await bailActif(base, t);
   let releve = null;
   if (!meneur) {
-    releve = await releverTickets({ base, stockage, reglages, telecharger: telechargeurCdn(fetchDiscord), botId: null, maintenant, fetch: fetchDiscord, jetonBot, ...(cycle?.contexteIngestion ?? {}) });
+    releve = await releverTickets({ base, stockage, reglages, telecharger: telechargeurCdn(fetchDiscord), botId: cycle?.botId ?? null, maintenant, fetch: fetchDiscord, jetonBot, ...(cycle?.contexteIngestion ?? {}) });
     await ecrireEtat(base, 'cron', { releve: { ...releve, le: iso(t) } }, t);
   }
   const suite = cycle ? await cycle.tachesCycle() : null;
