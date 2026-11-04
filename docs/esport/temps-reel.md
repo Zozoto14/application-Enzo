@@ -51,7 +51,8 @@ Sujets : `team:<id>` (team, membres, rôles), `team:<id>:<module>` (planning, at
 goals_tasks, meeting_summaries, strat_editor, playbook, video_review, scouting, player_notes, resources, tournois,
 resultats, activity_log), `cm` (tableaux, cartes, visuels, clips, réglages), `cm:drive`, `cm:reseaux`,
 `cm:reunions` (équipe CM ou invité), `sponsors`,
-`trombi`, `club` (rôles du club, comptes) et `compte` (ses propres notifications).
+`trombi`, `tickets` (tickets Discord : chaque ticket revérifié par `GET /tickets/:id`), `club` (rôles du club, comptes)
+et `compte` (ses propres notifications).
 
 **Contrôle d'accès, pour chaque destinataire et chaque message** (`esport/noyau/temps-reel/regles.mjs`) :
 

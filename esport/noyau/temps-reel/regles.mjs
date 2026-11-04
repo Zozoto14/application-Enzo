@@ -7,7 +7,7 @@
  * niveaux d'accès, vérifiés pour CHAQUE destinataire et CHAQUE message :
  *
  *  - le SUJET (`team:<id>:<module>`, `team:<id>`, `cm`, `cm:drive`, `cm:reseaux`, `sponsors`, `trombi`,
- *    `club`, `compte:<id>`) : le destinataire doit pouvoir lire ce module ou cette rubrique (mêmes règles
+ *    `tickets`, `club`, `compte:<id>`) : le destinataire doit pouvoir lire ce module ou cette rubrique (mêmes règles
  *    que les routes : appartenance, module activé, permission de lecture ; voir `controleSujet`) ;
  *  - l'OBJET : la clé, la version, l'auteur et son pseudo ne partent que si le destinataire peut lire CET
  *    objet : la route GET de l'objet (`sonde`) est rejouée en son nom (mêmes contrôles, jamais de copie des
@@ -56,10 +56,12 @@ export const SONDES_SUJETS = Object.freeze({
   'cm:reunions': { chemin: '/cm/reunions/moi', ok: r => r?.droits?.voir === true || r?.invite === true },
   sponsors: { chemin: '/sponsors/moi', ok: r => r?.voir === true },
   trombi: { chemin: '/trombi' },
+  // Tickets Discord (migration 0054) : qui voit des tickets ; chaque ticket est revérifié par GET /tickets/:id.
+  tickets: { chemin: '/tickets/moi', ok: r => r?.voir === true },
 });
 
 /** Sujets connus de l'app (forme), pour refuser tout le reste. */
-export const MOTIF_SUJET = /^(?:team:[0-9a-f-]{36}(?::[a-z_]{2,30})?|cm|cm:drive|cm:reseaux|cm:reunions|sponsors|trombi|club|compte:[A-Za-z0-9_-]{1,64})$/;
+export const MOTIF_SUJET = /^(?:team:[0-9a-f-]{36}(?::[a-z_]{2,30})?|cm|cm:drive|cm:reseaux|cm:reunions|sponsors|trombi|tickets|club|compte:[A-Za-z0-9_-]{1,64})$/;
 
 const ID = '([^/]+)';
 const dec = s => {
@@ -89,6 +91,8 @@ const IGNORES = [
   // (pastille « Nouveau », migration 0048).
   /^\/cm\/(?:tableaux\/[^/]+\/tout-vu|cartes\/[^/]+\/suivre|liens\/[^/]+\/vu)$/,
   /^\/cm\/reseaux\/import\/apercu$/,
+  // Tickets : « lu » et préférences sont personnels ; RGPD et aperçus ne changent rien chez les autres.
+  /^\/tickets\/(?:[^/]+\/lu|preferences|rgpd\/[a-z]+|config\/panneaux\/[^/]+\/apercu)$/,
 ];
 
 /** Sous-chemins d'une collection qui ne sont pas des objets (`/teams/:t/planning/reglages`…). */
@@ -130,6 +134,7 @@ const OBJETS_CLUB = [
   [/^\/sponsors\/prospects\/([^/]+)/, 'sponsors', 'sp-prospect', true],
   [/^\/sponsors\/partenaires\/([^/]+)/, 'sponsors', 'sp-partenaire', true],
   [/^\/trombi\/fiches\/([^/]+)/, 'trombi', 'trombi-fiche', true],
+  [/^\/tickets\/([0-9a-f-]{36})/, 'tickets', 'ticket', true],
 ];
 
 /** Sujet d'une route du club (sans objet). */
@@ -141,6 +146,7 @@ function sujetClub(chemin) {
   if (chemin === '/cm' || chemin.startsWith('/cm/')) return { sujet: 'cm' };
   if (chemin.startsWith('/sponsors/')) return { sujet: 'sponsors' };
   if (chemin === '/trombi' || chemin.startsWith('/trombi/')) return { sujet: 'trombi' };
+  if (chemin === '/tickets' || chemin.startsWith('/tickets/')) return { sujet: 'tickets' };
   if (/^\/(?:roles|comptes|admin\/comptes)(?:\/|$)/.test(chemin)) return { sujet: 'club', invalider: true };
   return null;
 }
@@ -250,6 +256,7 @@ export function sujetsEvenement(ev) {
   if (type.startsWith('cm.')) return [{ sujet: 'cm', invalider: droits }];
   if (type.startsWith('sponsors.')) return [{ sujet: 'sponsors' }];
   if (type.startsWith('trombi.')) return [{ sujet: 'trombi' }];
+  if (type.startsWith('ticket.') || type.startsWith('tickets.')) return [{ sujet: 'tickets' }];
   if (droits) return [{ sujet: 'club', invalider: true }];
   return [];
 }

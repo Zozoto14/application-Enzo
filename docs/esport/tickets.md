@@ -9,7 +9,7 @@ Décisions : connexion **Gateway** permanente du bot (messages reçus en temps r
 anonyme, messages du bot **bilingues** (langue de la personne d'abord, l'autre dessous), **un seul serveur** Discord
 (celui du club), fermeture automatique après **7 jours** d'inactivité (réglable, avertissement 24 h avant).
 
-Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · 3. tickets dans l'app ·
+Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · **3. tickets dans l'app** ·
 4. commandes utiles.
 
 ---
@@ -61,6 +61,37 @@ En tête, la **connexion Discord** :
 | **En direct** | un processus de l'app tient la Gateway : les messages arrivent en moins d'une seconde |
 | **Secours** | la Gateway est indisponible (connexion en cours, intent refusé, app endormie…) : les tickets ouverts sont relus par l'API toutes les 45 s (processus meneur) ou toutes les 5 min (cron) ; rien n'est perdu |
 | **Hors ligne** | plus rien depuis plusieurs minutes (tickets désactivés, jeton absent, cron arrêté) |
+
+Onglets : **Tickets** (`tickets.voir`), **Statistiques** (`tickets.gerer`), **Configuration** (`tickets.configurer`).
+Le **compteur** de l'entrée « Tickets » de la navigation donne le nombre de tickets ouverts avec du nouveau.
+
+### Tickets (liste et conversation)
+
+- **Liste** : tickets des catégories que vous traitez (toutes pour `tickets.gerer` et le Fondateur), filtres statut
+  (ouverts par défaut), catégorie, priorité, responsable (moi, personne : `responsable=moi|personne`), dates d'ouverture, **recherche** (n°, auteur,
+  réponses du formulaire, conversation). **Pastille rouge** : du nouveau depuis votre dernière lecture (messages des
+  autres ; ceux du bot ne comptent pas). Mise à jour **en direct** (temps réel, sujet `tickets`).
+- **Vue d'un ticket** (volet) : statut, priorité (4 niveaux d'urgence), catégorie, auteur, salon, responsable, réponses
+  du formulaire, **conversation en direct** (messages Discord, réponses depuis l'app, messages du bot, **notes internes**
+  sur fond ambré), pièces jointes (ouvertes par un lien signé de 5 minutes ; une pièce seulement référencée garde son
+  lien Discord, qui expire).
+- **Répondre** (`tickets.repondre`) : le bot publie dans le salon **« Staff · votre pseudo : … »** (mentions
+  neutralisées), avec jusqu'à 3 pièces jointes (5 Mo en tout, sous la limite de taille des requêtes de l'hébergeur ; depuis l'appareil sur le site et l'app PC,
+  ou depuis un **Drive** que vous voyez). Interrupteur **Note interne** : la note reste dans l'app, **jamais** envoyée
+  sur Discord.
+- **Actions** : prendre en charge / libérer, en attente de réponse, résolu, priorité, fermer (raison) / rouvrir
+  (`tickets.repondre`) ; **assigner** à un compte qui traite la catégorie, **changer de catégorie** (droits du salon mis
+  à jour), **ajouter / retirer** une personne (Discord ID), **transcript** (HTML imprimable en PDF) (`tickets.gerer`).
+- **Liaisons** : Partenariat → **créer le prospect Sponsors** (avec vos droits Sponsors), Demande CM → **créer la carte**
+  dans le tableau CM choisi pour la catégorie (droits CM), **lier la fiche** de l'auteur s'il a lié son Discord.
+- **Notifications** : nouveau ticket → cloche des comptes qui traitent la catégorie ; message de l'auteur dans un ticket
+  pris en charge → cloche du responsable (une seule tant qu'elle n'est pas lue). **MP Discord** selon vos préférences
+  (Tickets › Me prévenir en MP Discord : nouveaux tickets, nouveaux messages ; compte Discord lié requis).
+
+### Statistiques (`tickets.gerer`)
+
+Sur 30 jours : tickets ouverts maintenant, créés, fermés, **délai de 1re réponse** et **de résolution** (médianes),
+**satisfaction moyenne** (et nombre de notes), par catégorie et par responsable.
 
 ### Configuration (Fondateur, `tickets.configurer`)
 
@@ -177,7 +208,9 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 ## Confidentialité, données
 
 - Les conversations, notes internes, réponses aux formulaires et transcripts sont des **données sensibles** : jamais
-  envoyées à une IA externe (aucune fonction des tickets n'appelle l'IA), jamais copiées dans le fil des
+  envoyées à une IA externe (aucune fonction des tickets n'appelle l'IA ; la tâche « tickets » est en plus déclarée
+  **confidentielle** dans le connecteur IA, `esport/noyau/ia/confidentialite.mjs` : IA locale seulement si un jour une
+  fonction s'en servait), jamais copiées dans le fil des
   notifications, le journal ou le temps réel (ils ne portent que des identifiants, le numéro et la catégorie).
 - **Pièces jointes** : copiées dans le **stockage privé** du serveur (`tickets/<ticket>/<pièce>`, hors `public_html`),
   seulement depuis le CDN de Discord, sans suivre de redirection, sous la taille réglée (8 Mo par défaut) ; sinon
@@ -202,6 +235,13 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `POST /tickets/config/liste-noire` ; `DELETE …/liste-noire/:discordId` | liste noire |
 
 | `POST /tickets/rgpd/(export\|effacer)` `{ discordId }` | RGPD d'une personne sans compte (Fondateur) |
+| `GET /tickets?statut&categorie&priorite&responsable&auteur&du&au&q` | liste (catégories visibles), non lus |
+| `GET /tickets/compteur` ; `GET /tickets/stats?du&au` ; `GET\|PUT /tickets/preferences` | compteur, statistiques (`gerer`), MP |
+| `GET /tickets/:id` ; `POST /tickets/:id/lu` | ticket et conversation ; marquer lu |
+| `POST /tickets/:id/messages` `{ texte, pieces?, drive? }` ; `POST /tickets/:id/notes` `{ texte }` | réponse (le bot poste) ; note interne |
+| `POST /tickets/:id/(prendre\|liberer\|attente\|statut\|priorite\|fermer\|rouvrir)` | actions (`repondre`) |
+| `POST /tickets/:id/(assigner\|categorie\|ajouter\|retirer)` ; `GET …/assignables` ; `GET …/transcript` | actions (`gerer`) |
+| `POST /tickets/:id/liaison` `{ type, id? }` ; `POST /tickets/:id/pieces/:piece/lien` | liaison ; lien signé d'une pièce |
 
 Discord appelle toujours `POST /discord/interactions` (signature Ed25519) : les boutons, menus et fenêtres des tickets
 (`custom_id` commençant par `tk:`) et les commandes `/ticket`, `/tickets` y sont traités **sans compte lié**.
@@ -220,11 +260,14 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   notifications), `cron.mjs`. Commande `/ticket` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migration `0054_tickets.sql` ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
-- Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `ConfigTickets.tsx`, `ApercuDiscord.tsx`), API
-  `src/esport/tickets/api.ts`, textes `src/esport/i18n/tickets.ts`.
+- Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `TicketsStaff.tsx` : liste, vue, statistiques ;
+  `ConfigTickets.tsx`, `ApercuDiscord.tsx`), API `src/esport/tickets/api.ts`, compteur `src/esport/tickets/compteur.ts`,
+  textes `src/esport/i18n/tickets.ts`, phrases des notifications `src/esport/tickets/libelles.ts`.
 - Tests : `esport/test/tickets-gateway.test.mjs` (faux serveur Gateway WebSocket : HELLO, battements, RESUME,
   zombie, INVALID_SESSION, 4014, budget ; bail entre deux processus simulés ; relecture de secours ; cron),
-  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-cycle.test.mjs`
+  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-app.test.mjs`
+  (visibilité par catégorie, non lus, réponse depuis l'app, notes internes jamais envoyées, droits, transcript, pièces,
+  liaisons, statistiques), `esport/test/tickets-cycle.test.mjs`
   (cycle de vie complet avec interactions signées : formulaire, salon et droits, staff, fermeture, MP, note,
   réouverture, fermeture automatique, archives, rétention, RGPD), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

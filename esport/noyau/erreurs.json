@@ -850,7 +850,22 @@
   "Choisissez le salon de publication.": "Pick the publishing channel.",
   "Choisissez au moins une catégorie active.": "Pick at least one active category.",
   "Discord a refusé la publication du panneau.": "Discord refused to publish the panel.",
-  "Liste noire pleine.": "Blacklist full."
+  "Liste noire pleine.": "Blacklist full.",
+  "Ticket introuvable.": "Ticket not found.",
+  "Type de fichier refusé (images, PDF, texte, MP4, ZIP).": "File type refused (images, PDF, text, MP4, ZIP).",
+  "Fichier illisible.": "Unreadable file.",
+  "Ce ticket est fermé : rouvrez-le pour répondre.": "This ticket is closed: reopen it to reply.",
+  "Le salon Discord de ce ticket n’existe plus.": "This ticket’s Discord channel no longer exists.",
+  "Message vide.": "Empty message.",
+  "Ce compte ne traite pas cette catégorie.": "This account does not handle this category.",
+  "Liaison indisponible.": "Link unavailable.",
+  "L’auteur n’a pas de compte Esport lié (/lier).": "The author has no linked Esport account (/lier).",
+  "Liaison inconnue.": "Unknown link.",
+  "3 pièces jointes au plus.": "3 attachments at most.",
+  "Discord demande d’attendre : réessayez dans un instant.": "Discord asks to wait: try again in a moment.",
+  "Discord a refusé le message (permissions du bot ?).": "Discord refused the message (bot permissions?).",
+  "Pièce jointe trop volumineuse : 5 Mo au plus.": "Attachment too large: 5 MB at most.",
+  "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total."
  },
  "motifs": [
   [

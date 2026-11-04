@@ -22,11 +22,12 @@
 import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import { evenement } from '../evenements.mjs';
 import { limiter } from '../limites.mjs';
-import { droitsTickets, voitCategorie } from './acces.mjs';
+import { comptesDeCategorie, droitsTickets, voitCategorie } from './acces.mjs';
+import { publierEnBase } from '../temps-reel/diffusion.mjs';
 import { annoncer, ingererMessage, plusRecent, telechargeurCdn } from './conversation.mjs';
 import { DROITS_BOT, DROITS_PARTICIPANT, P, idDiscord, rest } from './discord.mjs';
 import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, titreTicket } from './panneaux.mjs';
-import { STATUTS_OUVERTS, categoriePublique, dansHoraires, lireGeneral, lireHoraires, lireMessages } from './reglages.mjs';
+import { STATUTS_OUVERTS, categoriePublique, dansHoraires, lireGeneral, lireHoraires, lireMessages, lireReglage } from './reglages.mjs';
 import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, t as tx } from './textes.mjs';
 
 const H = 3_600_000;
@@ -200,6 +201,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     await base.lot([ev('ticket.ouvert', ticket, null, { auteur: sur(auteur.nom, 80), nomCategorie: cat.nom.fr })]);
     await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_ouvert', { numero, auteur: `<@${auteur.id}>`, categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) }), { mode: general.langue === 'auteur' ? 'en_fr' : general.langue }), color: 0x4caf7a });
     await annoncer(base, id, t);
+    await alerterNouveau(await ticketPar(id), cat).catch(e => console.error('[esport] tickets : alerte', e?.message ?? e));
     return ticketPar(id);
   }
 
@@ -328,7 +330,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const r = await appel('GET', `/channels/${ticket.salon_id}/messages?limit=100${apresId}`);
     if (!r.ok || !Array.isArray(r.corps)) return;
     const reglages = await lireGeneral(base);
-    for (const m of [...r.corps].reverse()) await ingererMessage({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte }, { ...m, channel_id: ticket.salon_id });
+    for (const m of [...r.corps].reverse()) await ingererMessage({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte, surNouveau }, { ...m, channel_id: ticket.salon_id });
   }
 
   const dateCourte = (l, iso8601) => new Intl.DateTimeFormat(l === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Paris' }).format(new Date(iso8601));
@@ -372,10 +374,10 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return ticketPar(ticket.id);
   }
 
-  async function envoyerMp(discordId, charge) {
+  async function envoyerMp(discordId, charge, fichiers) {
     const canal = await appel('POST', '/users/@me/channels', { recipient_id: discordId });
     if (!canal.ok || !idDiscord(canal.corps?.id)) return null;
-    const r = await appel('POST', `/channels/${canal.corps.id}/messages`, { allowed_mentions: { parse: [] }, ...charge });
+    const r = await appel('POST', `/channels/${canal.corps.id}/messages`, { allowed_mentions: { parse: [] }, ...charge }, fichiers ? { fichiers } : undefined);
     return r.ok ? r : null;
   }
 
@@ -506,6 +508,46 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return lignes.length;
   }
 
+  // ---------------------------------------------------------------- Alertes du staff (cloche et MP Discord)
+
+  const preferences = compte => lireReglage(base, `pref:${compte}`, { mpNouveau: false, mpMessage: true });
+
+  /** MP Discord à un compte de l'app (s'il a lié son Discord), dans sa langue. */
+  async function mpCompte(compte, cle, vars) {
+    const lie = await base.premier('SELECT dc.discord_user_id, c.langue FROM discord_comptes dc LEFT JOIN comptes c ON c.id = dc.compte_id WHERE dc.compte_id = ?', [compte]);
+    if (!lie) return;
+    await envoyerMp(lie.discord_user_id, { content: tx(langueDe(lie.langue), cle, vars).slice(0, 2000) });
+  }
+
+  /** Nouveau ticket : MP aux comptes qui traitent la catégorie et l'ont demandé (la cloche passe par le bus). */
+  async function alerterNouveau(ticket, cat) {
+    const comptes = [...(await comptesDeCategorie(base, ticket.categorie_id, { repondre: true }))].slice(0, 20);
+    for (const c of comptes) {
+      if (!(await preferences(c)).mpNouveau) continue;
+      await mpCompte(c, 'mp_nouveau', { numero: ticket.numero, categorie: sur(cat.nom.fr, 80), salon: `<#${ticket.salon_id}>` }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Nouveau message de l'auteur (ou d'une personne ajoutée) dans un ticket pris en charge : notification au responsable
+   * (s'il voit encore la catégorie), une seule tant qu'elle n'est pas lue ; MP s'il l'a demandé.
+   */
+  async function surNouveau(ticket, message) {
+    if (message.staff || !ticket.responsable_compte_id) return;
+    const resp = ticket.responsable_compte_id;
+    if (!(await comptesDeCategorie(base, ticket.categorie_id)).has(resp)) return;
+    const deja = await base.premier("SELECT id FROM notifications WHERE compte_id = ? AND type = 'tk-message' AND lue_le IS NULL AND charge LIKE ?", [resp, `%"ticket":"${ticket.id}"%`]);
+    if (deja) return;
+    const t = maintenant();
+    const cat = await categorie(ticket.categorie_id);
+    await base.executer(
+      'INSERT INTO notifications (id, compte_id, team_id, type, charge, cree_le, categorie, ticket_categorie_id) VALUES (?, ?, NULL, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
+      [`${message.id}:${resp}`, resp, 'tk-message', JSON.stringify({ numero: Number(ticket.numero), ticket: ticket.id, categorie: ticket.categorie_id, nom: cat?.nom.fr ?? null }), iso(t), 'tickets', ticket.categorie_id],
+    );
+    await publierEnBase(base, { sujet: `compte:${resp}`, action: 'cree' }, t).catch(() => undefined);
+    if ((await preferences(resp)).mpMessage) await mpCompte(resp, 'mp_message', { numero: ticket.numero, auteur: sur(message.auteurNom, 80), salon: `<#${ticket.salon_id}>` }).catch(() => undefined);
+  }
+
   /** Message reçu d'un compte Discord lié à un compte de l'app qui répond aux tickets de cette catégorie : du staff. */
   async function estStaffCompte(discordId, categorieId) {
     const lie = await base.premier('SELECT compte_id, super_admin FROM discord_comptes WHERE discord_user_id = ?', [discordId]);
@@ -515,7 +557,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
   }
 
   /** Rappels pour la Gateway (superviseur) et la relecture : staff reconnu par son compte lié, salon supprimé. */
-  const contexteIngestion = { surSalonSupprime: salonSupprime, estStaffCompte };
+  const contexteIngestion = { surSalonSupprime: salonSupprime, estStaffCompte, surNouveau };
 
   return {
     verifierOuverture,
@@ -545,6 +587,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     contexte,
     contexteIngestion,
     estStaffCompte,
+    surNouveau,
     piecesEffacees,
     botId,
     lienApp,

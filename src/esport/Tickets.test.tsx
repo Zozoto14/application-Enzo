@@ -12,7 +12,8 @@ import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
 import { navEsport, navMobile } from './ui/CadreEsport';
 import { ConfigTickets } from './ui/tickets/ConfigTickets';
-import type { Categorie, ChargeDiscord, ConfigTickets as Config, Panneau } from './tickets/api';
+import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, Panneau, ResumeTicket } from './tickets/api';
+import { ListeTickets } from './ui/tickets/TicketsStaff';
 
 const theme = themeHub('nuit');
 afterEach(() => definirLangue('fr'));
@@ -125,4 +126,65 @@ test('navigation : entrée « Tickets » selon le droit ; téléphone : cinq ent
   expect(m.barre.map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets', 'plus']);
   expect(m.plus.map(n => n.cle)).toEqual(['jeux', 'statistiques']);
   expect(navMobile(true, true, false).plus).toEqual([]);
+});
+
+// ------------------------------------------------------------------ Étape 3 : tickets dans l'app
+
+const CAT = { id: 'cat1', nom: { fr: 'Recrutement', en: 'Recruitment' }, couleur: '#22aa66', icone: 'membres', actif: true };
+const resumeTk = (numero: number, nonLu: boolean): ResumeTicket => ({ id: `00000000-0000-0000-0000-00000000000${numero}`, numero, categorie: CAT, statut: 'ouvert', priorite: 'urgent', auteur: { discordId: '8001', nom: 'Léa', compte: null }, responsable: null, ouvertLe: '2026-11-04T10:00:00.000Z', derniereActivite: '2026-11-04T10:05:00.000Z', fermeLe: null, note: null, nonLu });
+
+function fauxClientTickets() {
+  const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
+  const detail = (): DetailTicket => ({
+    ...resumeTk(1, false),
+    nonLuDepuis: null,
+    salon: { id: '7001', nom: 'ticket-0001-lea', supprime: false },
+    reponses: [{ id: 'rang', libelle: { fr: 'Ton rang', en: 'Your rank' }, valeur: 'Diamant 2' }],
+    raison: null,
+    noteCommentaire: null,
+    liaison: { type: 'aucune' },
+    liaisonCategorie: { type: 'aucune' },
+    purge: false,
+    membres: [],
+    messages: [
+      { id: 'm1', genre: 'discord', auteur: { nom: 'Léa', discordId: '8001', compte: null }, staff: false, contenu: 'Bonjour, je postule', envoi: 'ok', le: '2026-11-04T10:01:00.000Z', modifieLe: null, supprimeLe: null, pieces: [] },
+      { id: 'm2', genre: 'note', auteur: { nom: 'Kai', discordId: null, compte: 'kai' }, staff: true, contenu: 'À vérifier', envoi: 'ok', le: '2026-11-04T10:02:00.000Z', modifieLe: null, supprimeLe: null, pieces: [] },
+    ],
+    droits: { repondre: true, gerer: false },
+  });
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    appels.push({ chemin, methode, corps });
+    if (chemin.startsWith('/tickets?')) return { tickets: [resumeTk(1, true), resumeTk(2, false)], categories: [CAT], droits: { repondre: true, gerer: false, configurer: false } };
+    if (chemin === '/tickets/preferences') return { mpNouveau: false, mpMessage: true };
+    if (/\/tickets\/[^/]+$/.test(chemin)) return detail();
+    if (chemin.endsWith('/lu')) return { ok: true };
+    if (chemin.endsWith('/notes') || chemin.endsWith('/messages') || chemin.endsWith('/prendre')) return detail();
+    throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
+  };
+  return { client: { requete } as unknown as ClientEsport, appels };
+}
+
+test('liste : non lus marqués ; vue : conversation, note interne distinguée, réponse et note envoyées aux bonnes routes', async () => {
+  const { client, appels } = fauxClientTickets();
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await screen.findByTestId('esport-tk-ticket-1');
+  expect(screen.getByTestId('esport-tk-ticket-1-non-lu')).toBeTruthy();
+  expect(screen.queryByTestId('esport-tk-ticket-2-non-lu')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue');
+  expect(screen.getByText('Diamant 2')).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-msg-m2-note')).toBeTruthy();
+  expect(appels.some(a => a.chemin.endsWith('/lu') && a.methode === 'POST')).toBe(true);
+  await fireEvent.changeText(screen.getByTestId('esport-tk-message'), 'Bienvenue !');
+  await fireEvent.press(screen.getByTestId('esport-tk-envoyer'));
+  await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/messages') && a.methode === 'POST')).toBe(true));
+  expect((appels.find(a => a.chemin.endsWith('/messages'))!.corps as { texte: string }).texte).toBe('Bienvenue !');
+  await fireEvent(screen.getByTestId('esport-tk-mode-note'), 'valueChange', true);
+  await fireEvent.changeText(screen.getByTestId('esport-tk-message'), 'Note privée');
+  await fireEvent.press(screen.getByTestId('esport-tk-envoyer'));
+  await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/notes'))).toBe(true));
+  expect(appels.filter(a => a.chemin.endsWith('/messages')).length).toBe(1);
+  // Pas de droit de gestion : ni assignation ni transcript.
+  expect(screen.queryByTestId('esport-tk-vue-assigner-kai')).toBeNull();
+  expect(screen.queryByTestId('esport-tk-transcript')).toBeNull();
 });

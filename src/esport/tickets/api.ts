@@ -154,6 +154,107 @@ export interface ChargeDiscord {
   components: Array<{ type: number; components: Array<{ type: number; style?: number; label?: string; custom_id?: string; placeholder?: string; options?: Array<{ label: string; value: string; description?: string }> }> }>;
 }
 
+export interface CategorieCourte {
+  id: string;
+  nom: DeuxLangues;
+  couleur: string;
+  icone: string;
+  actif: boolean;
+}
+
+export interface ResumeTicket {
+  id: string;
+  numero: number;
+  categorie: CategorieCourte;
+  statut: Statut;
+  priorite: Priorite;
+  auteur: { discordId: string; nom: string; compte: string | null };
+  responsable: { nom: string; compte: string | null; discordId: string | null; moi: boolean } | null;
+  ouvertLe: string;
+  derniereActivite: string;
+  fermeLe: string | null;
+  note: number | null;
+  nonLu: boolean;
+}
+
+export interface PieceTicket {
+  id: string;
+  nom: string;
+  type: string;
+  taille: number;
+  copiee: boolean;
+  url: string | null;
+}
+
+export interface MessageTicket {
+  id: string;
+  genre: 'discord' | 'app' | 'note' | 'systeme';
+  auteur: { nom: string; discordId: string | null; compte: string | null };
+  staff: boolean;
+  contenu: string;
+  envoi: 'ok' | 'attente' | 'echec';
+  le: string;
+  modifieLe: string | null;
+  supprimeLe: string | null;
+  pieces: PieceTicket[];
+}
+
+export interface Liaison {
+  type: TypeLiaison;
+  id?: string;
+  titre?: string;
+  tableauId?: string;
+  compte?: string;
+}
+
+export interface DetailTicket extends ResumeTicket {
+  nonLuDepuis: string | null;
+  salon: { id: string; nom: string; supprime: boolean } | null;
+  reponses: Array<{ id: string; libelle: DeuxLangues; valeur: string }>;
+  raison: string | null;
+  noteCommentaire: string | null;
+  liaison: Liaison;
+  liaisonCategorie: { type: TypeLiaison; tableauId?: string };
+  purge: boolean;
+  membres: Array<{ discordId: string; nom: string; depuis: string }>;
+  messages: MessageTicket[];
+  droits: { repondre: boolean; gerer: boolean };
+}
+
+export interface FiltresTickets {
+  statut?: string;
+  categorie?: string;
+  priorite?: string;
+  responsable?: string;
+  auteur?: string;
+  du?: string;
+  au?: string;
+  q?: string;
+}
+
+export interface BlocStats {
+  crees: number;
+  fermes: number;
+  premiereReponseMs: number | null;
+  resolutionMs: number | null;
+  satisfaction: number | null;
+  notes: number;
+}
+export interface StatsTickets {
+  du: string;
+  au: string;
+  total: BlocStats & { ouverts: number };
+  parCategorie: Array<BlocStats & { categorie: CategorieCourte; ouverts: number }>;
+  parResponsable: Array<BlocStats & { nom: string; compte: string | null }>;
+}
+
+/** Pièce jointe envoyée depuis l'appareil (contenu en base64, 8 Mo au plus). */
+export interface PieceEnvoyee {
+  nom: string;
+  type: string;
+  base64: string;
+}
+
 export function apiTickets(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) => client.requete<T>(chemin, methode, corps);
   return {
@@ -176,7 +277,20 @@ export function apiTickets(client: ClientEsport) {
     publierPanneau: (id: string) => r<Panneau>(`/tickets/config/panneaux/${encodeURIComponent(id)}/publier`, 'POST'),
     ajouterListeNoire: (c: { discordId: string; nom?: string; raison?: string }) => r<{ ok: true }>('/tickets/config/liste-noire', 'POST', c),
     retirerListeNoire: (id: string) => r<{ ok: true }>(`/tickets/config/liste-noire/${encodeURIComponent(id)}`, 'DELETE'),
-    url: requeteUrl,
+    liste: (f: FiltresTickets = {}) => r<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; droits: { repondre: boolean; gerer: boolean; configurer: boolean } }>(`/tickets${requeteUrl({ ...f })}`),
+    compteur: () => r<{ nonLus: number; ouverts?: number }>('/tickets/compteur'),
+    detail: (id: string) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}`),
+    lu: (id: string) => r<{ ok: true }>(`/tickets/${encodeURIComponent(id)}/lu`, 'POST'),
+    repondre: (id: string, c: { texte: string; pieces?: PieceEnvoyee[]; drive?: string[] }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/messages`, 'POST', c),
+    noter: (id: string, texte: string) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/notes`, 'POST', { texte }),
+    action: (id: string, action: string, corps: Record<string, unknown> = {}) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/${action}`, 'POST', corps),
+    assignables: (id: string) => r<{ comptes: Array<{ compte: string; pseudo: string | null }> }>(`/tickets/${encodeURIComponent(id)}/assignables`),
+    transcript: (id: string) => r<{ nom: string; contenu: string; type: string }>(`/tickets/${encodeURIComponent(id)}/transcript`),
+    lienPiece: (id: string, piece: string, telecharger = false) => r<{ url: string; expire: number }>(`/tickets/${encodeURIComponent(id)}/pieces/${encodeURIComponent(piece)}/lien${requeteUrl({ telecharger: telecharger ? '1' : undefined })}`, 'POST'),
+    lier: (id: string, c: { type: TypeLiaison; id?: string; nom?: string; tableauId?: string }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/liaison`, 'POST', c),
+    stats: (p: { du?: string; au?: string } = {}) => r<StatsTickets>(`/tickets/stats${requeteUrl({ ...p })}`),
+    preferences: () => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences'),
+    changerPreferences: (c: { mpNouveau: boolean; mpMessage: boolean }) => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences', 'PUT', c),
   };
 }
 export type ApiTickets = ReturnType<typeof apiTickets>;

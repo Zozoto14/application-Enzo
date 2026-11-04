@@ -71,7 +71,8 @@ import { servicesCentre } from './notifications/centre.mjs';
 import { routesNotifications } from './notifications/routes.mjs';
 import { servicesTempsReel } from './temps-reel/service.mjs';
 import { servicesConfigTickets } from './tickets/service.mjs';
-import { routesTickets } from './tickets/routes.mjs';
+import { routePieceTicket, routesTickets } from './tickets/routes.mjs';
+import { servicesVueTickets } from './tickets/vue.mjs';
 import { creerBotTickets } from './tickets/bot.mjs';
 import { servicesCycleTickets } from './tickets/cycle.mjs';
 import { servicesRgpdTickets } from './tickets/rgpd.mjs';
@@ -231,7 +232,19 @@ export function creerApi({
   // est tenue par le serveur Node (tickets/superviseur.mjs), jamais par l'API elle-même.
   const cycleTickets = servicesCycleTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, lienApp });
   const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive }), cycle: cycleTickets, rgpd: servicesRgpdTickets({ base, maintenant, contexteTickets, evenement }) };
-  const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets });
+  // Tickets dans l'app : liste, conversation, réponse (le bot poste), notes internes, liaisons (avec les droits de l'acteur).
+  tk.vue = servicesVueTickets({
+    base,
+    maintenant,
+    stockage,
+    cycle: cycleTickets,
+    cleSession,
+    drive: cm.drive,
+    fetch: envoiDiscord,
+    jetonBot,
+    liaisons: { creerProspect: (a, c) => sp.creerProspect(a, c), prospect: (a, id) => sp.prospect(a, id), creerCarte: (a, t, c) => cm.tableaux.creerCarte(a, t, c), carte: (a, id) => cm.tableaux.carte(a, id) },
+  });
+  const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets, config: tk.config });
   const bot = creerBot({
     base,
     maintenant,
@@ -299,6 +312,8 @@ export function creerApi({
     if (chemin.startsWith('/cm/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierCm(cm, url, requete);
     if ((chemin.startsWith('/cm/drive/contenu/') || chemin.startsWith('/cm/drive/zip/')) && (m === 'GET' || m === 'HEAD')) return routeDriveSignee(cm.drive, url, requete);
     if (chemin.startsWith('/cm/liens/contenu/') && (m === 'GET' || m === 'HEAD')) return routeRessourceSignee(cm, url, requete);
+    // Pièce jointe d'un ticket Discord (migration 0054) : lien signé, accès au ticket revérifié.
+    if (chemin.startsWith('/tickets/pieces/') && (m === 'GET' || m === 'HEAD')) return routePieceTicket(tk, url, requete);
     // Abonnement iCal aux réunions de l'équipe CM (migration 0039) : jeton révocable, sans session.
     const icalReunions = await routePubliqueReunions(cm.reunions, { chemin, methode: m, url });
     if (icalReunions !== undefined) return icalReunions;

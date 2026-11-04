@@ -116,6 +116,8 @@ const GENRES_LIEN = {
   // Fichier d'une ressource de DATA › Ressources (migration 0051) : `<ressource>.<version>`, visibilité de la ressource
   // ET accès au fichier source revérifiés à chaque lecture.
   ressource: { signature: 'cm-ressource', chemin: '/cm/liens/contenu/' },
+  // Pièce jointe d'un ticket Discord (migration 0054) : accès au ticket revérifié à chaque lecture.
+  ticket: { signature: 'ticket-piece', chemin: '/tickets/pieces/' },
 };
 
 /** Chemin signé `/fichiers/<id>?c=<compte>&exp=<ms>&sig=…` (à préfixer par l'adresse du serveur). */

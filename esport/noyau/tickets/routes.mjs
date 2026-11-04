@@ -11,6 +11,12 @@
  *   GET           /tickets/config/panneaux/:id/apercu ; POST …/:id/publier
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
  *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
+ *   GET           /tickets?statut&categorie&priorite&responsable&auteur&du&au&q ; /tickets/compteur ; /tickets/stats
+ *   GET|PUT       /tickets/preferences (MP Discord)
+ *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript
+ *   POST          /tickets/:id/(lu|messages|notes|liaison) ; /tickets/:id/pieces/:piece/lien
+ *   POST          /tickets/:id/(prendre|liberer|attente|statut|priorite|fermer|rouvrir|assigner|categorie|ajouter|retirer)
+ *   GET           /tickets/pieces/:piece?c&exp&sig  (lien signé, sans session)
  */
 
 const segment = s => {
@@ -21,7 +27,18 @@ const segment = s => {
   }
 };
 
-export async function routesTickets({ tk, acteur, chemin, methode: m, lireCorps, limite }) {
+const MOTIF_ID = /^[0-9a-f-]{36}$/;
+/** Réponse depuis l'app : jusqu'à 3 pièces jointes (5 Mo en tout) encodées en base64 dans le JSON. */
+const TAILLE_REPONSE = 7 * 1024 * 1024 + 64 * 1024;
+
+/** Pièce jointe d'un ticket par lien signé (sans session ; l'accès au ticket est revérifié). */
+export async function routePieceTicket(tk, url, requete) {
+  const p = /^\/tickets\/pieces\/([^/]+)$/.exec(url.pathname.replace(/^\/api\/esport(?=\/|$)/, ''));
+  if (!p) return undefined;
+  return tk.vue.servirPiece(p[1], url.searchParams, requete);
+}
+
+export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireCorps, limite }) {
   if (chemin !== '/tickets' && !chemin.startsWith('/tickets/')) return undefined;
   const p = chemin.split('/').slice(2).map(segment);
   const n = p.length;
@@ -30,6 +47,35 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, lireCorps,
 
   if (n === 1 && a === 'moi' && m === 'GET') return cf.moi(acteur);
   if (n === 1 && a === 'etat' && m === 'GET') return cf.etat(acteur);
+  const v = tk.vue;
+  const q = url.searchParams;
+  if (n === 0 && m === 'GET') return v.liste(acteur, Object.fromEntries(['statut', 'categorie', 'priorite', 'responsable', 'auteur', 'du', 'au', 'q'].map(k => [k, q.get(k) || undefined])));
+  if (n === 1 && a === 'compteur' && m === 'GET') return v.compteur(acteur);
+  if (n === 1 && a === 'stats' && m === 'GET') return v.stats(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined });
+  if (n === 1 && a === 'preferences') {
+    if (m === 'GET') return v.preferences(acteur);
+    if (m === 'PUT') return v.changerPreferences(acteur, await lireCorps());
+  }
+  if (MOTIF_ID.test(a ?? '')) {
+    if (n === 1 && m === 'GET') return v.detail(acteur, a);
+    if (n === 2 && b === 'lu' && m === 'POST') return v.marquerLu(acteur, a);
+    if (n === 2 && b === 'messages' && m === 'POST') {
+      await limite('tickets_reponse', acteur.compte);
+      return v.repondre(acteur, a, await lireCorps(TAILLE_REPONSE));
+    }
+    if (n === 2 && b === 'notes' && m === 'POST') return v.noter(acteur, a, await lireCorps());
+    if (n === 2 && b === 'liaison' && m === 'POST') return v.lier(acteur, a, await lireCorps());
+    if (n === 2 && b === 'assignables' && m === 'GET') return v.assignables(acteur, a);
+    if (n === 2 && b === 'transcript' && m === 'GET') {
+      await limite('export', acteur.compte);
+      return v.transcript(acteur, a, { langue: acteur.langue });
+    }
+    if (n === 4 && b === 'pieces' && d === 'lien' && m === 'POST') {
+      const lien = await v.lienPiece(acteur, a, c, { telecharger: q.get('telecharger') === '1' });
+      return { url: `${url.origin}${url.pathname.startsWith('/api/esport') ? '/api/esport' : ''}${lien.chemin}`, expire: lien.expire };
+    }
+    if (n === 2 && m === 'POST') return v.action(acteur, a, b, await lireCorps());
+  }
 
   // RGPD d'une personne sans compte (Discord ID) : le Fondateur seul.
   if (n === 2 && a === 'rgpd' && m === 'POST') {

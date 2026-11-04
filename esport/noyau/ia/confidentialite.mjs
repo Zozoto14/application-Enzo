@@ -4,7 +4,7 @@
  *
  * Une tâche CONFIDENTIELLE (contenu des réunions : audio, transcription brute, texte relu, résumés, PDF ; notes des
  * réunions de l'équipe CM — ordre du jour, compte rendu, tâches de suivi ; notes du
- * staff et suivi des joueurs ; strats) ne part JAMAIS chez un service externe (moteurs « api » et « api2 », API audio
+ * staff et suivi des joueurs ; strats ; tickets Discord) ne part JAMAIS chez un service externe (moteurs « api » et « api2 », API audio
  * de transcription) : seule l'IA LOCALE du serveur peut la faire, quels que soient IA_ORDRE, IA_ORDRE_LEGER, l'ordre
  * choisi dans l'Administration IA ou un moteur imposé par l'appelant. Si l'IA locale est indisponible, la tâche
  * n'est pas faite (la transcription reste brute, nettoyée sans IA).
@@ -24,6 +24,8 @@ export const TACHES_CONFIDENTIELLES = {
   resumes: 'Résumés de réunion (texte, PDF)',
   suivi: 'Notes du staff et suivi des joueurs',
   strats: 'Strats et playbook',
+  // Tickets Discord (migration 0054) : aucune fonction des tickets n'appelle l'IA ; si l'une le faisait, IA locale seule.
+  tickets: 'Tickets Discord (conversations, notes internes, transcripts)',
 };
 
 /** Tâches qui peuvent partir chez le fournisseur d'API (aucune donnée de réunion). */
@@ -60,8 +62,11 @@ const ALIAS_CONFIDENTIELS = {
   strats: 'strats',
   strat: 'strats',
   playbook: 'strats',
+  tickets: 'tickets',
+  ticket: 'tickets',
+  transcript: 'tickets',
 };
-const MOTIF_CONFIDENTIEL = /(transcri|reunion|r[ée]sum|meeting|suivi|staff|strat|playbook|correction|relecture)/i;
+const MOTIF_CONFIDENTIEL = /(transcri|reunion|r[ée]sum|meeting|suivi|staff|strat|playbook|correction|relecture|ticket)/i;
 
 /** Tâche confidentielle (clé de TACHES_CONFIDENTIELLES) d'un nom de tâche, ou null si elle peut partir à l'extérieur. */
 export function tacheConfidentielle(tache) {
@@ -70,7 +75,7 @@ export function tacheConfidentielle(tache) {
     .toLowerCase();
   if (ALIAS_CONFIDENTIELS[t]) return ALIAS_CONFIDENTIELS[t];
   // Nom inconnu qui ressemble à une donnée de réunion / staff : confidentiel par prudence (relecture).
-  if (MOTIF_CONFIDENTIEL.test(t)) return /strat|playbook/i.test(t) ? 'strats' : /suivi|staff/i.test(t) ? 'suivi' : /transcri|correction|relecture/i.test(t) ? 'correction' : 'resumes';
+  if (MOTIF_CONFIDENTIEL.test(t)) return /ticket/i.test(t) ? 'tickets' : /strat|playbook/i.test(t) ? 'strats' : /suivi|staff/i.test(t) ? 'suivi' : /transcri|correction|relecture/i.test(t) ? 'correction' : 'resumes';
   return null;
 }
 

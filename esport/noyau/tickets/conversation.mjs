@@ -17,6 +17,7 @@ import { publierEnBase } from '../temps-reel/diffusion.mjs';
 
 const HOTES_CDN = new Set(['cdn.discordapp.com', 'media.discordapp.net']);
 const TYPES_MESSAGE = new Set([0, 19, 20]);
+const TYPES_SURS = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain|video\/(mp4|webm|quicktime)|audio\/(mpeg|ogg|wav|webm|mp4)|application\/zip)$/;
 export const PIECES_MAX_PAR_MESSAGE = 10;
 
 /** Comparaison de deux identifiants Discord (snowflakes) : plus grand = plus récent. */
@@ -46,7 +47,10 @@ export async function preparerPiece({ ticketId, messageId, piece, stockage, regl
   const id = nouvelId();
   const nom = String(piece?.filename ?? 'fichier').replace(/[^\w.\- ()[\]]+/g, '_').slice(0, 120) || 'fichier';
   const taille = Number(piece?.size) || 0;
-  const type = String(piece?.content_type ?? 'application/octet-stream').split(';')[0].slice(0, 100);
+  // Type annoncé par Discord (deviné du nom, donc choisi par l'expéditeur) : seuls des types sans danger sont gardés ;
+  // tout le reste est servi comme un fichier à télécharger (jamais une page qui s'exécuterait).
+  const annonce = String(piece?.content_type ?? '').split(';')[0].trim().toLowerCase();
+  const type = TYPES_SURS.test(annonce) ? annonce : 'application/octet-stream';
   let url = null;
   try {
     const u = new URL(String(piece?.url ?? ''));

@@ -35,6 +35,7 @@ import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
 import { EspaceCm, Jeux, PageDevblog, PageTickets, Statistiques } from './differe';
 import { apiTickets, type MoiTickets } from '../tickets/api';
+import { useCompteurTickets } from '../tickets/compteur';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
 import { useNouveautesDrive } from '../cm/nouveautesDrive';
 import type { OngletCm } from './cm/EspaceCm';
@@ -129,6 +130,8 @@ export function Esport(props: PropsRacineApp) {
     };
   }, [clientPret, profilPret]);
   const tickets = Boolean(moiTickets?.voir || moiTickets?.configurer);
+  // Compteur de la navigation : tickets ouverts avec du nouveau (temps réel, et relecture lente de secours).
+  const nonLusTickets = useCompteurTickets(moiTickets?.voir ? clientPret : undefined);
   const cm = Boolean(moiCm?.espace);
   // Fenêtre « Nouveautés » : le dernier devblog publié pas encore vu par ce compte (une fois, marque en base).
   const nouveautes = useNouveautes(clientPret, profilPret);
@@ -243,7 +246,7 @@ export function Esport(props: PropsRacineApp) {
       );
     } else if (vue.v === 'tickets' && tickets && moiTickets) {
       // Tickets Discord : liste, conversation, configuration (selon les permissions, contrôlées par le serveur).
-      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} />;
+      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} />;
     } else if (vue.v === 'plus') {
       // Téléphone : les entrées de navigation qui ne tiennent pas dans la barre du bas.
       page = (
@@ -324,6 +327,7 @@ export function Esport(props: PropsRacineApp) {
         fondateur={stats}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
         tickets={tickets}
+        compteurs={{ tickets: nonLusTickets }}
         notifications={{ n: notifs.nonLues, actif: vue.v === 'notifications', onPress: () => setVue({ v: 'notifications' }) }}>
         {page}
       </CadreEsport>
