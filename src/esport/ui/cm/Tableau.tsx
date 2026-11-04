@@ -24,12 +24,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { Icone } from '../../../ui/icones';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { PORTEE_CLUB, type ApiCm, type CarteResume, type DetailTableau, type FondTableau, type ListeCm, type SaisieFond, type StatutPost, type TeamCm, type Urgence } from '../../cm/api';
-import { compterUrgences, couleurUrgence, fondCarteUrgence, melanger, NIVEAUX_URGENCE, trierParUrgence } from '../../cm/urgence';
+import { compterUrgences, couleurUrgence, fondCarteUrgence, melanger, NIVEAUX_URGENCE } from '../../cm/urgence';
+import { trierCartes, triAutomatique } from '../../cm/tri';
 import { colonnesAProposer, enRetard, nomColonneDeFin } from '../../cm/colonneFin';
 import { FONDS_COULEURS, FONDS_DEGRADES, styleFond } from '../../cm/fonds';
 import { minuscules } from '../../i18n';
@@ -41,7 +42,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { trDr } from '../../i18n/drive';
 import { ChoixDrive } from './drive/ChoixDrive';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand, signalerEtatCm } from './commun';
-import { BandeUrgence, CompteurUrgence, Drapeau, LegendeUrgence, PastilleUrgence, SelecteurUrgence, libelleUrgence } from './Drapeau';
+import { BandeUrgence, CompteurUrgence, Drapeau, LegendeUrgence, PastilleUrgence, SelecteurUrgence, libelleUrgence, useMouvementReduit } from './Drapeau';
 import { FicheCarte } from './FicheCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
 import { AccesTableau } from './AccesTableau';
@@ -81,6 +82,8 @@ interface GlisseListe {
 }
 interface Glisse {
   carteId: string;
+  /** Colonne d'où part la carte (en tri automatique, la déposer dans la même colonne n'a aucun sens). */
+  listeId: string;
   pret: boolean;
   conteneur: Rect;
   carte: Rect;
@@ -120,6 +123,16 @@ export function carteAInfos(c: CarteResume): boolean {
   return Boolean(
     c.post || c.reseaux.length || c.datePublication || c.echeance || c.description || c.commentaires || c.checklist.total || c.pieces || c.membres.length || c.origine === 'depot' || c.origine === 'suggestion',
   );
+}
+
+/**
+ * Que devient une carte déposée dans une colonne ? En tri automatique, le réordonnancement DANS la colonne est désactivé
+ * ('bloque') ; venant d'une autre colonne, la carte rejoint la colonne ('fin' : sa position manuelle est sans effet sur
+ * l'affichage, elle prend sa place triée). En ordre manuel : à l'endroit du dépôt ('libre').
+ */
+export function regleDepot(colonneAuto: boolean, listeSource: string, listeCible: string): 'libre' | 'fin' | 'bloque' {
+  if (!colonneAuto) return 'libre';
+  return listeSource === listeCible ? 'bloque' : 'fin';
 }
 
 type Vue = React.ComponentRef<typeof View>;
@@ -295,34 +308,27 @@ export function Tableau({
     for (const l of m.values()) l.sort((a, b) => a.position - b.position);
     return m;
   }, [d]);
-  // Colonnes triées par urgence (choix du compte, mémorisé en base) : vue seulement, l'ordre de la colonne n'est pas modifié.
-  const clePreferenceTri = `tableau.${id}.tri_urgence`;
-  const [triees, setTriees] = useState<string[]>([]);
-  useEffect(() => {
-    let vivant = true;
-    api
-      .preferences()
-      .then(p => {
-        const v = p?.preferences?.[clePreferenceTri];
-        if (vivant && Array.isArray(v)) setTriees(v.filter((x): x is string => typeof x === 'string'));
-      })
-      .catch(() => undefined);
-    return () => {
-      vivant = false;
-    };
-  }, [api, clePreferenceTri]);
-  const basculerTri = (listeId: string) => {
-    const suivantes = triees.includes(listeId) ? triees.filter(x => x !== listeId) : [...triees, listeId];
-    setTriees(suivantes);
-    void api.changerPreference(clePreferenceTri, suivantes.length ? suivantes : null).catch(() => undefined);
-  };
+  // Tri des cartes (migration 0052) : choix PAR COLONNE, stocké côté serveur, visible de tous. Automatique : urgence puis
+  // échéance (src/esport/cm/tri.ts) ; manuel : ordre des positions. Vue seulement, les positions ne sont pas modifiées.
+  const autos = useMemo(() => new Set((d?.listes ?? []).filter(l => triAutomatique(l)).map(l => l.id)), [d]);
+  const autosRef = useRef<Set<string>>(new Set());
+  autosRef.current = autos;
   const visibles = useCallback(
     (listeId: string) => {
       const vues = (parListe.get(listeId) ?? []).filter(c => carteVisible(c, filtres, maintenant, d?.noms ?? {}));
-      return triees.includes(listeId) ? trierParUrgence(vues) : vues;
+      return autos.has(listeId) ? trierCartes(vues) : vues;
     },
-    [parListe, filtres, maintenant, d, triees],
+    [parListe, filtres, maintenant, d, autos],
   );
+  const choisirTri = (l: ListeCm, tri: 'auto' | 'manuel') => {
+    if ((tri === 'auto') === autos.has(l.id)) return;
+    setD(cur => (cur ? { ...cur, listes: cur.listes.map(x => (x.id === l.id ? { ...x, tri } : x)) } : cur));
+    setAnnonce(trCm(tri === 'auto' ? 'tri.annonce_auto' : 'tri.annonce_manuel', { nom: nomListe(l) }));
+    void agir('liste', async () => {
+      await api.modifierListe(l.id, { tri });
+      await recharger();
+    });
+  };
   /** Cartes critiques / urgentes d'une colonne (archivées exclues), pour son en-tête. */
   const urgencesListe = (listeId: string) => compterUrgences(parListe.get(listeId) ?? []);
   const listes = useMemo(() => d?.listes ?? [], [d]);
@@ -356,7 +362,7 @@ export function Tableau({
       const conteneurRect = await mesurer(conteneur.current);
       const carteRect = await mesurer(refsCartes.current.get(carte.id));
       if (!conteneurRect || !carteRect) return;
-      const g: Glisse = { carteId: carte.id, pret: false, conteneur: conteneurRect, carte: carteRect, decalage: { x: px - carteRect.x, y: py - carteRect.y }, scrollDepart: scrollX.current, scrollColonnes: new Map(scrollColonnes.current), listes: [], cartes: new Map() };
+      const g: Glisse = { carteId: carte.id, listeId: carte.listeId, pret: false, conteneur: conteneurRect, carte: carteRect, decalage: { x: px - carteRect.x, y: py - carteRect.y }, scrollDepart: scrollX.current, scrollColonnes: new Map(scrollColonnes.current), listes: [], cartes: new Map() };
       glisse.current = g;
       for (const l of listes) {
         if (reduites.includes(l.id)) continue;
@@ -391,6 +397,12 @@ export function Tableau({
       setCible(c => (c ? undefined : c));
       return;
     }
+    // Colonne en tri automatique : pas de réordonnancement dedans, seulement un dépôt venant d'une autre colonne.
+    if (autosRef.current.has(liste.id) && g.listeId === liste.id) {
+      cibleRef.current = undefined;
+      setCible(c => (c ? undefined : c));
+      return;
+    }
     const colonne = refsColonnes.current.get(liste.id);
     const yCol = scrollColonnes.current.get(liste.id) ?? 0;
     if (py < liste.y + BORD_DEFILEMENT) colonne?.scrollTo({ y: Math.max(0, yCol - PAS_DEFILEMENT), animated: false });
@@ -415,10 +427,13 @@ export function Tableau({
       const carte = d?.cartes.find(x => x.id === g.carteId);
       if (!carte) return;
       const toutes = (parListe.get(c.listeId) ?? []).filter(x => x.id !== carte.id && !x.archive);
+      const regle = regleDepot(autos.has(c.listeId), carte.listeId, c.listeId);
+      if (regle === 'bloque') return setAnnonce(trCm('tri.intra_bloque'));
+      if (regle === 'fin') return deplacerCarte(carte, c.listeId, toutes.length);
       const vues = visibles(c.listeId).filter(x => x.id !== carte.id);
       deplacerCarte(carte, c.listeId, indexServeur(toutes, vues, c.index));
     },
-    [d, parListe, visibles, deplacerCarte],
+    [d, parListe, visibles, deplacerCarte, autos],
   );
 
   // ---------------------------------------------------------------- Actions
@@ -455,6 +470,8 @@ export function Tableau({
       datePublication: null,
       post,
       statut: post ? 'brouillon' : null,
+      // Déposée dans une colonne de fin, la carte est terminée d'emblée : elle se range avec les terminées.
+      terminee: Boolean(listes.find(x => x.id === listeId)?.fin),
       reseaux: [],
       origine: 'manuel',
       depotGenre: null,
@@ -469,7 +486,16 @@ export function Tableau({
     }));
     for (const c of temps) pendants.current.set(c.id, c);
     setD(cur => (cur ? { ...cur, cartes: [...cur.cartes, ...temps] } : cur));
-    setTimeout(() => refsColonnes.current.get(listeId)?.scrollToEnd?.({ animated: true }), 50);
+    // La colonne défile jusqu'à la nouvelle carte : en bas en ordre manuel, à sa place triée en tri automatique.
+    setTimeout(() => {
+      const colonne = refsColonnes.current.get(listeId);
+      if (!autos.has(listeId)) return colonne?.scrollToEnd?.({ animated: true });
+      void (async () => {
+        const [rc, rcol] = await Promise.all([mesurer(refsCartes.current.get(temps[temps.length - 1].id)), mesurer(colonne as unknown as Vue)]);
+        if (rc && rcol) colonne?.scrollTo?.({ y: Math.max(0, (scrollColonnes.current.get(listeId) ?? 0) + rc.y - rcol.y - 24), animated: true });
+        else colonne?.scrollToEnd?.({ animated: true });
+      })();
+    }, 50);
     for (const c of temps) {
       fileCreation.current = fileCreation.current.then(() =>
         agir('carte', async () => {
@@ -616,8 +642,8 @@ export function Tableau({
     const li = listes.findIndex(x => x.id === l.id);
     return [
       { titre: trCm('carte.ouvrir'), onPress: () => setOuverte(c.id), testID: `esport-cm-carte-${c.id}-ouvrir` },
-      ...(i > 0 && !triees.includes(l.id) ? [{ titre: trCm('carte.monter'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i - 1)), testID: `esport-cm-carte-${c.id}-monter` }] : []),
-      ...(i < vues.length - 1 && !triees.includes(l.id) ? [{ titre: trCm('carte.descendre'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i + 1)), testID: `esport-cm-carte-${c.id}-descendre` }] : []),
+      ...(i > 0 && !autos.has(l.id) ? [{ titre: trCm('carte.monter'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i - 1)), testID: `esport-cm-carte-${c.id}-monter` }] : []),
+      ...(i < vues.length - 1 && !autos.has(l.id) ? [{ titre: trCm('carte.descendre'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i + 1)), testID: `esport-cm-carte-${c.id}-descendre` }] : []),
       ...(li > 0 ? [{ titre: trCm('carte.liste_precedente'), onPress: () => deplacerCarte(c, listes[li - 1].id, (parListe.get(listes[li - 1].id) ?? []).filter(x => !x.archive).length), testID: `esport-cm-carte-${c.id}-gauche` }] : []),
       ...(li < listes.length - 1 ? [{ titre: trCm('carte.liste_suivante'), onPress: () => deplacerCarte(c, listes[li + 1].id, (parListe.get(listes[li + 1].id) ?? []).filter(x => !x.archive).length), testID: `esport-cm-carte-${c.id}-droite` }] : []),
       { titre: trCm('carte.deplacer_vers'), onPress: () => setDeplacer(c), testID: `esport-cm-carte-${c.id}-deplacer` },
@@ -646,10 +672,19 @@ export function Tableau({
   const rang = actifs.findIndex(x => x.id === l.id);
   return [
     { titre: reduites.includes(l.id) ? trCm('liste.agrandir') : trCm('liste.reduire'), onPress: () => basculerReduite(l.id), testID: `esport-cm-liste-${l.id}-reduire-menu` },
-    { titre: triees.includes(l.id) ? trCm('urgence.tri_annuler') : trCm('urgence.tri'), onPress: () => basculerTri(l.id), testID: `esport-cm-liste-${l.id}-tri-urgence` },
     ...(d?.droits.editer
       ? [
           { titre: trCm('liste.renommer'), onPress: () => setRenommer({ id: l.id, nom: nomListe(l) }), testID: `esport-cm-liste-${l.id}-renommer` },
+          {
+            titre: autos.has(l.id) ? trCm('tri.actuel', { choix: trCm('tri.auto') }) : trCm('tri.auto'),
+            onPress: () => choisirTri(l, 'auto'),
+            testID: `esport-cm-liste-${l.id}-tri-auto`,
+          },
+          {
+            titre: autos.has(l.id) ? trCm('tri.manuel') : trCm('tri.actuel', { choix: trCm('tri.manuel') }),
+            onPress: () => choisirTri(l, 'manuel'),
+            testID: `esport-cm-liste-${l.id}-tri-manuel`,
+          },
           {
             titre: l.fin ? trCm('fin.menu_retirer') : trCm('fin.menu_marquer'),
             onPress: () => marquerFin(l, !l.fin),
@@ -754,11 +789,6 @@ export function Tableau({
                     {String(vues.length)}
                   </Text>
                   {l.fin ? <Icone nom="valide" taille={15} couleur={theme.ok} libelle={trCm('fin.icone')} testID={`esport-cm-liste-${l.id}-fin-icone`} /> : null}
-                  {triees.includes(l.id) ? (
-                    <Text accessibilityLabel={trCm('urgence.tri_actif')} style={{ color: theme.attenue, fontSize: 13, fontWeight: '800' }} testID={`esport-cm-liste-${l.id}-tri-actif`}>
-                      ⇅
-                    </Text>
-                  ) : null}
                   {urgencesListe(l.id).critique ? (
                     <CompteurUrgence theme={theme} niveau="critique" n={urgencesListe(l.id).critique} libelle={trnCm('urgence.critiques_n', urgencesListe(l.id).critique)} testID={`esport-cm-liste-${l.id}-critiques`} />
                   ) : null}
@@ -780,6 +810,16 @@ export function Tableau({
                   </Pressable>
                   <MenuActions theme={theme} compact testID={`esport-cm-liste-${l.cle ?? l.id}-menu`} libelle={trCm('liste.actions', { nom: nomListe(l) })} actions={actionsListe(l)} />
                 </View>
+                {autos.has(l.id) ? (
+                  <Text
+                    numberOfLines={1}
+                    accessibilityHint={trCm('tri.actif_aide')}
+                    style={{ ...attenue(theme, 11), paddingLeft: ESP.s + 2, paddingBottom: 2 }}
+                    testID={`esport-cm-liste-${l.id}-tri-actif`}
+                    {...({ title: trCm('tri.actif_aide') } as object)}>
+                    {trCm('tri.actif')}
+                  </Text>
+                ) : null}
                 {/* Cartes : la COLONNE défile (sa propre barre), pas la page. */}
                 <ScrollView
                   ref={r => {
@@ -797,13 +837,14 @@ export function Tableau({
                   testID={`esport-cm-liste-${l.id}-cartes`}>
                   {vues.slice(0, limite).map((c, i) => (
                     <React.Fragment key={c.id}>
-                      {cible?.listeId === l.id && cible.index === i ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
+                      {cible?.listeId === l.id && cible.index === i && !autos.has(l.id) ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
                       <View
                         ref={r => {
                           if (r) refsCartes.current.set(c.id, r);
                           else refsCartes.current.delete(c.id);
                         }}
                         style={{ opacity: fantome?.carte.id === c.id ? 0.35 : 1 }}>
+                        <PlaceCarte rang={i} actif={autos.has(l.id)}>
                         <TuileCarte
                           theme={theme}
                           carte={c}
@@ -812,12 +853,13 @@ export function Tableau({
                           maintenant={maintenant}
                           onOuvrir={() => (pendants.current.has(c.id) ? undefined : setOuverte(c.id))}
                           actions={pendants.current.has(c.id) ? [] : actionsCarte(c, l, i, vues)}
-                          glisser={d.droits.editer && !triees.includes(l.id) && !pendants.current.has(c.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
+                          glisser={d.droits.editer && !pendants.current.has(c.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
                         />
+                        </PlaceCarte>
                       </View>
                     </React.Fragment>
                   ))}
-                  {cible?.listeId === l.id && cible.index >= Math.min(vues.length, limite) ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
+                  {cible?.listeId === l.id && cible.index >= Math.min(vues.length, limite) && !autos.has(l.id) ? <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.accent }} testID="esport-cm-depot-ici" /> : null}
                   {vues.length > limite ? (
                     <BoutonHub theme={theme} titre={trCm('liste.plus', { n: vues.length - limite })} onPress={() => setLimites(x => ({ ...x, [l.id]: limite + PAR_LISTE }))} testID={`esport-cm-liste-${l.id}-plus`} />
                   ) : null}
@@ -1343,6 +1385,36 @@ function ChoixFond({ theme, api, tableau, onChoisir, onFermer, erreur }: { theme
         testID="esport-cm-fond-choix-drive"
       />
     </Volet>
+  );
+}
+
+// ------------------------------------------------------------------ Place d'une carte (animation du reclassement)
+
+/**
+ * Quand une carte change de place dans sa colonne (urgence ou échéance modifiée, ici ou par un autre membre en temps
+ * réel), elle glisse d'un cran vers sa nouvelle place avec un léger fondu. Aucune animation avec `prefers-reduced-motion`
+ * ni au premier affichage.
+ */
+function PlaceCarte({ rang, actif, children }: { rang: number; actif: boolean; children: React.ReactNode }) {
+  const reduit = useMouvementReduit();
+  const avant = useRef<number | undefined>(undefined);
+  const anim = useRef(new Animated.Value(1)).current;
+  const decalage = useRef(0);
+  useEffect(() => {
+    const prec = avant.current;
+    avant.current = rang;
+    if (!actif || reduit || prec === undefined || prec === rang) return;
+    decalage.current = prec > rang ? 16 : -16;
+    anim.setValue(0);
+    Animated.timing(anim, { toValue: 1, duration: 260, useNativeDriver: false }).start();
+  }, [rang, actif, reduit, anim]);
+  if (!actif || reduit) return <>{children}</>;
+  return (
+    <Animated.View
+      testID="esport-cm-place-carte"
+      style={{ opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }), transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [decalage.current, 0] }) }] }}>
+      {children}
+    </Animated.View>
   );
 }
 

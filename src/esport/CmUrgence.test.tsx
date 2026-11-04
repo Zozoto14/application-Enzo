@@ -1,6 +1,6 @@
 /**
  * Drapeau d'urgence des cartes CM (docs/esport/cm.md, « Urgences ») : carte compacte (drapeau sans agrandir la carte,
- * libellé accessible), compteurs d'en-tête de colonne, filtre par niveau, tri de colonne par urgence (mémorisé),
+ * libellé accessible), compteurs d'en-tête de colonne, filtre par niveau (le tri des colonnes : CmTri.test.tsx),
  * réglage par la fiche et par le menu ⋯ (permission cm.editer), notifications FR / EN, couleurs lisibles.
  */
 
@@ -11,7 +11,7 @@ import { THEMES_HUB, themeHub } from '../hub/themes';
 import { clientEsport, oublierSessions, type ClientEsport } from './client';
 import { apiCm, type CarteResume, type DetailTableau, type ReponseCarte, type Urgence } from './cm/api';
 import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
-import { barresUrgence, compterUrgences, couleurUrgence, fondCarteUrgence, jetonUrgence, NIVEAUX_URGENCE, rangUrgence, trierParUrgence } from './cm/urgence';
+import { barresUrgence, compterUrgences, couleurUrgence, fondCarteUrgence, jetonUrgence, NIVEAUX_URGENCE, rangUrgence } from './cm/urgence';
 import { contraste } from './contraste';
 import { definirLangue } from './i18n';
 import { Tableau, carteAInfos, carteVisible } from './ui/cm/Tableau';
@@ -117,9 +117,8 @@ describe('drapeau d’urgence : niveaux, couleurs, tri', () => {
     }
   });
 
-  it('tri par urgence décroissante (position conservée à égalité) et compteurs sans les archivées', () => {
+  it('compteurs sans les archivées', () => {
     const cartes = tableau().cartes;
-    expect(trierParUrgence(cartes).map(c => c.titre)).toEqual(['Carte critique', 'Critique archivée', 'Carte urgente', 'Faible chose', 'Sans drapeau']);
     expect(compterUrgences(cartes)).toEqual({ critique: 1, urgent: 1 });
   });
 
@@ -168,25 +167,6 @@ describe('drapeau d’urgence sur le tableau', () => {
     await fireEvent.press(screen.getByTestId('esport-cm-filtre-urgence-critique'));
     await fireEvent.press(screen.getByTestId('esport-cm-filtre-urgence-aucune'));
     expect(titresColonne()).toEqual(['Sans drapeau']);
-  });
-
-  it('« Trier la colonne par urgence » : ordre par niveau, choix mémorisé, plus de glisser-déposer dans la colonne', async () => {
-    const { client, appels } = serveur();
-    await render(<Tableau theme={themeHub('nuit')} api={apiCm(client)} id={T} large />);
-    await screen.findByTestId(`esport-cm-carte-${B}`);
-    expect(titresColonne().map(t => t.split(',')[0])).toEqual(['Faible chose', 'Carte critique', 'Sans drapeau', 'Carte urgente', 'Critique archivée']);
-    expect(screen.getByTestId(`esport-cm-carte-${A}-poignee`)).toBeTruthy();
-    await fireEvent.press(screen.getByTestId(`esport-cm-liste-${L1}-menu`));
-    await fireEvent.press(await screen.findByTestId(`esport-cm-liste-${L1}-tri-urgence`));
-    expect(titresColonne().map(t => t.split(',')[0])).toEqual(['Carte critique', 'Critique archivée', 'Carte urgente', 'Faible chose', 'Sans drapeau']);
-    expect(screen.getByTestId(`esport-cm-liste-${L1}-tri-actif`)).toBeTruthy();
-    expect(screen.queryByTestId(`esport-cm-carte-${A}-poignee`)).toBeNull();
-    await waitFor(() => expect(appels.some(a => a.url === `/cm/preferences/tableau.${T}.tri_urgence`)).toBe(true));
-    expect(appels.find(a => a.url === `/cm/preferences/tableau.${T}.tri_urgence`)?.corps).toEqual({ valeur: [L1] });
-    // Relu depuis les préférences du compte.
-    const relu = serveur(true, { [`tableau.${T}.tri_urgence`]: [L1] });
-    await render(<Tableau theme={themeHub('nuit')} api={apiCm(relu.client)} id={T} large testID="tableau-relu" />);
-    await waitFor(() => expect(within(screen.getByTestId('tableau-relu')).getByTestId(`esport-cm-liste-${L1}-tri-actif`)).toBeTruthy());
   });
 
   it('menu ⋯ de la carte : « Urgence… » règle le drapeau (PATCH urgence) ; absent sans droit d’édition', async () => {

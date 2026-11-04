@@ -10,7 +10,7 @@
  *   GET|PATCH|DELETE  /cm/tableaux/:id                           tableau complet (?archives=1) ; modifier ; supprimer
  *   POST              /cm/tableaux/:id/(listes|etiquettes|cartes) créer une liste, une étiquette, une carte
  *   POST              /cm/tableaux/:id/tout-vu                   « Tout marquer comme lu » (commentaires, migration 0044)
- *   PATCH             /cm/listes/:id { nom, archive, fin, finIgnoree } ; POST …/deplacer { index }
+ *   PATCH             /cm/listes/:id { nom, archive, fin, finIgnoree, tri } ; POST …/deplacer { index }
  *   PUT               /cm/tableaux/:id/etiquettes/ordre { ids }  réordonner les étiquettes (cm.editer)
  *   PATCH|DELETE      /cm/etiquettes/:id ; POST …/fusionner { vers }   modifier (cm.editer) ; supprimer définitivement, fusionner (cm.gerer)
  *   GET|PATCH|DELETE  /cm/cartes/:id                             (GET ?vu=1 : fiche ouverte, commentaires marqués lus)

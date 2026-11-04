@@ -65,8 +65,3 @@ export function compterUrgences(cartes: Array<Pick<CarteResume, 'urgence' | 'arc
   for (const c of cartes) if (!c.archive && !c.terminee && estAlerte(c.urgence)) r[c.urgence as 'critique' | 'urgent']++;
   return r;
 }
-
-/** Tri d'une colonne par urgence décroissante ; à urgence égale, l'ordre de la colonne (position) est conservé. */
-export function trierParUrgence<T extends { urgence?: Urgence | null; position: number }>(cartes: T[]): T[] {
-  return [...cartes].sort((a, b) => rangUrgence(b.urgence) - rangUrgence(a.urgence) || a.position - b.position);
-}

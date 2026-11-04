@@ -72,7 +72,7 @@ const ECART_MIN = 1e-6;
  */
 export const FONDS_COULEURS = Object.freeze(['bleu', 'vert', 'orange', 'rouge', 'violet', 'rose', 'ciel', 'gris']);
 export const FONDS_DEGRADES = Object.freeze(['aurore', 'ocean', 'foret', 'crepuscule', 'neon', 'nuit']);
-const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.(reduites|tri_urgence)|calendrier\.teams)$/;
+const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.(reduites)|calendrier\.teams)$/;
 const PREFERENCE_MAX = 4000;
 
 // ------------------------------------------------------------------ Outils purs
@@ -104,6 +104,12 @@ const lireCouleur = (v, repli = '#5b8cff') => {
 const lireFin = v => {
   if (v === undefined || v === null) return false;
   if (typeof v !== 'boolean') throw echec(400, 'fin', 'Colonne de fin illisible.');
+  return v;
+};
+
+/** Tri des cartes d'une colonne (migration 0052) : 'auto' (urgence puis échéance) ou 'manuel'. */
+const lireTri = v => {
+  if (v !== 'auto' && v !== 'manuel') throw echec(400, 'tri', 'Tri de colonne illisible (auto ou manuel).');
   return v;
 };
 
@@ -614,7 +620,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       tableau: tableauPublic(tb, noms, { fond: fondPublic(tb, await imageFond(tb, acteur, origine)) }),
       droits: { ...droitsDe(ctx), acces: peutGererAcces(ctx, tb) },
       moi: acteur.compte,
-      listes: listes.map(l => ({ id: l.id, nom: l.nom ?? null, cle: l.cle ?? null, position: Number(l.position), archive: Boolean(l.archive_le), fin: Number(l.fin) === 1, finIgnoree: Number(l.fin_ignoree) === 1 })),
+      listes: listes.map(l => ({ id: l.id, nom: l.nom ?? null, cle: l.cle ?? null, position: Number(l.position), archive: Boolean(l.archive_le), fin: Number(l.fin) === 1, finIgnoree: Number(l.fin_ignoree) === 1, tri: l.tri === 'manuel' ? 'manuel' : 'auto' })),
       etiquettes: etiquettes.map(e => ({ id: e.id, nom: e.nom, couleur: e.couleur, cartes: nbParEtiquette.get(e.id) ?? 0 })),
       cartes: cartes.map(c => {
         const couv = jsonOu(c.couverture, null);
@@ -775,7 +781,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     const texte = JSON.stringify(valeur);
     if (texte.length > PREFERENCE_MAX) throw echec(400, 'preference', 'Préférence trop longue.');
-    if ((cle.endsWith('.reduites') || cle.endsWith('.tri_urgence')) && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
+    if (cle.endsWith('.reduites') && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
     if (cle === 'calendrier.teams' && !(valeur && typeof valeur === 'object' && !Array.isArray(valeur) && Object.entries(valeur).every(([k, v]) => MOTIF_UUID.test(k) && typeof v === 'boolean'))) throw echec(400, 'preference', 'Préférence illisible.');
     const t = iso(maintenant());
     await base.executer('INSERT INTO cm_preferences (compte_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le', [acteur.compte, cle, texte, t]);
@@ -835,6 +841,10 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (corps?.finIgnoree !== undefined) {
       champs.push('fin_ignoree');
       valeurs.push(corps.finIgnoree === true ? 1 : 0);
+    }
+    if (corps?.tri !== undefined) {
+      champs.push('tri');
+      valeurs.push(lireTri(corps.tri));
     }
     if (!champs.length) return { ok: true };
     await base.lot([{ sql: `UPDATE cm_listes SET ${champs.map(c => `${c} = ?`).join(', ')}, maj_le = ? WHERE id = ?`, params: [...valeurs, iso(t), liste.id] }, ...lot, versionTableau(tb.id, t)]);

@@ -389,11 +389,7 @@ ordre dans `esport/noyau/cm/urgence.mjs` (serveur) et `src/esport/cm/urgence.ts`
 - **Filtre** : dans **Filtres** du tableau, une rangée de cases Critique / Urgent / Moyen / Faible / **Sans drapeau**
   (plusieurs niveaux possibles) ; un filtre à choix unique dans **À valider** et dans le **calendrier éditorial**, qui
   affichent aussi le drapeau (`/cm/a-valider`, `/cm/calendrier`, `/cm/recherche` rendent `urgence`).
-- **Tri** : menu ⋯ de la colonne › **« Critiques en haut »** (Critique, Urgent, Moyen, Faible, puis les cartes
-  sans drapeau ; à niveau égal l'ordre de la colonne est conservé). C'est une **vue** : l'ordre réel des cartes n'est pas
-  modifié, le choix est **mémorisé par compte** (`cm_preferences`, clé `tableau.<id>.tri_urgence`) et un indicateur ⇅
-  l'annonce. Dans une colonne triée, le glisser-déposer, « Monter » et « Descendre » sont masqués (ils n'auraient pas de
-  sens) ; « Liste précédente / suivante » et « Déplacer vers… » restent.
+- **Tri** : voir « Tri des cartes » ci-dessous (tri automatique par urgence puis échéance, par défaut dans chaque colonne).
 - **Compteurs** : l'en-tête de chaque colonne montre le nombre de cartes **Critique** et **Urgent** (archivées exclues,
   **pastilles colorées** drapeau + nombre, libellé « 2 cartes critiques » pour les lecteurs d'écran). `GET /cm/tableaux` rend
   `urgences: { critique, urgent }` par tableau (puces sur la liste des tableaux) ; `GET /cm/etat` rend `urgences` (total
@@ -472,6 +468,40 @@ tableau sont possibles. Code : `esport/noyau/cm/colonneFin.mjs` (détection des 
 - **Tests** : `esport/test/cm-colonne-fin.test.mjs` (création, réglage, déplacement vers et depuis une colonne de fin, exclusions,
   notifications, temps réel, tableau restreint, circuit de validation, autre tableau, statistiques, import Trello, RGPD) et
   `src/esport/CmColonneFin.test.tsx` (noms, case cochée d'office, menu ⋯, bannière, icône, carte terminée, filtres, fiche, phrases FR / EN).
+
+## Tri des cartes
+
+Migration 0052 : `cm_listes.tri` (`auto` par défaut, ou `manuel`). Le choix est **par colonne**, **stocké côté serveur** et
+visible de tous les membres du tableau (ce n'est plus une préférence personnelle).
+
+- **Tri automatique** (défaut de chaque colonne) : (1) les cartes ouvertes d'abord ; (2) **urgence décroissante** :
+  Critique, Urgent, Moyen, Faible, sans drapeau ; (3) à urgence égale, **échéance la plus proche en premier** : les
+  échéances dépassées d'abord (la plus ancienne en tête), puis les plus proches ; les cartes **sans échéance** (ou dont
+  l'échéance est cochée « faite ») après celles qui en ont ; (4) à égalité, l'**ordre manuel** (`position`). Les cartes
+  **terminées** (colonne de fin) viennent en dernier, dans leur ordre manuel. L'échéance est un instant absolu : le fuseau
+  du club (Europe/Paris, y compris le passage à l'heure d'hiver) n'intervient que dans l'affichage. Fonction pure :
+  `src/esport/cm/tri.ts` (`comparerCartes`, `trierCartes`).
+- **Ordre manuel** : l'ordre des positions, réglé par glisser-déposer, « Monter » et « Descendre ».
+- **Choix** : menu ⋯ de la colonne › **« Tri automatique (urgence puis échéance) »** ou **« Ordre manuel »** (le choix en
+  cours est marqué « (actuel) » ; réservé à `cm.editer`, `PATCH /cm/listes/:id { tri }`, valeur autre que `auto` / `manuel`
+  refusée en 400). Le tri est une **vue** : les positions ne sont jamais modifiées, repasser en manuel retrouve l'ordre
+  d'avant. Un serveur ancien (sans le champ) reste en ordre manuel.
+- **Indication** : sous l'en-tête d'une colonne en tri automatique, le libellé discret **« Trié par urgence »**, avec
+  l'infobulle « … Passer en ordre manuel pour réordonner. ».
+- **Glisser-déposer** : **entre colonnes** il reste possible (la carte rejoint la colonne cible, où elle prend sa place
+  triée) ; **à l'intérieur** d'une colonne en tri automatique le réordonnancement est désactivé (pas d'indicateur de
+  dépôt, annonce « Colonne en tri automatique : passer en ordre manuel pour réordonner. » ; « Monter » et « Descendre »
+  masqués ; « Liste précédente / suivante » et « Déplacer vers… » restent). Règle : `regleDepot` (`Tableau.tsx`).
+- **Création en chaîne** : la nouvelle carte apparaît à sa place triée (une carte sans drapeau ni échéance : après les
+  cartes qui en ont, avant les terminées ; dans une colonne de fin : parmi les terminées) et la colonne défile jusqu'à
+  elle.
+- **Partout où une colonne est listée** (vue large comme mobile, une seule liste ordonnée) et **en temps réel** : quand
+  l'urgence ou l'échéance d'une carte change (ici ou chez un collègue), la carte se replace avec une petite animation
+  (glissement et fondu d'une fraction de seconde), **coupée avec `prefers-reduced-motion`**.
+- **Migration des anciens réglages** : la préférence personnelle « Critiques en haut » (`cm_preferences`, clé
+  `tableau.<id>.tri_urgence`) est supprimée par la migration 0052 ; toutes les colonnes passent en tri automatique.
+- **Export / import** : `tri` fait partie des colonnes de `cm_listes` de l'export de la base (un ancien export sans la
+  colonne s'importe en tri automatique).
 
 ## Accès au tableau (tableaux restreints)
 
@@ -655,6 +685,7 @@ d'un post publié** part sur Discord, en anglais avec un fil français, réglée
 | `cm_clips`, `cm_imports` | clips proposés ; historique des imports Trello |
 | `cm_commentaires_vus`, `cm_carte_suivis` (migration 0045) | commentaires lus par compte, cartes suivies |
 | `cm_listes.fin`, `cm_cartes.terminee_le` (migration 0050) | colonnes de fin, cartes terminées (date, auteur) |
+| `cm_listes.tri` (migration 0052) | tri des cartes de la colonne : `auto` (défaut) ou `manuel` |
 
 `envois` est reconstruite (comme en 0017) : usage « cm », `team_id` facultatif, colonne `portee`. Les rôles système
 des teams existantes reçoivent `cm.clips.proposer` (et `cm.voir`, `cm.deposer` pour le Manager) ; le module n'est
@@ -683,7 +714,7 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `PATCH /cm/cartes/:id { urgence }` (`null` ou `"aucune"`, `faible`, `moyen`, `urgent`, `critique`) | editer |
 | `PATCH /cm/tableaux/:id { fond }` (fond seul : `null`, `{ genre: 'couleur' \| 'degrade', cle }`, `{ genre: 'image', drive \| envoi }`) | editer |
 | `GET /cm/calendrier/teams?du&au` (calendriers des teams, lecture seule) | voir (et droits de chaque team) |
-| `GET /cm/preferences` ; `PUT /cm/preferences/:cle { valeur }` (`tableau.<id>.reduites`, `tableau.<id>.tri_urgence`, `calendrier.teams` ; `null` efface) | voir (ses choix seulement) |
+| `GET /cm/preferences` ; `PUT /cm/preferences/:cle { valeur }` (`tableau.<id>.reduites`, `calendrier.teams` ; `null` efface) | voir (ses choix seulement) |
 | `GET /cm/teams/:t` ; `POST …/depots` ; `GET …/matchs` ; `GET …/resume?genre&id&prefixe` ; `GET …/membres` | droits de la team |
 | `GET\|POST /cm/teams/:t/clips` ; `GET /cm/clips` ; `PATCH\|DELETE /cm/clips/:id` ; `POST …/carte` ; `POST …/lien` | proposer ; voir ; editer |
 | `GET\|POST /cm/roles` ; `PATCH\|DELETE /cm/roles/:id` ; `POST …/retablir` ; `GET\|POST /cm/affectations` ; `DELETE …/:id` ; `GET /cm/comptes` ; `GET\|PUT /cm/reglages` ; `GET /cm/journal` | gerer (club) |
@@ -718,6 +749,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
   `rgpd.mjs`, `routes.mjs`, `service.mjs`.
 - App : `src/esport/cm/` (client, règles des réseaux, phrases, `fonds.ts`), `src/esport/ui/cm/` (EspaceCm, Tableau,
   FicheCarte, Calendrier, Clips, ImportTrello, RolesCm, CmTeam), textes `src/esport/i18n/cm.ts`.
+- Tri des cartes : `src/esport/cm/tri.ts` ; tests `src/esport/CmTri.test.tsx` (fonction de tri, option par colonne, libellé, glisser, création en chaîne, temps réel, animation) et `esport/test/cm-tri.test.mjs` (défaut, `PATCH tri`, droits, export / import, migration 0052).
 - Tests : `esport/test/cm.test.mjs` (SQLite et PostgreSQL : règles, migration sur base existante, périmètre et
   permissions, tableaux, circuit de validation et invalidation, suggestions, clips, import Trello et entrées
   malformées, RGPD, export / import), `esport/test/cm-commentaires.test.mjs` (SQLite et PostgreSQL : commentaires non lus par compte, vu à l'ouverture, tout lu, permissions, notifications aux bonnes personnes, temps réel, RGPD) et `src/esport/CmCommentairesNonLus.test.tsx` (pastilles carte, colonne, tableau, groupe, tuile), `esport/test/cm-tableaux.test.mjs` (chaque modification d'une carte en

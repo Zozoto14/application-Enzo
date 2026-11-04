@@ -170,6 +170,8 @@ export interface ListeCm {
   fin?: boolean;
   /** La proposition « marquer comme colonne de fin » a été refusée pour cette colonne. */
   finIgnoree?: boolean;
+  /** Tri des cartes de la colonne (migration 0052) : automatique (urgence puis échéance) ou ordre manuel ; absent d'un serveur ancien (manuel). */
+  tri?: 'auto' | 'manuel';
 }
 export interface Etiquette {
   id: string;
@@ -496,7 +498,7 @@ export function apiCm(client: ClientEsport) {
     calendrierTeams: (du: string, au: string) => r<{ du: string; au: string; teams: CalendrierTeam[] }>(`/cm/calendrier/teams${requeteUrl({ du, au })}`),
     supprimerTableau: (id: string) => r<{ ok: true }>(`/cm/tableaux/${e(id)}`, 'DELETE'),
     creerListe: (tableauId: string, nom: string, fin = false) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/listes`, 'POST', fin ? { nom, fin } : { nom }),
-    modifierListe: (id: string, l: { nom?: string | null; archive?: boolean; fin?: boolean; finIgnoree?: boolean }) => r<{ ok: true }>(`/cm/listes/${e(id)}`, 'PATCH', l),
+    modifierListe: (id: string, l: { nom?: string | null; archive?: boolean; fin?: boolean; finIgnoree?: boolean; tri?: 'auto' | 'manuel' }) => r<{ ok: true }>(`/cm/listes/${e(id)}`, 'PATCH', l),
     deplacerListe: (id: string, index: number) => r<{ ok: true }>(`/cm/listes/${e(id)}/deplacer`, 'POST', { index }),
     creerEtiquette: (tableauId: string, et: { nom: string; couleur: string }) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/etiquettes`, 'POST', et),
     modifierEtiquette: (id: string, et: { nom?: string; couleur?: string }) => r<{ ok: true }>(`/cm/etiquettes/${e(id)}`, 'PATCH', et),

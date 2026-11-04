@@ -527,6 +527,7 @@
   "Membres illisibles.": "Unreadable members.",
   "Niveau d’urgence inconnu.": "Unknown priority level.",
   "Colonne de fin illisible.": "Unreadable end-column setting.",
+  "Tri de colonne illisible (auto ou manuel).": "Unreadable column sort setting (auto or manual).",
   "Adresses illisibles.": "Unreadable addresses.",
   "Ce réseau n’est pas ciblé par le post.": "This network isn’t targeted by the post.",
   "Adresse du post invalide : https:// sur le domaine du réseau.": "Invalid post address: https:// on the network’s domain.",
