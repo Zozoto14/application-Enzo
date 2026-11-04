@@ -9,7 +9,9 @@
  *    valables seulement tant qu'il est membre actif de cette team) ;
  *  - de son RÔLE dans la team (portée d'une team seulement) : les trois permissions « de team » du
  *    catalogue (cm.voir, cm.deposer, cm.clips.proposer ; le Propriétaire les a). Éditer, valider et gérer
- *    ne viennent jamais d'un rôle de team : ce sont des permissions du club.
+ *    ne viennent jamais d'un rôle de team : ce sont des permissions du club. Elles ne valent QUE dans l'onglet
+ *    CM de cette team (contexteCm de la team) : jamais dans l'espace « CM du club », réservé à l'équipe CM
+ *    (permissions du club, affectations à un rôle CM ; `porteesDe(...).teamsEspace`, `voitEspaceCm`).
  *
  * Ordre des contrôles (portée d'une team) : session → team existante → module `cm` activé (404) →
  * appartenance OU affectation (404 : on ne dit pas que la team existe) → permission (403).
@@ -129,6 +131,8 @@ export async function porteesDe(base, acteur) {
   const club = acteur.superAdmin ? new Set(PERMISSIONS_CM) : await permissionsClub(base, acteur.compte);
   const teams = await base.tous("SELECT t.id, t.nom, t.slug, t.logo_url FROM teams t JOIN team_modules m ON m.team_id = t.id AND m.module = ? AND m.active = 1 WHERE t.supprimee_le IS NULL ORDER BY t.nom", [MODULE_CM]);
   const parTeam = new Map(teams.map(t => [t.id, new Set(club)]));
+  // Espace « CM du club » : sans les permissions venues d'un rôle de TEAM (Manager, joueurs… : onglet CM de leur team seulement).
+  const parTeamEspace = new Map(teams.map(t => [t.id, new Set(club)]));
   if (acteur.compte) {
     const membres = await base.tous(
       "SELECT m.team_id, r.cle_systeme, rp.permission FROM membres m JOIN roles r ON r.id = m.role_id LEFT JOIN role_permissions rp ON rp.role_id = r.id WHERE m.compte_id = ? AND m.statut = 'actif'",
@@ -142,11 +146,31 @@ export async function porteesDe(base, acteur) {
       else if (m.permission && PERMISSIONS_EQUIPE.includes(m.permission)) s.add(m.permission);
     }
     const aff = await base.tous("SELECT a.portee, rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND a.portee <> 'club'", [acteur.compte]);
-    for (const a of aff) if (actives.has(a.portee) && PERMISSIONS_CM.includes(a.permission)) parTeam.get(a.portee)?.add(a.permission);
+    for (const a of aff) {
+      if (!actives.has(a.portee) || !PERMISSIONS_CM.includes(a.permission)) continue;
+      parTeam.get(a.portee)?.add(a.permission);
+      parTeamEspace.get(a.portee)?.add(a.permission);
+    }
   }
   const noms = new Map(teams.map(t => [t.id, { id: t.id, nom: t.nom, slug: t.slug, logoUrl: t.logo_url ?? null }]));
-  for (const [id, s] of [...parTeam]) if (s.size === 0) parTeam.delete(id);
-  return { club, teams: parTeam, noms };
+  for (const m of [parTeam, parTeamEspace]) for (const [id, s] of [...m]) if (s.size === 0) m.delete(id);
+  return { club, teams: parTeam, teamsEspace: parTeamEspace, noms };
+}
+
+/**
+ * Portées de l'ESPACE « CM du club » (tableaux, ressources, visuels, calendrier, réseaux… : tout ce qui n'est pas
+ * l'onglet CM d'une team) : `teams` réduit aux permissions de l'équipe CM (club, affectations), sans celles d'un
+ * rôle de team. À utiliser pour toute lecture transversale de l'espace.
+ */
+export const espaceCm = portees => ({ ...portees, teams: portees.teamsEspace ?? portees.teams });
+
+/** L'acteur lit-il l'espace « CM du club » (cm.voir du club, ou d'une team par une affectation à un rôle CM) ? */
+export const voitEspaceCm = portees => portees.club.has('cm.voir') || [...(portees.teamsEspace ?? portees.teams).values()].some(s => s.has('cm.voir'));
+
+/** 403 si l'acteur ne lit pas l'espace « CM du club » (un rôle de team ne l'ouvre jamais). */
+export function exigerEspaceCm(portees) {
+  if (!voitEspaceCm(portees)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+  return portees;
 }
 
 /** Permissions de l'acteur sur une portée, depuis `porteesDe` (Set vide si aucune). */

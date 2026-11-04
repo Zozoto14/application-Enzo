@@ -20,7 +20,7 @@ import { echec, iso, jsonOu, nouvelId, texteNettoye } from '../../outils.mjs';
 import { lignesParIds, pseudosDe } from '../../requetes.mjs';
 import { lecteurTableaux } from '../acces.mjs';
 import { cheminSigne } from '../../fichiers.mjs';
-import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, peut, porteesDe, teamDePortee, MOTIF_UUID } from '../commun.mjs';
+import { PORTEE_CLUB, contexteCm, espaceCm, exiger, exigerEspaceCm, exigerUuid, lirePortee, peut, porteesDe, teamDePortee, MOTIF_UUID } from '../commun.mjs';
 import { DUREE_LIEN_CM_MS } from '../tableaux.mjs';
 import { CHARTE_DEFAUT, CLES_FORMATS, FORMATS, LANGUES_VISUEL, TYPES_VISUEL, DocumentInvalide, erreurDocument, fichiersDuDocument, lireCharte, lireDocument, lireDocuments } from './document.mjs';
 import { GENRES_SOURCE, donneesVisuel } from './champs.mjs';
@@ -84,11 +84,12 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     return ctx;
   }
 
-  /** L'acteur voit-il la section CM quelque part ? (lecture de la charte, des modèles du club). */
+  /**
+   * L'acteur lit-il l'espace « CM du club » ? (lecture de la charte, des modèles et images du club, DATA › Visuels). Équipe
+   * CM seulement : un rôle de team (Manager) n'y entre pas. Portées rendues : celles de l'espace (sans rôle de team).
+   */
   async function voitSection(acteur) {
-    const p = await porteesDe(base, acteur);
-    if (!(p.club.has('cm.voir') || [...p.teams.values()].some(s => s.has('cm.voir')))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
-    return p;
+    return exigerEspaceCm(espaceCm(await porteesDe(base, acteur)));
   }
 
   // ---------------------------------------------------------------- Charte
@@ -404,7 +405,7 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
 
   /** Teams du programme de la semaine pour une portée « club » : celles où l'acteur peut éditer. */
   async function teamsEditables(acteur) {
-    const p = await porteesDe(base, acteur);
+    const p = espaceCm(await porteesDe(base, acteur));
     return [...p.teams].filter(([, s]) => s.has('cm.editer')).map(([id]) => id);
   }
 

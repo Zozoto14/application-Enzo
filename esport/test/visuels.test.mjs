@@ -208,6 +208,8 @@ async function preparer() {
   };
   await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'cm123456', roleId: 'cm-role-responsable', portee: 'club' } });
   for (const t of [A.teamId, B.teamId]) await ok(`/teams/${t}/modules`, s.fondateur, { methode: 'PUT', corps: { modules: { cm: true } } });
+  // Max (Manager de A) est le Correspondant CM de sa team : l'équipe CM, limitée à A (un rôle de team seul n'ouvre pas l'espace).
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'man12345', roleId: 'cm-role-correspondant', portee: A.teamId } });
   const nova = (await ok(`/teams/${A.teamId}/scouting/adversaires`, s.coach123, { methode: 'POST', corps: { nom: 'Nova' } })).id;
   return { b, A, B, s, api, ok, nova };
 }
@@ -337,7 +339,7 @@ test('charte : lecture par la section, modification cm.gerer, logos importés se
   assert.equal(c.version, 0);
   assert.equal(c.charte.polices.titre, 'Orbitron');
   assert.equal(c.gerer, true);
-  // Le correspondant d'une team (Manager : cm.voir de la team) lit la charte sans la modifier.
+  // Le correspondant d'une team (affectation : cm.voir de la team) lit la charte sans la modifier.
   const lue = await ok('/cm/charte', s.man12345);
   assert.equal(lue.gerer, false);
   assert.equal((await api('/cm/charte', s.man12345, { methode: 'PUT', corps: { charte: { couleurs: { primaire: '#ff0000' } } } })).statut, 403);

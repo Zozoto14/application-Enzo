@@ -16,7 +16,7 @@
 import { echec, iso } from '../outils.mjs';
 import { lireDate } from '../planning/temps.mjs';
 import { resumeAnnonce } from '../competition/resume.mjs';
-import { porteesDe } from './commun.mjs';
+import { espaceCm, porteesDe, voitEspaceCm } from './commun.mjs';
 
 export const COULEURS_TEAMS = Object.freeze(['#579dff', '#f87462', '#4bce97', '#e2b203', '#9f8fef', '#e774bb', '#6cc3e0', '#faa53d', '#94c748', '#8590a2']);
 const TYPES_AFFICHES = ['match', 'scrim', 'tournament', 'other'];
@@ -33,9 +33,9 @@ export function servicesCalendriersCm({ base, planning }) {
     const a = Date.parse(`${du}T00:00:00Z`);
     const b = Date.parse(`${au}T00:00:00Z`) + JOUR_MS;
     if (!(b > a) || b - a > PLAGE_MAX_JOURS * JOUR_MS) throw echec(400, 'periode', 'Période de 100 jours au plus.');
-    const portees = await porteesDe(base, acteur);
-    const voitCm = portees.club.has('cm.voir') || [...portees.teams.values()].some(s => s.has('cm.voir'));
-    if (!voitCm) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    // Calendrier de l'espace « CM du club » : équipe CM seulement (jamais un rôle de team).
+    const portees = espaceCm(await porteesDe(base, acteur));
+    if (!voitEspaceCm(portees)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     const toutes = await base.tous('SELECT id, nom, slug FROM teams WHERE supprimee_le IS NULL ORDER BY nom, id LIMIT ?', [MAX_TEAMS]);
     const sortie = [];
     for (const [i, t] of toutes.entries()) {

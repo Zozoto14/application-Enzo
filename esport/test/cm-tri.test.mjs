@@ -110,7 +110,7 @@ test('migration 0052 : colonne `tri` (défaut auto) sur les colonnes existantes 
   for (const [cle, valeur] of [['tableau.t1.tri_urgence', '["l1"]'], ['tableau.t1.reduites', '["l1"]'], ['calendrier.teams', '[]']]) {
     await base.executer('INSERT INTO cm_preferences (compte_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?)', ['cm123456', cle, valeur, t]);
   }
-  const faites = await appliquerMigrations(base, toutes);
+  const faites = await appliquerMigrations(base, toutes.filter(m => m.nom < '0053'));
   assert.deepEqual(faites, ['0052_cm_liste_tri.sql']);
   assert.equal((await base.premier("SELECT tri FROM cm_listes WHERE id = 'l1'")).tri, 'auto');
   const restantes = (await base.tous('SELECT cle FROM cm_preferences ORDER BY cle', [])).map(p => p.cle);

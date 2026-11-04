@@ -22,7 +22,7 @@
 import { echec } from '../outils.mjs';
 import { verifierLien } from '../fichiers.mjs';
 import { reponseFichierStocke } from '../medias/lecture.mjs';
-import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, porteesDe, teamDePortee } from './commun.mjs';
+import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, porteesDe, teamDePortee, voitEspaceCm } from './commun.mjs';
 import { servicesTableauxCm } from './tableaux.mjs';
 import { lecteurTableaux } from './acces.mjs';
 import { servicesDroitsCm } from './droits.mjs';
@@ -104,8 +104,8 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     }
     const image = await base.premier('SELECT portee FROM cm_visuel_images WHERE fichier_id = ? AND supprime_le IS NULL', [f.id]);
     if (image?.portee === PORTEE_CLUB) {
-      const p = await porteesDe(base, acteur);
-      if (p.club.has('cm.voir') || [...p.teams.values()].some(x => x.has('cm.voir'))) return true;
+      // Image du club (logo, fond) : qui lit l'espace « CM du club » (équipe CM, jamais un rôle de team).
+      if (voitEspaceCm(await porteesDe(base, acteur))) return true;
     } else if (image && image.portee !== f.portee) {
       try {
         if ((await contexteCm(base, acteur, image.portee)).permissions.has('cm.voir')) return true;

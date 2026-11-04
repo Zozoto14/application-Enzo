@@ -103,7 +103,7 @@ test('CM : rôles CM et qui les a (Équipe CM) ; anglais', async () => {
   await screen.findByTestId('esport-rp-club-editeur');
   await fireEvent.press(screen.getByTestId('esport-rp-section-cm'));
   expect(await screen.findByTestId('esport-rp-cm-editeur')).toBeTruthy();
-  expect(screen.getByText('CM: see the CM section (boards, posts, networks read-only).')).toBeTruthy();
+  expect(screen.getByText('CM: see the CM section (boards, posts, networks read-only). In a team role: only the team’s CM tab (its board), never the club’s CM space.')).toBeTruthy();
   expect(await screen.findByText('Lina · whole club')).toBeTruthy();
 });
 

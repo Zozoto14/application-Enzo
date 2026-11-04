@@ -6,16 +6,17 @@
  *    `cm.voir` d'une team (ses comptes et publications seulement ; module CM activé) ;
  *  - SAISIR des statistiques (relevés, publications ajoutées à la main, import CSV) : `cm.editer` sur la portée ;
  *  - CONFIGURER (comptes, salons Discord du club, annonces, message de test, réglages) : `cm.gerer` du CLUB.
- * Sans `cm.voir` nulle part : 404 sur toute la page (on ne dit pas qu'elle existe).
+ * Sans `cm.voir` nulle part : 404 sur toute la page (on ne dit pas qu'elle existe). Page de l'espace « CM du club » :
+ * seules les permissions de l'équipe CM comptent (club, affectations), jamais celles d'un rôle de team (Manager).
  */
 
 import { echec } from '../outils.mjs';
-import { porteesDe } from '../cm/commun.mjs';
+import { espaceCm, porteesDe, voitEspaceCm } from '../cm/commun.mjs';
 
 /** Droits Réseaux d'un acteur : `{ club: Set, teams: Map<teamId, Set>, noms: Map }` (portées CM). */
 export async function droitsReseaux(base, acteur) {
-  const p = await porteesDe(base, acteur);
-  if (!p.club.has('cm.voir') && ![...p.teams.values()].some(s => s.has('cm.voir'))) throw echec(404, 'route', 'Adresse inconnue.');
+  const p = espaceCm(await porteesDe(base, acteur));
+  if (!voitEspaceCm(p)) throw echec(404, 'route', 'Adresse inconnue.');
   return p;
 }
 

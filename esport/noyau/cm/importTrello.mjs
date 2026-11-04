@@ -21,7 +21,7 @@
 
 import { evenement } from '../evenements.mjs';
 import { echec, iso, nouvelId } from '../outils.mjs';
-import { PORTEE_CLUB, contexteCm, exiger, lirePortee, porteesDe, teamDePortee, versionTableau } from './commun.mjs';
+import { PORTEE_CLUB, contexteCm, espaceCm, exiger, lirePortee, porteesDe, teamDePortee, versionTableau } from './commun.mjs';
 import { niveauTableau } from './acces.mjs';
 import { urgenceDepuisNom, rangUrgence } from './urgence.mjs';
 import { nomColonneDeFin } from './colonneFin.mjs';
@@ -267,7 +267,7 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
 
   /** Portées où l'acteur peut importer (cm.gerer). */
   async function portees(acteur) {
-    const p = await porteesDe(base, acteur);
+    const p = espaceCm(await porteesDe(base, acteur));
     return {
       portees: [...(p.club.has('cm.gerer') ? [{ portee: PORTEE_CLUB, team: null }] : []), ...[...p.teams].filter(([, s]) => s.has('cm.gerer')).map(([id]) => ({ portee: id, team: p.noms.get(id) }))],
     };

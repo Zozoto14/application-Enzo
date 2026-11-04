@@ -10,7 +10,7 @@
  */
 
 import { echec, iso, nouvelId, texteNettoye } from '../../outils.mjs';
-import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
+import { PORTEE_CLUB, contexteCm, espaceCm, exiger, exigerEspaceCm, exigerUuid, lirePortee, porteesDe, teamDePortee } from '../commun.mjs';
 
 export const CLES_DOSSIERS_VISUELS = Object.freeze(['annonces', 'resultats', 'recrues', 'programmes', 'sponsors', 'divers']);
 /** Dossier par défaut d'un genre de visuel. */
@@ -41,12 +41,11 @@ export function servicesDossiersVisuels({ base, maintenant = () => Date.now() })
     return c;
   }
 
-  /** Lecture : `cm.voir` de la portée ; pour le club, voir la section quelque part suffit. */
+  /** Lecture : `cm.voir` de la portée ; pour le club, lire l'espace « CM du club » suffit (équipe CM, jamais un rôle de team). */
   async function ctxLecture(acteur, portee) {
     const p = lirePortee(portee ?? PORTEE_CLUB);
     if (p === PORTEE_CLUB) {
-      const x = await porteesDe(base, acteur);
-      if (!(x.club.has('cm.voir') || [...x.teams.values()].some(s => s.has('cm.voir')))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+      const x = exigerEspaceCm(espaceCm(await porteesDe(base, acteur)));
       return { portee: p, editer: x.club.has('cm.editer') };
     }
     const c = await contexteCm(base, acteur, p);

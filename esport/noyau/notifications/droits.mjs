@@ -8,7 +8,10 @@
  *    supprimer une team (comme contexteTeam) ; le reste selon ses permissions du club ;
  *  - membre actif : les permissions de son rôle (toutes pour un Propriétaire), module activé ; suspendu : rien ;
  *  - tableaux CM restreints (migration 0046) : `tableauxInterdits`, ceux dont le lecteur n'est pas ;
- *  - ressources de DATA › Ressources (migration 0048) : `liensInterdits`, celles qu'il ne voit pas.
+ *  - ressources de DATA › Ressources (migration 0048) : `liensInterdits`, celles qu'il ne voit pas ;
+ *  - espace « CM du club » : `cmEspace`, réservé à l'équipe CM (une permission CM d'un rôle de team n'ouvre que
+ *    l'onglet CM de cette team) ; sans lui, les personnelles CM / Drive du club (sans team) sont masquées, sauf
+ *    les invitations aux réunions et les ressources partagées avec le lecteur.
  */
 
 import { CLE_PROPRIETAIRE, TOUTES_PERMISSIONS, autorise, moduleConnu } from '../permissions.mjs';
@@ -23,7 +26,7 @@ const SAUF_ACCES_TOTAL = new Set(['team.delete']);
 
 /** Droits d'un lecteur : `{ tout }` pour le Fondateur, sinon permissions par team, du club et du CM. */
 export async function droitsLecteur(base, acteur) {
-  if (acteur?.superAdmin) return { tout: true, compte: acteur.compte, tableauxInterdits: [], liensInterdits: [] };
+  if (acteur?.superAdmin) return { tout: true, compte: acteur.compte, tableauxInterdits: [], liensInterdits: [], cmEspace: true };
   const club = new Set([...(await permissionsGlobalesDe(base, acteur)), ...(await droitsSponsors(base, acteur))]);
   const accesTotal = club.has(ACCES_TOTAL);
   const teams = await base.tous('SELECT id FROM teams WHERE supprimee_le IS NULL', []);
@@ -54,7 +57,7 @@ export async function droitsLecteur(base, acteur) {
   const tableauxInterdits = await lecteurTableaux(base, acteur).interdits();
   // Ressources de DATA › Ressources qu'il ne voit pas (restreintes dont il n'est pas, team sans accès CM ; migration 0048).
   const liensInterdits = await lecteurLiens(base, acteur, cm).interdits();
-  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, tableauxInterdits, liensInterdits };
+  return { tout: false, compte: acteur.compte, club, parTeam, cmClub: cm.club, cmTeams: cm.teams, cmEspace: cm.club.size > 0 || [...cm.teamsEspace.values()].some(s => s.size > 0), tableauxInterdits, liensInterdits };
 }
 
 /** Le lecteur voit-il un élément de clé d'accès `acces` (team de l'élément : `teamId`) ? */

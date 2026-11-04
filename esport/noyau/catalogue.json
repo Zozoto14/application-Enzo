@@ -208,7 +208,7 @@
       "cle": "manager",
       "nom": "Manager",
       "couleur": "#7c3aed",
-      "description": "Membres, rôles, planning, résumés (rédaction comprise), Discord, journal.",
+      "description": "Membres, rôles, planning, résumés (rédaction comprise), Discord, journal ; dépôt d’informations et clips pour le CM (sans accès à l’espace CM du club).",
       "permissions": [
         "team.manage",
         "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage", "membres.trombi.voir", "membres.trombi.editer", "membres.badges.gerer",
@@ -222,7 +222,7 @@
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
         "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
-        "cm.voir", "cm.deposer", "cm.clips.proposer",
+        "cm.deposer", "cm.clips.proposer",
         "activity_log.view"
       ]
     },
@@ -400,7 +400,7 @@
     "tournois.gerer": {"categorie":"competition","fr":"Tournois : fiche, inscription, roster, matchs, classement.","en":"Tournaments: details, registration, roster, matches, standings."},
     "resultats.voir": {"categorie":"competition","fr":"Résultats : voir.","en":"Results: view."},
     "resultats.saisir": {"categorie":"competition","fr":"Résultats : saisir et modifier.","en":"Results: enter and edit."},
-    "cm.voir": {"categorie":"cm","fr":"CM : voir la section CM (tableaux, posts, réseaux en lecture).","en":"CM: see the CM section (boards, posts, networks read-only)."},
+    "cm.voir": {"categorie":"cm","fr":"CM : voir la section CM (tableaux, posts, réseaux en lecture). Dans un rôle de team : seulement l’onglet CM de la team (son tableau), jamais l’espace CM du club.","en":"CM: see the CM section (boards, posts, networks read-only). In a team role: only the team’s CM tab (its board), never the club’s CM space."},
     "cm.deposer": {"categorie":"cm","fr":"CM : déposer des informations pour le community manager.","en":"CM: submit information for the community manager."},
     "cm.editer": {"categorie":"cm","fr":"CM : préparer les contenus (cartes, posts, visuels, publication).","en":"CM: prepare content (cards, posts, visuals, publishing)."},
     "cm.valider": {"categorie":"cm","fr":"CM : valider ou refuser les posts.","en":"CM: approve or refuse posts."},

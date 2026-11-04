@@ -65,6 +65,11 @@ export interface MoiCm {
   gerer: boolean;
   /** Réunions de l'équipe CM (migration 0039) : l'équipe CM voit l'agenda ; un membre du club invité voit ses réunions. */
   reunions?: { voir: boolean; gerer: boolean; invite: boolean };
+  /**
+   * DATA › Ressources : l'équipe CM, ou un compte hors équipe CM avec qui une ressource est partagée (il n'y voit que
+   * celles-là). L'espace du club est réservé à l'équipe CM : un rôle de team (Manager) n'ouvre que l'onglet CM de sa team.
+   */
+  ressources?: boolean;
 }
 export interface DroitsTableau {
   voir: boolean;

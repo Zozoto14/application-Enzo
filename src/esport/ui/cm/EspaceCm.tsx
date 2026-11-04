@@ -6,7 +6,9 @@
  * club et des teams ; docs/esport/drive.md) pour qui a un droit cm.drive.*. Rubrique « Sponsors » pour qui a
  * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Section « Réunions »
  * (réunions, disponibilités et rendez-vous de l'équipe CM ; docs/esport/cm-reunions.md) pour l'équipe CM et pour
- * un membre du club invité à une réunion. Les GROUPES (Accueil CM, Contenus, DATA, Diffusion, Partenaires, Équipe,
+ * un membre du club invité à une réunion. L'espace est réservé à l'équipe CM (GET /cm/moi : permissions du club et
+ * affectations à un rôle CM) : une permission CM d'un rôle de team (Manager, joueurs) n'ouvre que l'onglet CM de la
+ * team ; hors équipe CM, seulement ses réunions (invité) et les ressources partagées avec lui. Les GROUPES (Accueil CM, Contenus, DATA, Diffusion, Partenaires, Équipe,
  * Gestion) sont les entrées de la barre latérale du cadre (bloc « CM du club », comme les sections d'une team) ; chaque
  * groupe a ses sous-onglets en haut de la page (aucun s'il n'a qu'une sous-section) ; sur téléphone, un sélecteur de
  * groupe puis les sous-onglets. Tout est décidé
@@ -99,12 +101,12 @@ export interface GroupeCm {
  * Chaque groupe porte ses sous-sections (mêmes conditions qu'avant pour chacune) ; un groupe sans sous-section visible
  * n'apparaît pas. L'accueil (vue d'ensemble) est proposé à qui voit les contenus ; sans lui, l'espace s'ouvre sur le Drive, les Sponsors ou les réunions.
  */
-export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus, ressourcesNouvelles }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number; /** Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */ ressourcesNouvelles?: number }): GroupeCm[] {
+export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus, ressourcesNouvelles, ressources = voirCm }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number; /** Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */ ressourcesNouvelles?: number; /** DATA › Ressources : l'équipe CM, ou un compte avec qui une ressource est partagée (celles-là seulement). */ ressources?: boolean }): GroupeCm[] {
   const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, compteur: compteur || undefined });
   const brut: Array<{ id: GroupeCmId; libelle: string; entrees: EntreeCm[] }> = [
     { id: 'accueil', libelle: trCm('espace.g.accueil'), entrees: voirCm ? [e('accueil', trCm('espace.g.accueil'))] : [] },
     { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux'), commentairesNonLus), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
-    { id: 'data', libelle: trCm('espace.g.data'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : []), ...(voirCm ? [e('ressources', trCm('espace.ressources'), ressourcesNouvelles)] : [])] },
+    { id: 'data', libelle: trCm('espace.g.data'), entrees: [...(voirCm ? [e('clips', trCm('espace.clips')), e('visuels', trVi('espace.titre'))] : []), ...(drive ? [e('drive', trCm('espace.drive'), nouveautesDrive)] : []), ...(ressources ? [e('ressources', trCm('espace.ressources'), ressourcesNouvelles)] : [])] },
     { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
     { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
     { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...(reunions ? [e('reunions', trRe('onglet'))] : []), ...(gerer ? [e('equipe', trCm('espace.equipe'))] : [])] },
@@ -202,18 +204,21 @@ export function EspaceCm({
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   // Réunions de l'équipe CM (migration 0039) : l'équipe CM, et tout membre du club invité à une réunion.
   const reunions = Boolean(moi.reunions?.voir || moi.reunions?.invite);
+  // DATA › Ressources : l'équipe CM, ou un compte hors équipe avec qui une ressource est partagée (celles-là seulement).
+  const ressources = voirCm || Boolean(moi.ressources);
   const accueil = voirCm;
   const [onglet, setOnglet] = useState<OngletCm>(() => {
-    const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, ressources, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
     if (ongletInitial && (permis[ongletInitial] ?? voirCm)) return ongletInitial;
-    return accueil ? 'accueil' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : 'tableaux';
+    return accueil ? 'accueil' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : ressources ? 'ressources' : 'tableaux';
   });
   // Dernière sous-section ouverte de chaque groupe (on y revient en rouvrant le groupe), comme dans une team.
   const [derniers, setDerniers] = useState<Partial<Record<GroupeCmId, OngletCm>>>({});
   const [ouvert, setOuvert] = useState<string | undefined>();
   // Dossier du Drive à ouvrir (depuis « où est lié » d'une ressource) ; `n` relance l'ouverture du même dossier.
   const [dossierDrive, setDossierDrive] = useState<{ portee: string; id: string; n: number } | undefined>();
-  const { etat } = useEtatCm(api, voirCm);
+  // Pastille « Nouveau » des ressources partagées : aussi pour qui n'a que des ressources partagées.
+  const { etat } = useEtatCm(api, voirCm || ressources);
   // Pastille du Drive : nouveautés (fichiers, dossiers, versions ajoutés par d'autres) dans tous les Drive visibles.
   const nouveautesDrive = useNouveautesDrive(client, undefined, drive);
   const teams: TeamCm[] = moi.teams;
@@ -229,7 +234,7 @@ export function EspaceCm({
       vivant = false;
     };
   }, [client, onOuvrirTeam]);
-  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total, ressourcesNouvelles: etat?.ressources });
+  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total, ressourcesNouvelles: etat?.ressources, ressources });
   const toutes = groupes.flatMap(g => g.entrees);
   const courante = toutes.find(e => e.id === onglet);
   const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));
@@ -366,7 +371,7 @@ export function EspaceCm({
           dossierInitial={dossierDrive}
         />
       ) : null}
-      {onglet === 'ressources' && voirCm ? <Ressources theme={theme} client={client} large={large} onOuvrirTableau={ouvrirTableau} onOuvrirDossier={drive ? ouvrirDossier : undefined} /> : null}
+      {onglet === 'ressources' && ressources ? <Ressources theme={theme} client={client} large={large} onOuvrirTableau={ouvrirTableau} onOuvrirDossier={drive ? ouvrirDossier : undefined} /> : null}
       {onglet === 'equipe' && moi.gerer ? <RolesCm theme={theme} api={api} large={large} /> : null}
       {onglet === 'import' && moi.gerer ? <ImportTrello theme={theme} api={api} large={large} onOuvrir={ouvrirTableau} /> : null}
       {onglet === 'reglages' && moi.gerer ? <Reglages theme={theme} api={api} /> : null}

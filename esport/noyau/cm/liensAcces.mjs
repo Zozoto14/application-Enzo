@@ -43,10 +43,12 @@ export async function niveauLien(base, acteur, l) {
 /**
  * Lecture « de base » d'une ressource (avant la restriction), d'après les portées CM du compte (`porteesDe`) : il faut
  * `cm.voir` du club ou d'une team ; une ressource rattachée à une team ne se lit qu'avec `cm.voir` du club ou de cette team.
+ * Ressources = espace « CM du club » : seules les permissions de l'équipe CM comptent (`teamsEspace`), jamais celles d'un
+ * rôle de team (Manager) ; hors équipe CM, seules les ressources partagées avec le compte se lisent (liens.mjs).
  */
 export function voitPortee(portees, l) {
   const club = portees.club.has('cm.voir');
-  const equipes = [...portees.teams].filter(([, s]) => s.has('cm.voir')).map(([id]) => id);
+  const equipes = [...(portees.teamsEspace ?? portees.teams)].filter(([, s]) => s.has('cm.voir')).map(([id]) => id);
   if (!club && !equipes.length) return false;
   return club || !l.team_id || equipes.includes(l.team_id);
 }
@@ -70,9 +72,15 @@ export function lecteurLiens(base, acteur, portees = null) {
     interditsP ??= (async () => {
       const sortie = [];
       // Sans aucun accès CM, la catégorie CM est déjà masquée : seules les restreintes comptent (liste courte).
-      const lisible = portees && (portees.club.has('cm.voir') || [...portees.teams.values()].some(x => x.has('cm.voir'))) ? portees : null;
-      const lignes = lisible ? await base.tous('SELECT id, team_id, acces, cree_par FROM cm_liens', []) : await base.tous("SELECT id, team_id, acces, cree_par FROM cm_liens WHERE acces = 'restreint'", []);
-      for (const l of lignes) if ((lisible && !voitPortee(lisible, l)) || !(await niveau(l))) sortie.push(l.id);
+      const unAcces = portees && (portees.club.size > 0 || [...portees.teams.values()].some(x => x.size > 0));
+      // Hors équipe CM (Manager d'une team…) : seules les ressources partagées avec le compte se lisent.
+      const espace = portees && (portees.club.has('cm.voir') || [...(portees.teamsEspace ?? portees.teams).values()].some(x => x.has('cm.voir')));
+      const partagees = unAcces && !espace && acteur?.compte ? new Set((await base.tous('SELECT lien_id FROM cm_lien_partages WHERE compte_id = ?', [acteur.compte])).map(p => p.lien_id)) : null;
+      const lignes = unAcces ? await base.tous('SELECT id, team_id, acces, cree_par FROM cm_liens', []) : await base.tous("SELECT id, team_id, acces, cree_par FROM cm_liens WHERE acces = 'restreint'", []);
+      for (const l of lignes) {
+        const lisible = !unAcces || (espace ? voitPortee(portees, l) : Boolean(partagees?.has(l.id)));
+        if (!lisible || !(await niveau(l))) sortie.push(l.id);
+      }
       return sortie;
     })();
     return interditsP;

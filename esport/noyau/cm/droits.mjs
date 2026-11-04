@@ -13,7 +13,7 @@
 import { evenement } from '../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteNettoye } from '../outils.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
-import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from './commun.mjs';
+import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, espaceCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee, voitEspaceCm } from './commun.mjs';
 import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 import { permissionsGlobalesDe } from '../roles/globales.mjs';
@@ -303,11 +303,14 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   /**
-   * `GET /cm/moi` : ce que l'acteur peut faire dans la section CM (carte « CM du club » de la page Teams, onglet CM
-   * des teams), et le nombre de posts à valider (badge).
+   * `GET /cm/moi` : ce que l'acteur peut faire dans l'espace « CM du club » (carte « CM du club » de la page Teams,
+   * sélecteur « Changer de team », barre latérale). Réservé à l'équipe CM : une permission CM venue d'un rôle de TEAM
+   * (Manager, joueurs) n'ouvre que l'onglet CM de cette team (`GET /cm/teams/:id`), jamais l'espace ; `teams` ne
+   * liste donc que les permissions de l'équipe CM (club, affectations). Exceptions : l'invité d'une réunion à venir
+   * (ses réunions seulement) et la personne avec qui une ressource est partagée (`ressources` : ces ressources seulement).
    */
   async function moi(acteur) {
-    const portees = await porteesDe(base, acteur);
+    const portees = espaceCm(await porteesDe(base, acteur));
     const teams = [...portees.teams].map(([id, s]) => ({ ...portees.noms.get(id), permissions: [...s].sort() }));
     // Sponsors (migration 0024) : la rubrique s'ouvre aussi à qui n'a QUE sponsors.voir (affectation « club »).
     const sponsors = [...(await droitsSponsors(base, acteur))].sort();
@@ -318,10 +321,14 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     const invite = !reunions.voir && acteur.compte
       ? Boolean(await base.premier("SELECT p.reunion_id FROM cm_reunion_participants p JOIN cm_reunions r ON r.id = p.reunion_id WHERE p.compte_id = ? AND r.statut = 'active' AND (r.recurrence IS NOT NULL OR r.fin > ?) LIMIT 1", [acteur.compte, new Date(maintenant()).toISOString()]))
       : false;
-    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir') || voitDrive(portees.club) || [...portees.teams.values()].some(voitDrive) || reunions.voir || invite;
+    const lecteur = voitEspaceCm(portees);
+    // Hors équipe CM : une ressource de DATA › Ressources partagée avec le compte (« Partager avec… ») l'ouvre, limitée à elle.
+    const partagees = !lecteur && acteur.compte ? Boolean(await base.premier('SELECT lien_id FROM cm_lien_partages WHERE compte_id = ? LIMIT 1', [acteur.compte])) : false;
+    const espace = lecteur || sponsors.includes('sponsors.voir') || voitDrive(portees.club) || [...portees.teams.values()].some(voitDrive) || reunions.voir || invite || partagees;
     return {
       espace,
       reunions: { voir: reunions.voir, gerer: reunions.gerer, invite },
+      ressources: lecteur || partagees,
       sponsors,
       club: [...portees.club].sort(),
       teams,

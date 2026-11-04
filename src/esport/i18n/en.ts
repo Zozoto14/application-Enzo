@@ -1343,7 +1343,7 @@ export const en: Record<Cle, string> = {
   'cat.role.proprietaire.nom': 'Owner',
   'cat.role.proprietaire.description': 'Everything, including deleting the team and managing the modules.',
   'cat.role.manager.nom': 'Manager',
-  'cat.role.manager.description': 'Members, roles, schedule, summaries (including writing), Discord, journal.',
+  'cat.role.manager.description': 'Members, roles, schedule, summaries (including writing), Discord, journal; information and clips for the CM (no access to the club’s CM space).',
   'cat.role.coach.nom': 'Coach',
   'cat.role.coach.description': 'Schedule, review, strats, playbook, scouting, goals, attendance.',
   'cat.role.analyste.nom': 'Analyst',

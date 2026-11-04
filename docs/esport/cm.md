@@ -57,8 +57,11 @@ Elles viennent de deux endroits :
      plus s'il la quitte ou est suspendu).
 2. **Rôles de la team** (matrice habituelle, groupe « CM ») : seulement `cm.voir`, `cm.deposer` et
    `cm.clips.proposer`. Par défaut : les joueurs, remplaçants, analystes, coachs et managers **proposent des clips** ;
-   le Manager voit la partie CM et y dépose. Le Propriétaire a ces trois permissions. **Éditer, valider et gérer ne
-   viennent jamais d'un rôle de team** : la validation reste au Fondateur et au Responsable CM.
+   le Manager **dépose** des informations (sans `cm.voir` depuis la migration 0053 : il suit ses propres dépôts). Le
+   Propriétaire a ces trois permissions. **Éditer, valider et gérer ne viennent jamais d'un rôle de team** : la
+   validation reste au Fondateur et au Responsable CM. Une permission CM d'un rôle de team ne vaut **que dans l'onglet
+   CM de cette team** (déposer, proposer un clip, et avec `cm.voir` le tableau de la team) : **jamais** dans l'espace
+   « CM du club » (voir ci-dessous).
 
 Le **Fondateur** a tout. Anti-escalade : hors Fondateur, on n'ajoute à un rôle CM, et on n'attribue, que des
 permissions que l'on a soi-même (403 `escalade`) ; le nom et la couleur d'un rôle système sont fixes.
@@ -76,6 +79,25 @@ scouting détaillé (un adversaire n'apparaît que par son nom), les notes du st
 
 Contrôles d'une route CM : session → team existante → module `cm` activé (404) → appartenance ou affectation
 (404) → permission (403).
+
+### Qui entre dans l'espace « CM du club »
+
+L'espace (tuile « CM du club », entrée du sélecteur « Changer de team », barre latérale CM ; Accueil CM, Contenus,
+À valider, Calendrier, DATA — Clips, Visuels, Drive, Ressources —, Diffusion, Partenaires, Équipe, Gestion) est réservé
+à l'**équipe CM** : le Fondateur, les rôles du club qui portent une permission CM (Second CEO…), les affectations à un
+rôle CM (Responsable, Correspondant — du club ou d'une team —, rôles CM personnalisés) et les permissions CM accordées
+dans **Rôles et permissions**. Côté serveur, `porteesDe` (cm/commun.mjs) rend `teams` (toutes les permissions, pour
+l'onglet CM d'une team et l'état léger `/cm/etat`) et `teamsEspace` (sans celles d'un rôle de team) ; toutes les
+lectures de l'espace passent par `espaceCm` / `voitEspaceCm` / `exigerEspaceCm` : `GET /cm/moi` (`espace`, `teams`),
+`/cm/tableaux`, `/cm/a-valider`, `/cm/calendrier`, `/cm/recherche`, `/cm/urgences`, `/cm/terminees`, `/cm/clips`,
+`/cm/calendrier/teams`, la charte, les modèles, les visuels, les dossiers de visuels, les images du club, Réseaux,
+les Ressources, l'import Trello (403, ou 404 pour Réseaux). Le Drive, les réunions, l'Équipe CM, les Sponsors et la
+Gestion ne s'ouvraient déjà qu'aux rôles CM / du club. Notifications : sans équipe CM, les personnelles CM / Drive du
+club (sans team) sont masquées à la lecture, et les ressources hors partage comptent comme interdites dans le fil.
+Exceptions gardées : l'**invité d'une réunion** à venir (ses réunions seulement) et la personne avec qui une
+**ressource est partagée** (« Partager avec… », `moi.ressources` : DATA › Ressources ne montre que celles-là).
+Migration 0053 : `cm.voir` est retiré des rôles « Manager » des teams existantes qui ont encore les trois permissions
+CM par défaut (une partie CM personnalisée ne change pas ; le modèle des nouvelles teams réglé par le Fondateur non plus).
 
 ## DATA › Ressources : les liens utiles de l'équipe CM
 
@@ -686,6 +708,7 @@ d'un post publié** part sur Discord, en anglais avec un fil français, réglée
 | `cm_commentaires_vus`, `cm_carte_suivis` (migration 0045) | commentaires lus par compte, cartes suivies |
 | `cm_listes.fin`, `cm_cartes.terminee_le` (migration 0050) | colonnes de fin, cartes terminées (date, auteur) |
 | `cm_listes.tri` (migration 0052) | tri des cartes de la colonne : `auto` (défaut) ou `manuel` |
+| `role_permissions` (migration 0053) | `cm.voir` retiré des rôles « Manager » encore aux permissions CM par défaut |
 
 `envois` est reconstruite (comme en 0017) : usage « cm », `team_id` facultatif, colonne `portee`. Les rôles système
 des teams existantes reçoivent `cm.clips.proposer` (et `cm.voir`, `cm.deposer` pour le Manager) ; le module n'est

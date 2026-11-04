@@ -19,6 +19,10 @@ Migration `0033_roles_globaux.sql`, code serveur `esport/noyau/roles/`, écran `
 | **CM** | « Responsable CM », « Correspondant CM » (système) et rôles CM personnalisés | section CM, Drive, Sponsors, trombinoscope ([cm.md](cm.md)) | **Espace CM › Équipe CM** (club ou team) |
 | **Teams** | Propriétaire, Manager, Coach, Analyste, Joueur, Remplaçant (système) et rôles de team personnalisés | une team | la team (**Paramètres › Membres et rôles**) |
 
+Les permissions CM d'un rôle de **team** (`cm.voir`, `cm.deposer`, `cm.clips.proposer`) ne valent que dans l'onglet CM
+de cette team : l'espace « CM du club » est réservé à l'équipe CM (sections Club et CM ; [cm.md](cm.md), « Qui entre dans
+l'espace CM du club »). Par défaut, le Manager dépose des informations et propose des clips, sans `cm.voir` (migration 0053).
+
 Dans chaque section : choisir un rôle, cocher / décocher dans la **matrice**, puis **Enregistrer** (les changements
 sont surlignés et comptés ; **Annuler** revient en arrière). Boutons : **Rétablir les valeurs par défaut** (rôle
 système modifié), **Dupliquer** (nouveau rôle avec les mêmes permissions — seulement celles que vous pouvez

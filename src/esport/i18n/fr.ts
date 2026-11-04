@@ -1477,7 +1477,7 @@ export const fr = {
   'cat.role.proprietaire.nom': 'Propriétaire',
   'cat.role.proprietaire.description': 'Tout, y compris la suppression de la team et la gestion des modules.',
   'cat.role.manager.nom': 'Manager',
-  'cat.role.manager.description': 'Membres, rôles, planning, résumés (rédaction comprise), Discord, journal.',
+  'cat.role.manager.description': 'Membres, rôles, planning, résumés (rédaction comprise), Discord, journal ; dépôt d’informations et clips pour le CM (sans accès à l’espace CM du club).',
   'cat.role.coach.nom': 'Coach',
   'cat.role.coach.description': 'Planning, review, strats, playbook, scouting, objectifs, présence.',
   'cat.role.analyste.nom': 'Analyste',

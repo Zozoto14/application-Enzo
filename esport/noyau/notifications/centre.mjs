@@ -32,6 +32,8 @@ const LIMITE_MAX = 100;
 const ENTITES_RESSERRABLES = ['strat', 'ressource', 'resultat'];
 /** Personnelles visibles même hors de la team (l'intéressé vient d'en être retiré). */
 const PERSO_HORS_TEAM = ['retire'];
+/** Personnelles CM du club qu'un compte hors équipe CM garde (en plus des réunions) : ressource partagée avec lui. */
+const PERSO_CM_HORS_EQUIPE = ['cm-lien-partage'];
 
 // ------------------------------------------------------------------ Temps réel
 
@@ -223,6 +225,12 @@ export function filtrePerso(droits) {
     params.push(...droits.liensInterdits);
   }
   if (!aCm(droits)) conditions.push("COALESCE(p.categorie, '') NOT IN ('cm', 'drive')");
+  // Espace « CM du club » réservé à l'équipe CM : hors d'elle (Manager d'une team…), les personnelles CM / Drive du club
+  // (sans team) sont masquées, sauf réunions où il est invité et ressources partagées avec lui (relues à la lecture).
+  else if (!droits.cmEspace) {
+    conditions.push(`NOT (COALESCE(p.categorie, '') IN ('cm', 'drive') AND p.team_id IS NULL AND p.type NOT IN (${PERSO_CM_HORS_EQUIPE.map(() => '?').join(', ')}) AND p.type NOT LIKE 'cm-reunion%' AND p.type NOT LIKE 'cm-rdv%')`);
+    params.push(...PERSO_CM_HORS_EQUIPE);
+  }
   return { sql: conditions.join(' AND '), params };
 }
 

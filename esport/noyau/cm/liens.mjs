@@ -44,7 +44,7 @@ import { verifierAdresse } from '../ressources/apercu.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { GENRES_ACCES, MAX_REGLES_ACCES, NIVEAUX_ACCES, lecteurTableaux, permissionsAuNiveau } from './acces.mjs';
 import { ACCES_LIEN, lecteurLiens, lienRestreint, niveauxLien, voitPortee } from './liensAcces.mjs';
-import { MODULE_CM, PORTEE_CLUB, comptesClubAvec, comptesTeamAvec, contexteCm, exiger, exigerUuid, permissionsSur, porteesDe } from './commun.mjs';
+import { MODULE_CM, PORTEE_CLUB, comptesClubAvec, comptesTeamAvec, contexteCm, espaceCm, exiger, exigerUuid, permissionsSur, porteesDe } from './commun.mjs';
 
 export const LIENS_MAX = 500;
 export const TITRE_MAX = 120;
@@ -93,17 +93,25 @@ const publier = (l, teams) => ({
 
 /** `drive` : service du Drive (dossiers et fichiers que le compte voit, stockage des fichiers des ressources). */
 export function servicesLiensCm({ base, maintenant = () => Date.now(), drive, cleSession, stockage }) {
-  /** Lecture : `cm.voir` du club ou d'une team ; rend ce que le compte voit. */
+  /**
+   * Lecture : `cm.voir` du club ou d'une team pour l'équipe CM (espace « CM du club » : jamais par un rôle de team) ;
+   * rend ce que le compte voit. Hors équipe CM (Manager d'une team…), seulement les ressources partagées avec lui
+   * (« Partager avec… », `partagees`) ; sans aucune, 403.
+   */
   async function lecture(acteur) {
-    const x = await porteesDe(base, acteur);
+    const x = espaceCm(await porteesDe(base, acteur));
     const equipes = new Set([...x.teams].filter(([, s]) => s.has('cm.voir')).map(([id]) => id));
     const club = x.club.has('cm.voir');
-    if (!club && !equipes.size) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
-    return { acteur, club, equipes, editer: x.club.has('cm.editer'), gerer: x.club.has('cm.gerer'), noms: x.noms, portees: x, lecteur: lecteurLiens(base, acteur) };
+    let partagees = null;
+    if (!club && !equipes.size) {
+      partagees = acteur.compte ? new Set((await base.tous('SELECT lien_id FROM cm_lien_partages WHERE compte_id = ?', [acteur.compte])).map(p => p.lien_id)) : new Set();
+      if (!partagees.size) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    }
+    return { acteur, club, equipes, partagees, editer: x.club.has('cm.editer'), gerer: x.club.has('cm.gerer'), noms: x.noms, portees: x, lecteur: lecteurLiens(base, acteur) };
   }
 
-  /** Niveau de lecture d'une ressource ('modifier', 'voir') ou null : lecture de base (portée), puis restriction. */
-  const niveauVu = async (c, l) => (voitPortee(c.portees, l) ? c.lecteur.niveau(l) : null);
+  /** Niveau de lecture d'une ressource ('modifier', 'voir') ou null : lecture de base (portée, ou partage hors équipe CM), puis restriction. */
+  const niveauVu = async (c, l) => ((c.partagees ? c.partagees.has(l.id) : voitPortee(c.portees, l)) ? c.lecteur.niveau(l) : null);
   const fondateur = c => Boolean(c.acteur?.superAdmin) || c.acteur?.compte === 'principal';
   /** Droits du compte sur une ressource qu'il voit (`niveau`). */
   const droitsLien = (c, l, niveau) => {

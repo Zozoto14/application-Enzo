@@ -14,7 +14,7 @@ import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { lienSur } from '../review/markdown.mjs';
 import { cheminSigne } from '../fichiers.mjs';
 import { extraireYoutube } from '../review/youtube.mjs';
-import { activite, contexteCm, exiger, exigerUuid, peut, porteesDe, versionTableau } from './commun.mjs';
+import { activite, contexteCm, espaceCm, exiger, exigerEspaceCm, exigerUuid, peut, porteesDe, versionTableau } from './commun.mjs';
 import { DUREE_LIEN_CM_MS, assurerTableauDefaut, instructionsCarte, listeDeCle, positionFin } from './tableaux.mjs';
 import { lireReglagesCm } from './droits.mjs';
 
@@ -109,10 +109,13 @@ export function servicesClipsCm({ base, maintenant = () => Date.now(), medias, c
     return { ...(await publics(lignes, acteur, () => ctx.permissions)), tous };
   }
 
-  /** `GET /cm/clips?statut&team` : galerie des clips de toutes les teams où l'acteur voit la partie CM. */
+  /**
+   * `GET /cm/clips?statut&team` : galerie (DATA › Clips de l'espace « CM du club ») des clips de toutes les teams où
+   * l'équipe CM voit la partie CM. Un rôle de team (Manager) suit les clips de SA team dans son onglet CM (`/cm/teams/:id/clips`).
+   */
   async function galerie(acteur, { statut, team } = {}) {
     if (statut !== undefined && !STATUTS_CLIP.includes(statut)) throw echec(400, 'statut', 'Statut inconnu.');
-    const portees = await porteesDe(base, acteur);
+    const portees = exigerEspaceCm(espaceCm(await porteesDe(base, acteur)));
     const ids = [...portees.teams].filter(([id, s]) => s.has('cm.voir') && (!team || team === id)).map(([id]) => id);
     const lignes = (await lignesParIds(base, `SELECT * FROM cm_clips WHERE supprime_le IS NULL ${statut ? 'AND statut = ?' : ''} AND team_id`, ids, { paramsAvant: statut ? [statut] : [] }))
       .sort((a, b) => String(b.cree_le).localeCompare(String(a.cree_le)))

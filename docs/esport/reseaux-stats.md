@@ -28,8 +28,10 @@ Mêmes permissions que la section CM ([cm.md](cm.md)), sur la **portée** de cha
 | `cm.gerer` (du **club**) | configurer : comptes, annonces Discord (salons, modèles, rôle, test), salons Discord du club, rappels, liste des annonces |
 
 - Le **Fondateur** et le **Responsable CM** ont tout.
-- Un compte qui a `cm.voir` sur **une team seulement** (correspondant, Manager) ne voit que les comptes et les
-  publications **de cette team** ; un compte du club ou d'une autre team lui répond 404.
+- Un compte qui a `cm.voir` sur **une team seulement** (correspondant de la team) ne voit que les comptes et les
+  publications **de cette team** ; un compte du club ou d'une autre team lui répond 404. Une permission CM d'un
+  **rôle de team** (Manager…) n'ouvre jamais la page (404) : elle est dans l'espace « CM du club », réservé à
+  l'équipe CM.
 - Sans `cm.voir` nulle part, toute la page répond **404** ; avec `cm.voir` sans le droit d'écrire, **403**.
 - La configuration (comptes, annonces, salons) demande `cm.gerer` **du club** : un correspondant de team ne choisit
   pas les salons Discord.

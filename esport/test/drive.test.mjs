@@ -197,6 +197,8 @@ async function preparer({ drive } = {}) {
   await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'cm123456', roleId: 'cm-role-responsable', portee: 'club' } });
   await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'kai12345', roleId: 'cm-role-correspondant', portee: A.teamId } });
   for (const t of [A.teamId, B.teamId]) await ok(`/teams/${t}/modules`, s.fondateur, { methode: 'PUT', corps: { modules: { cm: true } } });
+  // Rôle Manager de A personnalisé : cm.voir (le tableau CM de la team, dans son onglet CM ; plus par défaut, migration 0053).
+  await b.base.executer("INSERT INTO role_permissions (role_id, permission) VALUES (?, 'cm.voir')", [A.roles.manager.id]);
   /** Envoie par morceaux (usage « drive ») ; rend l'identifiant de l'envoi, ou la réponse en erreur. */
   const envoyer = async (jeton, portee, octets, nom = 'fichier.bin') => {
     const debut = await api(`/cm/drive/portees/${portee}/envois`, jeton, { methode: 'POST', corps: { nom, taille: octets.length } });

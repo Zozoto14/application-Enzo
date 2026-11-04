@@ -143,7 +143,10 @@ export function servicesTempsReel({ base, maintenant = () => Date.now(), socle, 
     if (sujet.startsWith('compte:')) return sujet === `compte:${acteur.compte}`;
     if (sujet === 'club') return true;
     if (sujet === 'cm') {
-      // Lecture des tableaux (cm.voir) quelque part : un joueur qui ne peut que proposer un clip ne reçoit rien.
+      // Lecture des tableaux (cm.voir) quelque part : un joueur qui ne peut que proposer un clip ne reçoit rien, ni le
+      // Manager d'une team (cm.deposer, cm.clips.proposer par défaut, migration 0053). Un rôle de team qui garde cm.voir
+      // (personnalisé) suit le tableau de SA team dans l'onglet CM : le sujet ne porte que des signaux de relecture, chaque
+      // objet est revérifié (sonde) et l'état relu (`/cm/etat`) ne rend que ses tableaux ; l'espace du club reste fermé.
       const p = await porteesDe(base, acteur);
       return p.club.has('cm.voir') || [...p.teams.values()].some(x => x.has('cm.voir'));
     }

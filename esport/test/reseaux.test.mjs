@@ -196,6 +196,9 @@ async function preparer() {
   const redacteur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Rédacteur', couleur: '#123456', permissions: ['cm.voir', 'cm.editer'] } });
   await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'red12345', roleId: redacteur.id, portee: 'club' } });
   for (const t of [A.teamId, B.teamId]) await ok(`/teams/${t}/modules`, s.fondateur, { methode: 'PUT', corps: { modules: { cm: true, discord: true } } });
+  // Max (Manager d'Alpha) est aussi Correspondant CM de sa team : l'équipe CM, limitée à Alpha. Nox (Manager de Bravo,
+  // sans affectation) n'a que son rôle de team : l'espace « CM du club », donc Réseaux, lui reste fermé.
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'man12345', roleId: 'cm-role-correspondant', portee: A.teamId } });
   // Salon Discord de la Team Alpha : son webhook (fil français activé pour elle).
   await ok(`/teams/${A.teamId}/discord/webhook`, s.man12345, { methode: 'PUT', corps: { url: URL_TEST } });
   const publierPost = async ({ reseaux = ['x', 'instagram', 'tiktok'], titre = 'Victoire 2-0', publications, piece } = {}) => {
@@ -237,7 +240,7 @@ test('comptes : validation des adresses, identifiant cohérent, doublons ; permi
   assert.equal((await api('/cm/reseaux/comptes', s.red12345, { methode: 'POST', corps: { reseau: 'tiktok', url: 'https://www.tiktok.com/@club' } })).statut, 403);
   assert.equal((await api(`/cm/reseaux/comptes/${x.id}/annonce`, s.red12345, { methode: 'PUT', corps: { active: true } })).statut, 403);
   assert.equal((await api('/cm/reseaux/salons', s.red12345, { methode: 'POST', corps: { nom: 'annonces', url: URL_SALON_CLUB } })).statut, 403);
-  // Consulter : le rédacteur voit tout, sans la configuration des annonces ; le Manager de la team ne voit que ses comptes.
+  // Consulter : le rédacteur voit tout, sans la configuration des annonces ; le correspondant de la team ne voit que ses comptes.
   const vu = await ok('/cm/reseaux', s.red12345);
   assert.equal(vu.comptes.length, 3);
   assert.equal(vu.comptes[0].annonce, undefined, 'pas de réglage d’annonce sans cm.gerer');
@@ -246,16 +249,10 @@ test('comptes : validation des adresses, identifiant cohérent, doublons ; permi
   assert.deepEqual(team.comptes.map(c => c.id), [ig.id]);
   assert.equal((await api(`/cm/reseaux/comptes/${x.id}/releves`, s.man12345)).statut, 404, 'compte du club : invisible pour la team');
   assert.equal((await api(`/cm/reseaux/comptes/${ig.id}/releves`, s.man12345, { methode: 'POST', corps: { abonnes: 10 } })).statut, 403, 'voir sans éditer');
-  // Sans cm.voir nulle part : la page n'existe pas.
+  // Sans cm.voir de l'équipe CM : la page n'existe pas (le Manager de Bravo n'a qu'un rôle de team : espace fermé).
   for (const qui of ['lea12345', 'nox12345']) {
     for (const chemin of ['/cm/reseaux', '/cm/reseaux/publications', '/cm/reseaux/tableau-de-bord', '/cm/reseaux/export/posts.csv']) {
-      const r = await api(chemin, s[qui]);
-      if (qui === 'nox12345' && chemin === '/cm/reseaux') {
-        assert.deepEqual(r.corps.comptes, [], 'Manager de Bravo : voit la page (cm.voir de sa team) mais aucun compte');
-        continue;
-      }
-      if (qui === 'nox12345') continue;
-      assert.equal(r.statut, 404, `${qui} ${chemin}`);
+      assert.equal((await api(chemin, s[qui])).statut, 404, `${qui} ${chemin}`);
     }
   }
   // Modifier, désactiver, supprimer.
@@ -475,7 +472,7 @@ test('statistiques : publications suivies, relevés datés (J+1, J+7), engagemen
   assert.equal((await api(`/cm/reseaux/publications/${px.id}/releves`, s.red12345, { methode: 'POST', corps: { jour: '2026-10-20', vues: 'beaucoup' } })).corps.code, 'metrique-vues');
   assert.equal((await api(`/cm/reseaux/publications/${px.id}/releves`, s.red12345, { methode: 'POST', corps: { jour: '2026-10-20' } })).corps.code, 'releve-vide');
   assert.equal((await api(`/cm/reseaux/publications/${px.id}/releves`, s.red12345, { methode: 'POST', corps: { jour: '2030-01-01', vues: 1 } })).corps.code, 'jour');
-  assert.equal((await api(`/cm/reseaux/publications/${px.id}/releves`, s.man12345, { methode: 'POST', corps: { vues: 1 } })).statut, 403, 'Manager : voir sans éditer');
+  assert.equal((await api(`/cm/reseaux/publications/${px.id}/releves`, s.man12345, { methode: 'POST', corps: { vues: 1 } })).statut, 403, 'correspondant : voir sans éditer');
   await ok(`/cm/reseaux/publications/${px.id}/releves`, s.red12345, { methode: 'POST', corps: { jour: '2026-10-20', vues: 500, likes: 10 } });
   b.horloge.t += 7 * 86_400_000;
   // Une semaine plus tard : nouvelles sessions (elles expirent).
@@ -561,7 +558,7 @@ test('import CSV : correspondance, lignes malformées, adresse inconnue, créati
   assert.equal((await api('/cm/reseaux/import', s.red12345, { methode: 'POST', corps: { genre: 'posts', contenu: csv, correspondance: { 1: 'jour' } } })).corps.code, 'correspondance');
   assert.equal((await api('/cm/reseaux/import', s.red12345, { methode: 'POST', corps: { genre: 'posts', contenu: csv, correspondance: { 0: 'url', 1: 'url' } } })).corps.code, 'correspondance');
   assert.equal((await api('/cm/reseaux/import/apercu', s.red12345, { methode: 'POST', corps: { genre: 'posts', contenu: 'a\n"jamais fermé' } })).corps.code, 'csv-invalide');
-  assert.equal((await api('/cm/reseaux/import/apercu', s.man12345, { methode: 'POST', corps: { genre: 'posts', contenu: csv } })).statut, 403, 'Manager : pas de saisie');
+  assert.equal((await api('/cm/reseaux/import/apercu', s.man12345, { methode: 'POST', corps: { genre: 'posts', contenu: csv } })).statut, 403, 'correspondant : pas de saisie');
   let bilan = await ok('/cm/reseaux/import', s.red12345, { methode: 'POST', corps: { genre: 'posts', contenu: csv, correspondance: apercu.correspondance } });
   assert.deepEqual([bilan.releves, bilan.crees], [2, 0]);
   assert.deepEqual(bilan.invalides.map(i => [i.ligne, i.code]), [[4, 'publication-inconnue'], [5, 'reseau'], [6, 'jour'], [7, 'vues'], [8, 'releve-vide']]);

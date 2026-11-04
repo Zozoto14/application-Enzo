@@ -33,7 +33,9 @@ import {
   comptesClubAvec,
   comptesTeamAvec,
   contexteCm,
+  espaceCm,
   exiger,
+  exigerEspaceCm,
   exigerUuid,
   lirePortee,
   peut,
@@ -451,9 +453,12 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     throw echec(400, 'fond', 'Fond illisible.');
   }
 
-  /** `GET /cm/tableaux` : tableaux visibles (le tableau « Contenus » du club est créé au premier passage). */
+  /**
+   * `GET /cm/tableaux` : tableaux visibles de l'espace « CM du club » (le tableau « Contenus » du club est créé au premier
+   * passage). Réservé à l'équipe CM : un rôle de team (Manager) lit le tableau de SA team dans son onglet CM (`/cm/teams/:id`).
+   */
   async function tableaux(acteur, { archives = false } = {}) {
-    const portees = await porteesDe(base, acteur);
+    const portees = exigerEspaceCm(espaceCm(await porteesDe(base, acteur)));
     const visibles = [...(portees.club.has('cm.voir') ? [PORTEE_CLUB] : []), ...[...portees.teams].filter(([, s]) => s.has('cm.voir')).map(([id]) => id)];
     if (portees.club.has('cm.voir')) await assurerTableauDefaut(base, PORTEE_CLUB, maintenant());
     // Tableaux restreints : seulement ceux dont l'acteur est (migration 0046).
@@ -772,6 +777,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
   /** `PUT /cm/preferences/:cle { valeur }` : un choix d'affichage (JSON de 4 000 caractères au plus ; null l'efface). */
   async function changerPreference(acteur, cle, corps) {
     if (!acteur.compte || !CLE_PREFERENCE.test(String(cle))) throw echec(400, 'preference', 'Préférence inconnue.');
+    // Aussi depuis l'onglet CM d'une team (colonnes réduites du tableau de la team) : un rôle de team compte ici.
     const portees = await porteesDe(base, acteur);
     if (!portees.club.has('cm.voir') && ![...portees.teams.values()].some(x => x.has('cm.voir'))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     const valeur = corps?.valeur;
@@ -1744,8 +1750,14 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
 
   // ---------------------------------------------------------------- Vues transversales
 
-  async function porteesAvec(acteur, permission) {
-    const portees = await porteesDe(base, acteur);
+  /**
+   * Portées où l'acteur a `permission`. Vues transversales de l'espace « CM du club » (à valider, calendrier, recherche,
+   * urgences, terminées) : équipe CM seulement (403 sinon). `{ onglet: true }` (état léger, `/cm/etat`, relu aussi par
+   * l'onglet CM d'une team) : les permissions d'un rôle de team comptent, pour les tableaux de SA team.
+   */
+  async function porteesAvec(acteur, permission, { onglet = false } = {}) {
+    const toutes = await porteesDe(base, acteur);
+    const portees = onglet ? toutes : exigerEspaceCm(espaceCm(toutes));
     return { portees, liste: [...(portees.club.has(permission) ? [PORTEE_CLUB] : []), ...[...portees.teams].filter(([, s]) => s.has(permission)).map(([id]) => id)] };
   }
 
@@ -1855,7 +1867,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
 
   /** `GET /cm/etat` : versions des tableaux visibles et nombre de posts à valider (rafraîchissement léger). */
   async function etat(acteur) {
-    const { portees, liste } = await porteesAvec(acteur, 'cm.voir');
+    const { portees, liste } = await porteesAvec(acteur, 'cm.voir', { onglet: true });
     const lignes = await lecteurTableaux(base, acteur).filtrer(await lignesParIds(base, 'SELECT id, version, portee, team_id, acces FROM cm_tableaux WHERE supprime_le IS NULL AND portee', liste));
     const validables = lignes.filter(t => permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau).has('cm.valider')).map(t => t.id);
     const n = (await lignesParIds(base, "SELECT COUNT(*) AS n FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND terminee_le IS NULL AND statut = 'a_valider' AND tableau_id", validables)).reduce((s, l) => s + Number(l.n), 0);
