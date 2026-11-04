@@ -10,7 +10,7 @@ anonyme, messages du bot **bilingues** (langue de la personne d'abord, l'autre d
 (celui du club), fermeture automatique après **7 jours** d'inactivité (réglable, avertissement 24 h avant).
 
 Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · **3. tickets dans l'app** ·
-4. commandes utiles.
+**4. commandes utiles**.
 
 ---
 
@@ -162,6 +162,42 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
 - Personne **sans compte** (seulement Discord) : `POST /tickets/rgpd/export` et `POST /tickets/rgpd/effacer`
   `{ discordId }`, réservés au Fondateur.
 
+## Commandes Discord
+
+Noms en français, descriptions en anglais traduites en français pour les clients Discord en `fr` ; réponses
+**éphémères** (vues seulement par la personne qui tape la commande), dans sa langue. Chaque commande peut être
+**coupée** ou **réservée à des rôles Discord** dans **Tickets › Configuration › Commandes** ; les commandes du staff
+vérifient en plus que la personne est du staff du ticket (rôles Discord de la catégorie, administrateur du serveur, ou
+compte Esport lié avec `tickets.repondre` sur la catégorie). Elles se tapent **dans le salon du ticket**.
+
+| Commande | Pour qui | Effet |
+| --- | --- | --- |
+| `/ticket ouvrir [categorie]` | tout membre | ouvrir un ticket (menu des catégories sans option ; formulaire s'il y en a un) |
+| `/ticket fermer [raison]` | l'auteur, le staff | fermer le ticket du salon |
+| `/ticket prendre` · `/ticket liberer` | staff | prendre en charge, ne plus prendre en charge |
+| `/ticket ajouter membre` · `/ticket retirer membre` | staff | donner ou retirer l'accès au salon |
+| `/ticket renommer nom` | staff | renommer le salon |
+| `/ticket priorite niveau` | staff | faible, moyenne, urgente, critique |
+| `/ticket transferer categorie` | staff | changer de catégorie (droits du salon mis à jour) |
+| `/ticket attente` | staff | « en attente de la réponse de l'auteur » |
+| `/ticket note texte` | staff | **note interne** : gardée dans l'app, jamais postée sur Discord (réponse éphémère seulement) |
+| `/ticket transcript` | staff | transcript HTML **en message privé** (sans les notes internes, qui ne passent jamais par Discord ; l'app les montre) |
+| `/ticket rouvrir` | staff | rouvrir le ticket fermé du salon |
+| `/ticket stats` | staff | 30 jours : ouverts, créés, fermés par catégorie, délai de 1re réponse et de résolution, satisfaction |
+| `/ticket panneau [panneau]` | administrateur du serveur, ou compte lié qui configure les tickets | republier un panneau déjà réglé dans l'app |
+| `/tickets [liste]` | tout membre ; `liste: file` pour le staff | mes tickets ouverts ; ou la file des tickets non pris en charge de mes catégories |
+
+`/tickets` est une commande à part (Discord ne permet pas une commande à la fois seule et avec des sous-commandes) :
+`/tickets` seul donne vos tickets, `/tickets liste:file` la file du staff.
+
+**Après la mise à jour** : relancez l'enregistrement des commandes (étape 6 de [bot-discord.md](bot-discord.md)) :
+
+```bash
+cd ~/application-enzo
+set -a; . ~/.appdashboard/esport.env; set +a
+/home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.fr
+```
+
 ## Connexion Discord : un seul processus, et un secours
 
 L'app Esport tourne sous **Passenger** chez o2switch : plusieurs processus Node possibles, qui peuvent être arrêtés
@@ -257,7 +293,7 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   `gateway.mjs` (client Gateway), `superviseur.mjs` (bail, secours, état), `conversation.mjs` (messages reçus,
   pièces jointes, temps réel), `service.mjs` (configuration), `cycle.mjs` (cycle de vie : ouverture, staff,
   fermeture, note, réouverture, cron), `rgpd.mjs`, `routes.mjs`, `bot.mjs` (interactions), `bus.mjs` (événements,
-  notifications), `cron.mjs`. Commande `/ticket` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
+  notifications), `cron.mjs`. Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migration `0054_tickets.sql` ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
 - Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `TicketsStaff.tsx` : liste, vue, statistiques ;
@@ -265,7 +301,8 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   textes `src/esport/i18n/tickets.ts`, phrases des notifications `src/esport/tickets/libelles.ts`.
 - Tests : `esport/test/tickets-gateway.test.mjs` (faux serveur Gateway WebSocket : HELLO, battements, RESUME,
   zombie, INVALID_SESSION, 4014, budget ; bail entre deux processus simulés ; relecture de secours ; cron),
-  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-app.test.mjs`
+  `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-commandes.test.mjs`
+  (définitions, chaque commande, droits, commandes coupées ou réservées), `esport/test/tickets-app.test.mjs`
   (visibilité par catégorie, non lus, réponse depuis l'app, notes internes jamais envoyées, droits, transcript, pièces,
   liaisons, statistiques), `esport/test/tickets-cycle.test.mjs`
   (cycle de vie complet avec interactions signées : formulaire, salon et droits, staff, fermeture, MP, note,

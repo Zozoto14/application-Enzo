@@ -7,7 +7,7 @@ seulement les joueurs convoqués** qui ont lié leur compte. Sous chaque annonce
 (compteurs ✅ / 🤔 / ❌).
 
 Les joueurs ont aussi des commandes : `/prochain`, `/planning`, `/rsvp`, `/dispo`, `/taches`, `/strat`, `/resume`,
-`/aide`. Le staff a `/evenement-creer` et `/relancer`.
+`/aide`. Le staff a `/evenement-creer` et `/relancer`. Les tickets ont `/ticket …` et `/tickets` ([tickets.md](tickets.md)).
 
 ![Annonce d'un scrim](bot/apercus/01-annonce-scrim.png)
 
@@ -214,7 +214,8 @@ Réponses visibles **par vous seul** (éphémères).
 | `/evenement-creer` | staff (créer au planning) | type, titre, date (`24/10`, `demain`…), heure (`20h30`), convoqués, durée |
 | `/relancer evenement:` | staff (marquer la présence) | relance groupée des convoqués sans réponse |
 | `/esport-lier-serveur code:` | admin du serveur Discord | lier le serveur à une team |
-| `/ticket ouvrir [categorie]` · `/ticket fermer [raison]` | tout membre du serveur du club (sans compte lié) | tickets : ouvrir un ticket, fermer le sien (ou, pour le staff, celui du salon) — voir [tickets.md](tickets.md) |
+| `/ticket ouvrir [categorie]` · `/ticket fermer [raison]` · `/tickets [liste]` | tout membre du serveur du club (sans compte lié) | tickets : ouvrir un ticket, fermer le sien, voir ses tickets — voir [tickets.md](tickets.md) |
+| `/ticket prendre`, `liberer`, `ajouter`, `retirer`, `renommer`, `priorite`, `transferer`, `attente`, `note`, `transcript`, `rouvrir`, `stats`, `panneau` | staff du ticket (rôles de la catégorie, compte lié qui répond aux tickets ; `panneau` : administrateur) | tickets : gestion depuis le salon ([tickets.md](tickets.md#commandes-discord)) |
 
 Chaque commande fait **les mêmes contrôles que l'app** avec le compte lié : membre de la team, module activé, bon
 droit. Un joueur qui tape `/evenement-creer` reçoit « Tu n'as pas la permission ». Une commande ne touche **que

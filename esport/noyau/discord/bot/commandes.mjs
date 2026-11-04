@@ -117,11 +117,34 @@ export const COMMANDES = [
  * esport/outils/discord-commandes.mjs.
  */
 const optionCategorie = { type: T.CHAINE, name: 'categorie', ...desc('La catégorie du ticket', 'The ticket category'), autocomplete: true };
+const optionMembre = { type: T.UTILISATEUR, name: 'membre', ...desc('Le membre du serveur', 'The server member'), required: true };
+export const NIVEAUX_PRIORITE = [choix('Faible', 'Low', 'faible'), choix('Moyenne', 'Medium', 'moyen'), choix('Urgente', 'Urgent', 'urgent'), choix('Critique', 'Critical', 'critique')];
 export const SOUS_COMMANDES_TICKET = [
   { type: T.SOUS_COMMANDE, name: 'ouvrir', ...desc('Ouvrir un ticket (salon privé avec le staff)', 'Open a ticket (private channel with the staff)'), options: [{ ...optionCategorie, required: false }] },
   { type: T.SOUS_COMMANDE, name: 'fermer', ...desc('Fermer ce ticket', 'Close this ticket'), options: [{ type: T.CHAINE, name: 'raison', ...desc('Raison (facultative)', 'Reason (optional)'), required: false, max_length: 300 }] },
+  { type: T.SOUS_COMMANDE, name: 'prendre', ...desc('Staff : prendre ce ticket en charge', 'Staff: claim this ticket') },
+  { type: T.SOUS_COMMANDE, name: 'liberer', ...desc('Staff : ne plus prendre ce ticket en charge', 'Staff: release this ticket') },
+  { type: T.SOUS_COMMANDE, name: 'ajouter', ...desc('Staff : ajouter un membre à ce ticket', 'Staff: add a member to this ticket'), options: [optionMembre] },
+  { type: T.SOUS_COMMANDE, name: 'retirer', ...desc('Staff : retirer un membre de ce ticket', 'Staff: remove a member from this ticket'), options: [optionMembre] },
+  { type: T.SOUS_COMMANDE, name: 'renommer', ...desc('Staff : renommer le salon du ticket', 'Staff: rename the ticket channel'), options: [{ type: T.CHAINE, name: 'nom', ...desc('Nouveau nom du salon', 'New channel name'), required: true, min_length: 2, max_length: 90 }] },
+  { type: T.SOUS_COMMANDE, name: 'priorite', ...desc('Staff : changer la priorité', 'Staff: change the priority'), options: [{ type: T.CHAINE, name: 'niveau', ...desc('Niveau d’urgence', 'Urgency level'), required: true, choices: NIVEAUX_PRIORITE }] },
+  { type: T.SOUS_COMMANDE, name: 'transferer', ...desc('Staff : changer la catégorie du ticket', 'Staff: move the ticket to another category'), options: [{ ...optionCategorie, required: true }] },
+  { type: T.SOUS_COMMANDE, name: 'rouvrir', ...desc('Staff : rouvrir ce ticket fermé', 'Staff: reopen this closed ticket') },
+  { type: T.SOUS_COMMANDE, name: 'transcript', ...desc('Staff : recevoir le transcript en message privé', 'Staff: get the transcript by direct message') },
+  { type: T.SOUS_COMMANDE, name: 'note', ...desc('Staff : note interne (jamais visible de l’auteur)', 'Staff: internal note (never shown to the author)'), options: [{ type: T.CHAINE, name: 'texte', ...desc('Texte de la note', 'Note text'), required: true, max_length: 1500 }] },
+  { type: T.SOUS_COMMANDE, name: 'attente', ...desc('Staff : en attente de la réponse de l’auteur', 'Staff: waiting for the author’s reply') },
+  { type: T.SOUS_COMMANDE, name: 'stats', ...desc('Staff : statistiques des tickets (30 jours)', 'Staff: ticket statistics (30 days)') },
+  { type: T.SOUS_COMMANDE, name: 'panneau', ...desc('Admin : republier un panneau des tickets', 'Admin: republish a ticket panel'), options: [{ type: T.CHAINE, name: 'panneau', ...desc('Le panneau', 'The panel'), required: false, autocomplete: true }] },
 ];
-COMMANDES.push({ name: 'ticket', ...desc('Tickets du support', 'Support tickets'), contexts: SERVEUR, options: SOUS_COMMANDES_TICKET });
+COMMANDES.push(
+  { name: 'ticket', ...desc('Tickets du support', 'Support tickets'), contexts: SERVEUR, options: SOUS_COMMANDES_TICKET },
+  {
+    name: 'tickets',
+    ...desc('Tes tickets ouverts (ou la file du staff)', 'Your open tickets (or the staff queue)'),
+    contexts: SERVEUR,
+    options: [{ type: T.CHAINE, name: 'liste', ...desc('Quelle liste', 'Which list'), required: false, choices: [choix('Mes tickets', 'My tickets', 'mes'), choix('File du staff (non pris en charge)', 'Staff queue (unclaimed)', 'file')] }],
+  },
+);
 
 /** Définitions telles que Discord les attend (commandes de type 1, « chat input »). */
 export function definitionsCommandes() {

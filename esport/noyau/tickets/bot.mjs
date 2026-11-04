@@ -16,6 +16,9 @@
 
 import { lireLangue } from '../langues.mjs';
 import { droitsTickets, voitCategorie } from './acces.mjs';
+import { iso, nouvelId } from '../outils.mjs';
+import { annoncer } from './conversation.mjs';
+import { transcriptHtml } from './transcript.mjs';
 import { estRefus } from './cycle.mjs';
 import { nomDiscord } from './conversation.mjs';
 import { nomPriorite } from './panneaux.mjs';
@@ -25,6 +28,11 @@ import { t } from './textes.mjs';
 const EPHEMERE = 64;
 const T = { COMMANDE: 2, COMPOSANT: 3, AUTOCOMPLETE: 4, FENETRE: 5 };
 const PERMISSION_ADMIN = 0x8n;
+const PERMISSION_GERER_SERVEUR = 0x20n;
+const MEDIANE = l => {
+  const v = l.filter(Number.isFinite).sort((a, b) => a - b);
+  return v.length ? v[Math.floor(v.length / 2)] : null;
+};
 
 export const estInteractionTickets = i => {
   const id = String(i?.data?.custom_id ?? '');
@@ -41,7 +49,7 @@ function commande(i) {
   return { nom: 'tickets', options: Object.fromEntries((i.data?.options ?? []).map(o => [o.name, o.value])) };
 }
 
-export function creerBotTickets({ base, maintenant = () => Date.now(), cycle }) {
+export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, config }) {
   async function langueDe(i) {
     const u = i.member?.user ?? i.user;
     const l = u?.id ? await base.premier('SELECT c.langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [u.id]) : null;
@@ -243,6 +251,152 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle }) 
       return avis(t(langue, 'ferme_ok'));
     },
   };
+
+  /** Ticket du salon où la commande est tapée, et contrôle du staff (sauf `auteurPermis`). */
+  async function ticketIci(i, acteur, { staff = true } = {}) {
+    const ticket = await cycle.ticketDuSalon(i.channel_id);
+    if (!ticket) throw new RefusLocal('pas_ticket');
+    if (staff) await exigerStaff(i, ticket, acteur);
+    return ticket;
+  }
+
+  /** Catégories dont la personne est du staff (toutes pour un administrateur ou un compte lié qui gère les tickets). */
+  async function categoriesDuStaff(i, acteur) {
+    const toutes = await base.tous('SELECT id, nom_fr, nom_en, roles_discord FROM tickets_categories', []);
+    if (adminServeur(i)) return toutes;
+    const d = acteur.compte ? await droitsTickets(base, { compte: acteur.compte, superAdmin: acteur.superAdmin }) : null;
+    const roles = i.member?.roles ?? [];
+    return toutes.filter(c => (d?.repondre && voitCategorie(d, c.id)) || JSON.parse(c.roles_discord || '[]').some(r => roles.includes(r)));
+  }
+
+  const nomCategorie = (c, langue) => (langue === 'fr' ? c.nom_fr : c.nom_en) || c.nom_fr;
+  const salon = tk => (tk.salon_id ? `<#${tk.salon_id}>` : `#${tk.numero}`);
+
+  Object.assign(COMMANDES, {
+    async prendre(i, o, langue, acteur) {
+      await cycle.prendre(await ticketIci(i, acteur), acteur);
+      return avis(t(langue, 'pris', { staff: acteur.nom }));
+    },
+    async liberer(i, o, langue, acteur) {
+      await cycle.liberer(await ticketIci(i, acteur), acteur);
+      return avis(t(langue, 'libere'));
+    },
+    async ajouter(i, o, langue, acteur) {
+      const u = i.data?.resolved?.users?.[o.membre];
+      await cycle.ajouterMembre(await ticketIci(i, acteur), acteur, { id: String(o.membre ?? ''), nom: nomDiscord(u ?? { id: o.membre }) });
+      return avis(t(langue, 'ajoute', { membre: nomDiscord(u ?? { id: o.membre }) }));
+    },
+    async retirer(i, o, langue, acteur) {
+      const u = i.data?.resolved?.users?.[o.membre];
+      await cycle.retirerMembre(await ticketIci(i, acteur), acteur, { id: String(o.membre ?? '') });
+      return avis(t(langue, 'retire', { membre: nomDiscord(u ?? { id: o.membre }) }));
+    },
+    async renommer(i, o, langue, acteur) {
+      const r = await cycle.renommer(await ticketIci(i, acteur), acteur, String(o.nom ?? ''));
+      return avis(t(langue, 'renomme', { nom: r.nom }));
+    },
+    async priorite(i, o, langue, acteur) {
+      await cycle.priorite(await ticketIci(i, acteur), acteur, String(o.niveau ?? ''));
+      return avis(t(langue, 'priorite_changee', { priorite: nomPriorite(langue, String(o.niveau)) }));
+    },
+    async transferer(i, o, langue, acteur) {
+      const tk = await cycle.transferer(await ticketIci(i, acteur), acteur, String(o.categorie ?? ''));
+      const c = await cycle.categorie(tk.categorie_id);
+      return avis(t(langue, 'transfere', { categorie: (langue === 'fr' ? c?.nom.fr : c?.nom.en) ?? '' }));
+    },
+    async rouvrir(i, o, langue, acteur) {
+      const r = await cycle.rouvrir(await ticketIci(i, acteur), acteur);
+      return avis(t(langue, 'rouvert_ok', { salon: salon(r) }));
+    },
+    async attente(i, o, langue, acteur) {
+      await cycle.attente(await ticketIci(i, acteur), acteur);
+      return avis(t(langue, 'attente_ok'));
+    },
+    /** Note interne : enregistrée dans l'app, JAMAIS postée sur Discord (réponse éphémère seulement). */
+    async note(i, o, langue, acteur) {
+      const tk = await ticketIci(i, acteur);
+      const texte = String(o.texte ?? '').trim().slice(0, 1500);
+      if (!texte) throw new RefusLocal('erreur');
+      const t0 = maintenant();
+      await base.executer("INSERT INTO tickets_messages (id, ticket_id, genre, auteur_discord_id, auteur_compte_id, auteur_nom, staff, contenu, envoi, cree_le) VALUES (?, ?, 'note', ?, ?, ?, 1, ?, 'ok', ?)", [nouvelId(), tk.id, acteur.discordId, acteur.compte, acteur.nom, texte, iso(t0)]);
+      await annoncer(base, tk.id, t0, { acteur: acteur.compte ?? undefined });
+      return avis(t(langue, 'note_interne_ok'));
+    },
+    /** Transcript en MP au membre du staff : SANS les notes internes (elles ne passent jamais par Discord ; l'app les a). */
+    async transcript(i, o, langue, acteur) {
+      const tk = await ticketIci(i, acteur);
+      const cat = await base.premier('SELECT nom_fr, nom_en FROM tickets_categories WHERE id = ?', [tk.categorie_id]);
+      const messages = await base.tous('SELECT * FROM tickets_messages WHERE ticket_id = ? ORDER BY cree_le, id', [tk.id]);
+      const pieces = await base.tous('SELECT * FROM tickets_pieces WHERE ticket_id = ?', [tk.id]);
+      const tr = transcriptHtml({ ticket: tk, categorie: langue === 'fr' ? cat?.nom_fr : cat?.nom_en, messages, pieces, langue, notes: false, maintenant: maintenant() });
+      const ok = await cycle.envoyerMp(acteur.discordId, { content: t(langue, 'transcript_ok', { numero: tk.numero }) }, [{ nom: tr.nom, type: 'text/html', octets: new TextEncoder().encode(tr.contenu) }]);
+      return avis(t(langue, ok ? 'transcript_mp' : 'transcript_mp_impossible'));
+    },
+    async stats(i, o, langue, acteur) {
+      const cats = await categoriesDuStaff(i, acteur);
+      if (!cats.length) throw new RefusLocal('pas_staff');
+      const depuis = iso(maintenant() - 30 * 86_400_000);
+      const lignes = [];
+      const toutes = [];
+      for (const c of cats.slice(0, 20)) {
+        const ls = await base.tous('SELECT statut, ouvert_le, ferme_le, premiere_reponse_le, note FROM tickets WHERE categorie_id = ? AND (ouvert_le >= ? OR statut <> ?)', [c.id, depuis, 'ferme']);
+        toutes.push(...ls);
+        lignes.push(t(langue, 'stats_ligne', { categorie: nomCategorie(c, langue), ouverts: ls.filter(x => x.statut !== 'ferme').length, crees: ls.filter(x => x.ouvert_le >= depuis).length, fermes: ls.filter(x => x.ferme_le && x.ferme_le >= depuis).length }));
+      }
+      const ms = (a, b) => (a && b ? Date.parse(b) - Date.parse(a) : NaN);
+      const h = v => (v === null ? '—' : `${Math.round(v / 3_600_000)} h`);
+      const notes = toutes.filter(x => x.note !== null && x.note !== undefined).map(x => Number(x.note));
+      return {
+        type: 4,
+        data: {
+          flags: EPHEMERE,
+          allowed_mentions: { parse: [] },
+          embeds: [
+            {
+              title: t(langue, 'stats'),
+              description: lignes.join('\n').slice(0, 3500),
+              color: 0x5865f2,
+              fields: [
+                { name: t(langue, 'stats_reponse'), value: h(MEDIANE(toutes.map(x => ms(x.ouvert_le, x.premiere_reponse_le)))), inline: true },
+                { name: t(langue, 'stats_resolution'), value: h(MEDIANE(toutes.filter(x => x.ferme_le).map(x => ms(x.ouvert_le, x.ferme_le)))), inline: true },
+                { name: t(langue, 'stats_note'), value: notes.length ? `${(notes.reduce((a, b) => a + b, 0) / notes.length).toFixed(1)}/5 (${notes.length})` : '—', inline: true },
+              ],
+            },
+          ],
+        },
+      };
+    },
+    /** Republier un panneau : administrateur du serveur, ou compte lié qui configure les tickets. */
+    async panneau(i, o, langue, acteur) {
+      let droits = false;
+      try {
+        droits = (BigInt(i.member?.permissions ?? '0') & (PERMISSION_ADMIN | PERMISSION_GERER_SERVEUR)) !== 0n;
+      } catch {
+        droits = false;
+      }
+      const d = acteur.compte ? await droitsTickets(base, { compte: acteur.compte, superAdmin: acteur.superAdmin }) : null;
+      if (!droits && !d?.configurer) throw new RefusLocal('panneau_droits');
+      const panneaux = await base.tous('SELECT id FROM tickets_panneaux ORDER BY cree_le', []);
+      const id = o.panneau ? String(o.panneau) : panneaux.length === 1 ? panneaux[0].id : null;
+      if (!id || !panneaux.some(p => p.id === id)) throw new RefusLocal('panneau_introuvable');
+      // Compte lié qui configure : ses droits ; administrateur du serveur sans compte lié : publication du panneau déjà réglé.
+      const qui = d?.configurer ? { compte: acteur.compte, superAdmin: acteur.superAdmin } : { compte: 'principal', superAdmin: true };
+      await config.publierPanneau(qui, id);
+      return avis(t(langue, 'panneau_publie'));
+    },
+    /** /tickets : mes tickets ouverts ; `liste: file` (staff) : tickets non pris en charge de mes catégories. */
+    async tickets(i, o, langue, acteur) {
+      if (o.liste === 'file') {
+        const cats = await categoriesDuStaff(i, acteur);
+        if (!cats.length) throw new RefusLocal('pas_staff');
+        const ls = await base.tous(`SELECT numero, salon_id, priorite, ouvert_le, categorie_id FROM tickets WHERE statut <> 'ferme' AND responsable_compte_id IS NULL AND responsable_discord_id IS NULL AND categorie_id IN (${cats.map(() => '?').join(', ')}) ORDER BY ouvert_le LIMIT 15`, cats.map(c => c.id));
+        const nom = new Map(cats.map(c => [c.id, nomCategorie(c, langue)]));
+        return avis(ls.length ? [`**${t(langue, 'file')}**`, ...ls.map(x => `${salon(x)} · ${nom.get(x.categorie_id)} · ${nomPriorite(langue, x.priorite)}`)].join('\n') : t(langue, 'file_vide'));
+      }
+      const ls = await base.tous("SELECT numero, salon_id, statut, categorie_id FROM tickets WHERE auteur_discord_id = ? AND statut <> 'ferme' ORDER BY ouvert_le LIMIT 15", [acteur.discordId]);
+      return avis(ls.length ? [`**${t(langue, 'mes_tickets')}**`, ...ls.map(x => `${salon(x)} · ${t(langue, `s_${x.statut}`)}`)].join('\n') : t(langue, 'aucun_ticket'));
+    },
+  });
 
   async function commandeRecue(i, langue) {
     const { nom, options } = commande(i);
