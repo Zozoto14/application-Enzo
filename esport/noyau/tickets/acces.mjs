@@ -5,8 +5,9 @@
  *  - `tickets.voir`       : la page Tickets, les tickets des catégories qu'on traite ;
  *  - `tickets.repondre`   : répondre depuis l'app, notes internes, prendre en charge, attente, fermer, rouvrir ;
  *  - `tickets.gerer`      : TOUTES les catégories, assigner, changer de catégorie, ajouter / retirer quelqu'un,
- *                           transcripts, statistiques (implique voir et répondre) ;
- *  - `tickets.configurer` : la Configuration (n'ouvre AUCUN ticket à lui seul).
+ *                           transcripts, statistiques, avis, supprimer un ticket fermé (implique voir et répondre) ;
+ *  - `tickets.configurer` : la Configuration (n'ouvre AUCUN ticket à lui seul) ; les avis, et la suppression d'un
+ *                           ticket fermé, des catégories de ses rôles de l'app (migration 0056).
  *
  * Catégories visibles (sans `tickets.gerer`) : celles dont un des « rôles de l'app » est porté par le compte (rôle du
  * club `club:<id>` ou rôle CM attribué au club `cm:<id>`) ; une catégorie sans rôle de l'app réglé est visible de
@@ -50,7 +51,9 @@ export async function droitsTickets(base, acteur) {
   const voir = repondre || p.has('tickets.voir');
   const configurer = p.has('tickets.configurer');
   const categories = new Set();
-  if (voir && !gerer) {
+  // Catégories ouvertes par les rôles de l'app : pour voir les tickets (`voir`), et pour les avis et la suppression
+  // d'un ticket fermé quand on configure sans gérer (`configurer`).
+  if ((voir || configurer) && !gerer) {
     const roles = await rolesAppDe(base, acteur.compte);
     for (const c of await base.tous('SELECT id, roles_app FROM tickets_categories', [])) if (categorieOuverte(c, roles)) categories.add(c.id);
   }
@@ -59,6 +62,13 @@ export async function droitsTickets(base, acteur) {
 
 /** L'acteur voit-il les tickets de cette catégorie ? */
 export const voitCategorie = (droits, categorieId) => Boolean(droits.voir && (droits.tout || droits.categories.has(categorieId)));
+
+/**
+ * Avis de satisfaction et suppression d'un ticket fermé (migration 0056) : `tickets.gerer` (toutes les catégories), ou
+ * `tickets.configurer` pour les catégories dont il porte un des rôles de l'app (une catégorie sans rôle réglé : oui).
+ */
+export const gereAvis = (droits, categorieId) => Boolean(droits.gerer || (droits.configurer && (droits.tout || droits.categories.has(categorieId))));
+export const accesAvis = droits => Boolean(droits.gerer || droits.configurer);
 
 /** Contexte de la rubrique : 404 sans voir ni configurer ; `exiger` : une des permissions (403 sinon). */
 export async function contexteTickets(base, acteur, { exiger } = {}) {

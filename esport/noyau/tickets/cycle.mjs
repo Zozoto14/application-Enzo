@@ -161,8 +161,9 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const id = nouvelId();
     let numero = 0;
     for (let essai = 0; essai < 8; essai++) {
+      // Plus grand numéro en base, ou d'un ticket supprimé (migration 0056) : un numéro ne sert jamais deux fois.
       const m = await base.premier('SELECT MAX(numero) AS n FROM tickets', []);
-      numero = Number(m?.n ?? 0) + 1;
+      numero = Math.max(Number(m?.n ?? 0), await dernierNumeroSupprime()) + 1;
       try {
         await base.executer(
           `INSERT INTO tickets (id, numero, categorie_id, statut, priorite, auteur_discord_id, auteur_nom, auteur_compte_id, langue, reponses, ouvert_le, maj_le, derniere_activite_le, liaison)
@@ -455,6 +456,75 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return ticketPar(ticket.id);
   }
 
+  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migration 0056)
+
+  async function dernierNumeroSupprime() {
+    return Number(jsonOu((await base.premier("SELECT valeur FROM tickets_reglages WHERE cle = 'dernier_numero'", []))?.valeur, 0)) || 0;
+  }
+
+  /**
+   * Supprime le salon Discord d'un ticket supprimé (au mieux) : 404 (déjà supprimé à la main) ignoré, tout autre échec
+   * journalisé sans contenu. Rend `{ ok, statut }`.
+   */
+  async function supprimerSalon(salonId, numero) {
+    if (!salonId || !jetonBot) return { ok: true, statut: 0 };
+    const r = await appel('DELETE', `/channels/${salonId}`, undefined, { raison: `Ticket ${numero} supprimé` });
+    if (!r.ok && r.statut !== 404) console.error(`[esport] tickets : salon du ticket ${numero} non supprimé sur Discord (${r.motif ?? `HTTP ${r.statut}`})`);
+    return { ok: r.ok || r.statut === 404, statut: r.statut };
+  }
+
+  /**
+   * Supprime DÉFINITIVEMENT un ticket FERMÉ : conversation, notes internes, pièces jointes (octets du stockage compris),
+   * personnes ajoutées, « lu », notifications, et son salon Discord archivé s'il existe encore (au mieux). L'avis
+   * (note et commentaire) est gardé ANONYME pour les statistiques (`garderAvis`, par défaut) ou supprimé aussi.
+   * `salonPlusTard` : le salon n'est pas supprimé ici (commande tapée dans ce salon : la réponse part d'abord) ; rendu
+   * dans `salonId` pour l'appelant. Journal : qui a supprimé quel numéro, jamais le contenu. Rend `{ numero, salonId }`.
+   */
+  async function supprimer(ticket, acteur, { garderAvis = true, salonPlusTard = false } = {}) {
+    if (!ticket) throw refusTk('pas_ticket', {}, 404);
+    if (ticket.statut !== 'ferme') throw refusTk('supprimer_pas_ferme', {}, 409);
+    const t = maintenant();
+    const numero = Number(ticket.numero);
+    const pieces = await base.tous('SELECT cle_stockage FROM tickets_pieces WHERE ticket_id = ? AND cle_stockage IS NOT NULL', [ticket.id]);
+    const avis = garderAvis && ticket.note !== null && ticket.note !== undefined;
+    // Chaque effacement est conditionné au ticket encore fermé (une réouverture simultanée ne perd rien).
+    await base.lot([
+      ...(avis
+        ? [
+            {
+              sql: 'INSERT INTO tickets_avis_anonymes (id, categorie_id, note, commentaire, note_le, responsable_compte_id, responsable_discord_id, responsable_nom, cree_le) SELECT ?, categorie_id, note, note_commentaire, COALESCE(note_le, ferme_le, ?), responsable_compte_id, responsable_discord_id, responsable_nom, ? FROM tickets WHERE id = ? AND statut = ?',
+              params: [nouvelId(), iso(t), iso(t), ticket.id, 'ferme'],
+            },
+          ]
+        : []),
+      { sql: "DELETE FROM tickets_pieces WHERE ticket_id IN (SELECT id FROM tickets WHERE id = ? AND statut = 'ferme')", params: [ticket.id] },
+      { sql: "DELETE FROM tickets_messages WHERE ticket_id IN (SELECT id FROM tickets WHERE id = ? AND statut = 'ferme')", params: [ticket.id] },
+      { sql: "DELETE FROM tickets_membres WHERE ticket_id IN (SELECT id FROM tickets WHERE id = ? AND statut = 'ferme')", params: [ticket.id] },
+      { sql: "DELETE FROM tickets_lectures WHERE ticket_id IN (SELECT id FROM tickets WHERE id = ? AND statut = 'ferme')", params: [ticket.id] },
+      { sql: "DELETE FROM notifications WHERE categorie = 'tickets' AND charge LIKE ?", params: [`%"ticket":"${ticket.id}"%`] },
+      {
+        sql: "INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES ('dernier_numero', ?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = CASE WHEN CAST(tickets_reglages.valeur AS INTEGER) >= CAST(excluded.valeur AS INTEGER) THEN tickets_reglages.valeur ELSE excluded.valeur END, maj_le = excluded.maj_le",
+        params: [String(numero), iso(t)],
+      },
+      { sql: "DELETE FROM tickets WHERE id = ? AND statut = 'ferme'", params: [ticket.id] },
+      ev('ticket.supprime', ticket, acteur, { avisGarde: avis, par: String(acteur?.nom ?? '').slice(0, 100) || null }),
+    ]);
+    if (await ticketPar(ticket.id)) throw refusTk('supprimer_pas_ferme', {}, 409);
+    // Octets des pièces : après la base (une pièce orpheline ne se lit plus : sa ligne a disparu).
+    for (const p of pieces) await stockage?.supprimer(p.cle_stockage).catch(() => undefined);
+    const salonId = ticket.salon_id && !ticket.salon_supprime_le ? ticket.salon_id : null;
+    if (salonId && !salonPlusTard) await supprimerSalon(salonId, numero);
+    const { general } = await contexte();
+    const qui = acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Esport HQ', 80);
+    await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_supprime', { numero, staff: qui }), { mode: general.langue === 'auteur' ? 'en_fr' : general.langue }), color: 0x8b8b9a }).catch(() => undefined);
+    try {
+      await publierEnBase(base, { sujet: 'tickets', cle: `ticket:${ticket.id}`, sonde: `/tickets/${ticket.id}`, action: 'supprime', ...(acteur?.compte ? { acteur: acteur.compte } : {}) }, t);
+    } catch (e) {
+      console.error('[esport] tickets : temps réel', e?.message ?? e);
+    }
+    return { numero, salonId };
+  }
+
   /** Le salon d'un ticket a été supprimé sur Discord : noté ; un ticket encore ouvert est fermé (sans message). */
   async function salonSupprime(salonId) {
     const ticket = await ticketDuSalon(salonId);
@@ -508,6 +578,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
       }
     }
     bilan.purges = await purgerAnciens(t - general.retentionJours * J);
+    // Avis anonymes (tickets supprimés) : leur commentaire suit la même rétention que les conversations.
+    await base.executer('UPDATE tickets_avis_anonymes SET commentaire = NULL WHERE commentaire IS NOT NULL AND note_le < ?', [iso(t - general.retentionJours * J)]);
     bilan.pieces = await piecesEffacees();
     return bilan;
   }
@@ -607,6 +679,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     noter,
     commenterNote,
     salonSupprime,
+    supprimer,
+    supprimerSalon,
     tachesCycle,
     purgerAnciens,
     posterSysteme,

@@ -12,6 +12,8 @@
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
  *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
  *   GET           /tickets?statut&categorie&priorite&responsable&auteur&du&au&q ; /tickets/compteur ; /tickets/stats
+ *   GET           /tickets/avis?categorie&note&du&au&responsable&tri   (tickets.gerer, ou configurer : ses catégories)
+ *   POST          /tickets/supprimer { ids, garderAvis } ; /tickets/:id/supprimer { garderAvis }   (ticket FERMÉ)
  *   GET|PUT       /tickets/preferences (MP Discord)
  *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript
  *   POST          /tickets/:id/(lu|messages|notes|liaison) ; /tickets/:id/pieces/:piece/lien
@@ -52,6 +54,8 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
   if (n === 0 && m === 'GET') return v.liste(acteur, Object.fromEntries(['statut', 'categorie', 'priorite', 'responsable', 'auteur', 'du', 'au', 'q'].map(k => [k, q.get(k) || undefined])));
   if (n === 1 && a === 'compteur' && m === 'GET') return v.compteur(acteur);
   if (n === 1 && a === 'stats' && m === 'GET') return v.stats(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined });
+  if (n === 1 && a === 'avis' && m === 'GET') return v.avis(acteur, Object.fromEntries(['categorie', 'note', 'du', 'au', 'responsable', 'tri'].map(k => [k, q.get(k) || undefined])));
+  if (n === 1 && a === 'supprimer' && m === 'POST') return v.supprimerPlusieurs(acteur, await lireCorps());
   if (n === 1 && a === 'preferences') {
     if (m === 'GET') return v.preferences(acteur);
     if (m === 'PUT') return v.changerPreferences(acteur, await lireCorps());
@@ -74,6 +78,7 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
       const lien = await v.lienPiece(acteur, a, c, { telecharger: q.get('telecharger') === '1' });
       return { url: `${url.origin}${url.pathname.startsWith('/api/esport') ? '/api/esport' : ''}${lien.chemin}`, expire: lien.expire };
     }
+    if (n === 2 && b === 'supprimer' && m === 'POST') return v.supprimer(acteur, a, await lireCorps());
     if (n === 2 && m === 'POST') return v.action(acteur, a, b, await lireCorps());
   }
 

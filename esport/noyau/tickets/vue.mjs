@@ -13,7 +13,7 @@ import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import { evenement } from '../evenements.mjs';
 import { cheminSigne, verifierLien } from '../fichiers.mjs';
 import { reponseFichierStocke } from '../medias/lecture.mjs';
-import { comptesDeCategorie, contexteTickets, voitCategorie } from './acces.mjs';
+import { accesAvis, comptesDeCategorie, contexteTickets, gereAvis, voitCategorie } from './acces.mjs';
 import { annoncer, instructionPiece } from './conversation.mjs';
 import { estRefus } from './cycle.mjs';
 import { idDiscord, rest } from './discord.mjs';
@@ -157,7 +157,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const cats = await categoriesMap();
     const ls = await lignes(acteur, droits, { where, params });
     const visibles = [...cats.values()].filter(c => voitCategorie(droits, c.id));
-    return { tickets: ls.map(l => resume(l, cats, acteur.compte)), categories: visibles, droits: { repondre: droits.repondre, gerer: droits.gerer, configurer: droits.configurer } };
+    return { tickets: ls.map(l => resume(l, cats, acteur.compte)), categories: visibles, droits: { repondre: droits.repondre, gerer: droits.gerer, configurer: droits.configurer, supprimer: droits.gerer || droits.configurer } };
   }
 
   /** Nombre de tickets ouverts avec du nouveau pour l'acteur (compteur de la navigation). */
@@ -193,6 +193,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       reponses: jsonOu(ticket.reponses, []),
       raison: ticket.raison_fermeture ?? null,
       noteCommentaire: ticket.note_commentaire ?? null,
+      noteLe: ticket.note_le ?? null,
       liaison: { type: 'aucune', ...jsonOu(ticket.liaison, {}) },
       liaisonCategorie: cat ? { type: 'aucune', ...jsonOu(cat.liaison, {}) } : { type: 'aucune' },
       purge: Boolean(ticket.purge_le),
@@ -210,7 +211,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
         supprimeLe: m.supprime_le ?? null,
         pieces: parMessage.get(m.id) ?? [],
       })),
-      droits: { repondre: droits.repondre, gerer: droits.gerer },
+      droits: { repondre: droits.repondre, gerer: droits.gerer, supprimer: gereAvis(droits, ticket.categorie_id) },
     };
   }
 
@@ -437,10 +438,12 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const cats = await categoriesMap();
     const ls = await base.tous('SELECT * FROM tickets WHERE (ouvert_le >= ? AND ouvert_le <= ?) OR (ferme_le >= ? AND ferme_le <= ?)', [debut, fin, debut, fin]);
     const ouverts = await base.tous("SELECT categorie_id, COUNT(*) AS n FROM tickets WHERE statut <> 'ferme' GROUP BY categorie_id", []);
-    const bloc = l => {
+    // Avis gardés (anonymes) des tickets supprimés : comptés dans la satisfaction de la période (date de l'avis).
+    const anonymes = await base.tous('SELECT categorie_id, note, responsable_compte_id, responsable_discord_id, responsable_nom FROM tickets_avis_anonymes WHERE note_le >= ? AND note_le <= ?', [debut, fin]);
+    const bloc = (l, anon = []) => {
       const crees = l.filter(x => x.ouvert_le >= debut && x.ouvert_le <= fin);
       const fermes = l.filter(x => x.ferme_le && x.ferme_le >= debut && x.ferme_le <= fin);
-      const notes = l.filter(x => x.note !== null && x.note !== undefined).map(x => Number(x.note));
+      const notes = [...l, ...anon].filter(x => x.note !== null && x.note !== undefined).map(x => Number(x.note));
       return {
         crees: crees.length,
         fermes: fermes.length,
@@ -450,21 +453,135 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
         notes: notes.length,
       };
     };
-    const parCategorie = [...cats.values()].map(c => ({ categorie: c, ouverts: Number(ouverts.find(o => o.categorie_id === c.id)?.n ?? 0), ...bloc(ls.filter(x => x.categorie_id === c.id)) })).filter(x => x.crees || x.fermes || x.ouverts);
+    const parCategorie = [...cats.values()]
+      .map(c => ({ categorie: c, ouverts: Number(ouverts.find(o => o.categorie_id === c.id)?.n ?? 0), ...bloc(ls.filter(x => x.categorie_id === c.id), anonymes.filter(x => x.categorie_id === c.id)) }))
+      .filter(x => x.crees || x.fermes || x.ouverts || x.notes);
     const responsables = new Map();
-    for (const x of ls) {
-      if (!x.responsable_nom) continue;
+    const parQui = (x, genre) => {
+      if (!x.responsable_nom) return;
       const cle = x.responsable_compte_id ?? `d:${x.responsable_discord_id}`;
-      if (!responsables.has(cle)) responsables.set(cle, { nom: x.responsable_nom, compte: x.responsable_compte_id ?? null, lignes: [] });
-      responsables.get(cle).lignes.push(x);
-    }
+      if (!responsables.has(cle)) responsables.set(cle, { nom: x.responsable_nom, compte: x.responsable_compte_id ?? null, lignes: [], anon: [] });
+      responsables.get(cle)[genre].push(x);
+    };
+    for (const x of ls) parQui(x, 'lignes');
+    for (const x of anonymes) parQui(x, 'anon');
     return {
       du: debut.slice(0, 10),
       au: fin.slice(0, 10),
-      total: { ouverts: ouverts.reduce((s, o) => s + Number(o.n), 0), ...bloc(ls) },
+      total: { ouverts: ouverts.reduce((s, o) => s + Number(o.n), 0), ...bloc(ls, anonymes) },
       parCategorie,
-      parResponsable: [...responsables.values()].map(r => ({ nom: r.nom, compte: r.compte, ...bloc(r.lignes) })).sort((a, b) => b.fermes - a.fermes),
+      parResponsable: [...responsables.values()].map(r => ({ nom: r.nom, compte: r.compte, ...bloc(r.lignes, r.anon) })).sort((a, b) => b.fermes - a.fermes),
     };
+  }
+
+  // ---------------------------------------------------------------- Avis de satisfaction (migration 0056)
+
+  /**
+   * Avis des tickets (note 1 à 5, commentaire facultatif) et avis gardés anonymes des tickets supprimés, des seules
+   * catégories que l'acteur gère (`gereAvis`). Filtres : catégorie, note, période (date de l'avis), responsable ;
+   * tri : date ou note. Moyenne, nombre et répartition portent sur les mêmes filtres SAUF la note (la répartition
+   * montre toujours les cinq notes). Rend au plus 500 avis.
+   */
+  async function avis(acteur, f = {}) {
+    const { droits } = await contexteTickets(base, acteur);
+    if (!accesAvis(droits)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const cats = await categoriesMap();
+    const visibles = [...cats.values()].filter(c => gereAvis(droits, c.id));
+    const ids = visibles.map(c => c.id);
+    const debut = f.du && /^\d{4}-\d{2}-\d{2}$/.test(f.du) ? `${f.du}T00:00:00.000Z` : null;
+    const fin = f.au && /^\d{4}-\d{2}-\d{2}$/.test(f.au) ? `${f.au}T23:59:59.999Z` : null;
+    const categorie = f.categorie && ids.includes(String(f.categorie)) ? String(f.categorie) : f.categorie ? '__aucune__' : null;
+    const lignesAvis = [];
+    if (ids.length) {
+      const where = ['note IS NOT NULL', `categorie_id IN (${ids.map(() => '?').join(', ')})`];
+      const params = [...ids];
+      if (categorie) {
+        where.push('categorie_id = ?');
+        params.push(categorie);
+      }
+      if (debut) {
+        where.push('COALESCE(note_le, ferme_le) >= ?');
+        params.push(debut);
+      }
+      if (fin) {
+        where.push('COALESCE(note_le, ferme_le) <= ?');
+        params.push(fin);
+      }
+      const conditions = where.join(' AND ');
+      const tks = await base.tous(`SELECT id, numero, categorie_id, auteur_nom, auteur_discord_id, salon_nom, responsable_compte_id, responsable_discord_id, responsable_nom, note, note_commentaire, note_le, ferme_le FROM tickets WHERE ${conditions} ORDER BY COALESCE(note_le, ferme_le) DESC LIMIT 5000`, params);
+      const whereA = where.filter(w => !w.startsWith('note IS')).map(w => w.replace('COALESCE(note_le, ferme_le)', 'note_le'));
+      const condition = whereA.join(' AND ');
+      const anon = await base.tous(`SELECT * FROM tickets_avis_anonymes WHERE ${condition} ORDER BY note_le DESC LIMIT 5000`, params);
+      for (const l of tks) lignesAvis.push({ ...l, commentaire: l.note_commentaire, le: l.note_le ?? l.ferme_le, anonyme: false });
+      for (const l of anon) lignesAvis.push({ ...l, id: `anon:${l.id}`, numero: null, commentaire: l.commentaire, le: l.note_le, anonyme: true });
+    }
+    const cleQui = l => (l.responsable_compte_id ? `c:${l.responsable_compte_id}` : l.responsable_discord_id ? `d:${l.responsable_discord_id}` : l.responsable_nom ? `n:${l.responsable_nom}` : 'personne');
+    const responsables = new Map();
+    for (const l of lignesAvis) if (l.responsable_nom && !responsables.has(cleQui(l))) responsables.set(cleQui(l), l.responsable_nom);
+    const parQui = f.responsable ? lignesAvis.filter(l => cleQui(l) === String(f.responsable)) : lignesAvis;
+    const repartition = [1, 2, 3, 4, 5].map(n => parQui.filter(l => Number(l.note) === n).length);
+    const note = Number(f.note);
+    const filtres = Number.isInteger(note) && note >= 1 && note <= 5 ? parQui.filter(l => Number(l.note) === note) : parQui;
+    const tri = f.tri === 'note_haut' ? (a, b) => b.note - a.note || String(b.le).localeCompare(String(a.le)) : f.tri === 'note_bas' ? (a, b) => a.note - b.note || String(b.le).localeCompare(String(a.le)) : f.tri === 'ancien' ? (a, b) => String(a.le).localeCompare(String(b.le)) : (a, b) => String(b.le).localeCompare(String(a.le));
+    const inconnue = id => ({ id, nom: { fr: '?', en: '?' }, couleur: '#8b8b9a', icone: 'billets', actif: false });
+    return {
+      total: parQui.length,
+      moyenne: parQui.length ? parQui.reduce((s, l) => s + Number(l.note), 0) / parQui.length : null,
+      repartition,
+      avis: filtres
+        .map(l => ({ ...l, note: Number(l.note) }))
+        .sort(tri)
+        .slice(0, 500)
+        .map(l => ({
+          id: l.id,
+          ticketId: l.anonyme ? null : l.id,
+          numero: l.anonyme ? null : Number(l.numero),
+          salon: l.anonyme ? null : (l.salon_nom ?? null),
+          anonyme: l.anonyme,
+          categorie: cats.get(l.categorie_id) ?? inconnue(l.categorie_id),
+          note: l.note,
+          commentaire: l.commentaire ?? null,
+          auteur: l.anonyme ? null : l.auteur_nom || null,
+          responsable: l.responsable_nom ? { nom: l.responsable_nom, cle: cleQui(l) } : null,
+          le: l.le,
+        })),
+      categories: visibles,
+      responsables: [...responsables.entries()].map(([cle, nom]) => ({ cle, nom })).sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')),
+      voirTickets: droits.voir,
+    };
+  }
+
+  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migration 0056)
+
+  /** Un ticket fermé, supprimé définitivement (cycle.mjs, `supprimer`). `garderAvis` : vrai par défaut. */
+  async function supprimer(acteur, id, corps) {
+    const { ticket, droits } = await ticketVisible(acteur, id);
+    if (!gereAvis(droits, ticket.categorie_id)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    try {
+      const r = await cycle.supprimer(ticket, await nomActeur(acteur), { garderAvis: corps?.garderAvis !== false });
+      return { ok: true, numero: r.numero };
+    } catch (e) {
+      if (estRefus(e)) throw echec(e.statut ?? 400, `ticket-${e.cle}`, tx('fr', e.cle, e.vars));
+      throw e;
+    }
+  }
+
+  /** Suppression groupée (liste des tickets fermés) : 50 au plus ; rend ce qui a été supprimé et ce qui a échoué. */
+  async function supprimerPlusieurs(acteur, corps) {
+    const { droits } = await contexteTickets(base, acteur);
+    if (!droits.voir || !accesAvis(droits)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const ids = Array.isArray(corps?.ids) ? [...new Set(corps.ids.map(String))] : [];
+    if (!ids.length || ids.length > 50) throw echec(400, 'ids', 'Choisissez de 1 à 50 tickets.');
+    const supprimes = [];
+    const echecs = [];
+    for (const id of ids) {
+      try {
+        supprimes.push((await supprimer(acteur, id, corps)).numero);
+      } catch (e) {
+        echecs.push({ id, code: e?.code ?? 'erreur' });
+      }
+    }
+    return { supprimes, echecs };
   }
 
   // ---------------------------------------------------------------- Préférences (MP Discord)
@@ -481,5 +598,5 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     return v;
   }
 
-  return { liste, compteur, detail, marquerLu, repondre, noter, action, assignables, transcript, lienPiece, servirPiece, lier, stats, preferences, changerPreferences };
+  return { liste, compteur, detail, marquerLu, repondre, noter, action, assignables, transcript, lienPiece, servirPiece, lier, stats, avis, supprimer, supprimerPlusieurs, preferences, changerPreferences };
 }

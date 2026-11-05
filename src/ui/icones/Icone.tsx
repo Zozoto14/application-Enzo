@@ -27,6 +27,7 @@ export const REPLIS: Record<NomIcone, string> = {
   lien: '∞',
   oeil: '◉',
   'oeil-barre': '◌',
+  etoile: '☆',
   epingle: '⚲',
   bulle: '❝',
   dossier: '▭',

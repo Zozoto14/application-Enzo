@@ -2,7 +2,8 @@
  * Tickets Discord (docs/esport/tickets.md), écrans : configuration (connexion « secours » avec l'intent à activer,
  * permissions du bot qui manquent, création d'une catégorie avec formulaire, panneau : aperçu comme sur Discord et
  * publication), navigation (entrée « Tickets », barre du bas du téléphone : cinq entrées au plus, le reste dans
- * « Plus »).
+ * « Plus ») ; Avis (moyenne, répartition, filtres, avis qui ouvre son ticket) et suppression d'un ticket fermé
+ * (confirmation, avis gardé anonyme ou non, suppression groupée).
  */
 
 import React from 'react';
@@ -12,7 +13,8 @@ import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
 import { navEsport, navMobile } from './ui/CadreEsport';
 import { ConfigTickets } from './ui/tickets/ConfigTickets';
-import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, Panneau, ResumeTicket } from './tickets/api';
+import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, Panneau, ResumeTicket } from './tickets/api';
+import { AvisTicketsPage } from './ui/tickets/AvisTickets';
 import { ListeTickets } from './ui/tickets/TicketsStaff';
 
 const theme = themeHub('nuit');
@@ -388,4 +390,162 @@ test('Connexion : diagnostic précis (ce qui manque, dernière erreur, cron jama
   expect(screen.getByText(/URL_PUBLIQUE absente/)).toBeTruthy();
   expect(screen.getByTestId('esport-tk-diag-cron-commande')).toBeTruthy();
   expect(screen.getByText(/esport\/serveur\/cron\.mjs/)).toBeTruthy();
+});
+
+// ------------------------------------------------------------------ Avis de satisfaction (migration 0056)
+
+const CAT2 = { id: 'cat2', nom: { fr: 'Partenariat', en: 'Partnership' }, couleur: '#aa6622', icone: 'billets', actif: true };
+function listeAvis(note?: string): ListeAvis {
+  const avis = [
+    { id: 't1', ticketId: '00000000-0000-0000-0000-000000000001', numero: 1, salon: 'ticket-0001-lea', anonyme: false, categorie: CAT, note: 5, commentaire: 'Super réactif', auteur: 'Léa', responsable: { nom: 'Kai', cle: 'c:kai' }, le: '2026-11-04T12:00:00.000Z' },
+    { id: 't2', ticketId: '00000000-0000-0000-0000-000000000002', numero: 2, salon: null, anonyme: false, categorie: CAT2, note: 2, commentaire: null, auteur: null, responsable: null, le: '2026-11-03T12:00:00.000Z' },
+    { id: 'anon:a1', ticketId: null, numero: null, salon: null, anonyme: true, categorie: CAT, note: 4, commentaire: 'Bien', auteur: null, responsable: { nom: 'Kai', cle: 'c:kai' }, le: '2026-11-02T12:00:00.000Z' },
+  ];
+  return { total: 3, moyenne: 11 / 3, repartition: [0, 1, 0, 1, 1], avis: note ? avis.filter(a => String(a.note) === note) : avis, categories: [CAT, CAT2], responsables: [{ cle: 'c:kai', nom: 'Kai' }], voirTickets: true };
+}
+
+test('Avis : moyenne, nombre, répartition en barres, étoiles monochromes, filtres envoyés, un avis ouvre son ticket (pas l’anonyme)', async () => {
+  const appels: string[] = [];
+  const requete = async (chemin: string): Promise<unknown> => {
+    appels.push(chemin);
+    if (chemin.startsWith('/tickets/avis')) return listeAvis(/note=(\d)/.exec(chemin)?.[1]);
+    throw new Error(`inattendu : ${chemin}`);
+  };
+  const ouverts: Array<[string, number]> = [];
+  await render(<AvisTicketsPage theme={theme} client={{ requete } as unknown as ClientEsport} onOuvrir={(id, numero) => ouverts.push([id, numero])} />);
+  await screen.findByTestId('esport-tk-avis');
+  expect(screen.getByTestId('esport-tk-avis-moyenne-valeur')).toHaveTextContent('3.7/5');
+  expect(screen.getByTestId('esport-tk-avis-nombre')).toHaveTextContent('3');
+  expect(screen.getByLabelText('5 sur 5 : 1 avis')).toBeTruthy();
+  expect(screen.getByLabelText('3 sur 5 : 0 avis')).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-avis-t1-etoiles').props.accessibilityLabel).toBe('5 sur 5');
+  expect(screen.getByText('Super réactif')).toBeTruthy();
+  expect(screen.getByText('Ticket supprimé (avis anonyme)')).toBeTruthy();
+  expect(screen.getAllByText('Sans commentaire.').length).toBe(1);
+  expect(screen.getByText(/auteur effacé/)).toBeTruthy();
+  // Filtres : note, catégorie, responsable, tri, période.
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-f-note-5'));
+  await waitFor(() => expect(appels.some(c => c.includes('note=5'))).toBe(true));
+  await waitFor(() => expect(screen.queryByText('Ticket supprimé (avis anonyme)')).toBeNull());
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-f-categorie-cat1'));
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-f-responsable-c:kai'));
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-tri-note_bas'));
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-f-periode-30'));
+  await waitFor(() => expect(appels.at(-1)).toMatch(/categorie=cat1/));
+  const dernier = appels.at(-1)!;
+  expect(dernier).toMatch(/note=5/);
+  expect(dernier).toMatch(/responsable=c%3Akai/);
+  expect(dernier).toMatch(/tri=note_bas/);
+  expect(dernier).toMatch(/du=\d{4}-\d{2}-\d{2}/);
+  // Toucher un avis ouvre son ticket.
+  await fireEvent.press(screen.getByTestId('esport-tk-avis-t1'));
+  expect(ouverts).toEqual([['00000000-0000-0000-0000-000000000001', 1]]);
+});
+
+test('Avis : un avis anonyme (ticket supprimé) n’est pas cliquable', async () => {
+  const requete = async (): Promise<unknown> => listeAvis();
+  const ouverts: string[] = [];
+  await render(<AvisTicketsPage theme={theme} client={{ requete } as unknown as ClientEsport} onOuvrir={id => ouverts.push(id)} />);
+  await screen.findByTestId('esport-tk-avis-anon:a1');
+  expect(screen.getByTestId('esport-tk-avis-anon:a1').props.accessibilityRole).toBeUndefined();
+  expect(screen.getByTestId('esport-tk-avis-t1').props.accessibilityRole).toBe('button');
+});
+
+/** Client d'un ticket FERMÉ noté (4/5, commentaire), que l'acteur peut supprimer. */
+function clientFerme() {
+  const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
+  let supprime = false;
+  const ferme = (n: number): ResumeTicket => ({ ...resumeTk(n, false), statut: 'ferme', fermeLe: '2026-11-04T11:00:00.000Z', note: n === 1 ? 4 : null });
+  const detail = (): DetailTicket => ({
+    ...ferme(1),
+    nonLuDepuis: null,
+    salon: { id: '7001', nom: 'ticket-0001-lea', supprime: false },
+    reponses: [],
+    raison: null,
+    noteCommentaire: 'Merci pour l’aide',
+    noteLe: '2026-11-04T11:30:00.000Z',
+    liaison: { type: 'aucune' },
+    liaisonCategorie: { type: 'aucune' },
+    purge: false,
+    fermeture: { heures: 168, source: 'general', staffSeul: false, permanentPar: null, permanentLe: null },
+    membres: [],
+    messages: [],
+    droits: { repondre: true, gerer: true, supprimer: true },
+  });
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    appels.push({ chemin, methode, corps });
+    if (chemin.startsWith('/tickets?')) return { tickets: supprime ? [ferme(2)] : [ferme(1), ferme(2), ferme(3)], categories: [CAT], droits: { repondre: true, gerer: true, configurer: false, supprimer: true } };
+    if (chemin === '/tickets/preferences') return { mpNouveau: false, mpMessage: true };
+    if (chemin.endsWith('/assignables')) return { comptes: [] };
+    if (chemin.endsWith('/lu')) return { ok: true };
+    if (chemin.endsWith('/supprimer') && chemin !== '/tickets/supprimer') {
+      supprime = true;
+      return { ok: true, numero: 1 };
+    }
+    if (chemin === '/tickets/supprimer') {
+      supprime = true;
+      return { supprimes: [1, 3], echecs: [] };
+    }
+    if (/\/tickets\/[^/]+$/.test(chemin)) return detail();
+    throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
+  };
+  return { client: { requete } as unknown as ClientEsport, appels };
+}
+
+test('vue d’un ticket fermé : avis de l’auteur (étoiles, commentaire) ; Supprimer : confirmation claire, avis gardé par défaut ou supprimé', async () => {
+  const { client, appels } = clientFerme();
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue');
+  expect(screen.getByTestId('esport-tk-vue-avis-etoiles').props.accessibilityLabel).toBe('4 sur 5');
+  expect(screen.getByTestId('esport-tk-vue-avis-commentaire')).toHaveTextContent('Merci pour l’aide');
+  expect(screen.getByText(/^Noté le /)).toBeTruthy();
+  // Rien n'est supprimé avant la confirmation ; Annuler referme la confirmation.
+  await fireEvent.press(screen.getByTestId('esport-tk-supprimer'));
+  expect(screen.getByTestId('esport-tk-suppr-titre')).toHaveTextContent('Supprimer définitivement le ticket n° 1 ?');
+  expect(screen.getByText(/C’est irréversible : la conversation, les notes internes, les pièces jointes et le transcript seront effacés/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-suppr-garder-avis').props.value).toBe(true);
+  await fireEvent.press(screen.getByTestId('esport-tk-suppr-annuler'));
+  expect(screen.queryByTestId('esport-tk-suppr')).toBeNull();
+  expect(appels.some(a => a.chemin.endsWith('/supprimer'))).toBe(false);
+  // Avis supprimé aussi : interrupteur coupé, puis confirmation.
+  await fireEvent.press(screen.getByTestId('esport-tk-supprimer'));
+  await fireEvent(screen.getByTestId('esport-tk-suppr-garder-avis'), 'valueChange', false);
+  await fireEvent.press(screen.getByTestId('esport-tk-suppr-confirmer'));
+  await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/00000000-0000-0000-0000-000000000001/supprimer')).toBe(true));
+  const post = appels.find(a => a.chemin.endsWith('/supprimer'))!;
+  expect(post.methode).toBe('POST');
+  expect(post.corps).toEqual({ garderAvis: false });
+  // Le volet se ferme, la liste est relue, la suppression est annoncée.
+  await waitFor(() => expect(screen.queryByTestId('esport-tk-vue')).toBeNull());
+  await screen.findByText('Ticket n° 1 supprimé.');
+  await waitFor(() => expect(screen.queryByTestId('esport-tk-ticket-1')).toBeNull());
+});
+
+test('vue : un ticket ouvert n’a pas de bouton Supprimer ; liste des fermés : suppression groupée (avis gardé par défaut)', async () => {
+  const { client: clientOuvert } = fauxClientTickets();
+  const r = await render(<ListeTickets theme={theme} client={clientOuvert} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue');
+  expect(screen.queryByTestId('esport-tk-supprimer')).toBeNull();
+  expect(screen.queryByTestId('esport-tk-selection')).toBeNull();
+  await r.unmount();
+
+  const { client, appels } = clientFerme();
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await screen.findByTestId('esport-tk-ticket-1');
+  expect(screen.queryByTestId('esport-tk-selection')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-tk-f-statut-ferme'));
+  await fireEvent.press(await screen.findByTestId('esport-tk-selection-basculer'));
+  await fireEvent.press(screen.getByTestId('esport-tk-ticket-1'));
+  await fireEvent.press(screen.getByTestId('esport-tk-ticket-3'));
+  expect(screen.queryByTestId('esport-tk-vue')).toBeNull();
+  expect(screen.getByTestId('esport-tk-ticket-1').props.accessibilityState).toEqual({ checked: true });
+  expect(screen.getByText('2 ticket(s) choisi(s)')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-tk-selection-supprimer'));
+  expect(screen.getByTestId('esport-tk-suppr-groupe-titre')).toHaveTextContent('Supprimer définitivement 2 ticket(s) fermé(s) ?');
+  await fireEvent.press(screen.getByTestId('esport-tk-suppr-groupe-confirmer'));
+  await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/supprimer')).toBe(true));
+  expect(appels.find(a => a.chemin === '/tickets/supprimer')!.corps).toEqual({ ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'], garderAvis: true });
+  await screen.findByText('2 ticket(s) supprimé(s).');
 });

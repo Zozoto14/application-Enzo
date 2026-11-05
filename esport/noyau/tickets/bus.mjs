@@ -35,6 +35,7 @@ export const TYPES_TICKETS = [
   'ticket.note',
   'ticket.liaison',
   'ticket.permanent',
+  'ticket.supprime',
 ];
 
 /** Notifications personnelles des tickets (catégorie « tickets » du centre). */

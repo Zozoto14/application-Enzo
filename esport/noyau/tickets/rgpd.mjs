@@ -8,6 +8,8 @@
  *  - Personne sans compte (seulement un compte Discord) : même chose par Discord ID, pour le Fondateur
  *    (`POST /tickets/rgpd/(export|effacer) { discordId }`).
  * Les octets des pièces effacées sont supprimés du stockage par le cron (`piecesEffacees`, cycle.mjs).
+ * Les avis gardés d'un ticket supprimé (`tickets_avis_anonymes`, migration 0056) ne sont plus reliés à personne : rien à
+ * exporter ni à effacer pour l'auteur ; le responsable d'un compte supprimé y est oublié.
  */
 
 import { echec, iso, jsonOu } from '../outils.mjs';
@@ -62,6 +64,7 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
     lot.push(
       { sql: 'UPDATE tickets_messages SET auteur_compte_id = NULL WHERE auteur_compte_id = ?', params: [compte] },
       { sql: 'UPDATE tickets SET responsable_compte_id = NULL WHERE responsable_compte_id = ?', params: [compte] },
+      { sql: 'UPDATE tickets_avis_anonymes SET responsable_compte_id = NULL WHERE responsable_compte_id = ?', params: [compte] },
       { sql: 'UPDATE tickets SET auteur_compte_id = NULL WHERE auteur_compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM tickets_lectures WHERE compte_id = ?', params: [compte] },
       { sql: 'UPDATE tickets_liste_noire SET ajoute_par = NULL WHERE ajoute_par = ?', params: [compte] },

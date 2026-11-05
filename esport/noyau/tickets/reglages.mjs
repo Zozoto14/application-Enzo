@@ -20,9 +20,9 @@ export const ICONES = Object.freeze(['billets', 'question', 'membres', 'manette'
 /** Liaisons facultatives d'une catégorie. */
 export const LIAISONS = Object.freeze(['aucune', 'sponsors', 'cm', 'fiche']);
 /** Commandes slash des tickets (sous-commandes de /ticket, et /tickets). */
-export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'tickets']);
+export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer', 'tickets']);
 /** Commandes réservées au staff (rôles de la catégorie ou compte lié autorisé), en plus des rôles réglés. */
-export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent']);
+export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer']);
 
 export const LIMITES = Object.freeze({ categories: 25, champs: 5, panneaux: 20, listeNoire: 1000, roles: 20, mentions: 5, plages: 21 });
 

@@ -245,6 +245,8 @@ export interface DetailTicket extends ResumeTicket {
   reponses: Array<{ id: string; libelle: DeuxLangues; valeur: string }>;
   raison: string | null;
   noteCommentaire: string | null;
+  /** Date de la note de l'auteur (migration 0056 : vue du ticket fermé). */
+  noteLe?: string | null;
   liaison: Liaison;
   liaisonCategorie: { type: TypeLiaison; tableauId?: string };
   purge: boolean;
@@ -252,7 +254,8 @@ export interface DetailTicket extends ResumeTicket {
   fermeture: { heures: number; source: 'ticket' | 'categorie' | 'general'; staffSeul: boolean; permanentPar: string | null; permanentLe: string | null };
   membres: Array<{ discordId: string; nom: string; depuis: string }>;
   messages: MessageTicket[];
-  droits: { repondre: boolean; gerer: boolean };
+  /** `supprimer` : supprimer ce ticket une fois fermé (tickets.gerer, ou configurer pour une catégorie de ses rôles). */
+  droits: { repondre: boolean; gerer: boolean; supprimer?: boolean };
 }
 
 export interface FiltresTickets {
@@ -280,6 +283,43 @@ export interface StatsTickets {
   total: BlocStats & { ouverts: number };
   parCategorie: Array<BlocStats & { categorie: CategorieCourte; ouverts: number }>;
   parResponsable: Array<BlocStats & { nom: string; compte: string | null }>;
+}
+
+/** Un avis de satisfaction (migration 0056) ; `anonyme` : ticket supprimé, avis gardé sans lien. */
+export interface AvisTicket {
+  id: string;
+  ticketId: string | null;
+  numero: number | null;
+  salon: string | null;
+  anonyme: boolean;
+  categorie: CategorieCourte;
+  note: number;
+  commentaire: string | null;
+  auteur: string | null;
+  responsable: { nom: string; cle: string } | null;
+  le: string;
+}
+
+export type TriAvis = 'recent' | 'ancien' | 'note_haut' | 'note_bas';
+export interface FiltresAvis {
+  categorie?: string;
+  note?: string;
+  du?: string;
+  au?: string;
+  responsable?: string;
+  tri?: TriAvis;
+}
+
+export interface ListeAvis {
+  total: number;
+  moyenne: number | null;
+  /** Nombre d'avis de chaque note, de 1 à 5 (mêmes filtres, sauf la note). */
+  repartition: number[];
+  avis: AvisTicket[];
+  categories: CategorieCourte[];
+  responsables: Array<{ cle: string; nom: string }>;
+  /** L'acteur peut ouvrir les tickets (tickets.voir). */
+  voirTickets: boolean;
 }
 
 /** Pièce jointe envoyée depuis l'appareil (contenu en base64, 8 Mo au plus). */
@@ -312,7 +352,7 @@ export function apiTickets(client: ClientEsport) {
     publierPanneau: (id: string) => r<Panneau>(`/tickets/config/panneaux/${encodeURIComponent(id)}/publier`, 'POST'),
     ajouterListeNoire: (c: { discordId: string; nom?: string; raison?: string }) => r<{ ok: true }>('/tickets/config/liste-noire', 'POST', c),
     retirerListeNoire: (id: string) => r<{ ok: true }>(`/tickets/config/liste-noire/${encodeURIComponent(id)}`, 'DELETE'),
-    liste: (f: FiltresTickets = {}) => r<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; droits: { repondre: boolean; gerer: boolean; configurer: boolean } }>(`/tickets${requeteUrl({ ...f })}`),
+    liste: (f: FiltresTickets = {}) => r<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; droits: { repondre: boolean; gerer: boolean; configurer: boolean; supprimer?: boolean } }>(`/tickets${requeteUrl({ ...f })}`),
     compteur: () => r<{ nonLus: number; ouverts?: number }>('/tickets/compteur'),
     detail: (id: string) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}`),
     lu: (id: string) => r<{ ok: true }>(`/tickets/${encodeURIComponent(id)}/lu`, 'POST'),
@@ -324,6 +364,9 @@ export function apiTickets(client: ClientEsport) {
     lienPiece: (id: string, piece: string, telecharger = false) => r<{ url: string; expire: number }>(`/tickets/${encodeURIComponent(id)}/pieces/${encodeURIComponent(piece)}/lien${requeteUrl({ telecharger: telecharger ? '1' : undefined })}`, 'POST'),
     lier: (id: string, c: { type: TypeLiaison; id?: string; nom?: string; tableauId?: string }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/liaison`, 'POST', c),
     stats: (p: { du?: string; au?: string } = {}) => r<StatsTickets>(`/tickets/stats${requeteUrl({ ...p })}`),
+    avis: (f: FiltresAvis = {}) => r<ListeAvis>(`/tickets/avis${requeteUrl({ ...f })}`),
+    supprimer: (id: string, garderAvis: boolean) => r<{ ok: true; numero: number }>(`/tickets/${encodeURIComponent(id)}/supprimer`, 'POST', { garderAvis }),
+    supprimerPlusieurs: (ids: string[], garderAvis: boolean) => r<{ supprimes: number[]; echecs: Array<{ id: string; code: string }> }>('/tickets/supprimer', 'POST', { ids, garderAvis }),
     preferences: () => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences'),
     changerPreferences: (c: { mpNouveau: boolean; mpMessage: boolean }) => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences', 'PUT', c),
   };

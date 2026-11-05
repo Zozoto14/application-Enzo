@@ -688,10 +688,23 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     else await usage;
     const travail = executer(i);
     const premier = await Promise.race([travail, attendreLent().then(() => LENT)]);
-    if (premier !== LENT) return json(premier);
+    // Travail après la réponse (tickets : salon d'un ticket supprimé) : `apres`, jamais sérialisé dans la réponse.
+    const ensuite = r => {
+      if (typeof r?.apres !== 'function') return Promise.resolve();
+      return Promise.resolve()
+        .then(r.apres)
+        .catch(e => console.error('[esport] bot après la réponse', e?.message ?? e));
+    };
+    if (premier !== LENT) {
+      const apres = ensuite(premier);
+      if (attendre) attendre(apres);
+      return json(premier);
+    }
     // Trop lent pour les 3 s de Discord : réponse différée, puis suivi en arrière-plan.
     const majMessage = i.type === TYPE.COMPOSANT && /^(pg:|rs$|tk:u)/.test(String(i.data?.custom_id ?? ''));
-    const suite = travail.then(r => suivi(i, r)).catch(e => console.error('[esport] bot suivi', e));
+    const suite = travail
+      .then(r => suivi(i, r).then(() => ensuite(r)))
+      .catch(e => console.error('[esport] bot suivi', e));
     if (attendre) attendre(suite);
     return json(majMessage ? { type: REPONSE.DIFFERE_MAJ } : { type: REPONSE.DIFFERE, data: { flags: EPHEMERE } });
   }

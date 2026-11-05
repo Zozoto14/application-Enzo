@@ -10,13 +10,16 @@
  *
  * Identifiants (`custom_id`) : voir panneaux.mjs ; en plus, `tk:f:<catégorie>` (fenêtre du formulaire), `tk:as:` et
  * `tk:ps:` (choix d'une personne, d'une priorité), `tk:xc:` / `tk:xr:` / `tk:xm:` (confirmation, raison, fenêtre de la
- * raison), `tk:n:<ticket>:<note>` et `tk:nc:<ticket>:<note>` (note dans le MP, puis commentaire).
+ * raison), `tk:n:<ticket>:<note>` et `tk:nc:<ticket>:<note>` (note dans le MP, puis commentaire), `tk:dc:<ticket>:<g|s>`
+ * (suppression confirmée d'un ticket fermé, avis gardé anonyme ou supprimé).
  *
- * `interaction(i)` rend la réponse à donner à Discord, ou `undefined` si l'interaction n'est pas pour les tickets.
+ * `interaction(i)` rend la réponse à donner à Discord, ou `undefined` si l'interaction n'est pas pour les tickets. Une
+ * réponse peut porter `apres` (fonction) : travail lancé par interactions.mjs une fois la réponse partie (JSON.stringify
+ * ignore les fonctions).
  */
 
 import { lireLangue } from '../langues.mjs';
-import { droitsTickets, voitCategorie } from './acces.mjs';
+import { droitsTickets, gereAvis, voitCategorie } from './acces.mjs';
 import { iso, nouvelId } from '../outils.mjs';
 import { annoncer } from './conversation.mjs';
 import { transcriptHtml } from './transcript.mjs';
@@ -49,6 +52,10 @@ function commande(i) {
   if (i.data?.name === 'ticket' && premier && Number(premier.type) === 1) return { nom: premier.name, options: Object.fromEntries((premier.options ?? []).map(o => [o.name, o.value])) };
   return { nom: 'tickets', options: Object.fromEntries((i.data?.options ?? []).map(o => [o.name, o.value])) };
 }
+
+/** Délai avant de supprimer le salon d'un ticket supprimé par /ticket supprimer (la réponse part d'abord). */
+export const REGLAGES_SUPPRESSION = { delaiSalonMs: 3000 };
+const patienter = ms => new Promise(ok => (ms > 0 ? setTimeout(ok, ms).unref?.() : ok()));
 
 export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, config }) {
   async function langueDe(i) {
@@ -108,6 +115,16 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     if (c.roles.length && !adminServeur(i) && !c.roles.some(r => (i.member?.roles ?? []).includes(r))) throw new RefusLocal('commande_interdite');
   }
 
+  /**
+   * Supprimer un ticket fermé (/ticket supprimer) : compte Esport lié avec `tickets.gerer`, ou `tickets.configurer`
+   * pour une catégorie de ses rôles (gereAvis) ; jamais un simple rôle Discord (c'est irréversible).
+   */
+  async function exigerSuppression(ticket, acteur) {
+    if (ticket.statut !== 'ferme') throw new RefusLocal('supprimer_pas_ferme');
+    const d = acteur.compte ? await droitsTickets(base, { compte: acteur.compte, superAdmin: acteur.superAdmin }) : null;
+    if (!d || !gereAvis(d, ticket.categorie_id)) throw new RefusLocal('supprimer_droits');
+  }
+
   // ---------------------------------------------------------------- Ouverture
 
   async function categoriesActives() {
@@ -159,6 +176,16 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     if (m) {
       await cycle.noter(m[1], acteur.discordId, Number(m[2]));
       return fenetre(`tk:nc:${m[1]}:${m[2]}`, t(langue, 'note_titre'), [{ type: 4, custom_id: 'commentaire', style: 2, label: t(langue, 'commentaire').slice(0, 45), placeholder: t(langue, 'commentaire_placeholder').slice(0, 100), required: false, max_length: 1000 }]);
+    }
+    // Suppression confirmée (/ticket supprimer) : `g` garde l'avis anonyme, `s` le supprime aussi. Le salon est
+    // supprimé APRÈS la réponse (`apres`, lancé par interactions.mjs) : Discord ne pourrait plus l'afficher.
+    m = /^tk:dc:([0-9a-f-]{36}):([gs])$/.exec(id);
+    if (m) {
+      await exigerCommande(i, 'supprimer');
+      const ticket = await ticketDuBouton(i, m[1]);
+      await exigerSuppression(ticket, acteur);
+      const r = await cycle.supprimer(ticket, acteur, { garderAvis: m[2] === 'g', salonPlusTard: true });
+      return { ...avis(t(langue, 'supprime_ok', { numero: r.numero })), apres: r.salonId ? () => patienter(REGLAGES_SUPPRESSION.delaiSalonMs).then(() => cycle.supprimerSalon(r.salonId, r.numero)) : undefined };
     }
     m = /^tk:([a-z]{1,2}):([0-9a-f-]{36})$/.exec(id);
     if (!m) return avis(t(langue, 'erreur'));
@@ -338,6 +365,24 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       const tr = transcriptHtml({ ticket: tk, categorie: langue === 'fr' ? cat?.nom_fr : cat?.nom_en, messages, pieces, langue, notes: false, maintenant: maintenant() });
       const ok = await cycle.envoyerMp(acteur.discordId, { content: t(langue, 'transcript_ok', { numero: tk.numero }) }, [{ nom: tr.nom, type: 'text/html', octets: new TextEncoder().encode(tr.contenu) }]);
       return avis(t(langue, ok ? 'transcript_mp' : 'transcript_mp_impossible'));
+    },
+    /**
+     * Supprimer définitivement ce ticket FERMÉ (`avis` : garder, par défaut, ou supprimer l'avis de l'auteur) :
+     * demande d'abord une confirmation (bouton), éphémère.
+     */
+    async supprimer(i, o, langue, acteur) {
+      const tk = await ticketIci(i, acteur, { staff: false });
+      await exigerSuppression(tk, acteur);
+      const garder = o.avis !== 'supprimer';
+      return {
+        type: 4,
+        data: {
+          flags: EPHEMERE,
+          content: t(langue, 'supprimer_confirmer', { numero: tk.numero, avis: t(langue, garder ? 'supprimer_avis_garde' : 'supprimer_avis_efface') }).slice(0, 2000),
+          allowed_mentions: { parse: [] },
+          components: [{ type: 1, components: [{ type: 2, style: 4, custom_id: `tk:dc:${tk.id}:${garder ? 'g' : 's'}`, label: t(langue, 'b_supprimer') }] }],
+        },
+      };
     },
     /** Ticket permanent (`etat` : on / off) : jamais fermé automatiquement ; avertissement en attente annulé. */
     async permanent(i, o, langue, acteur) {
