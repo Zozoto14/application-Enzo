@@ -37,6 +37,31 @@ export interface Connexion {
   releve?: { salons: number; messages: number; limite: boolean; le: string } | null;
   intentRefuse?: boolean;
   jetonRefuse?: boolean;
+  sansWebSocket?: boolean;
+  dernierEssai?: string | null;
+  derniereErreur?: { motif: string; le: string } | null;
+  reveil?: { ok: boolean; statut: number; erreur?: string; le: string } | null;
+}
+
+/** Diagnostic complet de la connexion (Tickets › Configuration › Connexion), condition par condition. */
+export interface DiagnosticTickets {
+  bot: boolean;
+  serveur: { id: string; nom: string } | null;
+  categorie: boolean;
+  actif: boolean;
+  gatewayActivee: boolean;
+  reveilConfigure: boolean | null;
+  processus: { role: 'inactif' | 'suiveur' | 'meneur' | null; raison: string | null; le: string; frais: boolean } | null;
+  meneur: boolean;
+  connexion: Connexion;
+  cron: { le: string; frais: boolean } | null;
+}
+
+export interface EtatTickets {
+  actif: boolean;
+  bot: boolean;
+  connexion: Connexion;
+  diagnostic?: DiagnosticTickets;
 }
 
 export interface General {
@@ -142,9 +167,11 @@ export interface VerifSalon {
 }
 export interface ServeurDiscord {
   bot: boolean;
+  /** `discord-<statut>` (0 : Discord injoignable), `bot-absent` (le bot n'est pas sur ce serveur). */
   erreur?: string | null;
+  erreurDetail?: { etape: 'serveurs' | 'salons' | 'roles'; statut: number; code: number | null } | null;
   serveurs?: Array<{ id: string; nom: string }>;
-  serveur?: { id: string; nom: string };
+  serveur?: { id: string; nom: string; enregistre?: boolean };
   salons?: SalonDiscord[];
   roles?: Array<{ id: string; nom: string; couleur: string | null }>;
   permissions?: { membreTrouve: boolean; serveur: string[]; ouverts: VerifSalon | null; archives: VerifSalon | null; journaux: VerifSalon | null };
@@ -266,9 +293,10 @@ export function apiTickets(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) => client.requete<T>(chemin, methode, corps);
   return {
     moi: () => r<MoiTickets>('/tickets/moi'),
-    etat: () => r<{ actif: boolean; bot: boolean; connexion: Connexion }>('/tickets/etat'),
+    etat: () => r<EtatTickets>('/tickets/etat'),
     config: () => r<ConfigTickets>('/tickets/config'),
-    discord: () => r<ServeurDiscord>('/tickets/config/discord'),
+    /** Serveur Discord : celui enregistré, ou `serveur` (choisi dans l'app, pas encore enregistré). */
+    discord: (serveur?: string | null) => r<ServeurDiscord>(`/tickets/config/discord${serveur ? `?serveur=${encodeURIComponent(serveur)}` : ''}`),
     changerGeneral: (c: Partial<General>) => r<ConfigTickets>('/tickets/config/general', 'PUT', c),
     changerMessages: (c: Record<string, DeuxLangues>) => r<ConfigTickets>('/tickets/config/messages', 'PUT', c),
     changerHoraires: (c: Horaires) => r<ConfigTickets>('/tickets/config/horaires', 'PUT', c),

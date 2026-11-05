@@ -13,6 +13,12 @@
  *     tickets ouverts toutes les 45 s (25 salons au plus par passage, les plus anciennement relus d'abord ; arrêt au
  *     premier 429). Après une nouvelle session (READY sans reprise), une relecture rattrape ce qui a pu être manqué.
  * Le cron (toutes les 5 min) relit aussi les tickets si plus aucun processus n'est meneur, et réveille l'app.
+ * MAINTIEN EN ÉVEIL : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes) ; le meneur
+ * appelle donc sa propre adresse publique (`reveil`, URL_PUBLIQUE/sante) toutes les 4 min pour garder la Gateway.
+ *
+ * Diagnostic (`diagnosticTickets`) : chaque superviseur note son dernier passage (`superviseur` : inactif et pourquoi,
+ * suiveur, meneur), le cron note le sien (`cron_vu`) ; Tickets › Configuration › Connexion dit précisément ce qui
+ * manque (jeton, serveur, catégorie, activation, processus de l'app, Gateway et sa dernière erreur, cron).
  *
  * État affiché dans l'app (`tickets_etat`, clé `connexion`) : « en direct » (Gateway prête, battement reçu), « secours »
  * (relecture REST), « hors ligne » (plus rien depuis plusieurs minutes).
@@ -30,6 +36,9 @@ export const DUREE_BAIL_MS = 60_000;
 export const INTERVALLE_MS = 20_000;
 export const INTERVALLE_SECOURS_MS = 45_000;
 export const SALONS_PAR_RELEVE = 25;
+export const INTERVALLE_REVEIL_MS = 240_000;
+/** Un passage du superviseur est noté au plus une fois par minute (sauf changement). */
+const NOTE_SUPERVISEUR_MS = 60_000;
 
 /** Prend ou renouvelle le bail du meneur ; rend true si `titulaire` l'a. */
 export async function prendreBail(base, titulaire, t, duree = DUREE_BAIL_MS) {
@@ -115,6 +124,9 @@ export function creerSuperviseurTickets({
   surNouveau,
   surSalonSupprime,
   botId: botInitial = null,
+  reveil = null,
+  fetchReveil = (...a) => globalThis.fetch(...a),
+  intervalleReveil = INTERVALLE_REVEIL_MS,
   journal = console,
 }) {
   let minuterie = null;
@@ -127,6 +139,9 @@ export function creerSuperviseurTickets({
   let enCours = null;
   let arrete = false;
   let reglages = null;
+  let dernierReveil = 0;
+  let etatReveil = null;
+  let noteSuperviseur = { role: null, le: 0 };
   const telecharger = telechargeurCdn(fetchDiscord);
 
   const ctx = () => ({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte, surNouveau, surSalonSupprime, fetch: fetchDiscord, jetonBot });
@@ -166,6 +181,29 @@ export function creerSuperviseurTickets({
     if (g) await g.arreter(opts);
   }
 
+  /** Note le passage de ce processus (au plus une fois par minute, ou quand le rôle change). */
+  async function noter(role, raison, t) {
+    if (noteSuperviseur.role === `${role}:${raison ?? ''}` && t - noteSuperviseur.le < NOTE_SUPERVISEUR_MS) return;
+    noteSuperviseur = { role: `${role}:${raison ?? ''}`, le: t };
+    await ecrireEtat(base, 'superviseur', { role, raison: raison ?? null, processus: identifiant }, t).catch(() => undefined);
+  }
+
+  /** Maintien en éveil (meneur seulement) : une requête à l'adresse publique de l'app, sans attendre la réponse. */
+  function maintenirEveil(t) {
+    if (!reveil || t - dernierReveil < intervalleReveil) return;
+    dernierReveil = t;
+    Promise.resolve()
+      .then(() => fetchReveil(reveil, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(10_000) }))
+      .then(
+        r => {
+          etatReveil = { ok: Boolean(r && r.status < 400), statut: r?.status ?? 0, le: iso(t) };
+        },
+        e => {
+          etatReveil = { ok: false, statut: 0, erreur: String(e?.message ?? e).slice(0, 120), le: iso(t) };
+        },
+      );
+  }
+
   /** Un passage (aussi appelé par les tests). */
   async function passage() {
     if (enCours) return enCours;
@@ -176,13 +214,17 @@ export function creerSuperviseurTickets({
         if (meneur) await rendreBail(base, identifiant, t);
         meneur = false;
         await arreterGateway();
+        await noter('inactif', !jetonBot ? 'sans-jeton' : !reglages.guildId ? 'sans-serveur' : 'desactive', t);
         return { meneur: false, mode: 'inactif' };
       }
       meneur = await prendreBail(base, identifiant, t, dureeBail);
       if (!meneur) {
         await arreterGateway();
+        await noter('suiveur', null, t);
         return { meneur: false, mode: 'suiveur' };
       }
+      await noter('meneur', null, t);
+      maintenirEveil(t);
       if (!gw) await demarrerGateway();
       let e = gw.etat();
       // Fermeture définitive (jeton refusé, intent non activé…) : un seul nouvel essai toutes les 30 min, le temps que
@@ -203,7 +245,7 @@ export function creerSuperviseurTickets({
           return null;
         });
       }
-      await ecrireEtat(base, 'connexion', { mode, meneur: identifiant, gateway: e.etat, code: e.code ?? null, dernierAck: e.dernierAck ? iso(e.dernierAck) : null, prochainEssai: e.prochainEssai ? iso(e.prochainEssai) : null, connexions: e.connexions, identifies: e.identifies, reprises: e.reprises, ...(releve ? { releve: { ...releve, le: iso(t) } } : {}) }, t);
+      await ecrireEtat(base, 'connexion', { mode, meneur: identifiant, gateway: e.etat, code: e.code ?? null, dernierAck: e.dernierAck ? iso(e.dernierAck) : null, prochainEssai: e.prochainEssai ? iso(e.prochainEssai) : null, connexions: e.connexions, identifies: e.identifies, reprises: e.reprises, dernierEssai: e.dernierEssai ? iso(e.dernierEssai) : null, derniereErreur: e.derniereErreur ? { motif: e.derniereErreur.motif, le: iso(e.derniereErreur.le) } : null, reveil: etatReveil, ...(releve ? { releve: { ...releve, le: iso(t) } } : {}) }, t);
       return { meneur: true, mode, releve };
     })();
     try {
@@ -265,5 +307,34 @@ export async function diagnosticConnexion(base, t) {
     releve: c?.releve ?? cron?.releve ?? null,
     intentRefuse: c?.code === 4014,
     jetonRefuse: c?.code === 4004,
+    sansWebSocket: c?.code === 'sans-websocket',
+    dernierEssai: c?.dernierEssai ?? null,
+    derniereErreur: c?.derniereErreur ?? null,
+    reveil: c?.reveil ?? null,
+  };
+}
+
+/**
+ * Diagnostic complet (Tickets › Configuration › Connexion) : chaque condition, dans l'ordre où il faut les remplir.
+ * `serveurTickets` : `{ gateway }` (TICKETS_GATEWAY), `{ reveil }` (URL_PUBLIQUE posée) quand l'app les connaît.
+ */
+export async function diagnosticTickets(base, t, { jetonBot, general, serveurTickets = {} }) {
+  const sup = await lireEtat(base, 'superviseur');
+  const cronVu = await lireEtat(base, 'cron_vu');
+  const bail = await bailActif(base, t);
+  const frais = (e, ms) => Boolean(e?.majLe && t - Date.parse(e.majLe) < ms);
+  return {
+    bot: Boolean(jetonBot),
+    serveur: general.guildId ? { id: general.guildId, nom: general.guildNom ?? '' } : null,
+    categorie: Boolean(general.categorieOuverts),
+    actif: Boolean(general.actif),
+    gatewayActivee: serveurTickets.gateway !== false,
+    reveilConfigure: serveurTickets.reveil === undefined ? null : Boolean(serveurTickets.reveil),
+    // Processus de l'app : dernier passage d'un superviseur (toutes les 20 s tant que l'app tourne).
+    processus: sup ? { role: sup.role ?? null, raison: sup.raison ?? null, le: sup.majLe, frais: frais(sup, 3 * 60_000) } : null,
+    meneur: Boolean(bail),
+    connexion: await diagnosticConnexion(base, t),
+    // Tâche cron (toutes les 5 min) : dernier passage, quel que soit l'état des tickets.
+    cron: cronVu ? { le: cronVu.majLe, frais: frais(cronVu, 11 * 60_000) } : null,
   };
 }

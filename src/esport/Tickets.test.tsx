@@ -289,3 +289,103 @@ test('vue : sans tickets.gerer, pas d’interrupteur « Ne jamais fermer automat
   expect(screen.queryByTestId('esport-tk-permanent')).toBeNull();
   expect(screen.getByTestId('esport-tk-vue-fermeture')).toHaveTextContent('Fermeture automatique après 7 j sans message (réglage général).');
 });
+
+// ------------------------------------------------------------------ Général : choisir le serveur, puis tout enregistrer
+
+/** Client du parcours « Général » : rien d'enregistré au départ ; `discord403` : Discord refuse les salons (50001). */
+function clientGeneral({ discord403 = false, diagnostic }: { discord403?: boolean; diagnostic?: unknown } = {}) {
+  const conf = configDe();
+  conf.general = { ...conf.general, actif: false, guildId: null, guildNom: '', categorieOuverts: null };
+  const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
+  const serveurs = [{ id: '700', nom: 'Ligne Zero | 線ゼロ' }];
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    appels.push({ chemin, methode, corps });
+    if (chemin === '/tickets/config') return conf;
+    if (chemin === '/tickets/etat') return { actif: conf.general.actif, bot: true, connexion: { mode: 'hors_ligne', depuis: null }, ...(diagnostic ? { diagnostic } : {}) };
+    if (chemin === '/tickets/config/discord' && !conf.general.guildId) return { bot: true, serveurs, erreur: null };
+    if (chemin === '/tickets/config/discord?serveur=700' || chemin === '/tickets/config/discord') {
+      if (discord403) return { bot: true, serveurs, serveur: { id: '700', nom: 'Ligne Zero | 線ゼロ', enregistre: false }, erreur: 'discord-403', erreurDetail: { etape: 'salons', statut: 403, code: 50001 } };
+      return {
+        bot: true,
+        serveurs,
+        serveur: { id: '700', nom: 'Ligne Zero | 線ゼロ', enregistre: conf.general.guildId === '700' },
+        erreur: null,
+        salons: [{ id: '710', nom: 'Tickets', type: 'categorie', parent: null }, { id: '711', nom: 'Archives', type: 'categorie', parent: null }, { id: '713', nom: 'journaux', type: 'texte', parent: null }],
+        roles: [],
+        permissions: { membreTrouve: true, serveur: [], ouverts: null, archives: null, journaux: null },
+      };
+    }
+    if (chemin === '/tickets/config/general' && methode === 'PUT') {
+      conf.general = { ...conf.general, ...(corps as object) };
+      return { ...conf };
+    }
+    throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
+  };
+  return { client: { requete } as unknown as ClientEsport, appels };
+}
+
+test('Général : choisir le serveur montre ses catégories sans enregistrer ; serveur + catégorie + activation enregistrés ensemble', async () => {
+  const { client, appels } = clientGeneral();
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-general'));
+  expect(screen.getByText('Choisissez d’abord le serveur.')).toBeTruthy();
+  await fireEvent(screen.getByTestId('esport-tk-general-actif'), 'valueChange', true);
+  expect(screen.getByTestId('esport-tk-general-manque')).toBeTruthy();
+  // Le serveur est choisi : ses catégories sont lues TOUT DE SUITE (aucun enregistrement avant).
+  await fireEvent.press(await screen.findByTestId('esport-tk-general-serveur-700'));
+  await screen.findByTestId('esport-tk-general-ouverts-710');
+  expect(appels.some(a => a.chemin === '/tickets/config/discord?serveur=700')).toBe(true);
+  expect(appels.some(a => a.methode === 'PUT')).toBe(false);
+  expect(screen.queryByText('Choisissez d’abord le serveur.')).toBeNull();
+  expect(screen.getByTestId('esport-tk-general-non-enregistre')).toBeTruthy();
+  expect(screen.getByText(/catégorie Discord des tickets ouverts\.$/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-tk-general-ouverts-710'));
+  await fireEvent.press(screen.getByTestId('esport-tk-general-archives-711'));
+  await fireEvent.press(screen.getByTestId('esport-tk-general-journaux-713'));
+  expect(screen.queryByTestId('esport-tk-general-manque')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-tk-general-enregistrer'));
+  // Le retour s'affiche près du bouton.
+  await screen.findByTestId('esport-tk-general-avis');
+  expect(screen.getByText(/connexion Discord démarre dans la minute/)).toBeTruthy();
+  const put = appels.find(a => a.methode === 'PUT')!.corps as Record<string, unknown>;
+  expect(put).toMatchObject({ actif: true, guildId: '700', guildNom: 'Ligne Zero | 線ゼロ', categorieOuverts: '710', categorieArchives: '711', salonJournaux: '713' });
+  // L'état de la connexion est relu après l'enregistrement.
+  await waitFor(() => expect(appels.filter(a => a.chemin === '/tickets/etat').length).toBeGreaterThanOrEqual(2));
+});
+
+test('Général : Discord refuse (403 / 50001 Missing Access) : erreur et marche à suivre affichées dans Général', async () => {
+  const { client } = clientGeneral({ discord403: true });
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-general'));
+  await fireEvent.press(await screen.findByTestId('esport-tk-general-serveur-700'));
+  const avis = await screen.findByTestId('esport-tk-general-erreur-discord');
+  expect(avis).toBeTruthy();
+  expect(screen.getByText(/403, code 50001 Missing Access/)).toBeTruthy();
+  expect(screen.getByText(/Inviter le bot/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-general-relire')).toBeTruthy();
+  expect(screen.queryByTestId('esport-tk-general-ouverts-710')).toBeNull();
+});
+
+test('Connexion : diagnostic précis (ce qui manque, dernière erreur, cron jamais vu avec la commande à ajouter)', async () => {
+  const diagnostic = {
+    bot: true,
+    serveur: null,
+    categorie: false,
+    actif: false,
+    gatewayActivee: true,
+    reveilConfigure: false,
+    processus: { role: 'inactif', raison: 'sans-serveur', le: new Date().toISOString(), frais: true },
+    meneur: false,
+    connexion: { mode: 'hors_ligne', depuis: null },
+    cron: null,
+  };
+  const { client } = clientGeneral({ diagnostic });
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await screen.findByTestId('esport-tk-diag');
+  expect(screen.getByLabelText(/Jeton du bot sur le serveur \(DISCORD_BOT_TOKEN\) : OK/)).toBeTruthy();
+  expect(screen.getByLabelText(/Serveur Discord choisi : À faire/)).toBeTruthy();
+  expect(screen.getByLabelText(/Tickets activés : À faire/)).toBeTruthy();
+  expect(screen.getByText(/URL_PUBLIQUE absente/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-diag-cron-commande')).toBeTruthy();
+  expect(screen.getByText(/esport\/serveur\/cron\.mjs/)).toBeTruthy();
+});

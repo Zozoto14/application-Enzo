@@ -35,7 +35,7 @@ import {
   validerPanneau,
 } from './reglages.mjs';
 import { NOM_IMAGE_PANNEAU, chargePanneau } from './panneaux.mjs';
-import { diagnosticConnexion } from './superviseur.mjs';
+import { diagnosticConnexion, diagnosticTickets } from './superviseur.mjs';
 import { PERMISSIONS_REQUISES, P, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
 
 /** Lien d'invitation : permissions du bot d'annonces (bot-discord.md) + celles des tickets (Gérer les salons, Gérer les rôles, Joindre des fichiers). */
@@ -43,7 +43,11 @@ const PERMISSIONS_INVITATION = (309237861376n | P.VOIR_SALON | P.GERER_SALONS | 
 const TYPES_IMAGE = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const IMAGE_MAX = 8 * 1024 * 1024;
 
-export function servicesConfigTickets({ base, maintenant = () => Date.now(), stockage, fetch: fetchDiscord, jetonBot, applicationId = '', drive }) {
+/** Erreur d'un appel REST lisible par l'app : `discord-<statut>` (0 : injoignable), code JSON de Discord, étape. */
+const erreurRest = (etape, r) => ({ erreur: `discord-${r.statut}`, erreurDetail: { etape, statut: r.statut, code: r.code ?? null } });
+const ID_DISCORD = /^\d{5,25}$/;
+
+export function servicesConfigTickets({ base, maintenant = () => Date.now(), stockage, fetch: fetchDiscord, jetonBot, applicationId = '', drive, serveurTickets = {} }) {
   const ev = (type, acteur, entiteType, entiteId, charge = {}) => evenement(type, { acteur: acteur.compte, entiteType, entiteId, charge, maintenant: maintenant() });
 
   async function moi(acteur) {
@@ -54,9 +58,16 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
   }
 
   async function etat(acteur) {
-    await contexteTickets(base, acteur);
+    const { droits } = await contexteTickets(base, acteur);
     const general = await lireGeneral(base);
-    return { actif: general.actif, bot: Boolean(jetonBot), connexion: general.actif && jetonBot ? await diagnosticConnexion(base, maintenant()) : { mode: 'hors_ligne', depuis: null } };
+    const t = maintenant();
+    return {
+      actif: general.actif,
+      bot: Boolean(jetonBot),
+      connexion: general.actif && jetonBot ? await diagnosticConnexion(base, t) : { mode: 'hors_ligne', depuis: null },
+      // Diagnostic détaillé : pour qui configure les tickets seulement.
+      ...(droits?.configurer ? { diagnostic: await diagnosticTickets(base, t, { jetonBot, general, serveurTickets }) } : {}),
+    };
   }
 
   async function categories() {
@@ -278,36 +289,49 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
   /**
    * Ce que l'app affiche du serveur Discord : serveurs où est le bot (pour en choisir un), salons et catégories,
    * rôles, et permissions du bot (au niveau du serveur, puis dans chaque catégorie / salon choisi), avec ce qui manque.
+   * `serveur` (facultatif) : serveur CHOISI dans l'app mais pas encore enregistré ; ses catégories et salons sont lus
+   * tout de suite (le serveur et la catégorie des tickets s'enregistrent ensuite ensemble). Il doit être un serveur où
+   * est le bot. Erreur Discord : `erreur` (`discord-403`…), `erreurDetail` `{ etape, statut, code }` (50001 : Missing
+   * Access, le bot n'est pas, ou plus, sur le serveur).
    */
-  async function discord(acteur) {
+  async function discord(acteur, { serveur: demande } = {}) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
     if (!jetonBot) return { bot: false };
+    if (demande !== undefined && demande !== null && demande !== '' && (typeof demande !== 'string' || !ID_DISCORD.test(demande))) throw echec(400, 'serveur', 'Identifiant Discord invalide (chiffres seulement).');
     const general = await lireGeneral(base);
     const serveurs = await rest(fetchDiscord, jetonBot, 'GET', '/users/@me/guilds');
-    const listeServeurs = serveurs.ok && Array.isArray(serveurs.corps) ? serveurs.corps.map(g => ({ id: g.id, nom: String(g.name ?? '') })) : [];
-    if (!general.guildId) return { bot: true, serveurs: listeServeurs, erreur: serveurs.ok ? null : `discord-${serveurs.statut}` };
+    const listeServeurs = serveurs.ok && Array.isArray(serveurs.corps) ? serveurs.corps.map(g => ({ id: String(g.id), nom: String(g.name ?? '') })) : [];
+    if (!serveurs.ok) return { bot: true, serveurs: listeServeurs, ...erreurRest('serveurs', serveurs) };
+    const guildId = demande || general.guildId;
+    if (!guildId) return { bot: true, serveurs: listeServeurs, erreur: null };
+    const enregistre = guildId === general.guildId;
+    const serveur = { id: guildId, nom: listeServeurs.find(g => g.id === guildId)?.nom ?? (enregistre ? general.guildNom : '') ?? '', enregistre };
+    // Le bot n'est pas (ou plus) sur ce serveur : rien à lire, l'app propose le lien d'invitation.
+    if (!listeServeurs.some(g => g.id === guildId)) return { bot: true, serveurs: listeServeurs, serveur, erreur: 'bot-absent', erreurDetail: { etape: 'serveurs', statut: 0, code: null } };
     const [salons, roles, moiBot] = await Promise.all([
-      rest(fetchDiscord, jetonBot, 'GET', `/guilds/${general.guildId}/channels`),
-      rest(fetchDiscord, jetonBot, 'GET', `/guilds/${general.guildId}/roles`),
+      rest(fetchDiscord, jetonBot, 'GET', `/guilds/${guildId}/channels`),
+      rest(fetchDiscord, jetonBot, 'GET', `/guilds/${guildId}/roles`),
       rest(fetchDiscord, jetonBot, 'GET', `/users/@me`),
     ]);
-    if (!salons.ok || !roles.ok) return { bot: true, serveurs: listeServeurs, erreur: `discord-${salons.ok ? roles.statut : salons.statut}` };
+    if (!salons.ok) return { bot: true, serveurs: listeServeurs, serveur, ...erreurRest('salons', salons) };
+    if (!roles.ok) return { bot: true, serveurs: listeServeurs, serveur, ...erreurRest('roles', roles) };
     const botId = moiBot.corps?.id ?? applicationId;
-    const membre = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${general.guildId}/members/${botId}`);
+    const membre = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${guildId}/members/${botId}`);
     const rolesBot = membre.ok ? (membre.corps?.roles ?? []) : [];
-    const listeSalons = (salons.corps ?? []).filter(s => [0, 4, 5, 15].includes(Number(s.type)));
-    const perm = salon => permissionsMembre({ guildId: general.guildId, roles: roles.corps, membreRoles: rolesBot, salon, membreId: botId });
+    const listeSalons = (Array.isArray(salons.corps) ? salons.corps : []).filter(s => [0, 4, 5, 15].includes(Number(s.type)));
+    const perm = salon => permissionsMembre({ guildId, roles: roles.corps, membreRoles: rolesBot, salon, membreId: botId });
     const verif = id => {
-      if (!id) return null;
+      if (!id || !enregistre) return null;
       const s = listeSalons.find(x => x.id === id);
       return s ? { id, nom: s.name, manquantes: manquantes(perm(s)) } : { id, introuvable: true, manquantes: [] };
     };
     return {
       bot: true,
       serveurs: listeServeurs,
-      serveur: { id: general.guildId, nom: listeServeurs.find(g => g.id === general.guildId)?.nom ?? general.guildNom ?? '' },
+      serveur,
+      erreur: null,
       salons: listeSalons.map(s => ({ id: s.id, nom: String(s.name ?? ''), type: Number(s.type) === 4 ? 'categorie' : 'texte', parent: s.parent_id ?? null, position: Number(s.position ?? 0) })).sort((a, b) => a.position - b.position),
-      roles: (roles.corps ?? []).filter(r => r.id !== general.guildId && !r.managed).map(r => ({ id: r.id, nom: String(r.name ?? ''), couleur: Number(r.color) ? `#${Number(r.color).toString(16).padStart(6, '0')}` : null, position: Number(r.position ?? 0) })).sort((a, b) => b.position - a.position),
+      roles: (Array.isArray(roles.corps) ? roles.corps : []).filter(r => r.id !== guildId && !r.managed).map(r => ({ id: r.id, nom: String(r.name ?? ''), couleur: Number(r.color) ? `#${Number(r.color).toString(16).padStart(6, '0')}` : null, position: Number(r.position ?? 0) })).sort((a, b) => b.position - a.position),
       permissions: {
         membreTrouve: membre.ok,
         serveur: manquantes(perm(null)),

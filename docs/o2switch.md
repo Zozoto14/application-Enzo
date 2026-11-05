@@ -955,6 +955,7 @@ seulement après une semaine sans souci ici.
 | Ce que vous voyez | Que faire |
 | --- | --- |
 | Page « We're sorry, but something went wrong » ou erreur 503 sur esport./relais. | Lisez le journal de l'app : `tail -n 50 ~/logs/esport-passenger.log` (ou `relais-passenger.log`). Sans réglage de journal, Passenger écrit dans `stderr.log` du dossier de l'app (`~/application-enzo/esport/stderr.log`). Redémarrer : **Setup Node.js App** › l'app › **Restart**, ou `touch ~/application-enzo/esport/tmp/restart.txt`. |
+| Tickets Discord : « Connexion Discord : Hors ligne » | Ouvrez **Tickets › Configuration › Connexion** : le **diagnostic** dit quelle condition manque (jeton, serveur, catégorie, activation, app arrêtée, `URL_PUBLIQUE`, tâche cron jamais vue, avec la commande à copier). Détails : [esport/tickets.md](esport/tickets.md). |
 | `/sante` répond « Serveur Esport pas encore configuré » avec une liste de problèmes | Le fichier `~/.appdashboard/esport.env` manque une valeur (la liste dit laquelle). Corrigez, puis redémarrez l'app. |
 | « Node 22 ou plus est nécessaire » | **Setup Node.js App** › l'app › **Node.js version** : 22 › **Save**, pour les deux apps ; corrigez aussi le chemin `nodevenv/…/22/` de la tâche cron. |
 | `password authentication failed for user "jayo8828_esport"` | Mot de passe PostgreSQL faux dans un des deux `.env` (étape A2 pour le changer). |

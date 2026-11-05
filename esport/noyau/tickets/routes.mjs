@@ -4,7 +4,7 @@
  * vérifiée pour chaque ticket).
  *
  *   GET           /tickets/moi ; /tickets/etat
- *   GET           /tickets/config ; /tickets/config/discord
+ *   GET           /tickets/config ; /tickets/config/discord[?serveur=<id> : serveur choisi, pas encore enregistré]
  *   PUT           /tickets/config/(general|messages|horaires|commandes)
  *   POST          /tickets/config/categories ; PATCH|DELETE /tickets/config/categories/:id ; PUT …/categories/ordre
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
@@ -87,7 +87,7 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
     if (n === 1 && m === 'GET') return cf.config(acteur);
     if (n === 2 && b === 'discord' && m === 'GET') {
       await limite('tickets_discord', acteur.compte);
-      return cf.discord(acteur);
+      return cf.discord(acteur, { serveur: q.get('serveur') || undefined });
     }
     if (n === 2 && m === 'PUT') {
       if (b === 'general') return cf.changerGeneral(acteur, await lireCorps());

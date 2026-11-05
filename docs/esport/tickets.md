@@ -35,18 +35,27 @@ par le staff seul : voir « Tickets qui ne se ferment jamais »).
 
 ### 2. Côté serveur (o2switch)
 
-Rien de nouveau dans `esport.env` : le jeton du bot (`DISCORD_BOT_TOKEN`) suffit. Facultatif : `TICKETS_GATEWAY=non`
-coupe la connexion en direct (relecture de secours seulement), sans rien changer d'autre. La migration `0054` est
-appliquée par le déploiement automatique.
+Rien de nouveau dans `esport.env` : le jeton du bot (`DISCORD_BOT_TOKEN`) suffit, avec `URL_PUBLIQUE` (déjà posée à
+l'installation, [o2switch.md](../o2switch.md) étape A6) : l'app s'en sert pour **rester éveillée** tant qu'elle tient
+la connexion Discord (Passenger arrête un processus qui ne reçoit plus de requête), et la tâche cron pour la
+**réveiller**. La **tâche cron Esport** (toutes les 5 minutes, [o2switch.md](../o2switch.md) étape A9) doit tourner :
+elle relit les tickets quand l'app dort et la réveille. Facultatif : `TICKETS_GATEWAY=non` coupe la connexion en
+direct (relecture de secours seulement), sans rien changer d'autre. La migration `0054` est appliquée par le
+déploiement automatique. L'onglet **Connexion** dit lui-même ce qui manque (jeton, `URL_PUBLIQUE`, cron jamais vu ou
+arrêté, avec la commande à copier dans cPanel).
 
 ### 3. Dans l'app : **Tickets › Configuration**
 
-1. **Général** : choisir le **serveur** (liste des serveurs où est le bot), la **catégorie Discord des tickets
-   ouverts**, celle des **archives**, le **salon des journaux** ; la langue des messages ; les délais. Puis **Tickets
-   activés** et **Enregistrer**.
+1. **Général** : choisir le **serveur** (liste des serveurs où est le bot) : ses catégories et salons s'affichent
+   **aussitôt** (rien à enregistrer avant) ; choisir la **catégorie Discord des tickets ouverts**, celle des
+   **archives**, le **salon des journaux** ; la langue des messages ; les délais. Puis **Tickets activés** et
+   **Enregistrer** : tout est enregistré **en une fois**. Activer sans catégorie est refusé, et l'écran le dit au-dessus
+   du bouton. Si Discord refuse la lecture du serveur (bot absent, **403 / 50001 Missing Access**…), l'erreur et ce
+   qu'il faut faire (réinviter le bot, puis **Relire le serveur**) s'affichent sous le choix du serveur.
 2. **Catégories** : en créer une par type de demande (Recrutement, Partenariat, Demande CM, Aide…).
 3. **Panneaux** : un message fixe avec les boutons (ou un menu) « ouvrir un ticket », publié dans un salon public.
-4. **Connexion** : la pastille doit passer à **en direct** dans la minute.
+4. **Connexion** : la pastille doit passer à **en direct** dans la minute. Sinon, le **diagnostic** de cet onglet
+   dit quelle condition manque (voir « Diagnostic de la connexion »).
 
 ---
 
@@ -61,7 +70,7 @@ En tête, la **connexion Discord** :
 | --- | --- |
 | **En direct** | un processus de l'app tient la Gateway : les messages arrivent en moins d'une seconde |
 | **Secours** | la Gateway est indisponible (connexion en cours, intent refusé, app endormie…) : les tickets ouverts sont relus par l'API toutes les 45 s (processus meneur) ou toutes les 5 min (cron) ; rien n'est perdu |
-| **Hors ligne** | plus rien depuis plusieurs minutes (tickets désactivés, jeton absent, cron arrêté) |
+| **Hors ligne** | plus rien depuis plusieurs minutes (tickets désactivés, jeton absent, app arrêtée et cron arrêté) : le diagnostic de **Configuration › Connexion** dit pourquoi |
 
 Onglets : **Tickets** (`tickets.voir`), **Statistiques** (`tickets.gerer`), **Configuration** (`tickets.configurer`).
 Le **compteur** de l'entrée « Tickets » de la navigation donne le nombre de tickets ouverts avec du nouveau.
@@ -101,7 +110,7 @@ Sur 30 jours : tickets ouverts maintenant, créés, fermés, **délai de 1re ré
 
 | Section | Contenu |
 | --- | --- |
-| **Connexion** | état de la connexion et explication ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
+| **Connexion** | état de la connexion et explication ; **diagnostic** condition par condition (voir plus bas) ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
 | **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale |
 | **Catégories** | nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
 | **Panneaux** | titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, salon de publication ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
@@ -244,6 +253,23 @@ mutualisé n'aime pas les connexions en rafale. D'où (`esport/noyau/tickets/sup
   toutes les 45 s, arrêt au premier 429) ; aucun meneur (app endormie) → le **cron** (toutes les 5 min) relit, puis
   réveille l'app (`GET /sante`) pour qu'un meneur reprenne la Gateway. Un message vu par la Gateway et par la
   relecture n'est enregistré qu'**une fois** (identifiant Discord unique par ticket).
+- **Maintien en éveil** : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes). Le meneur
+  appelle donc sa propre adresse publique (`URL_PUBLIQUE/sante`) toutes les **4 minutes** : la Gateway reste tenue.
+  Sans `URL_PUBLIQUE`, l'app s'endort, la pastille passe à « secours » (relecture du cron) et le diagnostic le signale.
+
+### Diagnostic de la connexion (Configuration › Connexion)
+
+`GET /tickets/etat` rend `diagnostic` ; l'onglet affiche chaque condition (« OK » ou « À faire » et quoi faire) :
+
+| Ligne | D'où vient l'information |
+| --- | --- |
+| Jeton du bot | `DISCORD_BOT_TOKEN` lu par l'app |
+| Serveur, catégorie des tickets ouverts, tickets activés | réglages **Général** enregistrés |
+| Connexion en direct permise | `TICKETS_GATEWAY` (affichée seulement si `non`) |
+| App en marche sur le serveur | dernier passage d'un superviseur (`tickets_etat`, clé `superviseur` : toutes les 20 s, noté au plus une fois par minute ; récent = moins de 3 min), et son rôle (tient la connexion, un autre processus la tient, tickets pas prêts) |
+| Maintien en éveil | `URL_PUBLIQUE` absente, ou dernier appel en échec |
+| Connexion en direct (Gateway) | état (prête, connexion, nouvel essai, refusée…), **dernier essai** et **dernière erreur** (`GET /gateway/bot` refusé, fermeture avec son code, Node sans WebSocket…) |
+| Tâche cron Esport | dernier passage (`tickets_etat`, clé `cron_vu`, noté à chaque passage même tickets désactivés) ; jamais vu ou vieux de plus de 10 min : la commande de la tâche cron est affichée, à copier dans cPanel |
 
 ## Qui voit quoi (permissions)
 
@@ -286,9 +312,9 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | Route | Effet |
 | --- | --- |
 | `GET /tickets/moi` | droits du compte (`voir`, `repondre`, `gerer`, `configurer`), tickets activés |
-| `GET /tickets/etat` | état de la connexion Discord (`direct`, `secours`, `hors_ligne`), intent ou jeton refusé |
+| `GET /tickets/etat` | état de la connexion Discord (`direct`, `secours`, `hors_ligne`), intent ou jeton refusé ; `diagnostic` (conditions une par une) |
 | `GET /tickets/config` | toute la configuration (`tickets.configurer`) |
-| `GET /tickets/config/discord` | serveurs du bot, salons, rôles, permissions du bot et ce qui manque |
+| `GET /tickets/config/discord[?serveur=<id>]` | serveurs du bot, salons, rôles, permissions du bot et ce qui manque ; `serveur` : serveur choisi dans l'app, pas encore enregistré (lu tout de suite) ; erreur : `erreur` (`discord-403`, `bot-absent`…) et `erreurDetail { etape, statut, code }` |
 | `PUT /tickets/config/(general\|messages\|horaires\|commandes)` | réglages |
 | `POST /tickets/config/categories` ; `PATCH\|DELETE …/categories/:id` ; `PUT …/categories/ordre` | catégories |
 | `POST /tickets/config/panneaux` ; `PATCH\|DELETE …/panneaux/:id` ; `GET …/:id/apercu` ; `POST …/:id/publier` | panneaux |
@@ -327,6 +353,8 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   textes `src/esport/i18n/tickets.ts`, réglage de la fermeture en jours `src/esport/tickets/fermeture.ts`, phrases des notifications `src/esport/tickets/libelles.ts`.
 - Tests : `esport/test/tickets-gateway.test.mjs` (faux serveur Gateway WebSocket : HELLO, battements, RESUME,
   zombie, INVALID_SESSION, 4014, budget ; bail entre deux processus simulés ; relecture de secours ; cron),
+  `esport/test/tickets-diagnostic.test.mjs` (Général : serveur choisi lu avant l'enregistrement, tout enregistré en une fois,
+  403 / 50001 ; superviseur inactif → secours → en direct ; dernière erreur de la Gateway ; cron vu ; maintien en éveil),
   `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-commandes.test.mjs`
   (définitions, chaque commande, droits, commandes coupées ou réservées), `esport/test/tickets-app.test.mjs`
   (visibilité par catégorie, non lus, réponse depuis l'app, notes internes jamais envoyées, droits, transcript, pièces,

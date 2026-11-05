@@ -7,13 +7,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
 import { heuresPourMode, joursDeHeures, modeFermeture, texteDelai, type ModeFermeture } from '../../tickets/fermeture';
-import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type General, type Horaires, type ModeLangue, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
+import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
 import { Glyphe } from '../../../ui/icones';
 import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
@@ -92,7 +92,7 @@ export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; clien
   const api = useMemo(() => apiTickets(client), [client]);
   const [conf, setConf] = useState<Config | undefined>();
   const [serveur, setServeur] = useState<ServeurDiscord | undefined>();
-  const [connexion, setConnexion] = useState<{ actif: boolean; bot: boolean; connexion: Connexion } | undefined>();
+  const [connexion, setConnexion] = useState<EtatTickets | undefined>();
   const [section, setSection] = useState<Section>('connexion');
   const { erreur, avis, agir, enCours } = useAgir();
   const relire = useCallback(async () => {
@@ -100,7 +100,20 @@ export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; clien
     setConf(c);
     setConnexion(e);
   }, [api]);
-  const verifier = useCallback(() => agir('discord', async () => setServeur(await api.discord())), [agir, api]);
+  const relireEtat = useCallback(() => {
+    void api
+      .etat()
+      .then(setConnexion)
+      .catch(() => undefined);
+  }, [api]);
+  const verifier = useCallback(
+    () =>
+      agir('discord', async () => {
+        setServeur(await api.discord());
+        relireEtat();
+      }),
+    [agir, api, relireEtat],
+  );
   useEffect(() => {
     void agir('charger', async () => {
       await relire();
@@ -116,7 +129,14 @@ export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; clien
       <Onglets theme={theme} prefixe="esport-tk-conf-onglet" testID="esport-tk-conf-onglets" actif={section} onChoisir={id => setSection(id as Section)} entrees={SECTIONS.map(([id, cle]) => ({ id, libelle: trTk(cle) }))} defilant={!large} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-tk-conf" />
       {section === 'connexion' ? <SectionConnexion theme={theme} conf={conf} connexion={connexion} serveur={serveur} enCours={enCours === 'discord'} onVerifier={verifier} /> : null}
-      {section === 'general' ? <SectionGeneral {...props} serveur={serveur} onServeur={verifier} /> : null}
+      {section === 'general' ? (
+        <SectionGeneral
+          {...props}
+          serveur={serveur}
+          onServeur={setServeur}
+          onEnregistre={relireEtat}
+        />
+      ) : null}
       {section === 'categories' ? <SectionCategories {...props} /> : null}
       {section === 'panneaux' ? <SectionPanneaux {...props} /> : null}
       {section === 'messages' ? <SectionMessages {...props} /> : null}
@@ -140,14 +160,95 @@ interface PropsSection {
   client: ClientEsport;
 }
 
+/** Erreur Discord lisible (et ce qu'il faut faire) d'une lecture du serveur ; null sans erreur. */
+export function texteErreurDiscord(s?: ServeurDiscord): string | null {
+  if (!s?.erreur) return null;
+  if (s.erreur === 'bot-absent') return trTk('discord.err.bot-absent');
+  const statut = s.erreurDetail?.statut ?? Number(/^discord-(\d+)$/.exec(s.erreur)?.[1] ?? NaN);
+  const code = s.erreurDetail?.code ?? null;
+  const etape = s.erreurDetail?.etape ? ` (${trTk(`discord.etape.${s.erreurDetail.etape}` as CleTk)})` : '';
+  if (statut === 403) return trTk('discord.err.403', { code: code ? `, code ${code}${code === 50001 ? ' Missing Access' : ''}` : '' }) + etape;
+  if ([0, 401, 404, 429].includes(statut)) return trTk(`discord.err.${statut}` as CleTk) + etape;
+  return trTk('discord.err.autre', { code: `${s.erreur}${code ? `, code ${code}` : ''}` }) + etape;
+}
+
 // ------------------------------------------------------------------ Connexion
 
-function SectionConnexion({ theme, conf, connexion, serveur, enCours, onVerifier }: { theme: ThemeHub; conf: Config; connexion?: { actif: boolean; bot: boolean; connexion: Connexion }; serveur?: ServeurDiscord; enCours: boolean; onVerifier(): void }) {
+/** Une ligne du diagnostic : condition remplie (ou non), détail et, si besoin, ce qu'il faut faire. */
+function LigneDiag({ theme, ok, titre, detail, commande, testID }: { theme: ThemeHub; ok: boolean; titre: string; detail?: string | null; commande?: string; testID: string }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'flex-start' }} testID={testID} accessibilityLabel={`${titre} : ${ok ? trTk('diag.ok') : trTk('diag.a_faire')}`}>
+      <Glyphe valeur={ok ? 'valide' : 'alerte'} taille={14} couleur={ok ? theme.ok : theme.alerte} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>
+          {titre} : {ok ? trTk('diag.ok') : trTk('diag.a_faire')}
+        </Text>
+        {detail ? <Text style={attenue(theme)}>{detail}</Text> : null}
+        {commande ? (
+          <Text selectable style={{ ...texte(theme, 12), fontFamily: 'monospace' }} testID={`${testID}-commande`}>
+            {commande}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function Diagnostic({ theme, d }: { theme: ThemeHub; d: DiagnosticTickets }) {
+  const c = d.connexion;
+  const pret = d.bot && d.serveur && d.categorie && d.actif;
+  const etatGw = c.gateway ? trTk(`diag.etat.${c.gateway}` as CleTk) : '—';
+  return (
+    <View style={{ gap: ESP.xs }} testID="esport-tk-diag">
+      <Intertitre theme={theme}>{trTk('diag.titre')}</Intertitre>
+      <LigneDiag theme={theme} ok={d.bot} titre={trTk('diag.bot')} detail={d.bot ? null : trTk('diag.bot_non')} testID="esport-tk-diag-bot" />
+      <LigneDiag theme={theme} ok={Boolean(d.serveur)} titre={trTk('diag.serveur')} detail={d.serveur ? d.serveur.nom || d.serveur.id : trTk('diag.serveur_non')} testID="esport-tk-diag-serveur" />
+      <LigneDiag theme={theme} ok={d.categorie} titre={trTk('diag.categorie')} detail={d.categorie ? null : trTk('diag.categorie_non')} testID="esport-tk-diag-categorie" />
+      <LigneDiag theme={theme} ok={d.actif} titre={trTk('diag.actif')} detail={d.actif ? null : trTk('diag.actif_non')} testID="esport-tk-diag-actif" />
+      {!d.gatewayActivee ? <LigneDiag theme={theme} ok={false} titre={trTk('diag.gateway')} detail={trTk('diag.gateway_non')} testID="esport-tk-diag-gateway-coupee" /> : null}
+      <LigneDiag
+        theme={theme}
+        ok={Boolean(d.processus?.frais)}
+        titre={trTk('diag.processus')}
+        detail={d.processus?.frais ? trTk('diag.processus_oui', { quand: quand(d.processus.le), role: trTk(`diag.role.${d.processus.role ?? 'inactif'}` as CleTk) }) : trTk('diag.processus_non')}
+        testID="esport-tk-diag-processus"
+      />
+      {d.reveilConfigure === false ? <LigneDiag theme={theme} ok={false} titre={trTk('diag.reveil')} detail={trTk('diag.reveil_non')} testID="esport-tk-diag-reveil" /> : null}
+      {c.reveil && !c.reveil.ok ? <LigneDiag theme={theme} ok={false} titre={trTk('diag.reveil')} detail={trTk('diag.reveil_echec', { detail: c.reveil.erreur ?? `HTTP ${c.reveil.statut}` })} testID="esport-tk-diag-reveil-echec" /> : null}
+      {pret && d.gatewayActivee ? (
+        <LigneDiag
+          theme={theme}
+          ok={c.mode === 'direct'}
+          titre={trTk('diag.gateway_etat')}
+          detail={[
+            c.sansWebSocket ? trTk('diag.sans_websocket') : c.intentRefuse ? trTk('connexion.intent') : c.jetonRefuse ? trTk('connexion.jeton') : null,
+            trTk('diag.gateway_etat_detail', { etat: etatGw, quand: quand(c.dernierEssai) }),
+            c.derniereErreur ? trTk('diag.derniere_erreur', { motif: c.derniereErreur.motif, quand: quand(c.derniereErreur.le) }) : null,
+          ]
+            .filter(Boolean)
+            .join('\n')}
+          testID="esport-tk-diag-gateway"
+        />
+      ) : null}
+      <LigneDiag
+        theme={theme}
+        ok={Boolean(d.cron?.frais)}
+        titre={trTk('diag.cron')}
+        detail={d.cron?.frais ? trTk('diag.cron_oui', { quand: quand(d.cron.le) }) : d.cron ? trTk('diag.cron_vieux', { quand: quand(d.cron.le) }) : trTk('diag.cron_non')}
+        commande={d.cron?.frais ? undefined : trTk('diag.cron_commande')}
+        testID="esport-tk-diag-cron"
+      />
+    </View>
+  );
+}
+
+function SectionConnexion({ theme, conf, connexion, serveur, enCours, onVerifier }: { theme: ThemeHub; conf: Config; connexion?: EtatTickets; serveur?: ServeurDiscord; enCours: boolean; onVerifier(): void }) {
   const c = connexion?.connexion;
   const mode = connexion?.actif ? (c?.mode ?? 'hors_ligne') : 'hors_ligne';
   const perms = serveur?.permissions;
   const liste = (cles: string[]) => cles.map(k => trTk(`perm.${k}` as CleTk)).join(', ');
   const salonsVerifies = perms ? ([['general.categorie_ouverts', perms.ouverts], ['general.categorie_archives', perms.archives], ['general.salon_journaux', perms.journaux]] as const) : [];
+  const erreurDiscord = texteErreurDiscord(serveur);
   return (
     <Bloc theme={theme} testID="esport-tk-conf-connexion">
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
@@ -159,8 +260,13 @@ function SectionConnexion({ theme, conf, connexion, serveur, enCours, onVerifier
       {c?.jetonRefuse ? <Text style={{ ...texte(theme), fontWeight: '700' }}>{trTk('connexion.jeton')}</Text> : null}
       {c?.depuis ? <Text style={attenue(theme)}>{trTk('connexion.depuis', { quand: quand(c.depuis) })}</Text> : null}
       {c?.releve ? <Text style={attenue(theme)}>{trTk('connexion.releve', { n: c.releve.salons, m: c.releve.messages })}</Text> : null}
+      {connexion?.diagnostic ? <Diagnostic theme={theme} d={connexion.diagnostic} /> : null}
       <Intertitre theme={theme}>{trTk('connexion.permissions')}</Intertitre>
-      {serveur?.erreur ? <Text style={texte(theme)}>{trTk('connexion.erreur_discord', { code: serveur.erreur })}</Text> : null}
+      {erreurDiscord ? (
+        <Text style={texte(theme)} testID="esport-tk-conf-erreur-discord">
+          {erreurDiscord}
+        </Text>
+      ) : null}
       {perms && !perms.membreTrouve ? <Text style={texte(theme)}>{trTk('connexion.membre_introuvable')}</Text> : null}
       {perms ? (
         <View style={{ gap: ESP.xxs }} testID="esport-tk-conf-permissions">
@@ -181,10 +287,62 @@ function SectionConnexion({ theme, conf, connexion, serveur, enCours, onVerifier
 
 // ------------------------------------------------------------------ Général
 
-function SectionGeneral({ theme, api, conf, setConf, agir, salons, serveur, onServeur }: PropsSection & { serveur?: ServeurDiscord; onServeur(): void }) {
+/**
+ * Réglages généraux. Choisir un serveur lit TOUT DE SUITE ses catégories et salons (sans enregistrer d'abord) : le
+ * serveur, les catégories et l'activation s'enregistrent ensemble. Erreur de Discord (bot absent, 403 / 50001…) et
+ * retour de l'enregistrement affichés ici, près du bouton.
+ */
+function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnregistre }: PropsSection & { serveur?: ServeurDiscord; onServeur(s: ServeurDiscord): void; onEnregistre(): void }) {
   const [g, setG] = useState<General>(conf.general);
+  const [lu, setLu] = useState<ServeurDiscord | undefined>(serveur);
+  const [lecture, setLecture] = useState<string | null>(null);
+  const local = useAgir();
+  const enregistre = conf.general;
+  useEffect(() => setG(enregistre), [enregistre]);
+  useEffect(() => {
+    if (serveur) setLu(serveur);
+  }, [serveur]);
+  const lire = useCallback(
+    async (guildId: string | null) => {
+      setLecture(guildId ?? '');
+      try {
+        const d = await api.discord(guildId);
+        setLu(d);
+        if (!guildId || guildId === enregistre.guildId) onServeur(d);
+      } catch (e) {
+        setLu(prec => ({ bot: true, serveurs: prec?.serveurs, erreur: 'discord-app', erreurDetail: null, ...(e instanceof Error ? { message: e.message } : {}) }) as ServeurDiscord);
+      } finally {
+        setLecture(null);
+      }
+    },
+    [api, enregistre.guildId, onServeur],
+  );
+  // Première ouverture : la lecture du serveur a échoué (ou n'a pas eu lieu) : nouvel essai.
+  const premier = React.useRef(true);
+  useEffect(() => {
+    if (!premier.current) return;
+    premier.current = false;
+    if (!serveur) void lire(enregistre.guildId);
+  }, [serveur, lire, enregistre.guildId]);
+  const choisirServeur = (id: string) => {
+    const meme = id === enregistre.guildId;
+    setG({
+      ...g,
+      guildId: id,
+      guildNom: lu?.serveurs?.find(s => s.id === id)?.nom ?? '',
+      // Catégories d'un autre serveur : remises à zéro (celles du serveur enregistré reviennent si on y revient).
+      categorieOuverts: meme ? enregistre.categorieOuverts : null,
+      categorieArchives: meme ? enregistre.categorieArchives : null,
+      salonJournaux: meme ? enregistre.salonJournaux : null,
+    });
+    void lire(id);
+  };
+  const duServeur = lu && lu.serveur?.id === g.guildId && !lu.erreur;
+  const salons = duServeur ? (lu.salons ?? []) : [];
   const categoriesDiscord = salons.filter(s => s.type === 'categorie').map(s => ({ id: s.id, nom: s.nom }));
   const textes = salons.filter(s => s.type === 'texte').map(s => ({ id: s.id, nom: `#${s.nom}` }));
+  const erreurDiscord = lu && (!g.guildId || lu.serveur?.id === g.guildId || lu.erreur === 'discord-app' || lu.erreurDetail?.etape === 'serveurs') ? (lu.erreur === 'discord-app' ? ((lu as ServeurDiscord & { message?: string }).message ?? trTk('erreur.erreur')) : texteErreurDiscord(lu)) : null;
+  const manque = g.actif ? (!g.guildId ? trTk('general.manque_serveur') : !g.categorieOuverts ? trTk('general.manque_categorie') : null) : null;
   const nombre = (cle: keyof General, libelle: CleTk) => <Champ theme={theme} libelle={trTk(libelle)} valeur={String(g[cle] ?? '')} onChanger={v => setG({ ...g, [cle]: entier(v) })} clavier="number-pad" maxLength={4} testID={`esport-tk-general-${cle}`} />;
   return (
     <Bloc theme={theme} testID="esport-tk-conf-general">
@@ -195,9 +353,20 @@ function SectionGeneral({ theme, api, conf, setConf, agir, salons, serveur, onSe
         </View>
         <Interrupteur theme={theme} libelle={trTk('general.actif')} valeur={g.actif} onChanger={actif => setG({ ...g, actif })} testID="esport-tk-general-actif" />
       </View>
-      <Choix theme={theme} libelle={trTk('general.serveur')} valeur={g.guildId ?? undefined} options={(serveur?.serveurs ?? []).map(s => ({ id: s.id, nom: s.nom }))} onChoisir={id => setG({ ...g, guildId: id, guildNom: serveur?.serveurs?.find(s => s.id === id)?.nom ?? '' })} testID="esport-tk-general-serveur" />
+      <Choix theme={theme} libelle={trTk('general.serveur')} valeur={g.guildId ?? undefined} options={(lu?.serveurs ?? serveur?.serveurs ?? []).map(s => ({ id: s.id, nom: s.nom }))} onChoisir={choisirServeur} testID="esport-tk-general-serveur" />
       <Text style={attenue(theme)}>{trTk('general.serveur_aide')}</Text>
-      {!salons.length ? <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text> : null}
+      {erreurDiscord ? (
+        <Avis theme={theme} genre="critique" texte={erreurDiscord} testID="esport-tk-general-erreur-discord" />
+      ) : null}
+      {!g.guildId ? <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text> : null}
+      {g.guildId && lecture !== null ? <Text style={attenue(theme)} testID="esport-tk-general-lecture">{trTk('general.chargement_salons')}</Text> : null}
+      {g.guildId && lecture === null && duServeur && !categoriesDiscord.length ? <Text style={texte(theme)} testID="esport-tk-general-serveur-vide">{trTk('general.serveur_vide')}</Text> : null}
+      {g.guildId && lecture === null && (erreurDiscord || (duServeur && !categoriesDiscord.length)) ? (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <BoutonHub theme={theme} titre={trTk('general.relire')} onPress={() => void lire(g.guildId)} testID="esport-tk-general-relire" />
+        </View>
+      ) : null}
+      {g.guildId && g.guildId !== enregistre.guildId && duServeur ? <Text style={attenue(theme)} testID="esport-tk-general-non-enregistre">{trTk('general.non_enregistre')}</Text> : null}
       {salons.length ? (
         <>
           <Choix theme={theme} libelle={trTk('general.categorie_ouverts')} valeur={g.categorieOuverts ?? undefined} options={categoriesDiscord} onChoisir={id => setG({ ...g, categorieOuverts: id })} testID="esport-tk-general-ouverts" />
@@ -215,17 +384,23 @@ function SectionGeneral({ theme, api, conf, setConf, agir, salons, serveur, onSe
         <Interrupteur theme={theme} libelle={trTk('general.copier')} valeur={g.copierPieces} onChanger={copierPieces => setG({ ...g, copierPieces })} testID="esport-tk-general-copier" />
       </View>
       {nombre('pieceMaxMo', 'general.piece_max')}
+      {manque ? <Avis theme={theme} genre="alerte" texte={manque} testID="esport-tk-general-manque" /> : null}
+      <Retours theme={theme} erreur={local.erreur} avis={local.avis} prefixe="esport-tk-general" />
       <BoutonHub
         theme={theme}
         variante="plein"
         titre={trTk('enregistrer')}
         testID="esport-tk-general-enregistrer"
+        desactive={local.enCours === 'general'}
         onPress={() =>
-          void agir('general', async () => {
-            const serveurChange = g.guildId !== conf.general.guildId;
-            setConf(await api.changerGeneral(g));
-            if (serveurChange) onServeur();
-            return trTk('enregistre');
+          void local.agir('general', async () => {
+            const active = g.actif && !enregistre.actif;
+            const nouvelle = await api.changerGeneral(g);
+            setConf(nouvelle);
+            if (duServeur && lu) onServeur(lu);
+            else void lire(nouvelle.general.guildId);
+            onEnregistre();
+            return active ? trTk('general.active_attente') : trTk('enregistre');
           })
         }
       />

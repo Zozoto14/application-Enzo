@@ -841,6 +841,7 @@
   "Image du Drive illisible.": "Unreadable Drive image.",
   "25 catégories au plus par panneau.": "25 categories at most per panel.",
   "Identifiant Discord obligatoire.": "Discord ID required.",
+  "Identifiant Discord invalide (chiffres seulement).": "Invalid Discord ID (digits only).",
   "Ordre illisible.": "Unreadable order.",
   "Panneau introuvable.": "Panel not found.",
   "Drive indisponible.": "Drive unavailable.",

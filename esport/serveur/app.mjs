@@ -57,6 +57,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     cleDiscord: config.cleDiscord,
     lienApp: config.lienApp,
     discordBot: config.discordBot,
+    ticketsServeur: { gateway: config.ticketsGateway !== false, reveil: Boolean(config.urlPublique) },
     fetchDiscord,
     secretsExportables,
     medias: config.medias,
@@ -79,10 +80,13 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
   });
   if (config.tempsReel) console.log(`[esport] temps réel : mode ${api.tempsReel.mode}`);
   // Tickets Discord : connexion Gateway tenue par UN seul processus du compte (bail en base), relecture REST sinon.
-  // Rien n'est ouvert tant que les tickets ne sont pas activés dans l'app (Tickets › Configuration).
+  // Rien n'est ouvert tant que les tickets ne sont pas activés dans l'app (Tickets › Configuration). Le meneur garde
+  // l'app éveillée (Passenger arrête un processus sans requête) : URL_PUBLIQUE/sante toutes les 4 minutes (pas en
+  // test : un fetch Discord simulé est alors fourni, aucun réseau réel).
+  const reveil = config.urlPublique && !fetchDiscord ? `${String(config.urlPublique).replace(/\/+$/, '')}/sante` : null;
   const superviseur =
     demarrerTickets && config.ticketsGateway !== false && config.discordBot?.jetonBot
-      ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...api.ticketsGateway })
+      ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, reveil, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...api.ticketsGateway })
       : null;
   superviseur?.demarrer();
   return {

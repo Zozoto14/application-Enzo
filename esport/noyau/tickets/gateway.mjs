@@ -80,7 +80,11 @@ export function creerGateway({
   let urlGateway = null;
   let echecs = 0;
   let utilisateur = null;
-  const etat = { etat: 'ferme', depuis: Date.now(), code: null, dernierAck: null, identifies: 0, reprises: 0, connexions: 0, utilisateur: null };
+  // `derniereErreur` : dernier problème rencontré ({ motif, le }), affiché dans l'app (Tickets › Configuration › Connexion).
+  const etat = { etat: 'ferme', depuis: Date.now(), code: null, dernierAck: null, identifies: 0, reprises: 0, connexions: 0, utilisateur: null, dernierEssai: null, derniereErreur: null };
+  const noterErreur = motif => {
+    etat.derniereErreur = { motif: String(motif).slice(0, 200), le: Date.now() };
+  };
 
   const changer = (e, extra = {}) => {
     Object.assign(etat, { etat: e, depuis: Date.now(), ...extra });
@@ -162,6 +166,7 @@ export function creerGateway({
       changer('ferme');
       return;
     }
+    noterErreur(`fermeture ${code ?? '?'}`);
     if (FERMETURES_FATALES.includes(Number(code))) {
       journal.error?.(`[esport] tickets gateway : fermeture définitive (code ${code})`);
       changer('fatal', { code: Number(code) });
@@ -179,6 +184,7 @@ export function creerGateway({
   async function budget() {
     const r = await rest(fetchDiscord, jetonBot, 'GET', '/gateway/bot');
     if (!r.ok) {
+      noterErreur(`GET /gateway/bot : ${r.motif ?? `HTTP ${r.statut}`}`);
       if (r.statut === 401) return { fatal: 4004 };
       return { erreur: r.retryApresS ? r.retryApresS * 1000 : null };
     }
@@ -190,7 +196,9 @@ export function creerGateway({
   async function connecter(reprendre = true) {
     if (ferme || ws) return;
     // Node sans client WebSocket (version trop ancienne) : définitif, la relecture de secours prend le relais.
+    etat.dernierEssai = Date.now();
     if (typeof Ws !== 'function') {
+      noterErreur('client WebSocket absent (Node 22 requis)');
       changer('fatal', { code: 'sans-websocket' });
       return;
     }
@@ -226,6 +234,7 @@ export function creerGateway({
       w = new Ws(adresse);
     } catch (e) {
       journal.error?.('[esport] tickets gateway : connexion impossible', e?.message ?? e);
+      noterErreur(`connexion impossible : ${e?.message ?? e}`);
       planifier(reprendre);
       return;
     }
