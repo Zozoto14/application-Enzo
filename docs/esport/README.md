@@ -33,7 +33,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [trombinoscope.md](trombinoscope.md) | Fondateur, CM, staff, joueurs | Trombinoscope (Membres, premier onglet) : fiches des joueurs (photo, teams et jeu, postes, elo, palmarès saisi et calculé, anciennes structures, réseaux pro), visibilité par champ, texte d'annonce FR / EN, RGPD |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [tickets.md](tickets.md) | Fondateur, staff du support | Tickets Discord : salons privés ouverts par un panneau ou /ticket, formulaires, réponses depuis l'app, transcripts, notes de satisfaction, fermeture automatique ; tout se configure dans la page Tickets |
-| [roles-permissions.md](roles-permissions.md) | Fondateur | Page Membres › Rôles et permissions : rôles du club (Second CEO…), rôles CM, rôles des teams et modèle des nouvelles teams, matrice par catégories, garde-fous, journal |
+| [roles-permissions.md](roles-permissions.md) | Fondateur | Page Administration › Rôles et permissions : rôles du club (Second CEO…), rôles CM, rôles des teams et modèle des nouvelles teams, matrice par catégories, garde-fous, journal |
 | [devblog.md](devblog.md) | Fondateur, tous les membres | Devblog : notes de mise à jour FR / EN, fenêtre « Nouveautés » à l'entrée (une fois par compte), historique (bouton « Nouveautés » du Dashboard), éditeur avec aperçus et IA, publication Discord (anglais + fil français, @here) |
 | [notifications.md](notifications.md) | Tous les membres, Fondateur | Centre de notifications : cloche et compteur dans l'en-tête, toutes les notifications que votre rôle permet de voir (le Fondateur voit tout), filtres, préférences par compte, temps réel, ajout d'un événement |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
@@ -48,12 +48,10 @@ paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la 
 | Page | Pour quoi faire |
 | --- | --- |
 | **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
-| **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport ; **Ressources** (Fondateur) : publier une même ressource dans plusieurs teams d'un coup. |
+| **Teams** | Vos teams, création d'une team (Fondateur), votre profil Esport (les notifications sont dans le centre : cloche de l'en-tête) ; **Ressources** (Fondateur) : publier une même ressource dans plusieurs teams d'un coup. |
 | **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), **demandes de compte** (badge « Demandes en attente » du Fondateur ; « Proposer un membre » avec la permission « Créer des membres »), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
 | **Teams › CM du club** (selon vos droits CM, Drive ou Sponsors) | Carte en tête de la page **Teams** (PC et téléphone ; ce n'est plus une entrée de la navigation principale, l'entrée « Teams » reste surlignée) : section CM du club — tableaux de contenus façon Trello, posts X / Instagram / TikTok en français et en anglais, file « À valider », calendrier éditorial, clips proposés par les joueurs, visuels, réseaux, **Drive** (bouton direct sur la carte), Sponsors ; pour le gestionnaire : équipe et rôles CM, import Trello, réglages. Voir [cm.md](cm.md). |
-| **Jeux** (Fondateur, et les comptes à qui il confie la gestion) | Profils de jeu : formats de match, système de score, modes, maps, personnages, roster, rôles ; assistant IA facultatif (brouillon à relire, mises à jour proposées à valider) ; Administration de l'IA. Voir [profils-jeu.md](profils-jeu.md). |
-| **Tickets** (Fondateur, `tickets.voir` ou `tickets.configurer`) | Tickets Discord du club et leur configuration (connexion Discord, catégories, panneaux, messages…). Sur téléphone, dans **Plus** quand la barre du bas a plus de cinq entrées. Voir [tickets.md](tickets.md). |
-| **Statistiques** (Fondateur seulement) | Statistiques d'usage internes : utilisateurs actifs, sessions, pages les plus et les moins utilisées, heures d'activité, appareils, fonctionnalités, erreurs. Absente pour tous les autres comptes (le serveur répond 404). Voir [statistiques.md](statistiques.md). |
+| **Administration** (au moins une des permissions ci-dessous) | Une seule entrée de la navigation (barre latérale et barre du bas) pour l'administration du club, en sous-onglets, chacun selon sa permission (le serveur contrôle chaque requête) : **Tickets** (Fondateur, `tickets.voir` ou `tickets.configurer` : tickets Discord, leurs statistiques et leur configuration, [tickets.md](tickets.md)) · **Statistiques** (Fondateur, `statistiques.voir` : statistiques d'usage, [statistiques.md](statistiques.md)) · **Jeux** (Fondateur, `jeux.gerer` : profils de jeu, assistant IA, Administration de l'IA, [profils-jeu.md](profils-jeu.md)) · **Rôles et permissions** (Fondateur, `roles.gerer`, [roles-permissions.md](roles-permissions.md)) · **Devblog** (Fondateur, `devblog.gerer` : brouillons, éditeur, publication automatique ; la lecture reste pour tous via « Nouveautés » du Dashboard, [devblog.md](devblog.md)). Pastille rouge sur l'entrée et sur « Tickets » : tickets ouverts avec du nouveau pour vous (catégories que vous voyez), en temps réel. Les anciens liens (Tickets, Statistiques, Jeux, Membres › Rôles et permissions, notifications comprises) mènent au bon sous-onglet. |
 
 Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team **et** que votre rôle
 permet de le voir (un Joueur ne voit pas la présence de toute l'équipe ni le détail du journal). Le
@@ -183,7 +181,7 @@ et aux correspondants (leur team) ; les joueurs n'y voient que le dossier « Dé
 `ESPORT_DRIVE_QUOTA` ([drive.md](drive.md)).
 La migration `0030_trombinoscope.sql` ajoute le **Trombinoscope** (Membres) : le staff des teams et les rôles CM le
 voient par défaut, chaque joueur complète sa fiche depuis « Mon profil » ([trombinoscope.md](trombinoscope.md)).
-La migration `0033_roles_globaux.sql` ajoute les **rôles du club** et la page **Membres › Rôles et permissions**
+La migration `0033_roles_globaux.sql` ajoute les **rôles du club** et la page **Administration › Rôles et permissions**
 (Fondateur) : donnez le rôle « Second CEO » à votre adjoint depuis la section Club de cette page
 ([roles-permissions.md](roles-permissions.md)).
 
@@ -191,7 +189,7 @@ La migration `0033_roles_globaux.sql` ajoute les **rôles du club** et la page *
 
 1. Hub › tuile **Esport** › choisissez votre pseudo (la première fois).
 2. **Créer une team** : nom, **jeu (obligatoire)** et preset (« Team Valorant complète », « Minimal » ou
-   « Personnalisé »), puis les modules. Le jeu est un **profil de jeu** configuré avant dans **Esport › Jeux** (formats,
+   « Personnalisé »), puis les modules. Le jeu est un **profil de jeu** configuré avant dans **Esport › Administration › Jeux** (formats,
    score, maps, personnages… ; Valorant est préconfiguré) : voir [profils-jeu.md](profils-jeu.md). Vous pourrez activer
    ou désactiver un module plus tard sans rien perdre (Paramètres de la team).
 

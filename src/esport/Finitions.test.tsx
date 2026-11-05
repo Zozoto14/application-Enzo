@@ -154,6 +154,13 @@ describe('statistiques de la team (accueil)', () => {
     await screen.findByTestId('esport-accueil-team');
     expect(screen.queryByTestId('esport-stats')).toBeNull();
   });
+
+  it('accueil de la team : plus de carte « Notifications » (elles sont dans le centre de notifications)', async () => {
+    await monter(fauxClient({ stats: async () => Promise.reject(new Error('Adresse inconnue.')) }), detail([]), 'accueil');
+    await screen.findByTestId('esport-accueil-team');
+    expect(screen.getByTestId('esport-accueil-equipe')).toBeTruthy();
+    expect(screen.queryByTestId('esport-accueil-notifications')).toBeNull();
+  });
 });
 
 describe('exports et RGPD', () => {

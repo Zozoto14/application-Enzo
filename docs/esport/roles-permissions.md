@@ -1,7 +1,7 @@
 # Rôles et permissions
 
-Page **Esport › Membres › Rôles et permissions** (troisième onglet de la page Membres ; rien de nouveau dans la barre
-du bas du téléphone). Elle réunit, sur un seul écran, **qui peut faire quoi** dans le club, la section CM et les teams.
+Page **Esport › Administration › Rôles et permissions** (sous-onglet de l'entrée « Administration » de la navigation ;
+l'ancien lien Membres › Rôles et permissions y mène). Elle réunit, sur un seul écran, **qui peut faire quoi** dans le club, la section CM et les teams.
 Migration `0033_roles_globaux.sql`, code serveur `esport/noyau/roles/`, écran `src/esport/ui/membres/RolesPermissions.tsx`.
 
 ## Qui l'ouvre
@@ -60,7 +60,7 @@ n'existe pas d'objet « Discord du club » séparé.
 
 ## Le rôle « Second CEO »
 
-Rôle système du club, adjoint du Fondateur (à donner à Grimm : **Membres › Rôles et permissions › Club › Second CEO ›
+Rôle système du club, adjoint du Fondateur (à donner à Grimm : **Administration › Rôles et permissions › Club › Second CEO ›
 Qui a ce rôle › chercher « Grimm » › + Grimm**). Par défaut : **toutes les permissions du club et du CM, sauf
 `roles.gerer`**, soit :
 

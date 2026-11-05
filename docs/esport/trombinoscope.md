@@ -112,7 +112,7 @@ Marqués « Automatique » dans le catalogue ; calculés à chaque lecture, ils 
 | Badge | Qui le porte |
 | --- | --- |
 | **CEO** | le compte **Fondateur**, et **lui seul** : ni attribuable à quelqu'un d'autre (ni par la fiche, ni en lot, ni par l'API, même par le Fondateur), ni retirable à la main |
-| **Second CEO** | chaque titulaire du rôle du club « Second CEO » (**Membres › Rôles et permissions › Club**, migration 0033 ; [roles-permissions.md](roles-permissions.md)), pour tout le club ; il reste réservé au Fondateur (nom, couleur, ordre) |
+| **Second CEO** | chaque titulaire du rôle du club « Second CEO » (**Administration › Rôles et permissions › Club**, migration 0033 ; [roles-permissions.md](roles-permissions.md)), pour tout le club ; il reste réservé au Fondateur (nom, couleur, ordre) |
 | **Responsable CM** | chaque affectation au rôle CM système « Responsable CM » (Équipe CM) |
 | **Correspondant CM** | chaque affectation au rôle « Correspondant CM » ; affecté pour une team : « Correspondant CM · Team » |
 
@@ -249,4 +249,4 @@ Codes d'erreur utiles : `reseau-url` (adresse de profil invalide, avec `details.
 4. Badges : vérifier le catalogue (**Membres › Trombinoscope › « ⋯ » › Gérer les badges**), puis les attribuer depuis
    la fiche (bouton **Badges**) ou à plusieurs (« ⋯ » › **Badge à plusieurs**). « CEO » apparaît seul sur le compte
    Fondateur, « Responsable CM » / « Correspondant CM » sur l'Équipe CM ; « Second CEO » suit le rôle du club
-   « Second CEO » (Membres › Rôles et permissions).
+   « Second CEO » (Administration › Rôles et permissions).

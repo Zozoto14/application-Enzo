@@ -111,8 +111,8 @@ const fermerSections = async (mode: 'large' | 'telephone') => {
 describe('CM rangé dans Teams', () => {
   it('navigation principale : plus aucune entrée « CM », cinq entrées au plus (tiennent dans la barre du bas)', () => {
     expect(NAV_ESPORT.map(n => n.cle)).not.toContain('cm');
-    expect(navEsport(true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'jeux', 'statistiques']);
-    expect(navEsport(false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
+    expect(navEsport(true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'administration']);
+    expect(navEsport(false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
     // L'espace CM (et l'ancienne vue « cm ») surligne « Teams ».
     expect(ongletDeVue('cm')).toBe('teams');
     expect(ongletDeVue('boite')).toBe('teams');

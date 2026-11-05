@@ -167,8 +167,8 @@ describe('section CM', () => {
   });
 
   it('navigation : plus d’entrée « CM » de premier niveau (l’espace CM du club est dans Teams : NavCm.test.tsx)', () => {
-    expect(navEsport(false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
-    expect(navEsport(true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'jeux', 'statistiques']);
+    expect(navEsport(false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
+    expect(navEsport(true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'administration']);
   });
 
   it('compteur de caractères : X pondéré (adresses à 23, emoji à 2), Instagram en caractères ; hashtags', () => {

@@ -547,7 +547,7 @@ et comment : [esport/transcription.md](esport/transcription.md) ; côté app : [
 > au chargement), sans aucune « faute » mémoire ni processeur dans Resource Usage, alors que l'ancien moteur ONNX,
 > **dans Node**, a transcrit 28 minutes d'audio sans incident. whisper.cpp reste installable en option
 > (`--whispercpp`) : s'il est tué, le travail **bascule tout seul sur ONNX** et whisper.cpp est désactivé (visible dans
-> Esport › Jeux › Administration IA › Transcription sur le serveur).
+> Esport › Administration › Jeux › Administration IA › Transcription sur le serveur).
 
 ### H1. Installer ou mettre à jour (une fois, 10 à 30 minutes, sans rester devant)
 
@@ -664,7 +664,7 @@ cat ~/esport-modeles/pret.json                # modèles ONNX vérifiés (SHA-25
 curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 ```
 
-Dans l'app : Esport › Jeux › **Administration IA** › carte « Transcription sur le serveur » (modèles, whisper.cpp
+Dans l'app : Esport › Administration › Jeux › **Administration IA** › carte « Transcription sur le serveur » (modèles, whisper.cpp
 désactivé ou non, dernière décision du cron, file, transcriptions bloquées).
 
 ### H5. Une transcription reste « En file d'attente »
@@ -689,7 +689,7 @@ nice -n 19 node esport/serveur/transcription/travailleur.mjs
 
 ## Partie I — Assistant IA des profils de jeu (facultatif)
 
-La page **Esport › Jeux** (profils de jeu : formats, score, maps, personnages… voir
+La page **Esport › Administration › Jeux** (profils de jeu : formats, score, maps, personnages… voir
 [docs/esport/profils-jeu.md](esport/profils-jeu.md)) marche sans IA. Avec une clé d'API d'un fournisseur d'IA (pas
 Claude : celui que vous choisissez), le bouton **Préparer avec l'IA** prépare un brouillon de profil, et une
 vérification hebdomadaire propose des mises à jour à valider. Tout fournisseur qui offre une API « chat
@@ -704,7 +704,7 @@ légères : traductions, posts CM) et l'IA locale, essayés dans un **ordre de r
 > **Confidentialité** : le contenu des **réunions** (audio, transcriptions, relecture, résumés, PDF), les notes du
 > staff et les strats ne partent **jamais** chez le fournisseur d'API, quel que soit `IA_ORDRE_LEGER` : seule l'IA
 > locale (partie J) les traite ; sans elle, ces tâches ne sont pas faites. Ce qui part chez NVIDIA : profils de jeu,
-> traductions, textes des posts CM. Le Fondateur seul peut lever la règle, tâche par tâche (Esport › Jeux ›
+> traductions, textes des posts CM. Le Fondateur seul peut lever la règle, tâche par tâche (Esport › Administration › Jeux ›
 > Administration IA › « Confidentialité : ce qui quitte le serveur », avec avertissement ; journalisé). L'API audio
 > de transcription (`TRANSCRIPTION_API`) n'est utilisée qu'après cette autorisation explicite.
 
@@ -776,7 +776,7 @@ Réglages fins (délai, effort de raisonnement, flux, images) : [docs/esport/ia-
 
 ### I2. Vérifier
 
-Dans l'app : **Esport › Jeux › Administration IA › Moteurs de l'IA** : pour l'API principale et la secondaire,
+Dans l'app : **Esport › Administration › Jeux › Administration IA › Moteurs de l'IA** : pour l'API principale et la secondaire,
 fournisseur (NVIDIA) et modèle détectés, « Clé d'API : présente (jamais affichée) », puis **Tester** sur chacune (un
 modèle à raisonnement peut mettre 10 à 60 s). **Ordre de repli** : quel moteur pour les profils de jeu, lequel pour les
 tâches légères. Les plafonds mensuels (API principale 30 appels, API secondaire 200, 8 vérifications par défaut) se
@@ -845,7 +845,7 @@ mkdir -p ~/application-enzo/esport/tmp && touch ~/application-enzo/esport/tmp/re
 
 ### J3. Choisir et tester
 
-**Esport › Jeux › Administration IA › Ordre de repli** : placez l'**IA locale** où vous voulez pour les profils de
+**Esport › Administration › Jeux › Administration IA › Ordre de repli** : placez l'**IA locale** où vous voulez pour les profils de
 jeu et pour les tâches légères (seule, en tête avec les API en secours, ou en dernier recours), puis **Tester l'IA
 locale** (le premier test charge le modèle : jusqu'à une minute). La carte « Moteur de l'IA » affiche le modèle,
 « en marche » ou « arrêtée (démarre à la demande) », la dernière vitesse et le dernier temps de réponse.

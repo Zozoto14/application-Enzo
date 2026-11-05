@@ -76,7 +76,9 @@ En tête, la **connexion Discord** :
 
 Onglets : **Tickets** (`tickets.voir`), **Statistiques** (`tickets.gerer`), **Avis** (`tickets.gerer`, ou
 `tickets.configurer` pour les catégories de ses rôles), **Configuration** (`tickets.configurer`).
-Le **compteur** de l'entrée « Tickets » de la navigation donne le nombre de tickets ouverts avec du nouveau.
+La page est le sous-onglet **Administration › Tickets** (entrée « Administration » de la navigation). Le **compteur**
+(pastille de l'entrée « Administration » et du sous-onglet « Tickets ») donne le nombre de tickets ouverts avec du
+nouveau pour le compte (`GET /tickets/compteur`, catégories visibles seulement), relu en temps réel (sujet `tickets`).
 
 ### Tickets (liste et conversation)
 

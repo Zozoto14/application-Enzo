@@ -1,6 +1,6 @@
 # Esport : statistiques d'usage (page réservée au Fondateur)
 
-Une page **Esport › Statistiques**, juste pour le Fondateur : qui utilise l'app, quelles pages sont le plus utilisées
+Une page **Esport › Administration › Statistiques**, juste pour le Fondateur : qui utilise l'app, quelles pages sont le plus utilisées
 et lesquelles le sont le moins, quand, sur quel appareil, quelles fonctionnalités servent, quelles erreurs arrivent.
 
 - **Où** : dans la navigation de premier niveau, à côté de **Dashboard · Teams · Membres** (barre latérale sur PC et
@@ -110,7 +110,7 @@ sessions pour eux. La reconstitution dépend de la durée de conservation du jou
 1. **Mettre à jour le serveur Esport** : la migration `0018_statistiques_usage.sql` est appliquée par le déploiement
    automatique du serveur o2switch (ou `npm run migrer --prefix esport`). Rien à configurer : la collecte démarre seule.
 2. **Publier le site** (et l'app PC) comme d'habitude, pour que les membres envoient leurs statistiques.
-3. Ouvrir **Esport › Statistiques**. Les premiers chiffres arrivent dès que les membres utilisent l'app ; avant, la
+3. Ouvrir **Esport › Administration › Statistiques**. Les premiers chiffres arrivent dès que les membres utilisent l'app ; avant, la
    page montre l'historique reconstitué depuis le journal.
 4. Facultatif : prévenir les membres (la mention de l'app est déjà à jour), ou couper la collecte depuis le menu ⋯.
 

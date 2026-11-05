@@ -6,7 +6,7 @@ de jeu** décrit tout cela **avant** la création d'une team. Les modules (Strat
 ensuite les maps et personnages du profil du jeu de la team, et les modules Tournois / Résultats s'appuient
 sur ses formats et son système de score ([tournois-resultats.md](tournois-resultats.md)).
 
-Page : **Esport › Jeux** (le Fondateur, et les comptes à qui il confie la gestion). Migration : `0021_profils_jeu.sql`.
+Page : **Esport › Administration › Jeux** (le Fondateur, et les comptes à qui il confie la gestion). Migration : `0021_profils_jeu.sql`.
 
 ## Ce que contient un profil
 

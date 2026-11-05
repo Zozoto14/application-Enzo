@@ -24,8 +24,7 @@ import type { ContexteHub } from '../../hub/types';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
 import { apiJeux } from '../jeux/api';
 import { oublierProfilsTeams } from '../jeux/profil';
-import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTeam, type Notifications, type TeamListee, nomRole, nomJeu, descriptionModule } from '../client';
-import { dateCourte, phraseNotification } from '../libelles';
+import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTeam, type TeamListee, nomRole, nomJeu, descriptionModule } from '../client';
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
 import { AccueilCompetition } from './AccueilCompetition';
@@ -51,7 +50,6 @@ import { noterPage, pageDeSection } from '../usage';
 import { MaFicheTrombi } from './differe';
 import { apiTrombi } from '../trombi/api';
 import { trTb } from '../i18n/trombi';
-import { useTempsReel } from '../tempsReel/hooks';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
@@ -176,7 +174,8 @@ export function PageTeam({
   onExporter,
   onMembresGlobal,
   onNaviguer,
-  gererJeux,
+  administration,
+  compteurAdministration,
   onChangerTeam,
   onOuvrirCm,
   pseudo,
@@ -193,8 +192,10 @@ export function PageTeam({
   onMembresGlobal?(): void;
   /** Navigation de premier niveau (barre latérale, PC). Défaut : retour aux teams. */
   onNaviguer?(o: OngletEsport): void;
-  /** Permission globale « Gérer les profils de jeu » (entrée « Jeux » de la navigation). */
-  gererJeux?: boolean;
+  /** Au moins une permission d'administration du club : entrée « Administration » de la navigation (PC). */
+  administration?: boolean;
+  /** Tickets non lus : pastille de l'entrée « Administration ». */
+  compteurAdministration?: number;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   /** Le compte a accès à l'espace CM du club (mêmes conditions que la tuile « CM du club ») : le sélecteur le propose en tête. */
@@ -236,7 +237,7 @@ export function PageTeam({
 
   if (!detail) {
     return (
-      <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo}>
+      <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} compteurs={{ administration: compteurAdministration }}>
         <View style={{ padding: large ? ESP.xxl : ESP.m, gap: ESP.m }} testID="esport-team-chargement">
           {erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-team" /> : <Squelette theme={theme} lignes={4} hauteur={18} />}
           <BoutonHub theme={theme} titre={tr('pageTeam.teams')} onPress={onQuitter} testID="esport-team-retour" />
@@ -371,7 +372,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} compteurs={{ administration: compteurAdministration }} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>
@@ -401,13 +402,7 @@ export function PageTeam({
 }
 
 function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void }) {
-  const [notifs, setNotifs] = useState<Notifications | undefined>();
-  useEffect(() => {
-    client.notifications().then(setNotifs, () => undefined);
-  }, [client]);
-  useTempsReel(client, 'compte', () => void client.notifications().then(setNotifs, () => undefined));
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
-  const miennes = notifs?.liste.filter(n => n.team?.id === detail.team.id).slice(0, 5) ?? [];
   const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);
   const couleur = couleurTeam(detail.team.slug);
   const colonneDroite = (
@@ -427,18 +422,6 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
         <Text style={styleAttenue(theme)} numberOfLines={3}>
           {actifs.map(nomModule).join(' · ') || tr('pageTeam.aucun_module_active')}
         </Text>
-      </Carte>
-      <Carte theme={theme} testID="esport-accueil-notifications">
-        <TitreCarte theme={theme} titre={tr('discord.notifications')} />
-        {miennes.length === 0 ? <Text style={styleAttenue(theme, TYPO.texte)}>{tr('pageTeam.rien_de_nouveau')}</Text> : null}
-        {miennes.map(n => (
-          <View key={n.id} style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'flex-start' }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.lue ? theme.ligne : theme.accent }} />
-            <Text style={{ ...styleTexte(theme), flex: 1, fontWeight: n.lue ? '400' : '700' }}>
-              {phraseNotification(n, notifs?.noms ?? {})} <Text style={styleAttenue(theme)}>· {dateCourte(n.date)}</Text>
-            </Text>
-          </View>
-        ))}
       </Carte>
     </View>
   );

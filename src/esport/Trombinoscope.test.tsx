@@ -212,7 +212,7 @@ describe('règles du trombinoscope', () => {
 describe('page Membres', () => {
   it.each(['large', 'telephone'] as const)('(%s) s’ouvre sur le Trombinoscope ; « Tous les membres » garde la liste ; pas de nouvelle entrée de navigation', async mode => {
     await monter('staff', mode);
-    expect(navEsport(false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
+    expect(navEsport(false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
     expect(selectionne('esport-membres-onglet-trombi')).toBe(true);
     expect(screen.getByTestId('esport-trombi')).toBeTruthy();
     expect(screen.getByText('3 fiches · tout le club')).toBeTruthy();

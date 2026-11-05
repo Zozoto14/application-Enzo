@@ -96,7 +96,7 @@ arrête après 1 minute pour laisser la place au processus de fond).
 
 ## Choisir sa place (Administration IA › Ordre de repli)
 
-**Esport › Jeux › Administration IA › Ordre de repli** (Fondateur), pour les profils de jeu et pour les tâches
+**Esport › Administration › Jeux › Administration IA › Ordre de repli** (Fondateur), pour les profils de jeu et pour les tâches
 légères (détails : [ia-api.md](ia-api.md)) :
 
 | Ordre (profils de jeu) | Effet |

@@ -9,7 +9,7 @@ Migration `0038_centre_notifications.sql`. Code serveur : `esport/noyau/notifica
 - **Cloche** dans l'en-tête de l'app Esport (téléphone comme PC), avec la pastille des non lues. Sur téléphone, la
   barre du bas ne gagne aucune entrée.
 - **PC** : entrée « Notifications » dans la barre latérale (sous Dashboard · Teams · Membres…), avec son compteur.
-- Page **Teams** : la carte « Notifications » garde les dernières et propose « Notifications » (le centre).
+- Plus de carte « Notifications » sur la page **Teams** ni sur l'accueil d'une team : tout est dans le centre.
 
 La page liste tout ce que le rôle du compte permet de voir : icône par catégorie, phrase, team (ou « Club »), auteur,
 date relative, regroupement par jour (« Aujourd'hui », « Hier », puis la date), lu / non lu (point à droite :

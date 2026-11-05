@@ -356,6 +356,6 @@ Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
 ## Tickets
 
 Le bot tient aussi un **système de tickets** (salons privés, réponses depuis l'app, transcripts, notes de
-satisfaction), réglé dans **Esport › Tickets › Configuration** : voir [tickets.md](tickets.md). Il demande l'intent
+satisfaction), réglé dans **Esport › Administration › Tickets › Configuration** : voir [tickets.md](tickets.md). Il demande l'intent
 privilégié **Message Content** et les permissions **Gérer les salons**, **Gérer les rôles** et **Joindre des
 fichiers** en plus de celles des annonces.

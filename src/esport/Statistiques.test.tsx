@@ -1,5 +1,5 @@
 /**
- * Page « Statistiques » (Fondateur) : entrée de navigation pour le Fondateur seulement (PC et iPhone),
+ * Page « Statistiques » (Fondateur) : sous-onglet de l'Administration pour le Fondateur seulement (PC et iPhone),
  * vue d'ensemble, pages les plus et les moins utilisées, utilisateurs et fiche, activité, export CSV ; la
  * collecte d'usage branchée sur la navigation (lot au départ avec keepalive) ; le client (envoi keepalive).
  */
@@ -124,19 +124,20 @@ async function monter(client: ClientEsport, mode: 'large' | 'telephone' = 'large
   );
 }
 
-test('navigation : « Statistiques » à côté de Dashboard · Teams · Membres, pour le Fondateur seulement', async () => {
+test('navigation : « Statistiques » dans l’Administration, pour le Fondateur seulement', async () => {
   for (const mode of ['large', 'telephone'] as const) {
     const r1 = await monter(fauxClient(false), mode);
     await screen.findByTestId('esport-nav-membres');
-    expect(screen.queryByTestId('esport-nav-statistiques')).toBeNull();
+    expect(screen.queryByTestId('esport-nav-administration')).toBeNull();
     await r1.unmount();
     const r2 = await monter(fauxClient(true), mode);
     await screen.findByTestId('esport-nav-membres');
-    expect(screen.getByTestId('esport-nav-statistiques')).toBeTruthy();
+    expect(screen.getByTestId('esport-nav-administration')).toBeTruthy();
     await r2.unmount();
   }
   await monter(fauxClient(true));
-  await fireEvent.press(await screen.findByTestId('esport-nav-statistiques'));
+  await fireEvent.press(await screen.findByTestId('esport-nav-administration'));
+  await fireEvent.press(await screen.findByTestId('esport-admin-onglet-statistiques'));
   expect(await screen.findByTestId('esport-statistiques')).toBeTruthy();
   expect(await screen.findByTestId('esport-stats-valeur-periode')).toBeTruthy();
 });

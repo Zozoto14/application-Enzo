@@ -66,7 +66,7 @@ Elles viennent de deux endroits :
 Le **Fondateur** a tout. Anti-escalade : hors Fondateur, on n'ajoute à un rôle CM, et on n'attribue, que des
 permissions que l'on a soi-même (403 `escalade`) ; le nom et la couleur d'un rôle système sont fixes.
 
-3. **Rôles du club** (migration 0033, **Esport › Membres › Rôles et permissions**, [roles-permissions.md](roles-permissions.md)) :
+3. **Rôles du club** (migration 0033, **Esport › Administration › Rôles et permissions**, [roles-permissions.md](roles-permissions.md)) :
    un rôle du club qui porte des permissions CM vaut comme une affectation « club ». Le rôle système « **Second CEO** »
    (adjoint du Fondateur) a par défaut **tout le CM** (`cm.gerer`, tout le Drive, Sponsors compris). Les rôles CM se
    modifient aussi depuis cette page (section CM, même matrice), et les routes `/cm/roles` / `/cm/affectations`

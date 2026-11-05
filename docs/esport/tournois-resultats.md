@@ -210,7 +210,7 @@ Profil de jeu : `score.prolongations.ecart` (facultatif, 1 à 10, défaut 2) a �
    migration `0022_tournois_resultats.sql` s'applique seule.
 2. Publier le site et l'app PC comme d'habitude.
 3. Dans chaque team concernée : **Paramètres › Modules › Compétition** : activer **Tournois** et / ou **Résultats**.
-4. Vérifier le profil du jeu (**Esport › Jeux**) : formats et BO, système de score (Valorant : déjà prêt ; écart des
+4. Vérifier le profil du jeu (**Esport › Administration › Jeux**) : formats et BO, système de score (Valorant : déjà prêt ; écart des
    prolongations à 2 par défaut), roster, maps du pool ; pour un jeu à plusieurs équipes (The Finals), un format
    « 3v3v3v3 » (4 équipes) et un score « classement » avec son barème.
 5. Discord (facultatif) : **Réglages › Discord** : les quatre messages sont activés par défaut ; les couper si la

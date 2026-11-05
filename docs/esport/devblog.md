@@ -19,7 +19,7 @@ app `src/esport/ui/devblog/`, `src/esport/devblog/`.
 
 ## Gérer le devblog (Fondateur)
 
-Réservé au Fondateur, et aux comptes à qui il confie la permission du club **`devblog.gerer`** (page Membres › Rôles
+Réservé au Fondateur, et aux comptes à qui il confie la permission du club **`devblog.gerer`** (page Administration › Rôles
 et permissions, rôle du club ; catégorie Administration). Elle est **désactivée par défaut**, y compris pour le
 Second CEO.
 

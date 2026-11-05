@@ -9,7 +9,7 @@ L'Esport peut utiliser **trois moteurs d'IA**, essayés dans un **ordre de repli
 | `local` — **IA locale** | `IA_LOCALE_*` (voir [ia-locale.md](ia-locale.md)) | Qwen2.5-7B sur le serveur (gratuite, lente, rien ne sort du serveur) |
 
 Tout service « chat completions » compatible OpenAI convient (NVIDIA build.nvidia.com, OpenAI, Mistral, Gemini,
-DeepSeek, Groq…). Code : `esport/noyau/ia/connecteur.mjs` ; Administration : **Esport › Jeux › Administration IA**.
+DeepSeek, Groq…). Code : `esport/noyau/ia/connecteur.mjs` ; Administration : **Esport › Administration › Jeux › Administration IA**.
 
 > **Confidentialité** : les données envoyées à un service externe (API principale ou secondaire) **quittent le
 > serveur** (noms de jeux, profils, pages lues, textes à traduire ou à corriger). Seule l'IA locale garde tout sur le
@@ -196,7 +196,7 @@ const { texte, moteur } = await ia.discuterPour('correction', messages, { json: 
 
 ## 6. Administration IA
 
-**Esport › Jeux › Administration IA** (Fondateur) :
+**Esport › Administration › Jeux › Administration IA** (Fondateur) :
 
 - **Moteurs de l'IA** : pour chacun, fournisseur, modèle, clé **présente ou absente** (jamais sa valeur), modèle à
   raisonnement (effort), lecture d'images, appels et erreurs du mois, plafond, temps de réponse moyen, dernier appel,

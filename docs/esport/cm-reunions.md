@@ -12,7 +12,7 @@ Tests : `esport/test/cm-reunions.test.mjs` (SQLite et PostgreSQL), `src/esport/R
 
 ## Qui fait quoi
 
-Deux permissions du club, dans la section CM de **Membres › Rôles et permissions** et dans **Équipe CM** :
+Deux permissions du club, dans la section CM de **Administration › Rôles et permissions** et dans **Équipe CM** :
 
 | Permission | Ce qu'elle ouvre | Par défaut |
 | --- | --- | --- |

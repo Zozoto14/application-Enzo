@@ -11,7 +11,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { themeHub } from '../hub/themes';
 import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
-import { navEsport, navMobile } from './ui/CadreEsport';
 import { ConfigTickets } from './ui/tickets/ConfigTickets';
 import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, Panneau, ResumeTicket } from './tickets/api';
 import { AvisTicketsPage } from './ui/tickets/AvisTickets';
@@ -165,14 +164,7 @@ test('panneau : aperçu comme sur Discord, puis publication', async () => {
   expect(appels.some(a => a.chemin === '/tickets/config/panneaux/pan1/publier')).toBe(true);
 });
 
-test('navigation : entrée « Tickets » selon le droit ; téléphone : cinq entrées au plus, le reste dans « Plus »', () => {
-  expect(navEsport(false, false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
-  expect(navEsport(false, false, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets']);
-  const m = navMobile(true, true, true);
-  expect(m.barre.map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets', 'plus']);
-  expect(m.plus.map(n => n.cle)).toEqual(['jeux', 'statistiques']);
-  expect(navMobile(true, true, false).plus).toEqual([]);
-});
+// Navigation : l'entrée « Tickets » est devenue le sous-onglet Administration › Tickets (Administration.test.tsx).
 
 // ------------------------------------------------------------------ Étape 3 : tickets dans l'app
 

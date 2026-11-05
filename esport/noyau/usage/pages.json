@@ -8,6 +8,7 @@
     { "id": "esport.assistant", "module": null },
     { "id": "esport.profil", "module": null },
     { "id": "esport.statistiques", "module": null },
+    { "id": "esport.administration", "module": null },
     { "id": "esport.cm", "module": null },
     { "id": "team.accueil.accueil", "module": null },
     { "id": "team.agenda.planning", "module": "planning" },

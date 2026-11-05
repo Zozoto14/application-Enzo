@@ -248,10 +248,13 @@ try {
   // ================================================================ iPhone : Léa reçoit et télécharge
   log('iPhone : notification et ouverture du PDF par Léa');
   await lea.getByTestId('esport-team-retour').first().click();
-  await lea.getByTestId('esport-notifications').waitFor({ timeout: 20_000 });
+  // Les notifications sont dans le centre de notifications (cloche de l'en-tête), plus sur la page Teams.
+  await lea.getByTestId('esport-cloche').first().click();
+  await lea.getByTestId('esport-notifications-page').waitFor({ timeout: 20_000 });
   await lea.getByText(/Le résumé de « Réunion hebdo : retakes B » est prêt/).first().waitFor({ timeout: 20_000 });
   verifier(true, 'notification in-app : « Le résumé … est prêt »');
   await capture(lea, '06-iphone-lea-notification');
+  await lea.getByTestId('esport-nav-teams').first().click();
   await lea.getByTestId('esport-team-faucons-valorant').click();
   await ongletTeam(lea, 'module-meeting_summaries');
   await lea.getByTestId('esport-resumes-vue-miens').click();

@@ -1,5 +1,5 @@
 /**
- * Page Membres › Rôles et permissions : onglet réservé (Fondateur, roles.gerer), rôles du club (Second CEO) avec la
+ * Administration › Rôles et permissions : onglet réservé (Fondateur, roles.gerer), rôles du club (Second CEO) avec la
  * matrice par catégories, descriptions, « Sensible », recherche, confirmation avant d'accorder une permission
  * sensible, « Qui a ce rôle » ; délégué : permissions non accordables grisées ; rôles CM ; modèle des teams.
  */
@@ -107,13 +107,10 @@ test('CM : rôles CM et qui les a (Équipe CM) ; anglais', async () => {
   expect(await screen.findByText('Lina · whole club')).toBeTruthy();
 });
 
-test('Membres : l’onglet « Rôles et permissions » n’apparaît que s’il est permis', async () => {
+test('Membres : plus d’onglet « Rôles et permissions » (il est dans l’Administration)', async () => {
   const { client } = faux(vue());
   const props = { theme, client, contexte: {} as never, registre: [], large: true, onOuvrirTeam: () => undefined };
-  const { unmount } = await render(<PageMembres {...props} ongletInitial="tous" />);
+  await render(<PageMembres {...props} ongletInitial="tous" />);
+  expect(screen.getByTestId('esport-membres-onglet-tous')).toBeTruthy();
   expect(screen.queryByTestId('esport-membres-onglet-roles')).toBeNull();
-  await unmount();
-  await render(<PageMembres {...props} ongletInitial="roles" rolesPermissions />);
-  expect(screen.getByTestId('esport-membres-onglet-roles')).toBeTruthy();
-  expect(await screen.findByTestId('esport-roles-permissions')).toBeTruthy();
 });

@@ -1,10 +1,11 @@
 /**
  * App « Esport » du hub. Navigation de premier niveau, avant d'entrer dans une
  * team : Dashboard (résumé de toutes les teams) · Teams (liste, création,
- * notifications, profil ; en tête, la carte « CM du club » qui ouvre l'espace
+ * profil ; en tête, la carte « CM du club » qui ouvre l'espace
  * CM du club pour qui y a un droit) · Membres (tous les membres, création de
- * comptes, invitations), dans la barre latérale (PC) ou la barre d'onglets du
- * bas (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
+ * comptes, invitations) · Administration (Tickets, Statistiques, Jeux, Rôles et
+ * permissions, Devblog, selon les permissions : ui/administration), dans la barre
+ * latérale (PC) ou la barre d'onglets du bas (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
  * rangés en cinq sections (PageTeam.tsx).
  *
  * Tout passe par le serveur Esport (esport/), avec le jeton du relais déjà
@@ -20,8 +21,7 @@ import { Avis, BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { fabrique } from '../fabrique';
-import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee, nomRole, nomJeu } from '../client';
-import { dateCourte, phraseNotification } from '../libelles';
+import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type TeamListee, nomRole, nomJeu } from '../client';
 import { Assistant } from './Assistant';
 import { CadreEsport, EntreeLaterale, PageEsport, navMobile, type OngletEsport } from './CadreEsport';
 import { Dashboard } from './Dashboard';
@@ -33,7 +33,8 @@ import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EnTetePage, E
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { EspaceCm, Jeux, PageDevblog, PageTickets, Statistiques } from './differe';
+import { EspaceCm, PageDevblog } from './differe';
+import { PageAdministration, aAdministration, type DroitsAdministration, type SousOngletAdmin } from './administration/PageAdministration';
 import { apiTickets, type MoiTickets } from '../tickets/api';
 import { useCompteurTickets } from '../tickets/compteur';
 import { apiCm, voitDrive, type MoiCm } from '../cm/api';
@@ -43,7 +44,6 @@ import { useEtatCm } from './cm/commun';
 import { demarrerUsage, noterPage } from '../usage';
 import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
 import { trDv } from '../i18n/devblog';
-import { trNf } from '../i18n/notifications';
 import { ClocheNotifications, PageNotifications, useCompteurNotifications } from './notifications/CentreNotifications';
 import type { LienNotification } from '../notifications/api';
 import { useTempsReel } from '../tempsReel/hooks';
@@ -60,7 +60,29 @@ type Onglet = OngletEsport;
  * Écran affiché. `cm` : l'espace CM du club, rangé dans Teams (l'entrée « Teams » reste surlignée) ; une ancienne
  * navigation vers « cm » (entrée de premier niveau d'avant) mène toujours à cet écran, ou à Teams sans droit CM.
  */
-type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'devblog' } | { v: 'notifications' } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+type Vue =
+  | { v: Exclude<Onglet, 'membres' | 'administration'> }
+  | { v: 'administration'; sous?: SousOngletAdmin }
+  | { v: 'devblog' }
+  | { v: 'notifications' }
+  | { v: 'membres'; sous?: SousOngletMembres }
+  | { v: 'cm'; onglet?: OngletCm }
+  | { v: 'assistant' }
+  | { v: 'boite' }
+  | { v: 'team'; id: string; section?: SectionTeam };
+/**
+ * Vues d'avant l'Administration (entrées « Tickets », « Statistiques », « Jeux », sous-onglet Membres › Rôles et
+ * permissions) : les liens des notifications et les raccourcis y mènent encore.
+ */
+type VueAncienne = { v: 'tickets' | 'statistiques' | 'jeux' } | { v: 'membres'; sous: 'roles' };
+export type VueDemandee = Vue | VueAncienne;
+
+/** Redirige une ancienne vue vers son sous-onglet de l'Administration. */
+export function normaliserVue(v: VueDemandee): Vue {
+  if (v.v === 'tickets' || v.v === 'statistiques' || v.v === 'jeux') return { v: 'administration', sous: v.v };
+  if (v.v === 'membres' && v.sous === 'roles') return { v: 'administration', sous: 'roles' };
+  return v as Vue;
+}
 
 /** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
 export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v === 'devblog' || v === 'notifications' ? 'dashboard' : v);
@@ -73,7 +95,8 @@ export function Esport(props: PropsRacineApp) {
   // Abonné à la langue : un changement re-rend toute l'app Esport, sans recharger.
   useLangue();
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
-  const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
+  const [vueDemandee, setVue] = useState<VueDemandee>({ v: 'dashboard' });
+  const vue = normaliserVue(vueDemandee);
   // Section CM (GET /cm/moi) : carte « CM du club » de la page Teams ; un ancien serveur sans section CM n'affiche rien.
   const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
   // Tickets Discord (GET /tickets/moi) : entrée « Tickets » pour qui voit les tickets ou les configure.
@@ -130,14 +153,39 @@ export function Esport(props: PropsRacineApp) {
     };
   }, [clientPret, profilPret]);
   const tickets = Boolean(moiTickets?.voir || moiTickets?.configurer);
+  const moiPret = etat.e === 'pret' ? etat.moi : undefined;
   // Compteur de la navigation : tickets ouverts avec du nouveau (temps réel, et relecture lente de secours).
   const nonLusTickets = useCompteurTickets(moiTickets?.voir ? clientPret : undefined);
   const cm = Boolean(moiCm?.espace);
   // Fenêtre « Nouveautés » : le dernier devblog publié pas encore vu par ce compte (une fois, marque en base).
   const nouveautes = useNouveautes(clientPret, profilPret);
   // Statistiques : le Fondateur, ou un rôle du club qui a statistiques.voir (Second CEO…).
-  const stats = etat.e === 'pret' && (etat.moi.superAdmin || Boolean(etat.moi.peutVoirStatistiques));
-  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !stats) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : vue.v === 'cm' && !cm ? 'esport.teams' : `esport.${vue.v}`;
+  const stats = Boolean(moiPret && (moiPret.superAdmin || moiPret.peutVoirStatistiques));
+  // Administration : chaque sous-onglet selon sa permission (le serveur contrôle chaque requête).
+  const droitsAdmin: DroitsAdministration = {
+    tickets: tickets && Boolean(moiTickets),
+    statistiques: stats,
+    jeux: Boolean(moiPret?.peutGererJeux),
+    roles: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererRoles)),
+    devblog: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererDevblog)),
+  };
+  const administration = aAdministration(droitsAdmin);
+  const pageVue =
+    etat.e !== 'pret'
+      ? null
+      : !etat.moi.profil
+        ? 'esport.profil'
+        : vue.v === 'team'
+          ? null
+          : vue.v === 'administration'
+            ? !administration
+              ? 'esport.dashboard'
+              : vue.sous === 'statistiques' && stats
+                ? 'esport.statistiques'
+                : 'esport.administration'
+            : vue.v === 'cm' && !cm
+              ? 'esport.teams'
+              : `esport.${vue.v}`;
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
@@ -189,8 +237,9 @@ export function Esport(props: PropsRacineApp) {
         onQuitter={() => setVue({ v: 'teams' })}
         onExporter={exporter}
         onMembresGlobal={() => setVue({ v: 'membres', sous: 'tous' })}
-        onNaviguer={o => setVue({ v: o })}
-        gererJeux={Boolean(etat.moi.peutGererJeux)}
+        onNaviguer={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })}
+        administration={administration}
+        compteurAdministration={nonLusTickets}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         onOuvrirCm={cm ? () => setVue({ v: 'cm' }) : undefined}
         pseudo={etat.moi.profil.pseudo}
@@ -208,7 +257,7 @@ export function Esport(props: PropsRacineApp) {
           large={large}
           onAnnuler={() => setVue({ v: 'teams' })}
           onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })}
-          onJeux={etat.moi.peutGererJeux ? () => setVue({ v: 'jeux' }) : undefined}
+          onJeux={etat.moi.peutGererJeux ? () => setVue({ v: 'administration', sous: 'jeux' }) : undefined}
         />
       );
     } else if (vue.v === 'boite') {
@@ -244,26 +293,35 @@ export function Esport(props: PropsRacineApp) {
           onNouveautes={() => setVue({ v: 'devblog' })}
         />
       );
-    } else if (vue.v === 'tickets' && tickets && moiTickets) {
-      // Tickets Discord : liste, conversation, configuration (selon les permissions, contrôlées par le serveur).
-      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} />;
+    } else if (vue.v === 'administration' && administration) {
+      // Administration : Tickets (liste, conversation, configuration), Statistiques, Jeux, Rôles et permissions,
+      // Devblog ; un sous-onglet par permission (contrôlée par le serveur). `key` : un lien rouvre son sous-onglet.
+      page = (
+        <PageAdministration
+          key={vue.sous ?? 'administration'}
+          theme={theme}
+          client={etat.client}
+          large={large}
+          droits={droitsAdmin}
+          moiTickets={moiTickets}
+          fondateur={etat.moi.superAdmin}
+          nonLusTickets={nonLusTickets}
+          ongletInitial={vue.sous}
+          onExporter={exporter}
+        />
+      );
     } else if (vue.v === 'plus') {
       // Téléphone : les entrées de navigation qui ne tiennent pas dans la barre du bas.
       page = (
         <PageEsport large={large} testID="esport-plus">
           <EnTetePage theme={theme} large={large} titre={tr('cadreEsport.plus')} sous={tr('cadreEsport.plus_description')} />
           <View style={{ gap: ESP.xxs }}>
-            {navMobile(stats, Boolean(etat.moi.peutGererJeux), tickets).plus.map(n => (
-              <EntreeLaterale key={n.cle} theme={theme} libelle={n.libelle} glyphe={n.glyphe} description={n.description} choisi={false} onPress={() => setVue({ v: n.cle as Exclude<OngletEsport, 'membres'> })} testID={`esport-plus-${n.cle}`} role="link" />
+            {navMobile(administration).plus.map(n => (
+              <EntreeLaterale key={n.cle} theme={theme} libelle={n.libelle} glyphe={n.glyphe} description={n.description} choisi={false} onPress={() => setVue(n.cle === 'membres' ? { v: 'membres' } : { v: n.cle })} testID={`esport-plus-${n.cle}`} role="link" />
             ))}
           </View>
         </PageEsport>
       );
-    } else if (onglet === 'statistiques' && stats) {
-      page = <Statistiques theme={theme} client={etat.client} large={large} onExporter={exporter} />;
-    } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
-      // Profils de jeu, assistant IA, mises à jour proposées, Administration de l'IA (Fondateur).
-      page = <Jeux theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} />;
     } else if (vue.v === 'cm' && cm && moiCm) {
       // Section CM du club (dans Teams) : tableaux, À valider, calendrier, clips, Drive, Sponsors ; équipe CM, import
       // Trello, réglages (cm.gerer). `key` : le raccourci « Drive » rouvre l'espace sur son onglet.
@@ -295,7 +353,6 @@ export function Esport(props: PropsRacineApp) {
           onOuvrirTeam={id => setVue({ v: 'team', id })}
           onOuvrirApp={onOuvrirApp}
           onExporter={contexte.enregistrerFichier ? (nom, contenu, type = 'text/plain') => contexte.enregistrerFichier!(nom, contenu, type) : undefined}
-          rolesPermissions={etat.moi.superAdmin || Boolean(etat.moi.peutGererRoles)}
         />
       );
     } else {
@@ -313,7 +370,6 @@ export function Esport(props: PropsRacineApp) {
           onProfilSupprime={() => void ouvrir()}
           moiCm={cm ? moiCm : undefined}
           onCm={o => setVue({ v: 'cm', onglet: o })}
-          onNotifications={() => setVue({ v: 'notifications' })}
         />
       );
     }
@@ -324,10 +380,8 @@ export function Esport(props: PropsRacineApp) {
         onglet={onglet}
         onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })}
         pseudo={etat.moi.profil.pseudo}
-        fondateur={stats}
-        gererJeux={Boolean(etat.moi.peutGererJeux)}
-        tickets={tickets}
-        compteurs={{ tickets: nonLusTickets }}
+        administration={administration}
+        compteurs={{ administration: nonLusTickets }}
         notifications={{ n: notifs.nonLues, actif: vue.v === 'notifications', onPress: () => setVue({ v: 'notifications' }) }}>
         {page}
       </CadreEsport>
@@ -452,7 +506,6 @@ function MesTeams({
   onProfilSupprime,
   moiCm,
   onCm,
-  onNotifications,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -468,29 +521,24 @@ function MesTeams({
   moiCm?: MoiCm;
   /** Ouvrir l'espace CM du club (sur un onglet : « drive »). */
   onCm(onglet?: OngletCm): void;
-  /** Centre de notifications (toutes, filtres, préférences). */
-  onNotifications?(): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
-  const [notifs, setNotifs] = useState<Notifications | undefined>();
   const [boite, setBoite] = useState<Boite | undefined>();
   const [profil, setProfil] = useState(false);
   const [ressources, setRessources] = useState(false);
   const { erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
-    const [t, n, b] = await Promise.all([client.teams(), client.notifications().catch(() => undefined), Promise.resolve().then(() => client.boiteResumes()).catch(() => undefined)]);
+    const [t, b] = await Promise.all([client.teams(), Promise.resolve().then(() => client.boiteResumes()).catch(() => undefined)]);
     setTeams(t);
-    setNotifs(n);
     setBoite(b);
   }, [client]);
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
-  // Temps réel : notifications du compte, teams (ajout, retrait, rôle) relues dès qu'elles changent.
+  // Temps réel : teams (ajout, retrait, rôle) relues dès qu'elles changent. Les notifications sont dans le centre
+  // de notifications (cloche de l'en-tête, entrée de la barre latérale), plus sur cette page.
   useTempsReel(client, (sujet: string) => sujet === 'compte' || sujet === 'club' || /^team:[^:]+$/.test(sujet), () => void recharger().catch(() => undefined));
-
-  const nonLues = useMemo(() => notifs?.liste.filter(n => !n.lue) ?? [], [notifs]);
 
   return (
     <PageEsport large={large} testID="esport-teams">
@@ -551,38 +599,6 @@ function MesTeams({
           ))}
         </Grille>
       ) : null}
-      <Carte theme={theme} testID="esport-notifications">
-        <TitreCarte
-          theme={theme}
-          titre={nonLues.length ? tr('racineEsport.notifications_n', { n: nonLues.length }) : tr('racineEsport.notifications')}
-          sous={nonLues.length ? tr('racineEsport.les_plus_recentes_de') : undefined}
-          droite={
-            <View style={communs.ligne}>
-              {onNotifications ? <BoutonHub theme={theme} titre={trNf('titre')} libelle={trNf('sous')} onPress={onNotifications} testID="esport-notifications-centre" /> : null}
-              {nonLues.length ? (
-              <BoutonHub
-                theme={theme}
-                titre={tr('racineEsport.tout_marquer_lu')}
-                onPress={() =>
-                  void agir('Lu', async () => {
-                    setNotifs(await client.marquerLues(true));
-                  })
-                }
-                testID="esport-notifications-lues"
-              />
-              ) : null}
-            </View>
-          }
-        />
-        {notifs?.liste.length ? null : <Text style={attenue(theme, 15)}>{tr('pageTeam.rien_de_nouveau')}</Text>}
-        {notifs?.liste.slice(0, 8).map(n => (
-          <View key={n.id} style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', paddingVertical: ESP.xxs }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.lue ? theme.ligne : theme.accent }} />
-            <Text style={{ ...texte(theme), flex: 1, fontWeight: n.lue ? '400' : '700' }}>{phraseNotification(n, notifs.noms)}</Text>
-            <Text style={attenue(theme)}>{dateCourte(n.date)}</Text>
-          </View>
-        ))}
-      </Carte>
       <Text style={{ ...attenue(theme, 12), backgroundColor: teinteTransparente(theme.attenue, 0.08), padding: ESP.s, borderRadius: 10 }} testID="esport-mention">
         {mentionDonnees()}
       </Text>

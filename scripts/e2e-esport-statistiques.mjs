@@ -212,11 +212,11 @@ try {
   await pause(1500);
   await ongletTeam(lea, 'module-resources');
   await pause(800);
-  verifier((await lea.getByTestId('esport-nav-statistiques').count()) === 0, 'Léa (Joueuse) : pas d’entrée « Statistiques »');
+  verifier((await lea.getByTestId('esport-nav-administration').count()) === 0, 'Léa (Joueuse) : pas d’entrée « Administration » (donc pas de Statistiques)');
 
   log('Kai (Propriétaire) : pas d’entrée Statistiques, 404 sur la route ; il navigue');
   await kai.getByTestId('esport-nav-teams').waitFor({ timeout: 20_000 });
-  verifier((await kai.getByTestId('esport-nav-statistiques').count()) === 0, 'Kai (Propriétaire) : pas d’entrée « Statistiques » dans la navigation');
+  verifier((await kai.getByTestId('esport-admin-onglet-statistiques').count()) === 0, 'Kai (Propriétaire) : pas de « Statistiques » dans la navigation');
   const sessKai = (await api('/session', await jetonDeProfil(JETON, idKai), { methode: 'POST' })).corps.session;
   verifier((await api('/statistiques', sessKai)).statut === 404, 'Kai (Propriétaire) : GET /statistiques → 404');
   verifier((await api(`/statistiques/membres/${idLea}`, sessKai)).statut === 404, 'Kai (Propriétaire) : fiche d’un membre → 404');
@@ -252,9 +252,10 @@ try {
   verifier(Number(ip.n) === 0, 'aucune adresse IP stockée');
 
   // ================================================================ PC : le Fondateur ouvre Statistiques
-  log('PC : Esport › Statistiques');
+  log('PC : Esport › Administration › Statistiques');
   await ouvrirEsport(pc);
-  await pc.getByTestId('esport-nav-statistiques').click();
+  await pc.getByTestId('esport-nav-administration').click();
+  await pc.getByTestId('esport-admin-onglet-statistiques').click();
   await pc.getByTestId('esport-statistiques').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-stats-valeur-jour').waitFor({ timeout: 20_000 });
   const actifs = Number((await pc.getByTestId('esport-stats-valeur-jour').innerText()).replace(/\D/g, ''));
