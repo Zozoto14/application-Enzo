@@ -15,7 +15,7 @@
  *   GET|PUT       /tickets/preferences (MP Discord)
  *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript
  *   POST          /tickets/:id/(lu|messages|notes|liaison) ; /tickets/:id/pieces/:piece/lien
- *   POST          /tickets/:id/(prendre|liberer|attente|statut|priorite|fermer|rouvrir|assigner|categorie|ajouter|retirer)
+ *   POST          /tickets/:id/(prendre|liberer|attente|statut|priorite|fermer|rouvrir|assigner|categorie|ajouter|retirer|permanent)
  *   GET           /tickets/pieces/:piece?c&exp&sig  (lien signé, sans session)
  */
 

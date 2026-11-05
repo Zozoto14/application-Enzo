@@ -20,9 +20,9 @@ export const ICONES = Object.freeze(['billets', 'question', 'membres', 'manette'
 /** Liaisons facultatives d'une catégorie. */
 export const LIAISONS = Object.freeze(['aucune', 'sponsors', 'cm', 'fiche']);
 /** Commandes slash des tickets (sous-commandes de /ticket, et /tickets). */
-export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'tickets']);
+export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'tickets']);
 /** Commandes réservées au staff (rôles de la catégorie ou compte lié autorisé), en plus des rôles réglés. */
-export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau']);
+export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent']);
 
 export const LIMITES = Object.freeze({ categories: 25, champs: 5, panneaux: 20, listeNoire: 1000, roles: 20, mentions: 5, plages: 21 });
 
@@ -189,11 +189,23 @@ export function categoriePublique(l) {
     modeleNom: l.modele_nom,
     maxOuverts: Number(l.max_ouverts),
     fermetureAutoH: l.fermeture_auto_h === null || l.fermeture_auto_h === undefined ? null : Number(l.fermeture_auto_h),
+    fermetureStaffSeul: Number(l.fermeture_staff_seul) === 1,
     satisfaction: Number(l.satisfaction) === 1,
     prioriteDefaut: l.priorite_defaut,
     mentions: jsonOu(l.mentions, []),
     liaison: { type: 'aucune', ...jsonOu(l.liaison, {}) },
   };
+}
+
+/**
+ * Délai de fermeture automatique d'un ticket, en heures (0 : jamais), et d'où il vient. Ordre de priorité : ticket
+ * permanent (`tickets.permanent`, jamais) > réglage de la catégorie (`fermetureAutoH` : null = général, 0 = jamais,
+ * N heures) > réglage général (0 = jamais). `cat` : catégorie publique (categoriePublique) ou absente.
+ */
+export function delaiFermeture(ticket, cat, general) {
+  if (Number(ticket?.permanent) === 1) return { heures: 0, source: 'ticket' };
+  if (cat && cat.fermetureAutoH !== null && cat.fermetureAutoH !== undefined) return { heures: Math.max(0, Number(cat.fermetureAutoH) || 0), source: 'categorie' };
+  return { heures: Math.max(0, Number(general?.fermetureAutoH) || 0), source: 'general' };
 }
 
 const MOTIF_CHAMP = /^[a-z0-9_-]{1,40}$/;
@@ -258,6 +270,7 @@ export async function validerCategorie(base, c, { creation = false } = {}) {
   }
   if (c.maxOuverts !== undefined) s.max_ouverts = entier(c.maxOuverts, 1, 10, 'max-ouverts');
   if (c.fermetureAutoH !== undefined) s.fermeture_auto_h = c.fermetureAutoH === null ? null : entier(c.fermetureAutoH, 0, 2160, 'fermeture');
+  if (c.fermetureStaffSeul !== undefined) s.fermeture_staff_seul = c.fermetureStaffSeul === true ? 1 : 0;
   if (c.satisfaction !== undefined) s.satisfaction = c.satisfaction === false ? 0 : 1;
   if (c.prioriteDefaut !== undefined) {
     if (!PRIORITES.includes(c.prioriteDefaut)) throw echec(400, 'priorite', 'Priorité inconnue.');

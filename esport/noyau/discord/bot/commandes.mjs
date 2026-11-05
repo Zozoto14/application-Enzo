@@ -134,6 +134,12 @@ export const SOUS_COMMANDES_TICKET = [
   { type: T.SOUS_COMMANDE, name: 'note', ...desc('Staff : note interne (jamais visible de l’auteur)', 'Staff: internal note (never shown to the author)'), options: [{ type: T.CHAINE, name: 'texte', ...desc('Texte de la note', 'Note text'), required: true, max_length: 1500 }] },
   { type: T.SOUS_COMMANDE, name: 'attente', ...desc('Staff : en attente de la réponse de l’auteur', 'Staff: waiting for the author’s reply') },
   { type: T.SOUS_COMMANDE, name: 'stats', ...desc('Staff : statistiques des tickets (30 jours)', 'Staff: ticket statistics (30 days)') },
+  {
+    type: T.SOUS_COMMANDE,
+    name: 'permanent',
+    ...desc('Staff : ce ticket ne se ferme jamais automatiquement (on / off)', 'Staff: this ticket never closes automatically (on / off)'),
+    options: [{ type: T.CHAINE, name: 'etat', ...desc('Activer ou désactiver', 'Turn on or off'), required: true, choices: [choix('Activé (jamais fermé automatiquement)', 'On (never closed automatically)', 'on'), choix('Désactivé (fermeture automatique normale)', 'Off (normal automatic closing)', 'off')] }],
+  },
   { type: T.SOUS_COMMANDE, name: 'panneau', ...desc('Admin : republier un panneau des tickets', 'Admin: republish a ticket panel'), options: [{ type: T.CHAINE, name: 'panneau', ...desc('Le panneau', 'The panel'), required: false, autocomplete: true }] },
 ];
 COMMANDES.push(

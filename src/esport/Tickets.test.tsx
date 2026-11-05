@@ -102,6 +102,50 @@ test('catégorie : création avec un champ de formulaire, rôles de l’app', as
   expect(post.fermetureAutoH).toBeNull();
 });
 
+test('catégorie : fermeture automatique « Jamais » ou délai propre en jours, fermeture par le staff seul', async () => {
+  const conf = configDe();
+  const { client, appels } = fauxClient(conf);
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-categories'));
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-nouvelle'));
+  await fireEvent.changeText(screen.getByTestId('esport-tk-cat-nom-fr'), 'Sponsors');
+  // Délai global par défaut : le réglage général est rappelé (168 h = 7 j).
+  expect(screen.getByText('Réglage général (Configuration › Général) : 7 j.')).toBeTruthy();
+  // Délai propre : saisi en jours, envoyé en heures ; une saisie hors limites est refusée avant l'envoi.
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-fermeture-delai'));
+  await fireEvent.changeText(screen.getByTestId('esport-tk-cat-fermeture-jours'), '120');
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-enregistrer'));
+  await screen.findByText('Délai de fermeture : de 1 heure (0,05 jour) à 90 jours.');
+  expect(appels.some(a => a.chemin === '/tickets/config/categories')).toBe(false);
+  // Jamais + staff seul.
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-fermeture-jamais'));
+  expect(screen.getByText(/ne sont jamais fermés automatiquement/)).toBeTruthy();
+  await fireEvent(screen.getByTestId('esport-tk-cat-staff-seul'), 'valueChange', true);
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-enregistrer'));
+  await screen.findByTestId('esport-tk-cat-cat1');
+  const post = appels.find(a => a.chemin === '/tickets/config/categories' && a.methode === 'POST')!.corps as Categorie;
+  expect(post.fermetureAutoH).toBe(0);
+  expect(post.fermetureStaffSeul).toBe(true);
+  expect(screen.getByTestId('esport-tk-cat-cat1-fermeture')).toHaveTextContent('Ne se ferme jamais automatiquement · Fermeture par le staff seul');
+});
+
+test('catégorie : délai propre de 1,5 jour envoyé en heures (36)', async () => {
+  const conf = configDe();
+  const { client, appels } = fauxClient(conf);
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-categories'));
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-nouvelle'));
+  await fireEvent.changeText(screen.getByTestId('esport-tk-cat-nom-fr'), 'Aide');
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-fermeture-delai'));
+  await fireEvent.changeText(screen.getByTestId('esport-tk-cat-fermeture-jours'), '1,5');
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-enregistrer'));
+  await screen.findByTestId('esport-tk-cat-cat1');
+  const post = appels.find(a => a.chemin === '/tickets/config/categories' && a.methode === 'POST')!.corps as Categorie;
+  expect(post.fermetureAutoH).toBe(36);
+  expect(post.fermetureStaffSeul).toBe(false);
+  expect(screen.getByTestId('esport-tk-cat-cat1-fermeture')).toHaveTextContent('Fermeture : après 36 h');
+});
+
 test('panneau : aperçu comme sur Discord, puis publication', async () => {
   const conf = configDe();
   const { client, appels } = fauxClient(conf);
@@ -131,7 +175,7 @@ test('navigation : entrée « Tickets » selon le droit ; téléphone : cinq ent
 // ------------------------------------------------------------------ Étape 3 : tickets dans l'app
 
 const CAT = { id: 'cat1', nom: { fr: 'Recrutement', en: 'Recruitment' }, couleur: '#22aa66', icone: 'membres', actif: true };
-const resumeTk = (numero: number, nonLu: boolean): ResumeTicket => ({ id: `00000000-0000-0000-0000-00000000000${numero}`, numero, categorie: CAT, statut: 'ouvert', priorite: 'urgent', auteur: { discordId: '8001', nom: 'Léa', compte: null }, responsable: null, ouvertLe: '2026-11-04T10:00:00.000Z', derniereActivite: '2026-11-04T10:05:00.000Z', fermeLe: null, note: null, nonLu });
+const resumeTk = (numero: number, nonLu: boolean): ResumeTicket => ({ id: `00000000-0000-0000-0000-00000000000${numero}`, numero, categorie: CAT, statut: 'ouvert', priorite: 'urgent', auteur: { discordId: '8001', nom: 'Léa', compte: null }, responsable: null, ouvertLe: '2026-11-04T10:00:00.000Z', derniereActivite: '2026-11-04T10:05:00.000Z', fermeLe: null, note: null, nonLu, permanent: false });
 
 function fauxClientTickets() {
   const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
@@ -145,6 +189,7 @@ function fauxClientTickets() {
     liaison: { type: 'aucune' },
     liaisonCategorie: { type: 'aucune' },
     purge: false,
+    fermeture: { heures: 168, source: 'general', staffSeul: false, permanentPar: null, permanentLe: null },
     membres: [],
     messages: [
       { id: 'm1', genre: 'discord', auteur: { nom: 'Léa', discordId: '8001', compte: null }, staff: false, contenu: 'Bonjour, je postule', envoi: 'ok', le: '2026-11-04T10:01:00.000Z', modifieLe: null, supprimeLe: null, pieces: [] },
@@ -187,4 +232,60 @@ test('liste : non lus marqués ; vue : conversation, note interne distinguée, r
   // Pas de droit de gestion : ni assignation ni transcript.
   expect(screen.queryByTestId('esport-tk-vue-assigner-kai')).toBeNull();
   expect(screen.queryByTestId('esport-tk-transcript')).toBeNull();
+});
+
+test('vue : un gestionnaire rend le ticket permanent (badge, délai annoncé, staff seul)', async () => {
+  const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
+  let permanent = false;
+  const detail = (): DetailTicket => ({
+    ...resumeTk(1, false),
+    permanent,
+    nonLuDepuis: null,
+    salon: { id: '7001', nom: 'ticket-0001-lea', supprime: false },
+    reponses: [],
+    raison: null,
+    noteCommentaire: null,
+    liaison: { type: 'aucune' },
+    liaisonCategorie: { type: 'aucune' },
+    purge: false,
+    fermeture: permanent ? { heures: 0, source: 'ticket', staffSeul: true, permanentPar: 'Kai', permanentLe: '2026-11-04T11:00:00.000Z' } : { heures: 72, source: 'categorie', staffSeul: true, permanentPar: null, permanentLe: null },
+    membres: [],
+    messages: [],
+    droits: { repondre: true, gerer: true },
+  });
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    appels.push({ chemin, methode, corps });
+    if (chemin.startsWith('/tickets?')) return { tickets: [{ ...resumeTk(1, false), permanent }], categories: [CAT], droits: { repondre: true, gerer: true, configurer: false } };
+    if (chemin === '/tickets/preferences') return { mpNouveau: false, mpMessage: true };
+    if (chemin.endsWith('/assignables')) return { comptes: [] };
+    if (chemin.endsWith('/lu')) return { ok: true };
+    if (chemin.endsWith('/permanent')) {
+      permanent = (corps as { permanent: boolean }).permanent;
+      return detail();
+    }
+    if (/\/tickets\/[^/]+$/.test(chemin)) return detail();
+    throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
+  };
+  await render(<ListeTickets theme={theme} client={{ requete } as unknown as ClientEsport} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue');
+  expect(screen.getByTestId('esport-tk-vue-fermeture')).toHaveTextContent('Fermeture automatique après 3 j sans message (réglage de la catégorie).');
+  expect(screen.getByText('Seul le staff peut fermer ce ticket.')).toBeTruthy();
+  expect(screen.queryByTestId('esport-tk-vue-permanent')).toBeNull();
+  await fireEvent(screen.getByTestId('esport-tk-permanent'), 'valueChange', true);
+  await screen.findByTestId('esport-tk-vue-permanent');
+  const post = appels.find(a => a.chemin.endsWith('/permanent'))!;
+  expect(post.methode).toBe('POST');
+  expect(post.corps).toEqual({ permanent: true });
+  expect(screen.getByTestId('esport-tk-vue-fermeture')).toHaveTextContent(/jamais fermé automatiquement/);
+  expect(screen.getByText(/Rendu permanent par Kai/)).toBeTruthy();
+});
+
+test('vue : sans tickets.gerer, pas d’interrupteur « Ne jamais fermer automatiquement »', async () => {
+  const { client } = fauxClientTickets();
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue');
+  expect(screen.queryByTestId('esport-tk-permanent')).toBeNull();
+  expect(screen.getByTestId('esport-tk-vue-fermeture')).toHaveTextContent('Fermeture automatique après 7 j sans message (réglage général).');
 });

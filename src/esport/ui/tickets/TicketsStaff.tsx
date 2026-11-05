@@ -14,6 +14,7 @@ import { ErreurEsport, type ClientEsport } from '../../client';
 import { formaterDate, langueCourante } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
 import { PRIORITES, apiTickets, type ApiTickets, type CategorieCourte, type DetailTicket, type FiltresTickets, type MessageTicket, type PieceEnvoyee, type Priorite, type ResumeTicket, type StatsTickets, type Statut } from '../../tickets/api';
+import { texteDelai } from '../../tickets/fermeture';
 import { couleurUrgence } from '../../cm/urgence';
 import { choisirFichier, choixFichierDisponible } from '../../medias/choixFichier';
 import { useTempsReel } from '../../tempsReel/hooks';
@@ -52,6 +53,13 @@ function enBase64(octets: Uint8Array): string {
   let s = '';
   for (let i = 0; i < octets.length; i += 0x8000) s += String.fromCharCode(...octets.subarray(i, i + 0x8000));
   return (globalThis as unknown as { btoa(v: string): string }).btoa(s);
+}
+
+/** Fermeture automatique d'un ticket ouvert : jamais (ticket permanent, catégorie, général) ou après quel délai. */
+function texteFermeture(f: DetailTicket['fermeture']): string {
+  if (f.source === 'ticket') return trTk('vue.permanent_aide');
+  const de = f.source === 'categorie' ? 'categorie' : 'general';
+  return f.heures ? trTk(`vue.fermeture_delai_${de}` as CleTk, { delai: texteDelai(f.heures) }) : trTk(`vue.fermeture_jamais_${de}` as CleTk);
 }
 
 function PastillePriorite({ theme, priorite }: { theme: ThemeHub; priorite: Priorite }) {
@@ -129,7 +137,10 @@ function LigneTicket({ theme, tk, onPress }: { theme: ThemeHub; tk: ResumeTicket
             {trTk('numero', { numero: tk.numero })} · {tk.auteur.nom || tk.auteur.discordId}
           </Text>
         </View>
-        <Badge theme={theme} ton={TONS_STATUT[tk.statut]} texte={nomStatut(tk.statut)} />
+        <View style={{ flexDirection: 'row', gap: ESP.xxs, alignItems: 'center' }}>
+          {tk.permanent ? <Badge theme={theme} ton="accent" icone="epingle" texte={trTk('vue.permanent')} testID={`esport-tk-ticket-${tk.numero}-permanent`} /> : null}
+          <Badge theme={theme} ton={TONS_STATUT[tk.statut]} texte={nomStatut(tk.statut)} />
+        </View>
       </View>
       <View style={[styles.ligne, { gap: ESP.xs }]}>
         <Text style={attenue(theme)} numberOfLines={1}>
@@ -219,12 +230,26 @@ export function VueTicket({ theme, client, api, id, onChange, onExporter, catego
         <PastillePriorite theme={theme} priorite={d.priorite} />
         <Badge theme={theme} couleur={d.categorie.couleur} texte={nomCat(d.categorie)} />
         {d.note ? <Badge theme={theme} ton="accent" texte={trTk('vue.note', { note: d.note })} /> : null}
+        {d.permanent ? <Badge theme={theme} ton="accent" icone="epingle" texte={trTk('vue.permanent')} testID="esport-tk-vue-permanent" /> : null}
       </View>
       <Text style={texte(theme)}>{trTk('vue.auteur', { nom: d.auteur.nom || d.auteur.discordId })}</Text>
       {d.salon ? <Text style={attenue(theme)}>{d.salon.supprime ? trTk('vue.salon_supprime') : trTk('vue.salon', { nom: d.salon.nom })}</Text> : null}
       <Text style={attenue(theme)}>{d.responsable ? trTk('pris_par', { nom: d.responsable.nom }) : trTk('personne')}</Text>
       {d.raison ? <Text style={attenue(theme)}>{trTk('vue.raison_fermeture', { raison: d.raison === 'inactivite' ? '—' : d.raison })}</Text> : null}
       {d.noteCommentaire ? <Text style={{ ...texte(theme), fontStyle: 'italic' }}>{d.noteCommentaire}</Text> : null}
+      {ouvert ? (
+        <Text style={attenue(theme)} testID="esport-tk-vue-fermeture">
+          {texteFermeture(d.fermeture)}
+        </Text>
+      ) : null}
+      {d.permanent && d.fermeture.permanentPar && d.fermeture.permanentLe ? <Text style={attenue(theme)}>{trTk('vue.permanent_par', { nom: d.fermeture.permanentPar, quand: quand(d.fermeture.permanentLe) })}</Text> : null}
+      {d.fermeture.staffSeul ? <Text style={attenue(theme)}>{trTk('vue.staff_seul')}</Text> : null}
+      {d.droits.gerer ? (
+        <View style={[styles.ligne, { justifyContent: 'space-between' }]} testID="esport-tk-vue-permanent-bloc">
+          <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('vue.permanent_interrupteur')}</Text>
+          <Interrupteur theme={theme} libelle={trTk('vue.permanent_interrupteur')} valeur={d.permanent} onChanger={permanent => faire('permanent', { permanent })} testID="esport-tk-permanent" />
+        </View>
+      ) : null}
 
       {d.droits.repondre ? (
         <View style={styles.ligne} testID="esport-tk-vue-actions">

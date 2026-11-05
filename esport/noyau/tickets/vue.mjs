@@ -1,7 +1,8 @@
 /**
  * Tickets dans l'app (docs/esport/tickets.md, « Tickets dans l'app ») : liste filtrée, non lus, conversation, réponse
  * depuis l'app (le bot poste « Staff · pseudo : … », pièces jointes de l'appareil ou du Drive), notes internes (JAMAIS
- * envoyées sur Discord), actions (prendre, statut, priorité, assigner, catégorie, personnes, fermer, rouvrir),
+ * envoyées sur Discord), actions (prendre, statut, priorité, assigner, catégorie, personnes, ticket permanent, fermer,
+ * rouvrir),
  * transcript, liaisons (prospect Sponsors, carte CM, fiche), statistiques, préférences de MP.
  *
  * Chaque route vérifie les droits du moment (acces.mjs) : un ticket d'une catégorie que l'acteur ne voit pas rend 404,
@@ -16,7 +17,7 @@ import { comptesDeCategorie, contexteTickets, voitCategorie } from './acces.mjs'
 import { annoncer, instructionPiece } from './conversation.mjs';
 import { estRefus } from './cycle.mjs';
 import { idDiscord, rest } from './discord.mjs';
-import { PRIORITES, STATUTS, categoriePublique, instructionReglage, lireReglage } from './reglages.mjs';
+import { PRIORITES, STATUTS, categoriePublique, delaiFermeture, instructionReglage, lireGeneral, lireReglage } from './reglages.mjs';
 import { surLong, t as tx } from './textes.mjs';
 import { transcriptHtml } from './transcript.mjs';
 
@@ -78,6 +79,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     fermeLe: l.ferme_le ?? null,
     note: l.note === null || l.note === undefined ? null : Number(l.note),
     nonLu: Boolean(l.dernier_autre && (!l.lu_le || l.dernier_autre > l.lu_le)),
+    permanent: Number(l.permanent) === 1,
   });
 
   async function categoriesMap() {
@@ -181,6 +183,9 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       parMessage.get(p.message_id).push({ id: p.id, nom: p.nom, type: p.type_mime, taille: Number(p.taille), copiee: p.statut === 'copiee', url: p.statut === 'referencee' ? p.url_origine : null });
     }
     const cat = await base.premier('SELECT * FROM tickets_categories WHERE id = ?', [ticket.categorie_id]);
+    const catPublique = cat ? categoriePublique(cat) : null;
+    // Fermeture automatique : délai en heures (0 : jamais) et d'où il vient (ticket permanent > catégorie > général).
+    const delai = delaiFermeture(ticket, catPublique, await lireGeneral(base));
     return {
       ...resume({ ...ticket, lu_le: lu?.lu_le ?? null, dernier_autre: null }, cats, acteur.compte),
       nonLuDepuis: lu?.lu_le ?? null,
@@ -191,6 +196,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       liaison: { type: 'aucune', ...jsonOu(ticket.liaison, {}) },
       liaisonCategorie: cat ? { type: 'aucune', ...jsonOu(cat.liaison, {}) } : { type: 'aucune' },
       purge: Boolean(ticket.purge_le),
+      fermeture: { heures: delai.heures, source: delai.source, staffSeul: Boolean(catPublique?.fermetureStaffSeul), permanentPar: ticket.permanent_par ?? null, permanentLe: ticket.permanent_le ?? null },
       membres: membres.map(m => ({ discordId: m.discord_user_id, nom: m.nom, depuis: m.ajoute_le })),
       messages: messages.map(m => ({
         id: m.id,
@@ -335,6 +341,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     categorie: { droit: 'gerer', faire: (tk, a, c, ac) => cycle.transferer(tk, ac, String(c?.categorie ?? '')) },
     ajouter: { droit: 'gerer', faire: (tk, a, c, ac) => cycle.ajouterMembre(tk, ac, { id: String(c?.discordId ?? ''), nom: String(c?.nom ?? '') }) },
     retirer: { droit: 'gerer', faire: (tk, a, c, ac) => cycle.retirerMembre(tk, ac, { id: String(c?.discordId ?? '') }) },
+    permanent: { droit: 'gerer', faire: (tk, a, c, ac) => cycle.permanent(tk, ac, c?.permanent === true) },
   };
 
   async function action(acteur, id, nom, corps) {

@@ -5,7 +5,8 @@
  *
  * Qui est « staff » d'un ticket (prendre en charge, ajouter quelqu'un, priorité, rouvrir…) : un membre qui a un des
  * rôles Discord de la catégorie, un administrateur du serveur, ou une personne dont le compte Esport lié voit la
- * catégorie et a `tickets.repondre`. L'auteur peut fermer son propre ticket.
+ * catégorie et a `tickets.repondre`. L'auteur peut fermer son propre ticket, sauf dans une catégorie réglée sur « Seul le
+ * staff peut fermer » (migration 0055).
  *
  * Identifiants (`custom_id`) : voir panneaux.mjs ; en plus, `tk:f:<catégorie>` (fenêtre du formulaire), `tk:as:` et
  * `tk:ps:` (choix d'une personne, d'une priorité), `tk:xc:` / `tk:xr:` / `tk:xm:` (confirmation, raison, fenêtre de la
@@ -93,6 +94,13 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     if (!(await estStaff(i, ticket, acteur))) throw new RefusLocal('pas_staff');
   }
 
+  /** Fermer un ticket : le staff, ou son auteur (sauf catégorie « Seul le staff peut fermer »). */
+  async function exigerFermeture(i, ticket, acteur) {
+    if (ticket.auteur_discord_id !== acteur.discordId) return exigerStaff(i, ticket, acteur);
+    if (!(await cycle.categorie(ticket.categorie_id))?.fermetureStaffSeul) return;
+    if (!(await estStaff(i, ticket, acteur))) throw new RefusLocal('fermeture_staff');
+  }
+
   /** Commande activée, et réservée à certains rôles Discord si la configuration le dit (sauf administrateur). */
   async function exigerCommande(i, nom) {
     const c = (await lireCommandes(base))[nom];
@@ -156,7 +164,6 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     if (!m) return avis(t(langue, 'erreur'));
     const [, action, ticketId] = m;
     const ticket = await ticketDuBouton(i, ticketId);
-    const auteur = ticket.auteur_discord_id === acteur.discordId;
     switch (action) {
       case 'c':
         await exigerStaff(i, ticket, acteur);
@@ -180,7 +187,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
         await cycle.priorite(ticket, acteur, String(i.data?.values?.[0] ?? ''));
         return avis(t(langue, 'priorite_changee', { priorite: nomPriorite(langue, String(i.data?.values?.[0])) }));
       case 'x':
-        if (!auteur) await exigerStaff(i, ticket, acteur);
+        await exigerFermeture(i, ticket, acteur);
         if (ticket.statut === 'ferme') throw new RefusLocal('deja_ferme');
         return {
           type: 4,
@@ -192,11 +199,11 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
           },
         };
       case 'xc':
-        if (!auteur) await exigerStaff(i, ticket, acteur);
+        await exigerFermeture(i, ticket, acteur);
         await cycle.fermer(ticket, acteur);
         return avis(t(langue, 'ferme_ok'));
       case 'xr':
-        if (!auteur) await exigerStaff(i, ticket, acteur);
+        await exigerFermeture(i, ticket, acteur);
         return fenetre(`tk:xm:${ticket.id}`, t(langue, 'b_fermer'), [{ type: 4, custom_id: 'raison', style: 2, label: t(langue, 'raison').slice(0, 45), placeholder: t(langue, 'raison_placeholder').slice(0, 100), required: false, max_length: 300 }]);
       case 'r': {
         await exigerStaff(i, ticket, acteur);
@@ -219,7 +226,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     m = /^tk:xm:([0-9a-f-]{36})$/.exec(id);
     if (m) {
       const ticket = await ticketDuBouton(i, m[1]);
-      if (ticket.auteur_discord_id !== acteur.discordId) await exigerStaff(i, ticket, acteur);
+      await exigerFermeture(i, ticket, acteur);
       await cycle.fermer(ticket, acteur, { raison: v.raison ?? '' });
       return avis(t(langue, 'ferme_ok'));
     }
@@ -246,7 +253,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
     async fermer(i, o, langue, acteur) {
       const ticket = await cycle.ticketDuSalon(i.channel_id);
       if (!ticket) throw new RefusLocal('pas_ticket');
-      if (ticket.auteur_discord_id !== acteur.discordId) await exigerStaff(i, ticket, acteur);
+      await exigerFermeture(i, ticket, acteur);
       await cycle.fermer(ticket, acteur, { raison: o.raison ?? '' });
       return avis(t(langue, 'ferme_ok'));
     },
@@ -331,6 +338,12 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       const tr = transcriptHtml({ ticket: tk, categorie: langue === 'fr' ? cat?.nom_fr : cat?.nom_en, messages, pieces, langue, notes: false, maintenant: maintenant() });
       const ok = await cycle.envoyerMp(acteur.discordId, { content: t(langue, 'transcript_ok', { numero: tk.numero }) }, [{ nom: tr.nom, type: 'text/html', octets: new TextEncoder().encode(tr.contenu) }]);
       return avis(t(langue, ok ? 'transcript_mp' : 'transcript_mp_impossible'));
+    },
+    /** Ticket permanent (`etat` : on / off) : jamais fermé automatiquement ; avertissement en attente annulé. */
+    async permanent(i, o, langue, acteur) {
+      if (o.etat !== 'on' && o.etat !== 'off') throw new RefusLocal('erreur');
+      await cycle.permanent(await ticketIci(i, acteur), acteur, o.etat === 'on');
+      return avis(t(langue, o.etat === 'on' ? 'permanent_actif' : 'permanent_inactif'));
     },
     async stats(i, o, langue, acteur) {
       const cats = await categoriesDuStaff(i, acteur);

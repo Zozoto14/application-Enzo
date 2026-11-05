@@ -12,6 +12,7 @@ import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
+import { heuresPourMode, joursDeHeures, modeFermeture, texteDelai, type ModeFermeture } from '../../tickets/fermeture';
 import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type General, type Horaires, type ModeLangue, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
 import { Glyphe } from '../../../ui/icones';
 import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
@@ -273,6 +274,10 @@ function SectionCategories(p: PropsSection) {
           <Text style={attenue(theme)}>
             {trTk(`priorite.${c.prioriteDefaut}` as CleTk)} · {trTk('cat.formulaire', { n: c.formulaire.length })} · {trTk(`liaison.${c.liaison.type}` as CleTk)}
           </Text>
+          <Text style={attenue(theme)} testID={`esport-tk-cat-${c.id}-fermeture`}>
+            {c.fermetureAutoH === null ? trTk('cat.resume_general') : c.fermetureAutoH === 0 ? trTk('cat.resume_jamais') : trTk('cat.resume_delai', { delai: texteDelai(c.fermetureAutoH) })}
+            {c.fermetureStaffSeul ? ` · ${trTk('cat.resume_staff_seul')}` : ''}
+          </Text>
         </Bloc>
       ))}
       {edite ? <EditeurCategorie {...p} categorie={edite === 'nouvelle' ? undefined : edite} onFermer={() => setEdite(undefined)} onFait={categories => (majCategories(categories), setEdite(undefined))} /> : null}
@@ -293,6 +298,7 @@ const CATEGORIE_VIDE: Omit<Categorie, 'id' | 'position'> = {
   modeleNom: 'ticket-{numero}-{pseudo}',
   maxOuverts: 1,
   fermetureAutoH: null,
+  fermetureStaffSeul: false,
   satisfaction: true,
   prioriteDefaut: 'moyen',
   mentions: [],
@@ -301,13 +307,17 @@ const CATEGORIE_VIDE: Omit<Categorie, 'id' | 'position'> = {
 
 function EditeurCategorie({ theme, api, conf, agir, roles, categorie, onFermer, onFait }: PropsSection & { categorie?: Categorie; onFermer(): void; onFait(c: Categorie[]): void }) {
   const [c, setC] = useState<Omit<Categorie, 'id' | 'position'>>(categorie ?? CATEGORIE_VIDE);
-  const [fermeture, setFermeture] = useState(categorie?.fermetureAutoH === null || categorie?.fermetureAutoH === undefined ? '' : String(categorie.fermetureAutoH));
+  // Fermeture automatique : délai global (null), délai propre en jours, ou jamais (0).
+  const [modeFerm, setModeFerm] = useState<ModeFermeture>(modeFermeture(categorie?.fermetureAutoH));
+  const [jours, setJours] = useState(categorie?.fermetureAutoH ? joursDeHeures(categorie.fermetureAutoH) : '7');
   const { erreur, agir: agirLocal } = useAgir();
   const champ = (i: number, maj: Partial<ChampFormulaire>) => setC({ ...c, formulaire: c.formulaire.map((x, j) => (j === i ? { ...x, ...maj } : x)) });
   const rolesDiscord = roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }));
   const enregistrer = () =>
     agirLocal('enregistrer', async () => {
-      const corps = { ...c, fermetureAutoH: fermeture.trim() === '' ? null : entier(fermeture) };
+      const fermetureAutoH = heuresPourMode(modeFerm, jours);
+      if (fermetureAutoH === undefined) throw new Error(trTk('cat.fermeture_jours_invalide'));
+      const corps = { ...c, fermetureAutoH };
       const r = categorie ? await api.modifierCategorie(categorie.id, corps) : await api.creerCategorie(corps);
       onFait(r.categories);
     });
@@ -356,7 +366,14 @@ function EditeurCategorie({ theme, api, conf, agir, roles, categorie, onFermer, 
       <Text style={attenue(theme)}>{trTk('cat.variables')}</Text>
       <Champ theme={theme} libelle={trTk('cat.modele_nom')} valeur={c.modeleNom} onChanger={modeleNom => setC({ ...c, modeleNom })} maxLength={80} testID="esport-tk-cat-modele" />
       <Champ theme={theme} libelle={trTk('cat.max_ouverts')} valeur={String(c.maxOuverts)} onChanger={v => setC({ ...c, maxOuverts: entier(v) })} clavier="number-pad" maxLength={2} testID="esport-tk-cat-max" />
-      <Champ theme={theme} libelle={trTk('cat.fermeture')} valeur={fermeture} onChanger={setFermeture} clavier="number-pad" maxLength={4} testID="esport-tk-cat-fermeture" />
+      <Choix theme={theme} libelle={trTk('cat.fermeture')} valeur={modeFerm} options={(['general', 'delai', 'jamais'] as const).map(m => ({ id: m, nom: trTk(`cat.fermeture_${m}` as CleTk) }))} onChoisir={(m: ModeFermeture) => setModeFerm(m)} testID="esport-tk-cat-fermeture" />
+      {modeFerm === 'general' ? <Text style={attenue(theme)}>{trTk('cat.fermeture_general_aide', { delai: conf.general.fermetureAutoH ? texteDelai(conf.general.fermetureAutoH) : trTk('cat.fermeture_jamais') })}</Text> : null}
+      {modeFerm === 'delai' ? <Champ theme={theme} libelle={trTk('cat.fermeture_jours')} valeur={jours} onChanger={setJours} maxLength={6} testID="esport-tk-cat-fermeture-jours" /> : null}
+      {modeFerm === 'jamais' ? <Text style={attenue(theme)}>{trTk('cat.fermeture_jamais_aide')}</Text> : null}
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('cat.staff_seul')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('cat.staff_seul')} valeur={c.fermetureStaffSeul} onChanger={fermetureStaffSeul => setC({ ...c, fermetureStaffSeul })} testID="esport-tk-cat-staff-seul" />
+      </View>
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('cat.satisfaction')}</Text>
         <Interrupteur theme={theme} libelle={trTk('cat.satisfaction')} valeur={c.satisfaction} onChanger={satisfaction => setC({ ...c, satisfaction })} testID="esport-tk-cat-satisfaction" />

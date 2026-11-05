@@ -215,7 +215,7 @@ Réponses visibles **par vous seul** (éphémères).
 | `/relancer evenement:` | staff (marquer la présence) | relance groupée des convoqués sans réponse |
 | `/esport-lier-serveur code:` | admin du serveur Discord | lier le serveur à une team |
 | `/ticket ouvrir [categorie]` · `/ticket fermer [raison]` · `/tickets [liste]` | tout membre du serveur du club (sans compte lié) | tickets : ouvrir un ticket, fermer le sien, voir ses tickets — voir [tickets.md](tickets.md) |
-| `/ticket prendre`, `liberer`, `ajouter`, `retirer`, `renommer`, `priorite`, `transferer`, `attente`, `note`, `transcript`, `rouvrir`, `stats`, `panneau` | staff du ticket (rôles de la catégorie, compte lié qui répond aux tickets ; `panneau` : administrateur) | tickets : gestion depuis le salon ([tickets.md](tickets.md#commandes-discord)) |
+| `/ticket prendre`, `liberer`, `ajouter`, `retirer`, `renommer`, `priorite`, `transferer`, `attente`, `note`, `transcript`, `rouvrir`, `stats`, `permanent`, `panneau` | staff du ticket (rôles de la catégorie, compte lié qui répond aux tickets ; `panneau` : administrateur) | tickets : gestion depuis le salon ([tickets.md](tickets.md#commandes-discord)) |
 
 Chaque commande fait **les mêmes contrôles que l'app** avec le compte lié : membre de la team, module activé, bon
 droit. Un joueur qui tape `/evenement-creer` reçoit « Tu n'as pas la permission ». Une commande ne touche **que

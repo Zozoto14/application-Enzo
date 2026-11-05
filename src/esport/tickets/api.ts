@@ -79,7 +79,10 @@ export interface Categorie {
   accueil: DeuxLangues;
   modeleNom: string;
   maxOuverts: number;
+  /** Fermeture automatique : null = délai général, 0 = jamais, N = N heures sans message. */
   fermetureAutoH: number | null;
+  /** Seul le staff ferme les tickets de cette catégorie (l'auteur ne peut pas). */
+  fermetureStaffSeul: boolean;
   satisfaction: boolean;
   prioriteDefaut: Priorite;
   mentions: string[];
@@ -175,6 +178,8 @@ export interface ResumeTicket {
   fermeLe: string | null;
   note: number | null;
   nonLu: boolean;
+  /** Ticket permanent : jamais fermé automatiquement. */
+  permanent: boolean;
 }
 
 export interface PieceTicket {
@@ -216,6 +221,8 @@ export interface DetailTicket extends ResumeTicket {
   liaison: Liaison;
   liaisonCategorie: { type: TypeLiaison; tableauId?: string };
   purge: boolean;
+  /** Fermeture automatique : délai en heures (0 : jamais) et d'où il vient (ticket permanent > catégorie > général). */
+  fermeture: { heures: number; source: 'ticket' | 'categorie' | 'general'; staffSeul: boolean; permanentPar: string | null; permanentLe: string | null };
   membres: Array<{ discordId: string; nom: string; depuis: string }>;
   messages: MessageTicket[];
   droits: { repondre: boolean; gerer: boolean };

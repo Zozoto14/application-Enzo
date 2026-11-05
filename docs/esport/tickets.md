@@ -10,7 +10,8 @@ anonyme, messages du bot **bilingues** (langue de la personne d'abord, l'autre d
 (celui du club), fermeture automatique après **7 jours** d'inactivité (réglable, avertissement 24 h avant).
 
 Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · **3. tickets dans l'app** ·
-**4. commandes utiles**.
+**4. commandes utiles** · puis **tickets paramétrables** (un ticket ou une catégorie qui ne se ferme jamais, fermeture
+par le staff seul : voir « Tickets qui ne se ferment jamais »).
 
 ---
 
@@ -81,7 +82,10 @@ Le **compteur** de l'entrée « Tickets » de la navigation donne le nombre de t
   sur Discord.
 - **Actions** : prendre en charge / libérer, en attente de réponse, résolu, priorité, fermer (raison) / rouvrir
   (`tickets.repondre`) ; **assigner** à un compte qui traite la catégorie, **changer de catégorie** (droits du salon mis
-  à jour), **ajouter / retirer** une personne (Discord ID), **transcript** (HTML imprimable en PDF) (`tickets.gerer`).
+  à jour), **ajouter / retirer** une personne (Discord ID), **transcript** (HTML imprimable en PDF), interrupteur **Ne
+  jamais fermer automatiquement** (ticket permanent, badge **Permanent** avec une punaise dans la liste et la vue)
+  (`tickets.gerer`). La vue rappelle quand le ticket se fermera tout seul (« après 7 j sans message (réglage
+  général) », « jamais (réglage de la catégorie) »…) et si seul le staff peut le fermer.
 - **Liaisons** : Partenariat → **créer le prospect Sponsors** (avec vos droits Sponsors), Demande CM → **créer la carte**
   dans le tableau CM choisi pour la catégorie (droits CM), **lier la fiche** de l'auteur s'il a lié son Discord.
 - **Notifications** : nouveau ticket → cloche des comptes qui traitent la catégorie ; message de l'auteur dans un ticket
@@ -99,7 +103,7 @@ Sur 30 jours : tickets ouverts maintenant, créés, fermés, **délai de 1re ré
 | --- | --- |
 | **Connexion** | état de la connexion et explication ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
 | **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale |
-| **Catégories** | nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; fermeture automatique propre ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
+| **Catégories** | nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
 | **Panneaux** | titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, salon de publication ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
 | **Messages** | accueil, prise en charge, libération, attente, fermeture, réouverture, avertissement d'inactivité, demande de note, remerciement, MP récapitulatif, réponse hors horaires ; FR et EN ; vide = texte par défaut (affiché en gris) ; variables `{utilisateur}` `{numero}` `{categorie}` `{staff}` `{raison}` `{delai}` `{serveur}` `{horaires}` `{ouverture}` `{fermeture}` `{note}` |
 | **Liste noire** | comptes Discord (Discord ID) interdits d'ouvrir un ticket, avec un nom et une raison |
@@ -133,7 +137,9 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
 4. **Staff** d'un ticket (boutons et commandes du staff) : un membre qui a un des rôles Discord de la catégorie, un
    administrateur du serveur, ou une personne dont le **compte Esport lié** (`/lier`) a `tickets.repondre` et voit la
    catégorie. **Prendre en charge** (refusé si quelqu'un l'a déjà), **Ajouter quelqu'un** (choix d'un membre : droits sur
-   le salon), **Priorité** (4 niveaux d'urgence). L'auteur peut **fermer** son propre ticket.
+   le salon), **Priorité** (4 niveaux d'urgence). L'auteur peut **fermer** son propre ticket, sauf dans une catégorie
+   réglée sur **Seul le staff peut fermer** (bouton, raison et `/ticket fermer` lui répondent « Seul le staff peut
+   fermer les tickets de cette catégorie » ; un auteur qui est lui-même du staff de la catégorie peut fermer).
 5. **Fermeture** (bouton **Fermer** puis **Confirmer**, ou **Fermer avec une raison**, ou `/ticket fermer [raison]`) :
    - les derniers messages du salon sont relus (le transcript est complet même si la connexion en direct était coupée) ;
    - message de fermeture (raison) avec un bouton **Rouvrir** ; le salon est **verrouillé** (l'auteur et les personnes
@@ -147,11 +153,28 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
 6. **Réouverture** (bouton **Rouvrir**, staff) : le salon revient dans les tickets ouverts, l'auteur peut écrire ; si le
    salon a été supprimé, un nouveau est créé.
 7. **Fermeture automatique** (cron, toutes les 5 min) : après le délai sans message (défaut 7 jours, réglable par
-   catégorie ; 0 = jamais), avec un **avertissement** dans le salon 24 h avant (réglable). Tout message (de l'auteur ou
-   du staff) repousse l'échéance et efface l'avertissement. Raison : « Fermeture automatique : inactivité ».
+   catégorie ; jamais possible), avec un **avertissement** dans le salon 24 h avant (réglable). Tout message (de
+   l'auteur ou du staff) repousse l'échéance et efface l'avertissement. Raison : « Fermeture automatique : inactivité ».
+   Ordre de priorité : **ticket permanent > réglage de la catégorie > réglage général** (voir ci-dessous).
 8. **Salon supprimé à la main** sur Discord : le ticket est fermé (sans message ni MP).
 9. **Rétention** : après N jours (défaut 365) un ticket fermé perd sa conversation, ses pièces (octets compris), ses
    réponses et ses personnes ajoutées ; la ligne reste pour les statistiques (numéro, catégorie, dates, note).
+
+### Tickets qui ne se ferment jamais
+
+Demande du Fondateur : « paramétrer un ticket, par exemple un ticket de sponsor qui ne se ferme jamais » (migration
+`0055_tickets_permanents.sql`). Trois niveaux, du plus fort au plus faible :
+
+| Niveau | Où | Effet |
+| --- | --- | --- |
+| **Ticket permanent** | vue d'un ticket dans l'app, interrupteur **Ne jamais fermer automatiquement** (`tickets.gerer`) ; ou `/ticket permanent etat:on\|off` (staff du ticket) | ce ticket n'est **jamais** fermé automatiquement ni averti, quel que soit le réglage de sa catégorie ; badge **Permanent** ; un message bilingue le dit dans le salon ; un **avertissement d'inactivité déjà donné est annulé**. Désactivé : le ticket suit de nouveau sa catégorie |
+| **Catégorie** | Configuration › Catégories › **Fermeture automatique** | « Délai global » (défaut : le réglage général), délai propre en jours, ou « **Jamais** » (ni avertissement ni fermeture ; un avertissement donné avant le passage à « Jamais » est oublié) |
+| **Général** | Configuration › Général | délai en heures (défaut 168 = 7 jours ; 0 = jamais) |
+
+Un délai propre de catégorie l'emporte aussi sur un réglage général à 0. Un ticket permanent ou d'une catégorie
+« Jamais » se **ferme toujours à la main** (bouton, `/ticket fermer`, l'app) ; pour qu'il ne soit fermé **que par le
+staff**, activez **Seul le staff peut fermer** sur sa catégorie. Exemple : catégorie **Sponsors** réglée sur
+« Jamais » + « Seul le staff peut fermer ».
 
 ### RGPD
 
@@ -173,7 +196,7 @@ compte Esport lié avec `tickets.repondre` sur la catégorie). Elles se tapent *
 | Commande | Pour qui | Effet |
 | --- | --- | --- |
 | `/ticket ouvrir [categorie]` | tout membre | ouvrir un ticket (menu des catégories sans option ; formulaire s'il y en a un) |
-| `/ticket fermer [raison]` | l'auteur, le staff | fermer le ticket du salon |
+| `/ticket fermer [raison]` | l'auteur (sauf catégorie « Seul le staff peut fermer »), le staff | fermer le ticket du salon |
 | `/ticket prendre` · `/ticket liberer` | staff | prendre en charge, ne plus prendre en charge |
 | `/ticket ajouter membre` · `/ticket retirer membre` | staff | donner ou retirer l'accès au salon |
 | `/ticket renommer nom` | staff | renommer le salon |
@@ -183,6 +206,7 @@ compte Esport lié avec `tickets.repondre` sur la catégorie). Elles se tapent *
 | `/ticket note texte` | staff | **note interne** : gardée dans l'app, jamais postée sur Discord (réponse éphémère seulement) |
 | `/ticket transcript` | staff | transcript HTML **en message privé** (sans les notes internes, qui ne passent jamais par Discord ; l'app les montre) |
 | `/ticket rouvrir` | staff | rouvrir le ticket fermé du salon |
+| `/ticket permanent etat` | staff | `on` : ce ticket ne se ferme jamais automatiquement (avertissement en attente annulé) ; `off` : il suit de nouveau sa catégorie |
 | `/ticket stats` | staff | 30 jours : ouverts, créés, fermés par catégorie, délai de 1re réponse et de résolution, satisfaction |
 | `/ticket panneau [panneau]` | administrateur du serveur, ou compte lié qui configure les tickets | republier un panneau déjà réglé dans l'app |
 | `/tickets [liste]` | tout membre ; `liste: file` pour le staff | mes tickets ouverts ; ou la file des tickets non pris en charge de mes catégories |
@@ -190,7 +214,7 @@ compte Esport lié avec `tickets.repondre` sur la catégorie). Elles se tapent *
 `/tickets` est une commande à part (Discord ne permet pas une commande à la fois seule et avec des sous-commandes) :
 `/tickets` seul donne vos tickets, `/tickets liste:file` la file du staff.
 
-**Après la mise à jour** : relancez l'enregistrement des commandes (étape 6 de [bot-discord.md](bot-discord.md)) :
+**Après la mise à jour** (et après l'ajout de `/ticket permanent`) : relancez l'enregistrement des commandes (étape 6 de [bot-discord.md](bot-discord.md)) :
 
 ```bash
 cd ~/application-enzo
@@ -230,7 +254,7 @@ toutes, le **Second CEO** les reçoit par défaut :
 | --- | --- |
 | `tickets.voir` | la page Tickets ; les tickets des catégories **qu'on traite** : une catégorie dont un des « rôles de l'app » est porté par le compte (rôle du club, ou rôle CM attribué au club) ; une catégorie sans rôle de l'app réglé est visible de tous ceux qui ont `tickets.voir` |
 | `tickets.repondre` | répondre depuis l'app, notes internes, prendre en charge, mettre en attente, fermer et rouvrir les tickets qu'on voit |
-| `tickets.gerer` | **toutes** les catégories, assigner, changer de catégorie, ajouter ou retirer quelqu'un, transcripts, statistiques |
+| `tickets.gerer` | **toutes** les catégories, assigner, changer de catégorie, ajouter ou retirer quelqu'un, ticket permanent, transcripts, statistiques |
 | `tickets.configurer` | la Configuration (n'ouvre aucun ticket à elle seule) |
 
 Sans `tickets.voir` ni `tickets.configurer`, toutes les routes `/tickets…` répondent **404**. Les droits sont relus à
@@ -277,6 +301,7 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `POST /tickets/:id/messages` `{ texte, pieces?, drive? }` ; `POST /tickets/:id/notes` `{ texte }` | réponse (le bot poste) ; note interne |
 | `POST /tickets/:id/(prendre\|liberer\|attente\|statut\|priorite\|fermer\|rouvrir)` | actions (`repondre`) |
 | `POST /tickets/:id/(assigner\|categorie\|ajouter\|retirer)` ; `GET …/assignables` ; `GET …/transcript` | actions (`gerer`) |
+| `POST /tickets/:id/permanent` `{ permanent: true\|false }` | ticket permanent (`gerer`) ; `GET /tickets/:id` donne `permanent` et `fermeture { heures, source: ticket\|categorie\|general, staffSeul }` |
 | `POST /tickets/:id/liaison` `{ type, id? }` ; `POST /tickets/:id/pieces/:piece/lien` | liaison ; lien signé d'une pièce |
 
 Discord appelle toujours `POST /discord/interactions` (signature Ed25519) : les boutons, menus et fenêtres des tickets
@@ -294,11 +319,12 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   pièces jointes, temps réel), `service.mjs` (configuration), `cycle.mjs` (cycle de vie : ouverture, staff,
   fermeture, note, réouverture, cron), `rgpd.mjs`, `routes.mjs`, `bot.mjs` (interactions), `bus.mjs` (événements,
   notifications), `cron.mjs`. Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
-- Migration `0054_tickets.sql` ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
+- Migrations `0054_tickets.sql` et `0055_tickets_permanents.sql` (ticket permanent, fermeture par le staff seul ;
+  ordre de priorité de la fermeture automatique : `delaiFermeture` dans `reglages.mjs`) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
 - Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `TicketsStaff.tsx` : liste, vue, statistiques ;
   `ConfigTickets.tsx`, `ApercuDiscord.tsx`), API `src/esport/tickets/api.ts`, compteur `src/esport/tickets/compteur.ts`,
-  textes `src/esport/i18n/tickets.ts`, phrases des notifications `src/esport/tickets/libelles.ts`.
+  textes `src/esport/i18n/tickets.ts`, réglage de la fermeture en jours `src/esport/tickets/fermeture.ts`, phrases des notifications `src/esport/tickets/libelles.ts`.
 - Tests : `esport/test/tickets-gateway.test.mjs` (faux serveur Gateway WebSocket : HELLO, battements, RESUME,
   zombie, INVALID_SESSION, 4014, budget ; bail entre deux processus simulés ; relecture de secours ; cron),
   `esport/test/tickets-config.test.mjs` (configuration par l'API, faux Discord REST), `esport/test/tickets-commandes.test.mjs`
@@ -306,5 +332,6 @@ priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `
   (visibilité par catégorie, non lus, réponse depuis l'app, notes internes jamais envoyées, droits, transcript, pièces,
   liaisons, statistiques), `esport/test/tickets-cycle.test.mjs`
   (cycle de vie complet avec interactions signées : formulaire, salon et droits, staff, fermeture, MP, note,
-  réouverture, fermeture automatique, archives, rétention, RGPD), `src/esport/Tickets.test.tsx`
+  réouverture, fermeture automatique, archives, rétention, RGPD), `esport/test/tickets-permanents.test.mjs` (ordre de
+  priorité, catégorie « Jamais », ticket permanent par l'app et `/ticket permanent`, staff seul), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

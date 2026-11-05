@@ -45,7 +45,7 @@ async function preparer() {
 test('définitions : /ticket (sous-commandes) et /tickets, descriptions FR / EN, limites de Discord', () => {
   const defs = definitionsCommandes();
   const ticket = defs.find(d => d.name === 'ticket');
-  assert.deepEqual(ticket.options.map(o => o.name), ['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau']);
+  assert.deepEqual(ticket.options.map(o => o.name), ['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'permanent', 'panneau']);
   assert.ok(ticket.options.length <= 25);
   for (const s of SOUS_COMMANDES_TICKET) {
     assert.equal(s.type, 1);

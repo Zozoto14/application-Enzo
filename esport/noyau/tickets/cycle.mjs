@@ -11,8 +11,10 @@
  *    et déplacé dans la catégorie des archives, MP récapitulatif à l'auteur avec la demande de note (1 à 5, puis
  *    commentaire facultatif), journal ; transcript = la conversation gardée en base (transcript.mjs) ;
  *  - réouverture (salon remis en place, ou recréé s'il a été supprimé) ;
- *  - cron : avertissement avant la fermeture automatique, fermeture après le délai sans message, suppression des
- *    salons archivés après N jours, rétention (conversation et pièces effacées après N jours).
+ *  - ticket permanent (jamais fermé automatiquement, avertissement en attente annulé), réglé par le staff ;
+ *  - cron : avertissement avant la fermeture automatique, fermeture après le délai sans message (ticket permanent >
+ *    réglage de la catégorie > réglage général : reglages.mjs, `delaiFermeture`), suppression des salons archivés
+ *    après N jours, rétention (conversation et pièces effacées après N jours).
  *
  * Acteur : `{ discordId?, nom, compte? }` (personne sur Discord, ou compte de l'app). Les écritures Discord passent par
  * l'API REST du bot (discord.mjs) ; un échec Discord ne laisse jamais la base incohérente (statut d'abord, Discord
@@ -27,7 +29,7 @@ import { publierEnBase } from '../temps-reel/diffusion.mjs';
 import { annoncer, ingererMessage, plusRecent, telechargeurCdn } from './conversation.mjs';
 import { DROITS_BOT, DROITS_PARTICIPANT, P, idDiscord, rest } from './discord.mjs';
 import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, titreTicket } from './panneaux.mjs';
-import { STATUTS_OUVERTS, categoriePublique, dansHoraires, lireGeneral, lireHoraires, lireMessages, lireReglage } from './reglages.mjs';
+import { STATUTS_OUVERTS, categoriePublique, dansHoraires, delaiFermeture, lireGeneral, lireHoraires, lireMessages, lireReglage } from './reglages.mjs';
 import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, t as tx } from './textes.mjs';
 
 const H = 3_600_000;
@@ -321,6 +323,24 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return apres(nouveau, 'ticket.categorie', acteur, { de: ticket.categorie_id });
   }
 
+  /**
+   * Ticket permanent (`actif`) : jamais fermé automatiquement, quel que soit le réglage de sa catégorie ; un
+   * avertissement d'inactivité en attente est annulé. Annoncé dans le salon d'un ticket ouvert. Rend la ligne.
+   */
+  async function permanent(ticket, acteur, actif) {
+    if (!ticket) throw refusTk('pas_ticket', {}, 404);
+    const voulu = actif === true;
+    if ((Number(ticket.permanent) === 1) === voulu) return ticketPar(ticket.id);
+    const t = maintenant();
+    await base.executer('UPDATE tickets SET permanent = ?, permanent_par = ?, permanent_le = ?, avertissement_le = NULL WHERE id = ?', [voulu ? 1 : 0, voulu ? String(acteur?.nom ?? '').slice(0, 100) || null : null, voulu ? iso(t) : null, ticket.id]);
+    if (ticket.statut !== 'ferme') {
+      const { general } = await contexte();
+      const texte = bilingue(l => tx(l, voulu ? 'permanent_actif' : 'permanent_inactif'), optsLangue(general, ticket));
+      await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
+    }
+    return apres(ticket, 'ticket.permanent', acteur, { permanent: voulu });
+  }
+
   // ---------------------------------------------------------------- Fermeture, réouverture, note
 
   /** Derniers messages du salon relus avant la fermeture (le transcript est complet même sans Gateway). */
@@ -346,8 +366,12 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const { general, messages } = await contexte();
     const cat = await categorie(ticket.categorie_id);
     const texteRaison = l => (auto ? tx(l, 'raison_inactivite') : sur(raison, 300) || tx(l, 'raison_defaut'));
-    // Statut d'abord (conditionnel : deux fermetures simultanées n'en font qu'une).
-    const r = await base.executer("UPDATE tickets SET statut = 'ferme', ferme_le = ?, maj_le = ?, raison_fermeture = ?, ferme_par_nom = ? WHERE id = ? AND statut <> 'ferme'", [iso(t), iso(t), auto ? 'inactivite' : sur(raison, 300) || null, auto ? null : String(acteur?.nom ?? '').slice(0, 100), ticket.id]);
+    // Statut d'abord (conditionnel : deux fermetures simultanées n'en font qu'une ; une fermeture automatique ne passe
+    // pas sur un ticket rendu permanent entre-temps).
+    const sql = auto
+      ? "UPDATE tickets SET statut = 'ferme', ferme_le = ?, maj_le = ?, raison_fermeture = ?, ferme_par_nom = ? WHERE id = ? AND statut <> 'ferme' AND permanent = 0"
+      : "UPDATE tickets SET statut = 'ferme', ferme_le = ?, maj_le = ?, raison_fermeture = ?, ferme_par_nom = ? WHERE id = ? AND statut <> 'ferme'";
+    const r = await base.executer(sql, [iso(t), iso(t), auto ? 'inactivite' : sur(raison, 300) || null, auto ? null : String(acteur?.nom ?? '').slice(0, 100), ticket.id]);
     if (Number(r.changements) !== 1) throw refusTk('deja_ferme', {}, 409);
     const ferme = await ticketPar(ticket.id);
     const opts = optsLangue(general, ticket);
@@ -442,20 +466,25 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   // ---------------------------------------------------------------- Cron
 
-  /** Délai de fermeture automatique d'un ticket (heures ; 0 : jamais). */
-  const delaiFermeture = (cat, general) => (cat?.fermetureAutoH === null || cat?.fermetureAutoH === undefined ? general.fermetureAutoH : cat.fermetureAutoH);
-
   async function tachesCycle() {
     const { general, messages } = await contexte();
     const bilan = { avertis: 0, fermes: 0, salonsSupprimes: 0, purges: 0 };
     if (!general.actif || !jetonBot) return bilan;
     const t = maintenant();
     const cats = new Map((await base.tous('SELECT * FROM tickets_categories', [])).map(l => [l.id, categoriePublique(l)]));
-    const ouverts = await base.tous("SELECT * FROM tickets WHERE statut <> 'ferme' ORDER BY derniere_activite_le LIMIT 500", []);
+    // Tickets permanents et catégories « Jamais » écartés d'emblée (ils ne prennent pas la place des autres) ; un
+    // avertissement donné avant le passage de la catégorie à « Jamais » est oublié.
+    await base.executer("UPDATE tickets SET avertissement_le = NULL WHERE statut <> 'ferme' AND avertissement_le IS NOT NULL AND categorie_id IN (SELECT id FROM tickets_categories WHERE fermeture_auto_h = 0)", []);
+    const ouverts = await base.tous("SELECT * FROM tickets WHERE statut <> 'ferme' AND permanent = 0 AND categorie_id NOT IN (SELECT id FROM tickets_categories WHERE fermeture_auto_h = 0) ORDER BY derniere_activite_le LIMIT 500", []);
     for (const tk of ouverts) {
       if (bilan.avertis + bilan.fermes >= LOT_CRON) break;
-      const h = delaiFermeture(cats.get(tk.categorie_id), general);
-      if (!h) continue;
+      // Ticket permanent > réglage de la catégorie > réglage général (0 : jamais).
+      const h = delaiFermeture(tk, cats.get(tk.categorie_id), general).heures;
+      if (!h) {
+        // Plus de fermeture prévue (réglage général à 0…) : un avertissement déjà donné est oublié.
+        if (tk.avertissement_le) await base.executer('UPDATE tickets SET avertissement_le = NULL WHERE id = ?', [tk.id]);
+        continue;
+      }
       const inactif = t - Date.parse(tk.derniere_activite_le);
       if (inactif >= h * H) {
         await fermer(tk, { nom: 'Esport HQ' }, { auto: true }).catch(e => console.error('[esport] tickets : fermeture automatique', e?.message ?? e));
@@ -572,6 +601,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     retirerMembre,
     renommer,
     transferer,
+    permanent,
     fermer,
     rouvrir,
     noter,
