@@ -164,7 +164,7 @@ test('panneau : aperçu comme sur Discord, puis publication', async () => {
   expect(appels.some(a => a.chemin === '/tickets/config/panneaux/pan1/publier')).toBe(true);
 });
 
-// Navigation : l'entrée « Tickets » est devenue le sous-onglet Administration › Tickets (Administration.test.tsx).
+// Navigation : l'entrée « Tickets » (hors de l'Administration) et sa pastille sont testées dans Administration.test.tsx.
 
 // ------------------------------------------------------------------ Étape 3 : tickets dans l'app
 

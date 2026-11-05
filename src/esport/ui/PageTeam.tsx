@@ -175,7 +175,8 @@ export function PageTeam({
   onMembresGlobal,
   onNaviguer,
   administration,
-  compteurAdministration,
+  tickets,
+  compteurTickets,
   onChangerTeam,
   onOuvrirCm,
   pseudo,
@@ -194,8 +195,10 @@ export function PageTeam({
   onNaviguer?(o: OngletEsport): void;
   /** Au moins une permission d'administration du club : entrée « Administration » de la navigation (PC). */
   administration?: boolean;
-  /** Tickets non lus : pastille de l'entrée « Administration ». */
-  compteurAdministration?: number;
+  /** Tickets Discord (tickets.voir ou tickets.configurer) : entrée « Tickets » de la navigation (PC). */
+  tickets?: boolean;
+  /** Tickets non lus : pastille de l'entrée « Tickets ». */
+  compteurTickets?: number;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   /** Le compte a accès à l'espace CM du club (mêmes conditions que la tuile « CM du club ») : le sélecteur le propose en tête. */
@@ -237,7 +240,7 @@ export function PageTeam({
 
   if (!detail) {
     return (
-      <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} compteurs={{ administration: compteurAdministration }}>
+      <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} tickets={tickets} compteurs={{ tickets: compteurTickets }}>
         <View style={{ padding: large ? ESP.xxl : ESP.m, gap: ESP.m }} testID="esport-team-chargement">
           {erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-team" /> : <Squelette theme={theme} lignes={4} hauteur={18} />}
           <BoutonHub theme={theme} titre={tr('pageTeam.teams')} onPress={onQuitter} testID="esport-team-retour" />
@@ -372,7 +375,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} compteurs={{ administration: compteurAdministration }} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} administration={administration} tickets={tickets} compteurs={{ tickets: compteurTickets }} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>

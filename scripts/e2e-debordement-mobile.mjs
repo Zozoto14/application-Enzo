@@ -118,7 +118,7 @@ async function parcourir(page, taille) {
   await page.setViewportSize({ width: taille[0], height: taille[1] });
   await pause(600);
   await ouvrirEsport(page);
-  for (const onglet of ['dashboard', 'teams', 'membres', 'administration']) {
+  for (const onglet of ['dashboard', 'teams', 'membres', 'tickets', 'administration']) {
     // Téléphone : au-delà de cinq entrées, les dernières seraient dans « Plus ».
     if (!(await present(page, `esport-nav-${onglet}`, 1500)) && (await present(page, 'esport-nav-plus', 500))) {
       await page.getByTestId('esport-nav-plus').first().click();
@@ -135,15 +135,16 @@ async function parcourir(page, taille) {
     }
     await page.getByTestId(`esport-nav-${onglet}`).first().click();
     await controler(page, `esport-${onglet}`, taille);
-    // Administration : chaque sous-onglet ; Tickets en dernier, avec chaque section de sa configuration.
+    // Administration : chaque sous-onglet.
     if (onglet === 'administration') {
       for (const sous of ['statistiques', 'jeux', 'roles', 'devblog']) {
         if (!(await present(page, `esport-admin-onglet-${sous}`, 1500))) continue;
         await page.getByTestId(`esport-admin-onglet-${sous}`).first().click();
         await controler(page, `esport-administration-${sous}`, taille);
       }
-      if (await present(page, 'esport-admin-onglet-tickets', 1500)) await page.getByTestId('esport-admin-onglet-tickets').first().click();
-      await controler(page, 'esport-administration-tickets', taille);
+    }
+    // Tickets (entrée à part) : Statistiques, Avis, puis chaque section de la configuration.
+    if (onglet === 'tickets') {
       if (await present(page, 'esport-tk-onglet-stats', 1500)) {
         await page.getByTestId('esport-tk-onglet-stats').first().click();
         await controler(page, 'esport-tickets-stats', taille);

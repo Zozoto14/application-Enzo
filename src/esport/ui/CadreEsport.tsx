@@ -2,10 +2,10 @@
  * Cadre de navigation de l'Esport.
  *
  *  - PC et iPad paysage (≥ 900 px) : barre latérale. En haut, l'Esport
- *    (Dashboard · Teams · Membres, Administration selon les droits) ; dans une team, en dessous, la team
+ *    (Dashboard · Teams · Membres, Tickets et Administration selon les droits) ; dans une team, en dessous, la team
  *    (logo, nom, sélecteur rapide) et ses sections.
  *  - iPhone et petites fenêtres : barre d'onglets en bas. Dashboard · Teams ·
- *    Membres (· Administration) au premier niveau ; les sections de la team dans une team.
+ *    Membres (· Tickets · Administration) au premier niveau ; les sections de la team dans une team.
  *
  * L'espace CM du club n'est pas une entrée de premier niveau : il est rangé dans Teams (carte « CM du club »
  * en tête de la page Teams ; l'entrée « Teams » reste surlignée dans l'espace CM). Voir RacineEsport.tsx.
@@ -22,7 +22,7 @@ import { trNf } from '../i18n/notifications';
 import { trTk } from '../i18n/tickets';
 import { Glyphe } from '../../ui/icones';
 
-export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'administration' | 'plus';
+export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'tickets' | 'administration' | 'plus';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
   { cle: 'dashboard', get libelle() {
@@ -40,8 +40,15 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
     }, glyphe: 'membres', get description() {
       return tr('cadreEsport.membres_tous_les_comptes');
     } },
-  // Administration du club (ui/administration/PageAdministration.tsx) : Tickets, Statistiques, Jeux, Rôles et
-  // permissions, Devblog, chacun selon sa permission ; pastille des tickets non lus.
+  // Tickets Discord (ui/tickets/PageTickets.tsx : Tickets, Statistiques, Avis, Configuration) : tickets.voir
+  // (catégories traitées) ou tickets.configurer ; pastille des tickets non lus.
+  { cle: 'tickets', get libelle() {
+      return trTk('nav');
+    }, glyphe: 'billets', get description() {
+      return trTk('nav_description');
+    } },
+  // Administration du club (ui/administration/PageAdministration.tsx) : Statistiques, Jeux, Rôles et permissions,
+  // Devblog, chacun selon sa permission.
   { cle: 'administration', get libelle() {
       return tr('cadreEsport.administration');
     }, glyphe: 'outils', get description() {
@@ -50,10 +57,12 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
 ];
 
 /**
- * Entrées de premier niveau visibles : « Administration » avec au moins une permission d'un de ses sous-onglets
- * (voir aAdministration). Quatre au plus : elles tiennent dans la barre du bas du téléphone. Le CM du club est dans Teams.
+ * Entrées de premier niveau visibles : « Tickets » avec tickets.voir ou tickets.configurer ; « Administration » avec au
+ * moins une permission d'un de ses sous-onglets (voir aAdministration). Cinq au plus : elles tiennent toutes dans la
+ * barre du bas du téléphone. Le CM du club est dans Teams.
  */
-export const navEsport = (administration?: boolean) => NAV_ESPORT.filter(n => n.cle !== 'administration' || Boolean(administration));
+export const navEsport = (administration?: boolean, tickets?: boolean) =>
+  NAV_ESPORT.filter(n => (n.cle !== 'administration' || Boolean(administration)) && (n.cle !== 'tickets' || Boolean(tickets)));
 
 /** Entrée « Plus » de la barre du bas (téléphone) : les entrées au-delà de la quatrième. */
 export const ENTREE_PLUS = { cle: 'plus' as OngletEsport, glyphe: 'grille', get libelle() {
@@ -64,10 +73,11 @@ export const ENTREE_PLUS = { cle: 'plus' as OngletEsport, glyphe: 'grille', get 
 
 /**
  * Téléphone : la barre du bas tient cinq entrées. Au-delà, les quatre premières restent et les autres passent dans
- * « Plus » (page qui les liste, RacineEsport.tsx). Avec l'Administration regroupée, il n'y en a que quatre.
+ * « Plus » (page qui les liste, RacineEsport.tsx ; pastille sur « Plus » si une entrée rangée a un compteur).
+ * Aujourd'hui cinq au plus (Dashboard · Teams · Membres · Tickets · Administration) : toutes dans la barre.
  */
-export function navMobile(administration?: boolean) {
-  const toutes = navEsport(administration);
+export function navMobile(administration?: boolean, tickets?: boolean) {
+  const toutes = navEsport(administration, tickets);
   if (toutes.length <= 5) return { barre: toutes, plus: [] as typeof toutes };
   return { barre: [...toutes.slice(0, 4), ENTREE_PLUS], plus: toutes.slice(4) };
 }
@@ -294,13 +304,16 @@ export function CadreEsport({
   barreBasse,
   enTeteMobile,
   administration,
+  tickets,
   notifications,
   children,
 }: {
   theme: ThemeHub;
   large: boolean;
-  /** Au moins une permission d'administration (tickets, statistiques, jeux, rôles, devblog) : l'entrée « Administration ». */
+  /** Au moins une permission d'administration (statistiques, jeux, rôles, devblog) : l'entrée « Administration ». */
   administration?: boolean;
+  /** Tickets Discord (tickets.voir ou tickets.configurer) : l'entrée « Tickets ». */
+  tickets?: boolean;
   /** Onglet de premier niveau actif (« teams » dans une team). */
   onglet: OngletEsport;
   onOnglet(o: OngletEsport): void;
@@ -348,12 +361,12 @@ export function CadreEsport({
             testID="esport-nav"
             actif={onglet}
             onChoisir={c => onOnglet(c as OngletEsport)}
-            entrees={navMobile(administration).barre.map(n => ({
+            entrees={navMobile(administration, tickets).barre.map(n => ({
               cle: n.cle,
               libelle: n.libelle,
               glyphe: n.glyphe,
               description: n.description,
-              pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : n.cle === 'plus' && navMobile(administration).plus.some(p => compteurs?.[p.cle]) ? '•' : undefined,
+              pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : n.cle === 'plus' && navMobile(administration, tickets).plus.some(p => compteurs?.[p.cle]) ? '•' : undefined,
             }))}
           />
         )}
@@ -432,7 +445,7 @@ export function CadreEsport({
               jusqu'à treize sections) ; l'en-tête (réduction) et le pseudo restent en place. */}
           <ScrollView testID="esport-barre-defilement" onScroll={cacher} scrollEventThrottle={64} style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ gap: ESP.l }} showsVerticalScrollIndicator={false}>
           <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
-            {navEsport(administration).map(n => (
+            {navEsport(administration, tickets).map(n => (
               <EntreeLaterale
                 key={n.cle}
                 theme={theme}

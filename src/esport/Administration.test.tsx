@@ -1,8 +1,8 @@
 /**
- * Administration de l'Esport : une entrée de navigation (PC et téléphone) qui regroupe Tickets, Statistiques, Jeux,
- * Rôles et permissions et Devblog, chacun selon sa permission ; pastille des tickets non lus (entrée et sous-onglet
- * « Tickets »), relue en temps réel ; anciennes vues redirigées ; plus de carte « Notifications » sur la page Teams
- * ni sur l'accueil d'une team.
+ * Administration de l'Esport : une entrée de navigation (PC et téléphone) qui regroupe Statistiques, Jeux, Rôles et
+ * permissions et Devblog, chacun selon sa permission. Les Tickets ont leur propre entrée (hors de l'Administration),
+ * avec la pastille des tickets non lus, relue en temps réel ; anciennes vues redirigées (Administration › Tickets
+ * comprise) ; plus de carte « Notifications » sur la page Teams ni sur l'accueil d'une team.
  */
 
 import React from 'react';
@@ -105,29 +105,33 @@ async function monter(client: ClientEsport, mode: 'large' | 'telephone' = 'large
   );
 }
 
-test('navigation : une seule entrée « Administration », plus d’entrées Tickets, Statistiques, Jeux ; quatre au plus sur téléphone', () => {
-  expect(navEsport(false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
-  expect(navEsport(true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'administration']);
-  expect(navMobile(true).barre.map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'administration']);
-  expect(navMobile(true).plus).toEqual([]);
+test('navigation : entrées « Tickets » et « Administration » selon les droits ; cinq au plus, toutes dans la barre du téléphone', () => {
+  expect(navEsport(false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
+  expect(navEsport(true, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'administration']);
+  expect(navEsport(false, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets']);
+  expect(navEsport(true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets', 'administration']);
+  expect(navMobile(true, true).barre.map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'tickets', 'administration']);
+  expect(navMobile(true, true).plus).toEqual([]);
   expect(aAdministration({})).toBe(false);
   expect(aAdministration({ devblog: true })).toBe(true);
-  expect(sousOngletsAdmin({ roles: true, tickets: true, jeux: true, statistiques: false })).toEqual(['tickets', 'jeux', 'roles']);
+  expect(sousOngletsAdmin({ roles: true, jeux: true, statistiques: false })).toEqual(['jeux', 'roles']);
 });
 
-test('anciennes vues : Tickets, Statistiques, Jeux et Membres › Rôles et permissions mènent à l’Administration', () => {
-  expect(normaliserVue({ v: 'tickets' })).toEqual({ v: 'administration', sous: 'tickets' });
+test('anciennes vues : Statistiques, Jeux, Membres › Rôles et permissions mènent à l’Administration ; Administration › Tickets à « Tickets »', () => {
+  expect(normaliserVue({ v: 'tickets' })).toEqual({ v: 'tickets' });
+  expect(normaliserVue({ v: 'administration', sous: 'tickets' })).toEqual({ v: 'tickets' });
   expect(normaliserVue({ v: 'statistiques' })).toEqual({ v: 'administration', sous: 'statistiques' });
   expect(normaliserVue({ v: 'jeux' })).toEqual({ v: 'administration', sous: 'jeux' });
   expect(normaliserVue({ v: 'membres', sous: 'roles' })).toEqual({ v: 'administration', sous: 'roles' });
   expect(normaliserVue({ v: 'membres', sous: 'tous' })).toEqual({ v: 'membres', sous: 'tous' });
 });
 
-test('visible avec au moins une permission (PC et téléphone), absente sans', async () => {
+test('visibles selon les permissions (PC et téléphone) : Tickets seul, Administration seule, aucune', async () => {
   for (const mode of ['large', 'telephone'] as const) {
     const r1 = await monter(fauxClient({}).client, mode);
     await screen.findByTestId('esport-nav-membres');
     expect(screen.queryByTestId('esport-nav-administration')).toBeNull();
+    expect(screen.queryByTestId('esport-nav-tickets')).toBeNull();
     await r1.unmount();
     const r2 = await monter(fauxClient({ roles: true }).client, mode);
     expect(await screen.findByTestId('esport-nav-administration')).toBeTruthy();
@@ -135,18 +139,33 @@ test('visible avec au moins une permission (PC et téléphone), absente sans', a
     expect(screen.queryByTestId('esport-nav-jeux')).toBeNull();
     expect(screen.queryByTestId('esport-nav-statistiques')).toBeNull();
     await r2.unmount();
+    const r3 = await monter(fauxClient({ tickets: 'voir' }).client, mode);
+    expect(await screen.findByTestId('esport-nav-tickets')).toBeTruthy();
+    expect(screen.queryByTestId('esport-nav-administration')).toBeNull();
+    expect(screen.queryByTestId('esport-nav-plus')).toBeNull();
+    await r3.unmount();
   }
 });
 
-test('chaque sous-onglet selon sa permission ; un seul sous-onglet : pas de rangée d’onglets', async () => {
-  const r1 = await monter(fauxClient({ jeux: true, tickets: 'voir' }).client);
-  await fireEvent.press(await screen.findByTestId('esport-nav-administration'));
-  expect(await screen.findByTestId('esport-admin-onglet-tickets')).toBeTruthy();
-  expect(screen.getByTestId('esport-admin-onglet-jeux')).toBeTruthy();
-  expect(screen.queryByTestId('esport-admin-onglet-statistiques')).toBeNull();
-  expect(screen.queryByTestId('esport-admin-onglet-roles')).toBeNull();
-  expect(screen.queryByTestId('esport-admin-onglet-devblog')).toBeNull();
+test('téléphone : Fondateur avec les tickets, cinq entrées dans la barre du bas, pas de « Plus »', async () => {
+  await monter(fauxClient({ superAdmin: true, tickets: 'configurer' }).client, 'telephone');
+  expect(await screen.findByTestId('esport-nav-tickets')).toBeTruthy();
+  expect(screen.getByTestId('esport-nav-administration')).toBeTruthy();
+  expect(screen.queryByTestId('esport-nav-plus')).toBeNull();
+});
+
+test('entrée « Tickets » : sous-onglets des tickets ; l’Administration n’a plus de sous-onglet Tickets', async () => {
+  const r1 = await monter(fauxClient({ jeux: true, roles: true, tickets: 'voir' }).client);
+  await fireEvent.press(await screen.findByTestId('esport-nav-tickets'));
   expect(await screen.findByTestId('esport-tickets')).toBeTruthy();
+  expect(screen.queryByTestId('esport-administration')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-nav-administration'));
+  expect(await screen.findByTestId('esport-admin-onglet-jeux')).toBeTruthy();
+  expect(screen.getByTestId('esport-admin-onglet-roles')).toBeTruthy();
+  expect(screen.queryByTestId('esport-admin-onglet-tickets')).toBeNull();
+  expect(screen.queryByTestId('esport-admin-onglet-statistiques')).toBeNull();
+  expect(screen.queryByTestId('esport-admin-onglet-devblog')).toBeNull();
+  expect(screen.queryByTestId('esport-tickets')).toBeNull();
   await r1.unmount();
   await monter(fauxClient({ roles: true }).client);
   await fireEvent.press(await screen.findByTestId('esport-nav-administration'));
@@ -154,42 +173,41 @@ test('chaque sous-onglet selon sa permission ; un seul sous-onglet : pas de rang
   expect(screen.queryByTestId('esport-admin-onglets')).toBeNull();
 });
 
-test('pastille des tickets non lus sur l’entrée et sur le sous-onglet « Tickets », relue en temps réel', async () => {
+test('pastille des tickets non lus sur l’entrée « Tickets » (pas sur l’Administration), relue en temps réel', async () => {
   const etat = { nonLus: 1 };
   const { client } = fauxClient({ tickets: 'voir', roles: true }, etat);
   await monter(client);
-  await waitFor(() => expect(screen.getByTestId('esport-nav-administration').props.accessibilityLabel).toBeDefined());
   // Barre étendue : le compteur (Compteur, comme les commentaires non lus du CM) à côté du libellé.
-  await waitFor(() => expect(screen.getByTestId('esport-nav-administration')).toHaveTextContent(/1/));
-  await fireEvent.press(screen.getByTestId('esport-nav-administration'));
-  expect(await screen.findByTestId('esport-admin-onglet-tickets-pastille')).toHaveTextContent('1');
+  await waitFor(() => expect(screen.getByTestId('esport-nav-tickets')).toHaveTextContent(/1/));
+  expect(screen.getByTestId('esport-nav-administration')).not.toHaveTextContent(/1/);
   etat.nonLus = 4;
   await act(async () => {
     annoncer('tickets');
     await new Promise<void>(r => setTimeout(r, 0));
   });
-  await waitFor(() => expect(screen.getByTestId('esport-admin-onglet-tickets-pastille')).toHaveTextContent('4'));
-  expect(screen.getByTestId('esport-nav-administration')).toHaveTextContent(/4/);
+  await waitFor(() => expect(screen.getByTestId('esport-nav-tickets')).toHaveTextContent(/4/));
+  expect(screen.getByTestId('esport-nav-administration')).not.toHaveTextContent(/4/);
   etat.nonLus = 0;
   await act(async () => {
     annoncer('tickets');
     await new Promise<void>(r => setTimeout(r, 0));
   });
-  await waitFor(() => expect(screen.queryByTestId('esport-admin-onglet-tickets-pastille')).toBeNull());
+  await waitFor(() => expect(screen.getByTestId('esport-nav-tickets')).not.toHaveTextContent(/4/));
 });
 
-test('téléphone : pastille sur l’entrée « Administration » de la barre du bas', async () => {
-  const { client } = fauxClient({ tickets: 'voir' }, { nonLus: 2 });
+test('téléphone : pastille sur l’entrée « Tickets » de la barre du bas', async () => {
+  const { client } = fauxClient({ tickets: 'voir', roles: true }, { nonLus: 2 });
   await monter(client, 'telephone');
-  await waitFor(() => expect(screen.getByTestId('esport-nav-administration')).toHaveTextContent(/2/));
+  await waitFor(() => expect(screen.getByTestId('esport-nav-tickets')).toHaveTextContent(/2/));
+  expect(screen.getByTestId('esport-nav-administration')).not.toHaveTextContent(/2/);
 });
 
-test('configuration des tickets seule : pas de compteur (il ne compte que les tickets visibles)', async () => {
+test('configuration des tickets seule : entrée « Tickets » sans compteur (il ne compte que les tickets visibles)', async () => {
   const { client, requete } = fauxClient({ tickets: 'configurer' }, { nonLus: 5 });
   await monter(client);
-  await screen.findByTestId('esport-nav-administration');
+  await screen.findByTestId('esport-nav-tickets');
   expect(requete.mock.calls.some(c => c[0] === '/tickets/compteur')).toBe(false);
-  expect(screen.getByTestId('esport-nav-administration')).not.toHaveTextContent(/5/);
+  expect(screen.getByTestId('esport-nav-tickets')).not.toHaveTextContent(/5/);
 });
 
 test('page Teams : plus de carte « Notifications » (la cloche reste)', async () => {

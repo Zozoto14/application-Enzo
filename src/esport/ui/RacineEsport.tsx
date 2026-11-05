@@ -3,7 +3,8 @@
  * team : Dashboard (résumé de toutes les teams) · Teams (liste, création,
  * profil ; en tête, la carte « CM du club » qui ouvre l'espace
  * CM du club pour qui y a un droit) · Membres (tous les membres, création de
- * comptes, invitations) · Administration (Tickets, Statistiques, Jeux, Rôles et
+ * comptes, invitations) · Tickets (Tickets Discord : tickets, statistiques, avis,
+ * configuration ; ui/tickets) · Administration (Statistiques, Jeux, Rôles et
  * permissions, Devblog, selon les permissions : ui/administration), dans la barre
  * latérale (PC) ou la barre d'onglets du bas (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
  * rangés en cinq sections (PageTeam.tsx).
@@ -33,7 +34,7 @@ import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EnTetePage, E
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { EspaceCm, PageDevblog } from './differe';
+import { EspaceCm, PageDevblog, PageTickets } from './differe';
 import { PageAdministration, aAdministration, type DroitsAdministration, type SousOngletAdmin } from './administration/PageAdministration';
 import { apiTickets, type MoiTickets } from '../tickets/api';
 import { useCompteurTickets } from '../tickets/compteur';
@@ -71,18 +72,23 @@ type Vue =
   | { v: 'boite' }
   | { v: 'team'; id: string; section?: SectionTeam };
 /**
- * Vues d'avant l'Administration (entrées « Tickets », « Statistiques », « Jeux », sous-onglet Membres › Rôles et
- * permissions) : les liens des notifications et les raccourcis y mènent encore.
+ * Anciennes vues : entrées « Statistiques » et « Jeux », sous-onglet Membres › Rôles et permissions (rangés depuis
+ * dans l'Administration) et Administration › Tickets (les tickets ont retrouvé leur propre entrée « Tickets ») : les
+ * liens des notifications et les raccourcis y mènent encore.
  */
-type VueAncienne = { v: 'tickets' | 'statistiques' | 'jeux' } | { v: 'membres'; sous: 'roles' };
+type VueAncienne = { v: 'statistiques' | 'jeux' } | { v: 'membres'; sous: 'roles' } | { v: 'administration'; sous: 'tickets' };
 export type VueDemandee = Vue | VueAncienne;
 
-/** Redirige une ancienne vue vers son sous-onglet de l'Administration. */
+/** Redirige une ancienne vue vers son écran d'aujourd'hui (sous-onglet de l'Administration, ou entrée « Tickets »). */
 export function normaliserVue(v: VueDemandee): Vue {
-  if (v.v === 'tickets' || v.v === 'statistiques' || v.v === 'jeux') return { v: 'administration', sous: v.v };
+  if (v.v === 'statistiques' || v.v === 'jeux') return { v: 'administration', sous: v.v };
   if (v.v === 'membres' && v.sous === 'roles') return { v: 'administration', sous: 'roles' };
+  if (v.v === 'administration' && v.sous === 'tickets') return { v: 'tickets' };
   return v as Vue;
 }
+
+/** Écran d'une entrée de la navigation de premier niveau (sous-onglet par défaut). */
+const vueDOnglet = (o: OngletEsport): Vue => (o === 'membres' ? { v: 'membres' } : o === 'administration' ? { v: 'administration' } : { v: o });
 
 /** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
 export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v === 'devblog' || v === 'notifications' ? 'dashboard' : v);
@@ -161,9 +167,9 @@ export function Esport(props: PropsRacineApp) {
   const nouveautes = useNouveautes(clientPret, profilPret);
   // Statistiques : le Fondateur, ou un rôle du club qui a statistiques.voir (Second CEO…).
   const stats = Boolean(moiPret && (moiPret.superAdmin || moiPret.peutVoirStatistiques));
-  // Administration : chaque sous-onglet selon sa permission (le serveur contrôle chaque requête).
+  // Administration : chaque sous-onglet selon sa permission (le serveur contrôle chaque requête). Les tickets ont
+  // leur propre entrée « Tickets » (tickets.voir ou tickets.configurer).
   const droitsAdmin: DroitsAdministration = {
-    tickets: tickets && Boolean(moiTickets),
     statistiques: stats,
     jeux: Boolean(moiPret?.peutGererJeux),
     roles: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererRoles)),
@@ -183,7 +189,7 @@ export function Esport(props: PropsRacineApp) {
               : vue.sous === 'statistiques' && stats
                 ? 'esport.statistiques'
                 : 'esport.administration'
-            : vue.v === 'cm' && !cm
+            : (vue.v === 'cm' && !cm) || (vue.v === 'tickets' && !(tickets && moiTickets))
               ? 'esport.teams'
               : `esport.${vue.v}`;
   useEffect(() => {
@@ -237,9 +243,10 @@ export function Esport(props: PropsRacineApp) {
         onQuitter={() => setVue({ v: 'teams' })}
         onExporter={exporter}
         onMembresGlobal={() => setVue({ v: 'membres', sous: 'tous' })}
-        onNaviguer={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })}
+        onNaviguer={o => setVue(vueDOnglet(o))}
         administration={administration}
-        compteurAdministration={nonLusTickets}
+        tickets={tickets}
+        compteurTickets={nonLusTickets}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         onOuvrirCm={cm ? () => setVue({ v: 'cm' }) : undefined}
         pseudo={etat.moi.profil.pseudo}
@@ -293,9 +300,13 @@ export function Esport(props: PropsRacineApp) {
           onNouveautes={() => setVue({ v: 'devblog' })}
         />
       );
+    } else if (vue.v === 'tickets' && tickets && moiTickets) {
+      // Tickets Discord : sous-onglets Tickets, Statistiques, Avis, Configuration (selon les permissions, contrôlées
+      // par le serveur).
+      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} />;
     } else if (vue.v === 'administration' && administration) {
-      // Administration : Tickets (liste, conversation, configuration), Statistiques, Jeux, Rôles et permissions,
-      // Devblog ; un sous-onglet par permission (contrôlée par le serveur). `key` : un lien rouvre son sous-onglet.
+      // Administration : Statistiques, Jeux, Rôles et permissions, Devblog ; un sous-onglet par permission
+      // (contrôlée par le serveur). `key` : un lien rouvre son sous-onglet.
       page = (
         <PageAdministration
           key={vue.sous ?? 'administration'}
@@ -303,9 +314,7 @@ export function Esport(props: PropsRacineApp) {
           client={etat.client}
           large={large}
           droits={droitsAdmin}
-          moiTickets={moiTickets}
           fondateur={etat.moi.superAdmin}
-          nonLusTickets={nonLusTickets}
           ongletInitial={vue.sous}
           onExporter={exporter}
         />
@@ -316,8 +325,8 @@ export function Esport(props: PropsRacineApp) {
         <PageEsport large={large} testID="esport-plus">
           <EnTetePage theme={theme} large={large} titre={tr('cadreEsport.plus')} sous={tr('cadreEsport.plus_description')} />
           <View style={{ gap: ESP.xxs }}>
-            {navMobile(administration).plus.map(n => (
-              <EntreeLaterale key={n.cle} theme={theme} libelle={n.libelle} glyphe={n.glyphe} description={n.description} choisi={false} onPress={() => setVue(n.cle === 'membres' ? { v: 'membres' } : { v: n.cle })} testID={`esport-plus-${n.cle}`} role="link" />
+            {navMobile(administration, tickets).plus.map(n => (
+              <EntreeLaterale key={n.cle} theme={theme} libelle={n.libelle} glyphe={n.glyphe} description={n.description} choisi={false} onPress={() => setVue(vueDOnglet(n.cle))} testID={`esport-plus-${n.cle}`} role="link" />
             ))}
           </View>
         </PageEsport>
@@ -378,10 +387,11 @@ export function Esport(props: PropsRacineApp) {
         theme={theme}
         large={large}
         onglet={onglet}
-        onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })}
+        onOnglet={o => setVue(vueDOnglet(o))}
         pseudo={etat.moi.profil.pseudo}
         administration={administration}
-        compteurs={{ administration: nonLusTickets }}
+        tickets={tickets}
+        compteurs={{ tickets: nonLusTickets }}
         notifications={{ n: notifs.nonLues, actif: vue.v === 'notifications', onPress: () => setVue({ v: 'notifications' }) }}>
         {page}
       </CadreEsport>

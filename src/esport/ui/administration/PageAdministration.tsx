@@ -1,36 +1,33 @@
 /**
  * Page « Administration » de l'Esport : une seule entrée de navigation (barre latérale sur PC, barre du bas sur
  * téléphone) pour les pages d'administration du club, rangées en sous-onglets :
- *  - « Tickets » (Tickets Discord : tickets, statistiques, configuration ; tickets.voir ou tickets.configurer) ;
  *  - « Statistiques » (statistiques d'usage : Fondateur, ou statistiques.voir) ;
  *  - « Jeux » (profils de jeu, assistant IA : Fondateur, ou jeux.gerer) ;
  *  - « Rôles et permissions » (Fondateur, ou roles.gerer) ;
  *  - « Devblog » (brouillons, éditeur, publication automatique : Fondateur, ou devblog.gerer ; la lecture des
  *    devblogs reste pour tous via « Nouveautés » du Dashboard).
- * Un sous-onglet n'apparaît qu'avec sa permission (le serveur contrôle chaque requête, comme avant). Pastille rouge
- * du sous-onglet « Tickets » (et de l'entrée « Administration ») : tickets ouverts avec du nouveau pour le compte.
- * Les anciennes vues (« tickets », « statistiques », « jeux », Membres › Rôles et permissions) mènent ici : voir
- * `normaliserVue` dans RacineEsport.tsx.
+ * Un sous-onglet n'apparaît qu'avec sa permission (le serveur contrôle chaque requête, comme avant). Les Tickets
+ * Discord ont leur propre entrée « Tickets » de la navigation (avec la pastille des tickets non lus), hors de
+ * l'Administration. Les anciennes vues (« statistiques », « jeux », Membres › Rôles et permissions) mènent ici, et
+ * Administration › Tickets mène à l'entrée « Tickets » : voir `normaliserVue` dans RacineEsport.tsx.
  */
 
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
-import type { MoiTickets } from '../../tickets/api';
 import { tr } from '../../i18n';
 import { ESP, LARGEUR_CONTENU, Onglets } from '../design';
-import { Jeux, PageDevblog, PageTickets, RolesPermissions, Statistiques } from '../differe';
+import { Jeux, PageDevblog, RolesPermissions, Statistiques } from '../differe';
 
-export type SousOngletAdmin = 'tickets' | 'statistiques' | 'jeux' | 'roles' | 'devblog';
+export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'devblog';
 
-/** Ce que le compte peut ouvrir dans l'Administration (d'après GET /moi et GET /tickets/moi). */
+/** Ce que le compte peut ouvrir dans l'Administration (d'après GET /moi). */
 export type DroitsAdministration = Partial<Record<SousOngletAdmin, boolean>>;
 
-const ORDRE: readonly SousOngletAdmin[] = ['tickets', 'statistiques', 'jeux', 'roles', 'devblog'];
+const ORDRE: readonly SousOngletAdmin[] = ['statistiques', 'jeux', 'roles', 'devblog'];
 
 const LIBELLES: Record<SousOngletAdmin, { libelle(): string; description(): string }> = {
-  tickets: { libelle: () => tr('administration.onglet_tickets'), description: () => tr('administration.onglet_tickets_description') },
   statistiques: { libelle: () => tr('administration.onglet_statistiques'), description: () => tr('administration.onglet_statistiques_description') },
   jeux: { libelle: () => tr('administration.onglet_jeux'), description: () => tr('administration.onglet_jeux_description') },
   roles: { libelle: () => tr('administration.onglet_roles'), description: () => tr('administration.onglet_roles_description') },
@@ -48,9 +45,7 @@ export function PageAdministration({
   client,
   large,
   droits,
-  moiTickets,
   fondateur,
-  nonLusTickets = 0,
   ongletInitial,
   onExporter,
 }: {
@@ -58,15 +53,12 @@ export function PageAdministration({
   client: ClientEsport;
   large: boolean;
   droits: DroitsAdministration;
-  moiTickets?: MoiTickets;
   /** Fondateur : Administration de l'IA dans « Jeux ». */
   fondateur: boolean;
-  /** Tickets ouverts avec du nouveau (pastille du sous-onglet « Tickets »). */
-  nonLusTickets?: number;
   ongletInitial?: SousOngletAdmin;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
 }) {
-  const permis = sousOngletsAdmin({ ...droits, tickets: Boolean(droits.tickets && moiTickets) });
+  const permis = sousOngletsAdmin(droits);
   const [choix, setChoix] = useState<SousOngletAdmin | undefined>(ongletInitial);
   const onglet: SousOngletAdmin | undefined = choix && permis.includes(choix) ? choix : permis[0];
   return (
@@ -79,7 +71,6 @@ export function PageAdministration({
               id: o,
               libelle: LIBELLES[o].libelle(),
               description: LIBELLES[o].description(),
-              pastille: o === 'tickets' && nonLusTickets > 0 ? nonLusTickets : undefined,
             }))}
             actif={onglet ?? ''}
             onChoisir={id => setChoix(id as SousOngletAdmin)}
@@ -91,9 +82,7 @@ export function PageAdministration({
         </View>
       ) : null}
       <View style={{ flex: 1 }}>
-        {onglet === 'tickets' && moiTickets ? (
-          <PageTickets theme={theme} client={client} large={large} moi={moiTickets} onExporter={onExporter} />
-        ) : onglet === 'statistiques' ? (
+        {onglet === 'statistiques' ? (
           <Statistiques theme={theme} client={client} large={large} onExporter={onExporter} />
         ) : onglet === 'jeux' ? (
           <Jeux theme={theme} client={client} large={large} fondateur={fondateur} />
