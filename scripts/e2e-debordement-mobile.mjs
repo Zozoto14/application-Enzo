@@ -148,6 +148,10 @@ async function parcourir(page, taille) {
         await page.getByTestId('esport-tk-onglet-stats').first().click();
         await controler(page, 'esport-tickets-stats', taille);
       }
+      if (await present(page, 'esport-tk-onglet-avis', 1500)) {
+        await page.getByTestId('esport-tk-onglet-avis').first().click();
+        await controler(page, 'esport-tickets-avis', taille);
+      }
       if (await present(page, 'esport-tk-onglet-config', 1500)) await page.getByTestId('esport-tk-onglet-config').first().click();
       for (const s of ['connexion', 'general', 'categories', 'panneaux', 'messages', 'liste', 'horaires', 'commandes']) {
         if (!(await present(page, `esport-tk-conf-onglet-${s}`, 2000))) continue;

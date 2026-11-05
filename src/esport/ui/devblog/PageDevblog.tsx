@@ -58,10 +58,11 @@ export function PageDevblog({ theme, client, large, avant }: { theme: ThemeHub; 
         sous={trDv('page_sous')}
         action={
           gestion ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
+            // Fragment : les deux boutons passent à la ligne dans la rangée de l'en-tête (téléphone : rien ne dépasse).
+            <>
               <BoutonHub theme={theme} icone="reglages" titre={trDv('auto_bouton')} onPress={() => setVoirAuto(v => !v)} testID="esport-devblog-auto-ouvrir" />
               <BoutonHub theme={theme} titre={trDv('nouveau')} variante="plein" onPress={() => setEdition('nouveau')} testID="esport-devblog-nouveau" />
-            </View>
+            </>
           ) : undefined
         }
       />
