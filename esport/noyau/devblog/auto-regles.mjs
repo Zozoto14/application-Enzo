@@ -217,7 +217,12 @@ export function contientFuite(texte) {
 /** Nom de fournisseur ou de technologie (refusé dans le texte publié) ? */
 export const contientJargon = texte => MOTS_INTERDITS.test(String(texte ?? ''));
 
-/** Texte d'un commit débarrassé de tout ce qui est interne (avant l'envoi à l'IA). */
+const MOTS_INTERDITS_TOUS = new RegExp(MOTS_INTERDITS.source, 'gi');
+
+/**
+ * Texte d'un commit débarrassé de tout ce qui est interne (avant l'envoi à l'IA), noms de technologies et de
+ * fournisseurs compris : le modèle ne peut pas les recopier (la validation refuserait le devblog).
+ */
 export function nettoyerLigne(v, max = 200) {
   return String(v ?? '')
     .normalize('NFC')
@@ -226,6 +231,7 @@ export function nettoyerLigne(v, max = 200) {
     .replace(/\bwww\.\S+/gi, ' ')
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, ' ')
     .replace(/(^|[\s(«"'])(~|\.{1,2})?\/[^\s,;)»"']*/g, '$1 ')
+    .replace(MOTS_INTERDITS_TOUS, ' ')
     .replace(/[^\s,;(«"']*[\w.:-]\/[\w.:-]+\/[^\s,;)»"']*/g, ' ')
     .replace(/\b(esport|src|relais|docs|scripts|bureau|android|ios|public|node_modules|serveur|noyau|tests?|migrations|adaptateurs|outils)\/[\w.-]+/gi, ' ')
     .replace(/\b[\w.-]+\/[\w.-]+\.(mjs|cjs|js|jsx|ts|tsx|json|sql|sh|md|ya?ml|env|css|html?|py|log|txt)\b/gi, ' ')
@@ -244,16 +250,37 @@ export function nettoyerLigne(v, max = 200) {
     .slice(0, max);
 }
 
+/** Puces du corps d'un commit : une puce continuée sur les lignes suivantes (texte replié à 72 colonnes) est recollée. */
+function pucesDuCorps(corps) {
+  const puces = [];
+  let courante = null;
+  for (const brute of String(corps ?? '').split('\n')) {
+    const l = brute.trim();
+    // Ligne vide, ou ligne de fin (Co-Authored-By, Signed-off-by, Claude-Session…) : fin de la puce.
+    if (!l || /^[\w-]{2,40}:\s/.test(l)) {
+      courante = null;
+      continue;
+    }
+    if (/^[-*•]\s+/.test(l)) {
+      courante = l.replace(/^[-*•]\s+/, '');
+      puces.push(courante);
+    } else if (courante !== null && /^\s/.test(brute)) {
+      courante = `${courante} ${l}`;
+      puces[puces.length - 1] = courante;
+    } else courante = null;
+  }
+  return puces;
+}
+
+/** Puce technique (tests, migration, documentation…) : sans intérêt pour les membres, jamais envoyée à l'IA. */
+const puceTechnique = p => estTechnique({ sujet: p }) || /^(migrations?|sch[ée]ma|cron|ci|build)\b/i.test(p);
+
 /** Commit → texte envoyé à l'IA : sujet + au plus 5 puces du corps, nettoyés ; sans hash, sans date, sans auteur. */
 export function nettoyerCommit(c) {
   const sujet = nettoyerLigne(c?.sujet, 200);
-  const puces = String(c?.corps ?? '')
-    .split('\n')
-    .map(l => l.trim())
-    // Lignes de fin (Co-Authored-By, Signed-off-by, Claude-Session…) écartées.
-    .filter(l => l && !/^[\w-]{2,40}:\s/.test(l))
-    .filter(l => /^[-*•]\s+/.test(l))
-    .map(l => nettoyerLigne(l.replace(/^[-*•]\s+/, ''), 200))
+  const puces = pucesDuCorps(c?.corps)
+    .filter(p => !puceTechnique(p))
+    .map(p => nettoyerLigne(p, 200))
     .filter(Boolean)
     .slice(0, 5);
   return { sujet, puces };
@@ -409,7 +436,11 @@ function verifierLangue(brut, langue) {
  */
 export function lireRedaction(brut) {
   if (!brut || typeof brut !== 'object' || Array.isArray(brut)) throw refusRedaction('réponse illisible');
-  if (brut.rien === true && !brut.fr && !brut.en) return { rien: true };
+  // Rien à publier : `{"rien": true}`, éventuellement avec des langues vides, ou deux langues sans aucune section.
+  const vide = l => l === undefined || l === null || (typeof l === 'object' && !Array.isArray(l) && (!Array.isArray(l.sections) || l.sections.length === 0));
+  const sansSection = l => l && typeof l === 'object' && Array.isArray(l.sections) && l.sections.length === 0;
+  if ((brut.rien === true || brut.rien === 'true') && vide(brut.fr) && vide(brut.en)) return { rien: true };
+  if (sansSection(brut.fr) && sansSection(brut.en)) return { rien: true };
   verifierLangue(brut.fr, 'fr');
   verifierLangue(brut.en, 'en');
   if (brut.fr.sections.length !== brut.en.sections.length) throw refusRedaction('sections différentes entre le français et l’anglais');
@@ -424,6 +455,19 @@ export function lireRedaction(brut) {
   });
   if (!contenuComplet(fr) || !contenuComplet(en)) throw refusRedaction('contenu incomplet');
   return { fr, en };
+}
+
+/**
+ * Second essai de la rédaction : le motif du refus (ou de l'échec) de la première réponse, et les règles à tenir.
+ * Jamais la réponse refusée elle-même (elle pourrait contenir ce qui a été refusé).
+ */
+export function consigneNouvelEssai(erreur) {
+  const motif = erreur?.code === 'ia-reponse-tronquee' ? 'it was cut off (too long)' : erreur?.code === 'ia-reponse' ? 'it was empty or unreadable' : String(erreur?.motif ?? 'invalid answer').slice(0, 200);
+  return [
+    `Your previous answer was rejected: ${motif}.`,
+    'Write the devblog again from the same changes: valid JSON only, no text around it, at most 6 sections and 5 bullets per section, short sentences.',
+    'No technology, vendor or product names (no API, database, hosting, framework, library or AI model names), no file names, paths, slash commands, links, dates with slashes or mentions.',
+  ].join('\n');
 }
 
 /**

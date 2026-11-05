@@ -131,7 +131,12 @@ Ce que fait le cron (`esport/serveur/cron.mjs`, étape `devblog automatique`) à
    aucune donnée de réunion — donc autorisée vers l'API externe, ordre de repli « léger ») écrit le devblog **FR + EN
    dans la DA exacte** : exemples fournis (devblog du 23/10 et premier devblog du 30/10), titre « Nouvelle Mise à
    Jour ! » / « New Update! », intro, sections emoji + titre, puces « **Nom :** description », phrase de fin ; ton
-   positif, sans jargon ni nom de fournisseur ou de technologie.
+   positif, sans jargon ni nom de fournisseur ou de technologie. Avant l'envoi, les puces des commits repliées sur
+   plusieurs lignes sont recollées, les puces techniques (tests, migrations…) écartées et les noms de technologies
+   retirés. Budget de **16 000 jetons**, raisonnement compris (gpt-oss raisonne avant d'écrire les deux langues : avec
+   5000, la réponse s'arrêtait en route, `finish_reason: "length"`, et chaque passage finissait en brouillon de
+   secours) ; JSON demandé par la consigne (pas de `response_format` pour cette longue réponse). Une réponse coupée,
+   illisible ou refusée par la validation est redemandée **une fois**, avec le motif du refus.
 5. **Validation stricte** du JSON : structure, longueurs, un emoji par section, mêmes sections et puces en français et
    en anglais, aucune mention, aucun élément interne (hash, chemin, fichier, variable, adresse), aucun nom de
    technologie ou de fournisseur. Refusé = jamais publié.
@@ -141,8 +146,9 @@ Ce que fait le cron (`esport/serveur/cron.mjs`, étape `devblog automatique`) à
 
 Garde-fous :
 
-- **rien à publier** sans changement notable (ou si l'IA répond qu'il n'y a rien pour les membres) : aucun devblog ;
-- **IA en échec** ou réponse refusée : **brouillon de secours** (les sujets nettoyés, à réécrire) + notification ;
+- **rien à publier** sans changement notable (ou si l'IA répond qu'il n'y a rien pour les membres, même avec des
+  langues sans section) : aucun devblog, aucune notification ;
+- **IA en échec** ou réponse refusée deux fois : **brouillon de secours** (les sujets nettoyés, à réécrire) + notification ;
   jamais de publication d'un texte invalide ;
 - **au plus une publication automatique par jour** : le passage du jour est réservé en base (`devblog_auto.jour`
   unique), même si deux cron se chevauchent ;

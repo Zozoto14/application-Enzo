@@ -139,7 +139,9 @@ Tests : `esport/test/ia-confidentialite.test.mjs` (échoue si une tâche confide
 - **Sortie JSON** : `response_format: {"type": "json_object"}` est envoyé ; si le modèle le refuse (HTTP 400), la
   requête est refaite sans et le connecteur s'en souvient (la consigne demande du JSON, et l'extraction tolère du
   texte autour ou un bloc de code). Même chose pour `reasoning_effort` refusé.
-- **Réponse coupée** (`finish_reason: "length"` sans contenu) : code `ia-reponse-tronquee`.
+- **Réponse coupée** (`finish_reason: "length"` sans contenu, ou avec un JSON incomplet quand du JSON est demandé) :
+  code `ia-reponse-tronquee` (jamais un texte coupé rendu comme une réponse). Option `formatJson: false` : pas de
+  `response_format`, le JSON est demandé par la consigne seulement (devblog automatique).
 - **Flux** (`IA_API_FLUX=oui`) : lecture SSE (`delta.content` seulement ; `delta.reasoning_content` ignoré), en-tête
   `Accept: text/event-stream`. La lecture s'arrête dès `data: [DONE]` (même si le serveur garde la connexion ouverte) ;
   un flux fermé sans `finish_reason` ni `[DONE]` est une réponse interrompue (`ia-reponse`). Un flux servi sans le type

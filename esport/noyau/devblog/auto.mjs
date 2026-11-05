@@ -12,9 +12,12 @@
  *  2. changements : commits du dépôt déployé depuis le dernier devblog (`auto_etat.commit` ; au premier passage, le
  *     premier déploiement du journal postérieur au dernier devblog publié, sinon l'état actuel) ;
  *  3. filtrage des commits techniques (règles), nettoyage (aucun hash, chemin, fichier, variable, adresse) ;
- *  4. rédaction FR + EN par l'IA (tâche « devblog », non confidentielle : messages de commit seulement), dans la DA
- *     du devblog (exemples), validation STRICTE ;
- *  5. rien de notable : rien n'est créé (le point de départ avance) ; IA en échec ou réponse refusée : BROUILLON de
+ *  4. rédaction FR + EN par l'IA (tâche « devblog », non confidentielle : messages de commit seulement, jamais
+ *     réservée à l'IA locale), dans la DA du devblog (exemples), validation STRICTE ; budget de jetons large (le
+ *     raisonnement d'un modèle comme gpt-oss en consomme), JSON demandé par la consigne (pas de sortie contrainte) ;
+ *     réponse tronquée, illisible ou refusée : UN second essai, avec le motif du refus ;
+ *  5. rien de notable (règles, ou l'IA répond « rien » / des sections vides) : rien n'est créé ni notifié (le point
+ *     de départ avance) ; IA en échec ou réponse refusée deux fois : BROUILLON de
  *     secours + notification, jamais publié ; « Validation avant publication » : brouillon + notification ; sinon
  *     publié dans l'app et mis en file sur les salons Discord des réglages (@here selon les réglages).
  * Chaque passage qui fait quelque chose est journalisé (`devblog_auto`). « Générer maintenant » (`genererMaintenant`)
@@ -25,6 +28,7 @@
 import { extraireJson } from '../ia/connecteur.mjs';
 import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import {
+  consigneNouvelEssai,
   MAX_COMMITS_IA,
   MAX_COMMITS_LUS,
   REGLAGES_AUTO_DEFAUT,
@@ -43,6 +47,14 @@ import { ciblesParDefaut, ciblesPossibles, ecrireReglage, exigerComplet, lireReg
 const MOTIF_HASH = /^[0-9a-f]{7,40}$/;
 /** Tâche passée au connecteur IA (non confidentielle : catégorie « leger », peut partir à l'API). */
 export const TACHE_IA_DEVBLOG = 'devblog';
+/**
+ * Jetons de la réponse, raisonnement compris. 5000 ne suffisaient pas : gpt-oss (moteur secondaire) raisonne avant
+ * d'écrire les deux langues (souvent un premier jet complet), et la réponse s'arrêtait en route (« length ») : un
+ * JSON coupé, illisible, donc un brouillon de secours et une notification d'échec chaque jour.
+ */
+export const JETONS_DEVBLOG = 16_000;
+/** Erreurs après lesquelles la rédaction est redemandée une fois (réponse coupée, illisible ou refusée). */
+const REESSAIS_REDACTION = new Set(['ia-reponse', 'ia-reponse-tronquee', 'devblog-redaction']);
 
 export const lireReglagesEnBase = async base => lireReglagesAuto({}, await lireReglage(base, 'auto', REGLAGES_AUTO_DEFAUT));
 export const lireEtatAuto = async base => (await lireReglage(base, 'auto_etat', null)) ?? {};
@@ -107,12 +119,24 @@ export async function changementsDeployes(base, source) {
   return { tete, de, lus: commits.length, retenus, changements };
 }
 
-/** Rédaction par l'IA, validée : `{ rien }` ou `{ fr, en, moteur }` ; exception si l'IA échoue ou la réponse est refusée. */
+/**
+ * Rédaction par l'IA, validée : `{ rien }` ou `{ fr, en, moteur }` ; exception si l'IA échoue ou si la réponse est
+ * refusée deux fois. Le second essai rappelle le motif du refus (jamais la réponse refusée elle-même).
+ */
 export async function redigerDevblog(discuterPour, changements) {
   if (!discuterPour) throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
-  const r = await discuterPour(TACHE_IA_DEVBLOG, messagesRedaction(changements), { json: true, maxJetons: 5000 });
-  const brut = extraireJson(r?.texte);
-  return { ...lireRedaction(brut), moteur: r?.moteur ?? null };
+  const messages = messagesRedaction(changements);
+  let erreur = null;
+  for (let essai = 0; essai < 2; essai++) {
+    try {
+      const r = await discuterPour(TACHE_IA_DEVBLOG, erreur ? [...messages, { role: 'user', content: consigneNouvelEssai(erreur) }] : messages, { json: true, formatJson: false, maxJetons: JETONS_DEVBLOG });
+      return { ...lireRedaction(extraireJson(r?.texte)), moteur: r?.moteur ?? null };
+    } catch (e) {
+      if (!REESSAIS_REDACTION.has(e?.code)) throw e;
+      erreur = e;
+    }
+  }
+  throw erreur;
 }
 
 async function journaliser(base, id, champs) {

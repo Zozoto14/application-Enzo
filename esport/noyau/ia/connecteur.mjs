@@ -292,15 +292,16 @@ export const ADAPTATEURS = {
      * `etat` (propre à un connecteur) : `sansEffort` / `sansFormat` quand le fournisseur a refusé
      * `reasoning_effort` / `response_format` (on ne les renvoie plus).
      */
-    requete(config, messages, { json = true, maxJetons = 4000, temperature, schema = null, effort, flux = false } = {}, etat = {}) {
+    requete(config, messages, { json = true, maxJetons = 4000, temperature, schema = null, effort, flux = false, formatJson = true } = {}, etat = {}) {
       const corps = { model: config.modele, messages, temperature: temperature ?? config.temperature ?? 0.2, max_tokens: Math.max(maxJetons, config.jetonsMin ?? 0) };
       if (config.topP !== null && config.topP !== undefined) corps.top_p = config.topP;
       // Effort de raisonnement : seulement pour un modèle qui l'accepte (profil ou IA_API_EFFORT) ; `effort` le change (test : low).
       if (config.effort && !etat.sansEffort) corps.reasoning_effort = EFFORTS_IA.includes(effort) ? effort : config.effort;
       // IA locale (llama-server) : sortie CONTRAINTE par le schéma JSON (grammaire), sinon un objet JSON.
       if (json && config.fournisseur === 'local') corps.response_format = schema ? { type: 'json_schema', json_schema: { name: 'reponse', schema, strict: true } } : { type: 'json_object' };
-      // Sortie JSON forcée chez les fournisseurs qui la gèrent (le prompt la demande de toute façon).
-      else if (json && !etat.sansFormat && (FOURNISSEURS[config.fournisseur]?.jsonForce ?? false)) corps.response_format = { type: 'json_object' };
+      // Sortie JSON forcée chez les fournisseurs qui la gèrent (le prompt la demande de toute façon). `formatJson: false` :
+      // JSON demandé par la consigne seulement (longue réponse d'un modèle à raisonnement : voir le devblog automatique).
+      else if (json && formatJson !== false && !etat.sansFormat && (FOURNISSEURS[config.fournisseur]?.jsonForce ?? false)) corps.response_format = { type: 'json_object' };
       if (flux) Object.assign(corps, { stream: true, stream_options: { include_usage: true } });
       return {
         url: config.url,
@@ -591,7 +592,11 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
         noter(`flux interrompu après ${secondes()} s (${f.texte.length} caractères reçus, ni fin ni [DONE])`, 'ia-reponse');
         throw echec(502, 'ia-reponse', 'Réponse du service d’IA interrompue (flux coupé avant la fin).');
       }
-      if (f.fin === 'length' && !t) throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
+      // Limite de jetons atteinte : sans texte, ou avec un JSON coupé en route (illisible), la réponse est tronquée.
+      if (f.fin === 'length' && (!t || (options.json !== false && !extraireJson(t)))) {
+        noter(`réponse tronquée après ${secondes()} s (limite de jetons atteinte, ${t.length} caractères reçus)`, 'ia-reponse-tronquee');
+        throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
+      }
       if (!t) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
       const u = f.usage ?? {};
       noterEtapes(r);
@@ -612,6 +617,12 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
       if (choix?.finish_reason === 'length') throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
       throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
     }
+    // Limite de jetons atteinte (raisonnement compris) avec un JSON coupé en route : jamais rendu comme une réponse
+    // (l'appelant lisait un texte incomplet, « réponse illisible ») ; un JSON complet reste utilisable.
+    if (json?.choices?.[0]?.finish_reason === 'length' && options.json !== false && !extraireJson(sortie.texte)) {
+      noter(`réponse tronquée après ${secondes()} s (limite de jetons atteinte, ${sortie.texte.length} caractères reçus)`, 'ia-reponse-tronquee');
+      throw echec(502, 'ia-reponse-tronquee', 'Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).');
+    }
     noterEtapes(r);
     return { ...sortie, dureeMs: maintenant() - debut };
   }
@@ -623,7 +634,8 @@ async function echanger({ adaptateur, config, messages, options, fetchIa, delai,
  * réel) ; `journal(texte, code)` facultatif (codes et durées seulement) ; `attendre(ms)` injectable (429).
  * `discuter(messages, options)` → { texte, jetons, dureeMs } ; options : `json` (défaut true), `maxJetons`,
  * `temperature`, `effort` (low/medium/high, modèle à raisonnement seulement), `delai`, `flux`, `essais429`,
- * `progression` (flux), `premierOctet` (délai du début de la réponse, ms), `diagnostic` (étapes au journal).
+ * `progression` (flux), `premierOctet` (délai du début de la réponse, ms), `diagnostic` (étapes au journal),
+ * `formatJson` (false : pas de `response_format`, le JSON est demandé par la consigne seulement).
  * Erreurs : ErreurEsport au code stable (ia-non-configuree, ia-cle-refusee, ia-limite-fournisseur,
  * ia-requete-refusee, ia-modele, ia-delai, ia-dns, ia-tls, ia-delai-dns, ia-delai-connexion, ia-delai-tls,
  * ia-delai-premier-octet, ia-delai-lecture, ia-injoignable, ia-reponse,
