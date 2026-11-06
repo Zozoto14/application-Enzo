@@ -78,6 +78,21 @@ export interface General {
   retentionJours: number;
   copierPieces: boolean;
   pieceMaxMo: number;
+  /** Personne n'écrit dans les salons : le staff répond depuis l'app, l'auteur avec le bouton « Répondre » du bot. */
+  reponsesAppSeules: boolean;
+}
+
+/** Catégorie par défaut (modèle proposé par le serveur, esport/noyau/tickets/modeles.mjs). */
+export interface ModeleCategorie {
+  cle: string;
+  nom: DeuxLangues;
+  description: DeuxLangues;
+  icone: string;
+  couleur: string;
+  formulaire: ChampFormulaire[];
+  fermetureAutoH?: number | null;
+  fermetureStaffSeul?: boolean;
+  rolesApp?: string[];
 }
 
 export interface ChampFormulaire {
@@ -144,6 +159,8 @@ export interface ConfigTickets {
   horaires: Horaires;
   commandes: Commandes;
   categories: Categorie[];
+  /** Catégories par défaut proposées (bouton « Catégories par défaut »). */
+  modeles?: ModeleCategorie[];
   panneaux: Panneau[];
   listeNoire: Array<{ discordId: string; nom: string; raison: string; ajouteLe: string }>;
   rolesApp: Array<{ cle: string; nom: string; couleur: string; famille: 'club' | 'cm' }>;
@@ -337,13 +354,14 @@ export function apiTickets(client: ClientEsport) {
     config: () => r<ConfigTickets>('/tickets/config'),
     /** Serveur Discord : celui enregistré, ou `serveur` (choisi dans l'app, pas encore enregistré). */
     discord: (serveur?: string | null) => r<ServeurDiscord>(`/tickets/config/discord${serveur ? `?serveur=${encodeURIComponent(serveur)}` : ''}`),
-    changerGeneral: (c: Partial<General>) => r<ConfigTickets>('/tickets/config/general', 'PUT', c),
+    changerGeneral: (c: Partial<General>) => r<ConfigTickets & { reapplication?: { ok: number; echecs: number; total: number } }>('/tickets/config/general', 'PUT', c),
     changerMessages: (c: Record<string, DeuxLangues>) => r<ConfigTickets>('/tickets/config/messages', 'PUT', c),
     changerHoraires: (c: Horaires) => r<ConfigTickets>('/tickets/config/horaires', 'PUT', c),
     changerCommandes: (c: Commandes) => r<ConfigTickets>('/tickets/config/commandes', 'PUT', c),
     creerCategorie: (c: Partial<Categorie>) => r<{ id: string; categories: Categorie[] }>('/tickets/config/categories', 'POST', c),
     modifierCategorie: (id: string, c: Partial<Categorie>) => r<{ categories: Categorie[] }>(`/tickets/config/categories/${encodeURIComponent(id)}`, 'PATCH', c),
     supprimerCategorie: (id: string) => r<{ categories: Categorie[] }>(`/tickets/config/categories/${encodeURIComponent(id)}`, 'DELETE'),
+    ajouterModeles: (cles: string[]) => r<{ ajoutees: string[]; ignorees: string[]; categories: Categorie[] }>('/tickets/config/categories/defaut', 'POST', { cles }),
     ordonnerCategories: (ordre: string[]) => r<{ categories: Categorie[] }>('/tickets/config/categories/ordre', 'PUT', { ordre }),
     creerPanneau: (c: Partial<Panneau>) => r<Panneau>('/tickets/config/panneaux', 'POST', c),
     modifierPanneau: (id: string, c: Partial<Panneau>) => r<Panneau>(`/tickets/config/panneaux/${encodeURIComponent(id)}`, 'PATCH', c),

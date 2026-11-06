@@ -233,7 +233,7 @@ export function creerApi({
   // Tickets Discord (migration 0054, docs/esport/tickets.md) : configuration, cycle de vie, conversation ; la Gateway
   // est tenue par le serveur Node (tickets/superviseur.mjs), jamais par l'API elle-même.
   const cycleTickets = servicesCycleTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, lienApp });
-  const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive, serveurTickets: ticketsServeur }), cycle: cycleTickets, rgpd: servicesRgpdTickets({ base, maintenant, contexteTickets, evenement }) };
+  const tk = { config: servicesConfigTickets({ base, maintenant, stockage, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, drive: cm.drive, serveurTickets: ticketsServeur, cycle: cycleTickets }), cycle: cycleTickets, rgpd: servicesRgpdTickets({ base, maintenant, contexteTickets, evenement }) };
   // Tickets dans l'app : liste, conversation, réponse (le bot poste), notes internes, liaisons (avec les droits de l'acteur).
   tk.vue = servicesVueTickets({
     base,

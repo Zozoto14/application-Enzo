@@ -6,7 +6,9 @@
  *   tk:o:<catégorie>   bouton « ouvrir un ticket » d'une catégorie (panneau à boutons) ;
  *   tk:s               menu des catégories (panneau à menu ; valeur = catégorie) ;
  *   tk:c:<ticket>      prendre en charge ; tk:a:<ticket> ajouter quelqu'un ; tk:p:<ticket> priorité ;
- *   tk:x:<ticket>      fermer (demande de confirmation) ; tk:r:<ticket> rouvrir.
+ *   tk:x:<ticket>      fermer (demande de confirmation) ; tk:r:<ticket> rouvrir ;
+ *   tk:rp:<ticket>     répondre (réglage « Répondre uniquement depuis l'AppDashboard » : fenêtre `tk:rm:<ticket>` de
+ *                      l'auteur, dont le bot poste le texte dans le salon).
  */
 
 import { bilingue, libelle2, nom2, ordreLangues, sur, surLong, t as tx } from './textes.mjs';
@@ -57,12 +59,18 @@ const NOMS_PRIORITE = { faible: 'p_faible', moyen: 'p_moyen', urgent: 'p_urgent'
 const COULEURS_PRIORITE = { faible: 0x4caf7a, moyen: 0x5865f2, urgent: 0xe8a23a, critique: 0xd9534f };
 export const nomPriorite = (langue, p) => tx(langue, NOMS_PRIORITE[p] ?? 'p_moyen');
 
-/** Boutons du message d'accueil d'un ticket ouvert. */
-export function boutonsTicket(ticketId, opts) {
+/** Bouton « Répondre » (salon en lecture seule : l'auteur écrit par une fenêtre du bot). */
+export const boutonRepondre = (ticketId, opts) => ({ type: 2, style: 3, custom_id: `tk:rp:${ticketId}`, label: libelle2('b_repondre', opts) });
+/** Rangée avec le seul bouton « Répondre » (sous les messages du bot), ou rien. */
+export const rangeeRepondre = (ticketId, opts, repondre) => (repondre ? [{ type: 1, components: [boutonRepondre(ticketId, opts)] }] : []);
+
+/** Boutons du message d'accueil d'un ticket ouvert (`repondre` : bouton « Répondre » en tête, cinq boutons au plus). */
+export function boutonsTicket(ticketId, opts, { repondre = false } = {}) {
   return [
     {
       type: 1,
       components: [
+        ...(repondre ? [boutonRepondre(ticketId, opts)] : []),
         { type: 2, style: 1, custom_id: `tk:c:${ticketId}`, label: libelle2('b_prendre', opts) },
         { type: 2, style: 2, custom_id: `tk:a:${ticketId}`, label: libelle2('b_ajouter', opts) },
         { type: 2, style: 2, custom_id: `tk:p:${ticketId}`, label: libelle2('b_priorite', opts) },
@@ -76,7 +84,7 @@ export function boutonsTicket(ticketId, opts) {
  * Message d'accueil d'un ticket : mention de l'auteur (et des rôles à prévenir), texte d'accueil bilingue, réponses
  * du formulaire, boutons. `accueil` : texte déjà composé (variables remplies).
  */
-export function chargeAccueil({ ticket, categorie, accueil, mentions = [], opts }) {
+export function chargeAccueil({ ticket, categorie, accueil, mentions = [], opts, repondre = false }) {
   const champs = [];
   const reponses = Array.isArray(ticket.reponses) ? ticket.reponses : [];
   for (const r of reponses.slice(0, 5)) {
@@ -87,7 +95,7 @@ export function chargeAccueil({ ticket, categorie, accueil, mentions = [], opts 
   return {
     content: [`<@${ticket.auteur_discord_id}>`, ...mentions.map(r => `<@&${r}>`)].join(' '),
     embeds: [{ title: titreTicket(ticket.numero, opts), description: accueil.slice(0, 4000), color: COULEURS_PRIORITE[ticket.priorite] ?? couleurNum(categorie.couleur), fields: champs }],
-    components: boutonsTicket(ticket.id, opts),
+    components: boutonsTicket(ticket.id, opts, { repondre }),
     allowed_mentions: { users: [ticket.auteur_discord_id], roles: mentions.slice(0, 5) },
   };
 }

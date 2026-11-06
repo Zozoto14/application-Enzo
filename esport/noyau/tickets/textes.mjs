@@ -20,8 +20,8 @@ export const MODES_LANGUE = Object.freeze(['auteur', 'en_fr', 'fr_en', 'fr', 'en
 /** Messages personnalisables (Configuration › Messages) et leurs défauts. */
 export const MESSAGES_DEFAUT = Object.freeze({
   accueil: {
-    fr: 'Bonjour {utilisateur}, merci d’avoir ouvert le ticket n° {numero} ({categorie}). Un membre du staff va vous répondre ici : décrivez votre demande en détail, vous pouvez joindre des fichiers.',
-    en: 'Hi {utilisateur}, thanks for opening ticket #{numero} ({categorie}). A staff member will answer you here: describe your request in detail, you can attach files.',
+    fr: 'Bonjour {utilisateur}, merci d’avoir ouvert le ticket n° {numero} ({categorie}). Un membre du staff va vous répondre ici : décrivez votre demande en détail.',
+    en: 'Hi {utilisateur}, thanks for opening ticket #{numero} ({categorie}). A staff member will answer you here: describe your request in detail.',
   },
   prise_en_charge: { fr: '{staff} prend en charge votre ticket.', en: '{staff} is now handling your ticket.' },
   liberation: { fr: 'Le ticket n’est plus pris en charge : un autre membre du staff va reprendre.', en: 'The ticket is no longer claimed: another staff member will take over.' },
@@ -153,6 +153,17 @@ const T = {
     duree_j: '{n} j',
     mp_nouveau: 'Nouveau ticket n° {numero} ({categorie}) : {salon}',
     mp_message: 'Nouveau message de {auteur} dans le ticket n° {numero} : {salon}',
+    consigne_app: 'Ce salon est en lecture seule : pour écrire au staff, utilisez le bouton « Répondre » sous les messages du bot. Les fichiers ne peuvent pas être joints : partagez-les sous forme de lien.',
+    consigne_fichiers: 'Vous pouvez écrire et joindre des fichiers directement dans ce salon.',
+    b_repondre: 'Répondre',
+    repondre_titre: 'Répondre au ticket',
+    repondre_libelle: 'Votre message',
+    repondre_placeholder: 'Écrivez votre message au staff. Pour un fichier, collez un lien.',
+    reponse_ok: 'Message envoyé dans le ticket.',
+    reponse_vide: 'Message vide : rien n’a été envoyé.',
+    repondre_staff: 'Le staff répond depuis l’AppDashboard (rubrique Tickets), pas depuis Discord.{lien}',
+    repondre_pas_auteur: 'Seuls l’auteur du ticket et les personnes ajoutées répondent avec ce bouton.',
+    trop_vite: 'Trop de messages en peu de temps : réessayez dans un moment.',
   },
   en: {
     ticket: 'Ticket #{numero}',
@@ -260,6 +271,17 @@ const T = {
     duree_j: '{n} d',
     mp_nouveau: 'New ticket #{numero} ({categorie}): {salon}',
     mp_message: 'New message from {auteur} in ticket #{numero}: {salon}',
+    consigne_app: 'This channel is read-only: to write to the staff, use the “Reply” button under the bot’s messages. Files cannot be attached: share them as a link.',
+    consigne_fichiers: 'You can write and attach files directly in this channel.',
+    b_repondre: 'Reply',
+    repondre_titre: 'Reply to the ticket',
+    repondre_libelle: 'Your message',
+    repondre_placeholder: 'Write your message to the staff. For a file, paste a link.',
+    reponse_ok: 'Message sent in the ticket.',
+    reponse_vide: 'Empty message: nothing was sent.',
+    repondre_staff: 'The staff answers from the AppDashboard (Tickets section), not from Discord.{lien}',
+    repondre_pas_auteur: 'Only the ticket’s author and the people added to it reply with this button.',
+    trop_vite: 'Too many messages in a short time: try again in a moment.',
   },
 };
 

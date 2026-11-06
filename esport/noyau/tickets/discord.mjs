@@ -21,6 +21,10 @@ export const P = Object.freeze({
   JOINDRE_FICHIERS: 1n << 15n,
   HISTORIQUE: 1n << 16n,
   GERER_ROLES: 1n << 28n,
+  REACTIONS: 1n << 6n,
+  CREER_FILS_PUBLICS: 1n << 35n,
+  CREER_FILS_PRIVES: 1n << 36n,
+  ENVOYER_FILS: 1n << 38n,
 });
 
 /** Permissions demandées au bot pour les tickets (nom affiché dans l'app : clé de traduction côté app). */
@@ -36,6 +40,16 @@ export const PERMISSIONS_REQUISES = Object.freeze([
 
 /** Droits donnés dans un salon de ticket à l'auteur, aux rôles de la catégorie et aux personnes ajoutées. */
 export const DROITS_PARTICIPANT = (P.VOIR_SALON | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS).toString();
+/**
+ * « Répondre uniquement depuis l'AppDashboard » (Configuration › Général, activé par défaut) : l'auteur, les rôles de
+ * la catégorie et les personnes ajoutées LISENT le salon (voir, historique ; les boutons et les commandes slash
+ * restent utilisables, « Utiliser les commandes de l'application » n'est pas refusé) mais n'y écrivent pas : envoyer
+ * des messages, écrire dans les fils, créer des fils, ajouter des réactions sont refusés. `REFUS_ECRITURE_MINIMAL` :
+ * repli si Discord refuse les surcharges complètes (le bot ne peut refuser que des permissions qu'il a lui-même).
+ */
+export const DROITS_LECTURE = (P.VOIR_SALON | P.HISTORIQUE).toString();
+export const REFUS_ECRITURE = (P.ENVOYER | P.ENVOYER_FILS | P.CREER_FILS_PUBLICS | P.CREER_FILS_PRIVES | P.REACTIONS).toString();
+export const REFUS_ECRITURE_MINIMAL = P.ENVOYER.toString();
 /** Droits du bot dans le salon (il doit pouvoir tout y faire, même si un rôle lui refuse l'accès au serveur). */
 export const DROITS_BOT = (P.VOIR_SALON | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS | P.GERER_SALONS).toString();
 

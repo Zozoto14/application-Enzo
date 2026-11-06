@@ -13,7 +13,7 @@ import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
 import { heuresPourMode, joursDeHeures, modeFermeture, texteDelai, type ModeFermeture } from '../../tickets/fermeture';
-import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
+import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type ModeleCategorie, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
 import { Glyphe } from '../../../ui/icones';
 import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
@@ -384,6 +384,14 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
         <Interrupteur theme={theme} libelle={trTk('general.copier')} valeur={g.copierPieces} onChanger={copierPieces => setG({ ...g, copierPieces })} testID="esport-tk-general-copier" />
       </View>
       {nombre('pieceMaxMo', 'general.piece_max')}
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]} testID="esport-tk-general-app-seule-bloc">
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ ...texte(theme), fontWeight: '700' }}>{trTk('general.app_seule')}</Text>
+          <Text style={attenue(theme)}>{trTk('general.app_seule_aide')}</Text>
+        </View>
+        <Interrupteur theme={theme} libelle={trTk('general.app_seule')} valeur={g.reponsesAppSeules !== false} onChanger={reponsesAppSeules => setG({ ...g, reponsesAppSeules })} testID="esport-tk-general-app-seule" />
+      </View>
+      {g.reponsesAppSeules !== false ? <Avis theme={theme} genre="alerte" texte={trTk('general.app_seule_admin')} testID="esport-tk-general-app-seule-admin" /> : null}
       {manque ? <Avis theme={theme} genre="alerte" texte={manque} testID="esport-tk-general-manque" /> : null}
       <Retours theme={theme} erreur={local.erreur} avis={local.avis} prefixe="esport-tk-general" />
       <BoutonHub
@@ -395,12 +403,14 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
         onPress={() =>
           void local.agir('general', async () => {
             const active = g.actif && !enregistre.actif;
-            const nouvelle = await api.changerGeneral(g);
+            const { reapplication, ...nouvelle } = await api.changerGeneral(g);
             setConf(nouvelle);
             if (duServeur && lu) onServeur(lu);
             else void lire(nouvelle.general.guildId);
             onEnregistre();
-            return active ? trTk('general.active_attente') : trTk('enregistre');
+            if (active) return trTk('general.active_attente');
+            if (reapplication) return trTk(reapplication.echecs ? 'general.reapplication_echecs' : 'general.reapplication', { ok: reapplication.ok, total: reapplication.total, echecs: reapplication.echecs });
+            return trTk('enregistre');
           })
         }
       />
@@ -413,6 +423,7 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
 function SectionCategories(p: PropsSection) {
   const { theme, api, conf, setConf, agir } = p;
   const [edite, setEdite] = useState<Categorie | 'nouvelle' | undefined>();
+  const [modeles, setModeles] = useState(false);
   const majCategories = (categories: Categorie[]) => setConf({ ...conf, categories });
   const deplacer = (i: number, d: number) => {
     const ids = conf.categories.map(c => c.id);
@@ -424,7 +435,10 @@ function SectionCategories(p: PropsSection) {
   return (
     <View style={{ gap: ESP.s }} testID="esport-tk-conf-categories">
       <View style={{ alignSelf: 'flex-start' }}>
-        <BoutonHub theme={theme} variante="plein" titre={trTk('cat.nouvelle')} onPress={() => setEdite('nouvelle')} testID="esport-tk-cat-nouvelle" />
+        <View style={styles.ligne}>
+          <BoutonHub theme={theme} variante="plein" titre={trTk('cat.nouvelle')} onPress={() => setEdite('nouvelle')} testID="esport-tk-cat-nouvelle" />
+          {conf.modeles?.length ? <BoutonHub theme={theme} titre={trTk('cat.defaut')} onPress={() => setModeles(true)} testID="esport-tk-cat-defaut" /> : null}
+        </View>
       </View>
       {!conf.categories.length ? <Text style={attenue(theme)}>{trTk('cat.vide')}</Text> : null}
       {conf.categories.map((c, i) => (
@@ -453,10 +467,90 @@ function SectionCategories(p: PropsSection) {
             {c.fermetureAutoH === null ? trTk('cat.resume_general') : c.fermetureAutoH === 0 ? trTk('cat.resume_jamais') : trTk('cat.resume_delai', { delai: texteDelai(c.fermetureAutoH) })}
             {c.fermetureStaffSeul ? ` · ${trTk('cat.resume_staff_seul')}` : ''}
           </Text>
+          {!c.rolesDiscord.length && !c.rolesApp.length ? <Avis theme={theme} genre="alerte" texte={trTk('cat.a_configurer')} testID={`esport-tk-cat-${c.id}-a-configurer`} /> : null}
         </Bloc>
       ))}
       {edite ? <EditeurCategorie {...p} categorie={edite === 'nouvelle' ? undefined : edite} onFermer={() => setEdite(undefined)} onFait={categories => (majCategories(categories), setEdite(undefined))} /> : null}
+      {modeles && conf.modeles ? (
+        <DialogueModeles
+          theme={theme}
+          modeles={conf.modeles}
+          categories={conf.categories}
+          onFermer={() => setModeles(false)}
+          onAjouter={cles =>
+            void agir('modeles', async () => {
+              const r = await api.ajouterModeles(cles);
+              majCategories(r.categories);
+              setModeles(false);
+              return [trTk('cat.defaut_ajoutees', { n: r.ajoutees.length }), r.ignorees.length ? trTk('cat.defaut_ignorees', { n: r.ignorees.length }) : ''].filter(Boolean).join(' ');
+            })
+          }
+        />
+      ) : null}
     </View>
+  );
+}
+
+/** Nom comparé pour les doublons (casse, accents, espaces), comme le serveur. */
+const nomCompare = (v: string) =>
+  v
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * « Catégories par défaut » : les modèles du serveur, à cocher ; ceux dont le nom existe déjà sont grisés (le
+ * serveur les ignorerait de toute façon).
+ */
+export function DialogueModeles({ theme, modeles, categories, onFermer, onAjouter }: { theme: ThemeHub; modeles: ModeleCategorie[]; categories: Categorie[]; onFermer(): void; onAjouter(cles: string[]): void }) {
+  const pris = useMemo(() => new Set(categories.flatMap(c => [nomCompare(c.nom.fr), nomCompare(c.nom.en)])), [categories]);
+  const existe = (m: ModeleCategorie) => pris.has(nomCompare(m.nom.fr)) || pris.has(nomCompare(m.nom.en));
+  const libres = modeles.filter(m => !existe(m)).map(m => m.cle);
+  const [coches, setCoches] = useState<string[]>(libres);
+  return (
+    <Volet theme={theme} visible titre={trTk('cat.defaut_titre')} onFermer={onFermer} largeur={720} testID="esport-tk-modeles">
+      <Text style={attenue(theme)}>{trTk('cat.defaut_aide')}</Text>
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} titre={trTk('cat.defaut_tout_coche')} onPress={() => setCoches(libres)} testID="esport-tk-modeles-tout" />
+        <BoutonHub theme={theme} titre={trTk('cat.defaut_rien_coche')} onPress={() => setCoches([])} testID="esport-tk-modeles-rien" />
+      </View>
+      {modeles.map(m => {
+        const deja = existe(m);
+        const coche = !deja && coches.includes(m.cle);
+        return (
+          <Pressable
+            key={m.cle}
+            testID={`esport-tk-modele-${m.cle}`}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: coche, disabled: deja }}
+            accessibilityLabel={`${m.nom.fr} · ${m.nom.en}`}
+            disabled={deja}
+            onPress={() => setCoches(coche ? coches.filter(x => x !== m.cle) : [...coches, m.cle])}
+            style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', padding: ESP.s, borderWidth: 1, borderRadius: 10, borderColor: coche ? m.couleur : theme.ligne, backgroundColor: coche ? teinteTransparente(m.couleur, 0.12) : theme.surface, opacity: deja ? 0.5 : 1 }}
+          >
+            <View style={{ width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: coche ? m.couleur : theme.ligne, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>{coche ? <Glyphe valeur="valide" taille={12} couleur={theme.texte} /> : null}</View>
+            <Glyphe valeur={m.icone} taille={18} couleur={theme.texte} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text style={{ ...texte(theme), fontWeight: '700' }}>
+                {m.nom.fr} · {m.nom.en}
+              </Text>
+              <Text style={attenue(theme)}>{m.description.fr}</Text>
+              <Text style={attenue(theme)}>
+                {trTk('cat.defaut_champs', { n: m.formulaire.length })}
+                {m.fermetureAutoH === 0 ? ` · ${trTk('cat.defaut_jamais')}` : ''}
+              </Text>
+              {deja ? <Badge theme={theme} texte={trTk('cat.defaut_existe')} testID={`esport-tk-modele-${m.cle}-existe`} /> : null}
+            </View>
+          </Pressable>
+        );
+      })}
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} variante="plein" titre={trTk('cat.defaut_ajouter', { n: coches.filter(c => libres.includes(c)).length })} desactive={!coches.some(c => libres.includes(c))} onPress={() => onAjouter(coches.filter(c => libres.includes(c)))} testID="esport-tk-modeles-ajouter" />
+        <BoutonHub theme={theme} titre={trTk('annuler')} onPress={onFermer} testID="esport-tk-modeles-annuler" />
+      </View>
+    </Volet>
   );
 }
 

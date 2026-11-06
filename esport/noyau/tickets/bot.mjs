@@ -11,7 +11,10 @@
  * Identifiants (`custom_id`) : voir panneaux.mjs ; en plus, `tk:f:<catégorie>` (fenêtre du formulaire), `tk:as:` et
  * `tk:ps:` (choix d'une personne, d'une priorité), `tk:xc:` / `tk:xr:` / `tk:xm:` (confirmation, raison, fenêtre de la
  * raison), `tk:n:<ticket>:<note>` et `tk:nc:<ticket>:<note>` (note dans le MP, puis commentaire), `tk:dc:<ticket>:<g|s>`
- * (suppression confirmée d'un ticket fermé, avis gardé anonyme ou supprimé).
+ * (suppression confirmée d'un ticket fermé, avis gardé anonyme ou supprimé), `tk:rp:<ticket>` puis `tk:rm:<ticket>`
+ * (bouton « Répondre » d'un salon en lecture seule, puis fenêtre du message : l'auteur ou une personne ajoutée ; le
+ * staff répond depuis l'AppDashboard). Boutons et fenêtres ne s'enregistrent pas auprès de Discord (seules les
+ * commandes slash le sont).
  *
  * `interaction(i)` rend la réponse à donner à Discord, ou `undefined` si l'interaction n'est pas pour les tickets. Une
  * réponse peut porter `apres` (fonction) : travail lancé par interactions.mjs une fois la réponse partie (JSON.stringify
@@ -232,6 +235,11 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       case 'xr':
         await exigerFermeture(i, ticket, acteur);
         return fenetre(`tk:xm:${ticket.id}`, t(langue, 'b_fermer'), [{ type: 4, custom_id: 'raison', style: 2, label: t(langue, 'raison').slice(0, 45), placeholder: t(langue, 'raison_placeholder').slice(0, 100), required: false, max_length: 300 }]);
+      // « Répondre » (salon en lecture seule) : fenêtre du message pour l'auteur et les personnes ajoutées.
+      case 'rp':
+        if (ticket.statut === 'ferme') throw new RefusLocal('deja_ferme');
+        if (!(await cycle.participant(ticket, acteur.discordId))) throw new RefusLocal((await estStaff(i, ticket, acteur)) ? 'repondre_staff' : 'repondre_pas_auteur', { lien: cycle.lienApp ? ` ${cycle.lienApp}` : '' });
+        return fenetre(`tk:rm:${ticket.id}`, t(langue, 'repondre_titre'), [{ type: 4, custom_id: 'message', style: 2, label: t(langue, 'repondre_libelle').slice(0, 45), placeholder: t(langue, 'repondre_placeholder').slice(0, 100), required: true, max_length: 4000 }]);
       case 'r': {
         await exigerStaff(i, ticket, acteur);
         const r = await cycle.rouvrir(ticket, acteur);
@@ -256,6 +264,13 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       await exigerFermeture(i, ticket, acteur);
       await cycle.fermer(ticket, acteur, { raison: v.raison ?? '' });
       return avis(t(langue, 'ferme_ok'));
+    }
+    m = /^tk:rm:([0-9a-f-]{36})$/.exec(id);
+    if (m) {
+      const ticket = await ticketDuBouton(i, m[1]);
+      if (!(await cycle.participant(ticket, acteur.discordId))) throw new RefusLocal('repondre_pas_auteur');
+      await cycle.messageAuteur(ticket, acteur, v.message ?? '');
+      return avis(t(langue, 'reponse_ok'));
     }
     m = /^tk:nc:([0-9a-f-]{36}):([1-5])$/.exec(id);
     if (m) {

@@ -26,6 +26,7 @@ import {
   lireHoraires,
   lireMessages,
   panneauPublic,
+  reponsesAppSeules,
   validerCategorie,
   validerCommandes,
   validerGeneral,
@@ -35,11 +36,13 @@ import {
   validerPanneau,
 } from './reglages.mjs';
 import { NOM_IMAGE_PANNEAU, chargePanneau } from './panneaux.mjs';
+import { CATEGORIES_DEFAUT, corpsModele, nomNormalise } from './modeles.mjs';
 import { diagnosticConnexion, diagnosticTickets } from './superviseur.mjs';
 import { PERMISSIONS_REQUISES, P, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
 
 /** Lien d'invitation : permissions du bot d'annonces (bot-discord.md) + celles des tickets (Gérer les salons, Gérer les rôles, Joindre des fichiers). */
-const PERMISSIONS_INVITATION = (309237861376n | P.VOIR_SALON | P.GERER_SALONS | P.GERER_ROLES | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS).toString();
+/** (+ Réactions et Créer des fils privés : le bot ne peut refuser dans un salon que des permissions qu'il a lui-même.) */
+const PERMISSIONS_INVITATION = (309237861376n | P.VOIR_SALON | P.GERER_SALONS | P.GERER_ROLES | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS | P.REACTIONS | P.CREER_FILS_PRIVES | P.CREER_FILS_PUBLICS | P.ENVOYER_FILS).toString();
 const TYPES_IMAGE = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const IMAGE_MAX = 8 * 1024 * 1024;
 
@@ -47,7 +50,7 @@ const IMAGE_MAX = 8 * 1024 * 1024;
 const erreurRest = (etape, r) => ({ erreur: `discord-${r.statut}`, erreurDetail: { etape, statut: r.statut, code: r.code ?? null } });
 const ID_DISCORD = /^\d{5,25}$/;
 
-export function servicesConfigTickets({ base, maintenant = () => Date.now(), stockage, fetch: fetchDiscord, jetonBot, applicationId = '', drive, serveurTickets = {} }) {
+export function servicesConfigTickets({ base, maintenant = () => Date.now(), stockage, fetch: fetchDiscord, jetonBot, applicationId = '', drive, serveurTickets = {}, cycle }) {
   const ev = (type, acteur, entiteType, entiteId, charge = {}) => evenement(type, { acteur: acteur.compte, entiteType, entiteId, charge, maintenant: maintenant() });
 
   async function moi(acteur) {
@@ -82,6 +85,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
 
   async function config(acteur) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
+    await semerSiVide(acteur);
     const liste = await base.tous('SELECT * FROM tickets_liste_noire ORDER BY ajoute_le DESC LIMIT 1000', []);
     const tableaux = await base.tous("SELECT id, nom, cle_defaut FROM cm_tableaux WHERE portee = 'club' AND archive_le IS NULL ORDER BY position", []);
     return {
@@ -91,6 +95,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       horaires: await lireHoraires(base),
       commandes: await lireCommandes(base),
       categories: await categories(),
+      modeles: CATEGORIES_DEFAUT,
       panneaux: (await base.tous('SELECT * FROM tickets_panneaux ORDER BY cree_le', [])).map(panneauPublic),
       listeNoire: liste.map(l => ({ discordId: l.discord_user_id, nom: l.nom, raison: l.raison, ajouteLe: l.ajoute_le })),
       rolesApp: await rolesApp(),
@@ -106,9 +111,17 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     return config(acteur);
   }
 
+  /**
+   * Réglages généraux. « Répondre uniquement depuis l'AppDashboard » changé : les droits des salons des tickets
+   * ouverts sont remis à jour tout de suite (au mieux ; bilan rendu dans `reapplication`).
+   */
   async function changerGeneral(acteur, corps) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
-    return changerReglage(acteur, 'general', validerGeneral(corps ?? {}, await lireGeneral(base)));
+    const avant = await lireGeneral(base);
+    const apres = validerGeneral(corps ?? {}, avant);
+    const sortie = await changerReglage(acteur, 'general', apres);
+    if (cycle && reponsesAppSeules(apres) !== reponsesAppSeules(avant)) return { ...sortie, reapplication: await cycle.reappliquerDroits() };
+    return sortie;
   }
   async function changerMessages(acteur, corps) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
@@ -156,6 +169,64 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       ev('tickets.categorie_supprimee', acteur, 'ticket_categorie', id),
     ]);
     return { categories: await categories() };
+  }
+
+  // ---------------------------------------------------------------- Catégories par défaut (modeles.mjs)
+
+  /**
+   * Ajoute les modèles demandés (`cles`), dans l'ordre de la liste ; un modèle dont le nom (français ou anglais) est
+   * déjà celui d'une catégorie est ignoré ; arrêt à la limite de 25 catégories. Rend `{ ajoutees, ignorees }` (clés).
+   */
+  async function creerModeles(acteur, cles) {
+    const voulues = new Set(cles);
+    const existants = new Set();
+    for (const l of await base.tous('SELECT nom_fr, nom_en FROM tickets_categories WHERE supprime_le IS NULL', [])) {
+      existants.add(nomNormalise(l.nom_fr));
+      existants.add(nomNormalise(l.nom_en));
+    }
+    const roles = new Set((await rolesApp()).map(r => r.cle));
+    const ajoutees = [];
+    const ignorees = [];
+    for (const m of CATEGORIES_DEFAUT) {
+      if (!voulues.has(m.cle)) continue;
+      if (existants.has(nomNormalise(m.nom.fr)) || existants.has(nomNormalise(m.nom.en))) {
+        ignorees.push(m.cle);
+        continue;
+      }
+      const n = await base.premier('SELECT COUNT(*) AS n FROM tickets_categories WHERE supprime_le IS NULL', []);
+      if (Number(n?.n ?? 0) >= LIMITES.categories) {
+        ignorees.push(m.cle);
+        continue;
+      }
+      const { id, instruction } = await creerCategorie(base, acteur, corpsModele(m, roles), maintenant());
+      await base.lot([instruction, ev('tickets.categorie_creee', acteur, 'ticket_categorie', id, { modele: m.cle })]);
+      existants.add(nomNormalise(m.nom.fr));
+      existants.add(nomNormalise(m.nom.en));
+      ajoutees.push(m.cle);
+    }
+    return { ajoutees, ignorees };
+  }
+
+  /**
+   * Première lecture de la configuration : sans AUCUNE catégorie (même supprimée), les catégories par défaut sont
+   * créées. Une seule fois (réglage `categories_defaut`, posé avant : deux lectures simultanées n'en sèment qu'une) ;
+   * une installation qui a déjà des catégories reçoit le réglage sans rien de créé.
+   */
+  async function semerSiVide(acteur) {
+    if (await base.premier("SELECT cle FROM tickets_reglages WHERE cle = 'categories_defaut'", [])) return;
+    const n = await base.premier('SELECT COUNT(*) AS n FROM tickets_categories', []);
+    const vide = Number(n?.n ?? 0) === 0;
+    const r = await base.executer("INSERT INTO tickets_reglages (cle, valeur, maj_par, maj_le) VALUES ('categories_defaut', ?, ?, ?) ON CONFLICT (cle) DO NOTHING", [JSON.stringify({ semees: vide }), acteur.compte ?? null, iso(maintenant())]);
+    if (Number(r?.changements) !== 1 || !vide) return;
+    await creerModeles(acteur, CATEGORIES_DEFAUT.map(m => m.cle));
+  }
+
+  async function ajouterModeles(acteur, corps) {
+    await contexteTickets(base, acteur, { exiger: 'configurer' });
+    const cles = Array.isArray(corps?.cles) ? corps.cles.map(String).slice(0, CATEGORIES_DEFAUT.length) : null;
+    if (!cles || !cles.length || cles.some(c => !CATEGORIES_DEFAUT.some(m => m.cle === c))) throw echec(400, 'modeles', 'Choisissez au moins une catégorie par défaut.');
+    const r = await creerModeles(acteur, cles);
+    return { ...r, categories: await categories() };
   }
 
   async function ordonnerCategories(acteur, corps) {
@@ -355,6 +426,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     modifierCategorie,
     supprimerCategorie,
     ordonnerCategories,
+    ajouterModeles,
     ajouterPanneau,
     modifierPanneau,
     supprimerPanneau,

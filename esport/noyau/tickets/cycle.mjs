@@ -27,10 +27,10 @@ import { limiter } from '../limites.mjs';
 import { comptesDeCategorie, droitsTickets, voitCategorie } from './acces.mjs';
 import { publierEnBase } from '../temps-reel/diffusion.mjs';
 import { annoncer, ingererMessage, plusRecent, telechargeurCdn } from './conversation.mjs';
-import { DROITS_BOT, DROITS_PARTICIPANT, P, idDiscord, rest } from './discord.mjs';
-import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, titreTicket } from './panneaux.mjs';
-import { STATUTS_OUVERTS, categoriePublique, dansHoraires, delaiFermeture, lireGeneral, lireHoraires, lireMessages, lireReglage } from './reglages.mjs';
-import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, t as tx } from './textes.mjs';
+import { DROITS_BOT, DROITS_LECTURE, DROITS_PARTICIPANT, P, REFUS_ECRITURE, REFUS_ECRITURE_MINIMAL, idDiscord, rest } from './discord.mjs';
+import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, rangeeRepondre, titreTicket } from './panneaux.mjs';
+import { STATUTS_OUVERTS, categoriePublique, dansHoraires, delaiFermeture, lireGeneral, lireHoraires, lireMessages, lireReglage, reponsesAppSeules } from './reglages.mjs';
+import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, surLong, t as tx } from './textes.mjs';
 
 const H = 3_600_000;
 const J = 24 * H;
@@ -87,10 +87,10 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return r;
   }
 
-  /** Message court bilingue dans le salon (prise en charge, attente…). */
+  /** Message court bilingue dans le salon (prise en charge, attente…), avec le bouton « Répondre » si le salon est en lecture seule. */
   async function annonceSalon(ticket, general, messages, cle, vars) {
     const texte = messageBilingue(messages, cle, vars, optsLangue(general, ticket));
-    return posterSysteme(ticket, { embeds: [{ description: texte.slice(0, 4000), color: 0x5865f2 }] }, texte);
+    return posterSysteme(ticket, { embeds: [{ description: texte.slice(0, 4000), color: 0x5865f2 }], components: rangeeRepondre(ticket.id, optsLangue(general, ticket), reponsesAppSeules(general)) }, texte);
   }
 
   async function journalDiscord(general, embed) {
@@ -103,24 +103,48 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   // ---------------------------------------------------------------- Droits des salons
 
-  /** Surcharges de droits d'un salon de ticket. `verrouille` : l'auteur et les personnes ajoutées lisent seulement. */
-  async function surcharges(ticket, cat, general, { verrouille = false } = {}) {
+  /**
+   * Droits d'un participant (auteur, rôle de la catégorie, personne ajoutée) : écrire (réglage désactivé), ou lire
+   * seulement (« Répondre uniquement depuis l'AppDashboard », par défaut ; `minimal` : repli, seul « Envoyer des
+   * messages » refusé).
+   */
+  const droitsParticipant = (general, { minimal = false } = {}) => (reponsesAppSeules(general) ? { allow: DROITS_LECTURE, deny: minimal ? REFUS_ECRITURE_MINIMAL : REFUS_ECRITURE } : { allow: DROITS_PARTICIPANT, deny: '0' });
+
+  /**
+   * Surcharges de droits d'un salon de ticket. `verrouille` (ticket fermé) : l'auteur et les personnes ajoutées lisent
+   * seulement. Réglage « Répondre uniquement depuis l'AppDashboard » : personne n'écrit (auteur, rôles de la catégorie,
+   * personnes ajoutées) ; le bot garde tous ses droits.
+   */
+  async function surcharges(ticket, cat, general, { verrouille = false, minimal = false } = {}) {
     const ajoutes = await base.tous('SELECT discord_user_id FROM tickets_membres WHERE ticket_id = ?', [ticket.id]);
-    const participant = verrouille ? VOIR_HISTORIQUE : DROITS_PARTICIPANT;
+    const droits = droitsParticipant(general, { minimal });
+    const personne = verrouille ? { allow: VOIR_HISTORIQUE, deny: reponsesAppSeules(general) ? droits.deny : P.ENVOYER.toString() } : droits;
     const liste = [{ id: general.guildId, type: 0, allow: '0', deny: P.VOIR_SALON.toString() }];
-    for (const r of cat?.rolesDiscord ?? []) if (r !== general.guildId) liste.push({ id: r, type: 0, allow: DROITS_PARTICIPANT, deny: '0' });
-    liste.push({ id: ticket.auteur_discord_id, type: 1, allow: participant, deny: verrouille ? P.ENVOYER.toString() : '0' });
-    for (const a of ajoutes) if (a.discord_user_id !== ticket.auteur_discord_id) liste.push({ id: a.discord_user_id, type: 1, allow: participant, deny: verrouille ? P.ENVOYER.toString() : '0' });
+    for (const r of cat?.rolesDiscord ?? []) if (r !== general.guildId) liste.push({ id: r, type: 0, ...droits });
+    liste.push({ id: ticket.auteur_discord_id, type: 1, ...personne });
+    for (const a of ajoutes) if (a.discord_user_id !== ticket.auteur_discord_id) liste.push({ id: a.discord_user_id, type: 1, ...personne });
     if (botId) liste.push({ id: botId, type: 1, allow: DROITS_BOT, deny: '0' });
     return liste;
   }
 
+  /**
+   * Écriture Discord qui porte des surcharges de droits (`corps(minimal)`) : si Discord refuse (403 : le bot ne peut
+   * refuser que des permissions qu'il a), nouvel essai avec le refus minimal (« Envoyer des messages » seul), journalisé.
+   */
+  async function appelDroits(methode, chemin, corps, general, opts) {
+    const r = await appel(methode, chemin, await corps(false), opts);
+    if (r.ok || r.statut !== 403 || !reponsesAppSeules(general)) return r;
+    console.error(`[esport] tickets : surcharges complètes refusées par Discord (${chemin}) ; repli sur « Envoyer des messages » refusé seul`);
+    return appel(methode, chemin, await corps(true), opts);
+  }
+
   async function creerSalon(ticket, cat, general) {
     const nom = nomSalon(cat.modeleNom, { numero: ticket.numero, pseudo: ticket.auteur_nom, categorie: cat.nom.en || cat.nom.fr });
-    const r = await appel(
+    const r = await appelDroits(
       'POST',
       `/guilds/${general.guildId}/channels`,
-      { name: nom, type: 0, parent_id: general.categorieOuverts, topic: `${titreTicket(ticket.numero, { mode: 'en_fr' })} · ${nom2(cat.nom, { mode: 'en_fr' })}`.slice(0, 1024), permission_overwrites: await surcharges(ticket, cat, general) },
+      async minimal => ({ name: nom, type: 0, parent_id: general.categorieOuverts, topic: `${titreTicket(ticket.numero, { mode: 'en_fr' })} · ${nom2(cat.nom, { mode: 'en_fr' })}`.slice(0, 1024), permission_overwrites: await surcharges(ticket, cat, general, { minimal }) }),
+      general,
       { raison: `Ticket ${ticket.numero}` },
     );
     return r.ok ? { id: idDiscord(r.corps?.id), nom } : { erreur: r };
@@ -194,8 +218,10 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const opts = optsLangue(general, ticket);
     const vars = l => ({ utilisateur: `<@${auteur.id}>`, pseudo: sur(auteur.nom, 80), numero, categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) });
     const accueilRegle = l => (cat.accueil?.[l]?.trim() ? cat.accueil[l] : messageRegle(messages, 'accueil', l));
-    const accueil = bilingue(l => remplir(accueilRegle(l), vars(l)), opts);
-    const charge = chargeAccueil({ ticket: { ...ticket, reponses: lues }, categorie: cat, accueil, mentions: cat.mentions, opts });
+    // Consigne ajoutée à l'accueil : salon en lecture seule (bouton « Répondre », fichiers en lien), ou pièces jointes possibles.
+    const appSeule = reponsesAppSeules(general);
+    const accueil = bilingue(l => `${remplir(accueilRegle(l), vars(l)).trim()}\n\n${tx(l, appSeule ? 'consigne_app' : 'consigne_fichiers')}`, opts);
+    const charge = chargeAccueil({ ticket: { ...ticket, reponses: lues }, categorie: cat, accueil, mentions: cat.mentions, opts, repondre: appSeule });
     await posterSysteme(ticket, charge, accueil);
     if (horaires.actif && !dansHoraires(horaires, t)) {
       const plages = horaires.plages.map(p => `${p.jour}:${p.debut}-${p.fin}`).join(', ');
@@ -280,10 +306,10 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     ouvert(ticket);
     if (!idDiscord(id)) throw refusTk('erreur');
     if (id === ticket.auteur_discord_id) return ticket;
-    const r = await appel('PUT', `/channels/${ticket.salon_id}/permissions/${id}`, { type: 1, allow: DROITS_PARTICIPANT, deny: '0' });
+    const general = await lireGeneral(base);
+    const r = await appelDroits('PUT', `/channels/${ticket.salon_id}/permissions/${id}`, async minimal => ({ type: 1, ...droitsParticipant(general, { minimal }) }), general);
     if (!r.ok) throw refusTk('erreur', {}, 502);
     await base.executer('INSERT INTO tickets_membres (ticket_id, discord_user_id, nom, ajoute_par, ajoute_le) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticket_id, discord_user_id) DO NOTHING', [ticket.id, id, String(nom ?? '').slice(0, 100), acteur.compte ?? acteur.discordId ?? null, iso(maintenant())]);
-    const { general } = await contexte();
     const texte = bilingue(l => tx(l, 'ajoute', { membre: `<@${id}>` }), optsLangue(general, ticket));
     await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x4caf7a }] }, texte);
     return apres(ticket, 'ticket.membre', acteur, { ajout: true });
@@ -318,7 +344,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const { general } = await contexte();
     await base.executer('UPDATE tickets SET categorie_id = ? WHERE id = ?', [cat.id, ticket.id]);
     const nouveau = await ticketPar(ticket.id);
-    await appel('PATCH', `/channels/${ticket.salon_id}`, { permission_overwrites: await surcharges(nouveau, cat, general) });
+    const maj = await appelDroits('PATCH', `/channels/${ticket.salon_id}`, async minimal => ({ permission_overwrites: await surcharges(nouveau, cat, general, { minimal }) }), general);
+    if (!maj.ok) console.error(`[esport] tickets : droits du salon du ticket ${ticket.numero} non mis à jour au transfert (${maj.motif ?? `HTTP ${maj.statut}`})`);
     const texte = bilingue(l => tx(l, 'transfere', { categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) }), optsLangue(general, ticket));
     await posterSysteme(nouveau, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
     return apres(nouveau, 'ticket.categorie', acteur, { de: ticket.categorie_id });
@@ -340,6 +367,83 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
       await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
     }
     return apres(ticket, 'ticket.permanent', acteur, { permanent: voulu });
+  }
+
+  // ---------------------------------------------------------------- Réponses par le bot (salon en lecture seule)
+
+  /**
+   * Message de l'auteur (ou d'une personne ajoutée) écrit dans la fenêtre « Répondre » : le bot le poste dans le salon
+   * (embed : pseudo, texte ; bouton « Répondre » dessous) et il est enregistré dans la conversation EXACTEMENT comme un
+   * message tapé sur Discord (genre `discord`, pas du staff) : activité, retour « ouvert » d'un ticket en attente,
+   * notification du responsable. Pas de pièce jointe possible (fenêtre Discord) : un lien dans le texte. Rend la ligne.
+   */
+  async function messageAuteur(ticket, acteur, brut) {
+    ouvert(ticket);
+    const texte = String(brut ?? '').replace(/\r\n?/g, '\n').trim().slice(0, 4000);
+    if (!texte) throw refusTk('reponse_vide');
+    if (!ticket.salon_id || ticket.salon_supprime_le) throw refusTk('erreur', {}, 409);
+    try {
+      await limiter(base, 'tickets_reponse_discord', acteur.discordId, maintenant());
+    } catch {
+      throw refusTk('trop_vite', {}, 429);
+    }
+    const { general } = await contexte();
+    const nom = sur(acteur.nom, 80) || '—';
+    const charge = { embeds: [{ author: { name: nom }, description: surLong(texte, 4000), color: 0x99aab5 }], components: rangeeRepondre(ticket.id, optsLangue(general, ticket), reponsesAppSeules(general)), allowed_mentions: { parse: [] } };
+    const r = await appel('POST', `/channels/${ticket.salon_id}/messages`, charge);
+    if (!r.ok) throw refusTk('erreur', {}, 502);
+    const t = maintenant();
+    const discordId = idDiscord(r.corps?.id);
+    const lie = await base.premier('SELECT compte_id FROM discord_comptes WHERE discord_user_id = ?', [acteur.discordId]);
+    const id = nouvelId();
+    const actuel = (await ticketPar(ticket.id)) ?? ticket;
+    const auteurRepond = acteur.discordId === actuel.auteur_discord_id;
+    const statut = auteurRepond && actuel.statut === 'en_attente' ? (actuel.responsable_compte_id || actuel.responsable_discord_id ? 'pris_en_charge' : 'ouvert') : actuel.statut;
+    await base.lot([
+      {
+        sql: `INSERT INTO tickets_messages (id, ticket_id, discord_message_id, genre, auteur_discord_id, auteur_compte_id, auteur_nom, staff, contenu, envoi, cree_le)
+              VALUES (?, ?, ?, 'discord', ?, ?, ?, 0, ?, 'ok', ?)`,
+        params: [id, ticket.id, discordId, acteur.discordId, lie?.compte_id ?? null, String(acteur.nom ?? '').slice(0, 100), texte, iso(t)],
+      },
+      {
+        sql: 'UPDATE tickets SET derniere_activite_le = ?, maj_le = ?, avertissement_le = NULL, statut = ?, dernier_message_id = ? WHERE id = ?',
+        params: [iso(t), iso(t), statut, discordId ? plusRecent(actuel.dernier_message_id, discordId) : actuel.dernier_message_id, ticket.id],
+      },
+    ]);
+    await annoncer(base, ticket.id, t);
+    await surNouveau(actuel, { id, staff: false, auteurDiscordId: acteur.discordId, auteurNom: String(acteur.nom ?? ''), auteurCompte: lie?.compte_id ?? null }).catch(e => console.error('[esport] tickets : suite d’un message', e?.message ?? e));
+    return ticketPar(ticket.id);
+  }
+
+  /** L'utilisateur Discord est-il l'auteur du ticket ou une personne ajoutée ? */
+  async function participant(ticket, discordId) {
+    if (!discordId) return false;
+    if (discordId === ticket.auteur_discord_id) return true;
+    return Boolean(await base.premier('SELECT discord_user_id FROM tickets_membres WHERE ticket_id = ? AND discord_user_id = ?', [ticket.id, discordId]));
+  }
+
+  /**
+   * Réglage « Répondre uniquement depuis l'AppDashboard » changé : les droits des salons des tickets OUVERTS sont remis
+   * à jour (au mieux ; un échec est journalisé, sans contenu ; arrêt sur limite de débit). Rend `{ ok, echecs, total }`.
+   */
+  async function reappliquerDroits() {
+    const general = await lireGeneral(base);
+    const bilan = { ok: 0, echecs: 0, total: 0 };
+    if (!jetonBot || !general.guildId) return bilan;
+    const ouverts = await base.tous("SELECT * FROM tickets WHERE statut <> 'ferme' AND salon_id IS NOT NULL AND salon_supprime_le IS NULL ORDER BY ouvert_le LIMIT 200", []);
+    bilan.total = ouverts.length;
+    for (const tk of ouverts) {
+      const cat = await categorie(tk.categorie_id);
+      const r = await appelDroits('PATCH', `/channels/${tk.salon_id}`, async minimal => ({ permission_overwrites: await surcharges(tk, cat, general, { minimal }) }), general, { raison: 'Réglage des réponses' });
+      if (r.ok) {
+        bilan.ok++;
+        continue;
+      }
+      bilan.echecs++;
+      console.error(`[esport] tickets : droits du salon du ticket ${tk.numero} non mis à jour (${r.motif ?? `HTTP ${r.statut}`})`);
+      if (r.statut === 429) break;
+    }
+    return bilan;
   }
 
   // ---------------------------------------------------------------- Fermeture, réouverture, note
@@ -381,7 +485,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
       const texte = messageBilingue(messages, 'fermeture', l => ({ staff, raison: texteRaison(l) }), opts);
       await posterSysteme(ferme, { embeds: [{ description: texte.slice(0, 4000), color: 0xd9534f }], components: [{ type: 1, components: [{ type: 2, style: 2, custom_id: `tk:r:${ticket.id}`, label: [...new Set(['en', 'fr'].map(l => tx(l, 'b_rouvrir')))].join(' · ') }] }] }, texte);
       // Salon verrouillé (l'auteur lit seulement), déplacé dans les archives.
-      const maj = await appel('PATCH', `/channels/${ticket.salon_id}`, { ...(general.categorieArchives ? { parent_id: general.categorieArchives } : {}), permission_overwrites: await surcharges(ferme, cat, general, { verrouille: true }) }, { raison: `Ticket ${ticket.numero} fermé` });
+      const maj = await appelDroits('PATCH', `/channels/${ticket.salon_id}`, async minimal => ({ ...(general.categorieArchives ? { parent_id: general.categorieArchives } : {}), permission_overwrites: await surcharges(ferme, cat, general, { verrouille: true, minimal }) }), general, { raison: `Ticket ${ticket.numero} fermé` });
       if (maj.ok) await base.executer('UPDATE tickets SET archive_le = ? WHERE id = ?', [iso(t), ticket.id]);
     }
     // MP récapitulatif à l'auteur (et demande de note si la catégorie la prévoit).
@@ -419,7 +523,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     let rouvert = await ticketPar(ticket.id);
     let remis = false;
     if (rouvert.salon_id && !rouvert.salon_supprime_le) {
-      const maj = await appel('PATCH', `/channels/${rouvert.salon_id}`, { parent_id: general.categorieOuverts, permission_overwrites: await surcharges(rouvert, cat, general) });
+      const maj = await appelDroits('PATCH', `/channels/${rouvert.salon_id}`, async minimal => ({ parent_id: general.categorieOuverts, permission_overwrites: await surcharges(rouvert, cat, general, { minimal }) }), general);
       remis = maj.ok;
       if (!maj.ok && maj.statut === 404) await base.executer('UPDATE tickets SET salon_supprime_le = ? WHERE id = ?', [iso(t), ticket.id]);
     }
@@ -429,7 +533,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     }
     rouvert = await ticketPar(ticket.id);
     const texte = messageBilingue(messages, 'reouverture', { staff: acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? '', 80) }, optsLangue(general, rouvert));
-    await posterSysteme(rouvert, { content: `<@${rouvert.auteur_discord_id}>`, embeds: [{ description: texte, color: 0x4caf7a }], components: boutonsTicket(rouvert.id, optsLangue(general, rouvert)), allowed_mentions: { users: [rouvert.auteur_discord_id] } }, texte);
+    await posterSysteme(rouvert, { content: `<@${rouvert.auteur_discord_id}>`, embeds: [{ description: texte, color: 0x4caf7a }], components: boutonsTicket(rouvert.id, optsLangue(general, rouvert), { repondre: reponsesAppSeules(general) }), allowed_mentions: { users: [rouvert.auteur_discord_id] } }, texte);
     return apres(rouvert, 'ticket.rouvert', acteur);
   }
 
@@ -674,6 +778,10 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     renommer,
     transferer,
     permanent,
+    messageAuteur,
+    participant,
+    reappliquerDroits,
+    surcharges,
     fermer,
     rouvrir,
     noter,

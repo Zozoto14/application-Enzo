@@ -40,7 +40,12 @@ export const GENERAL_DEFAUT = Object.freeze({
   retentionJours: 365,
   copierPieces: true,
   pieceMaxMo: 8,
+  // Personne n'écrit dans les salons des tickets : le staff répond depuis l'AppDashboard, l'auteur avec le bouton
+  // « Répondre » du bot (discord.mjs : DROITS_LECTURE, REFUS_ECRITURE). Activé par défaut.
+  reponsesAppSeules: true,
 });
+/** Le réglage « Répondre uniquement depuis l'AppDashboard » est-il actif ? (absent : oui, c'est le défaut) */
+export const reponsesAppSeules = general => general?.reponsesAppSeules !== false;
 export const HORAIRES_DEFAUT = Object.freeze({ actif: false, fuseau: 'Europe/Paris', plages: [] });
 
 const ID = /^\d{5,25}$/;
@@ -119,6 +124,7 @@ export function validerGeneral(c, actuel) {
   s.suppressionArchivesJours = entier(c.suppressionArchivesJours, 0, 365, 'suppression', s.suppressionArchivesJours);
   s.retentionJours = entier(c.retentionJours, 7, 3650, 'retention', s.retentionJours);
   if (c.copierPieces !== undefined) s.copierPieces = c.copierPieces === true;
+  if (c.reponsesAppSeules !== undefined) s.reponsesAppSeules = c.reponsesAppSeules !== false;
   s.pieceMaxMo = entier(c.pieceMaxMo, 1, 25, 'piece', s.pieceMaxMo);
   if (s.actif && (!s.guildId || !s.categorieOuverts)) throw echec(400, 'incomplet', 'Choisissez le serveur et la catégorie Discord des tickets ouverts avant d’activer.');
   return s;

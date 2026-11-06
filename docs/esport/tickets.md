@@ -54,7 +54,10 @@ arrêté, avec la commande à copier dans cPanel).
    **Enregistrer** : tout est enregistré **en une fois**. Activer sans catégorie est refusé, et l'écran le dit au-dessus
    du bouton. Si Discord refuse la lecture du serveur (bot absent, **403 / 50001 Missing Access**…), l'erreur et ce
    qu'il faut faire (réinviter le bot, puis **Relire le serveur**) s'affichent sous le choix du serveur.
-2. **Catégories** : en créer une par type de demande (Recrutement, Partenariat, Demande CM, Aide…).
+2. **Catégories** : une installation **sans aucune catégorie** reçoit les **catégories par défaut** à la première
+   ouverture de la Configuration (voir « Catégories par défaut ») ; sinon, bouton **Catégories par défaut** pour en
+   ajouter, ou **Nouvelle catégorie**. Pour chacune, choisir **qui traite** (rôles Discord, rôles de l'app) : l'écran
+   affiche « À configurer : qui traite ? » tant qu'aucun n'est choisi.
 3. **Panneaux** : un message fixe avec les boutons (ou un menu) « ouvrir un ticket », publié dans un salon public.
 4. **Connexion** : la pastille doit passer à **en direct** dans la minute. Sinon, le **diagnostic** de cet onglet
    dit quelle condition manque (voir « Diagnostic de la connexion »).
@@ -136,13 +139,71 @@ Demande du Fondateur : « voir les avis » (migration `0056_tickets_avis.sql`). 
 | Section | Contenu |
 | --- | --- |
 | **Connexion** | état de la connexion et explication ; **diagnostic** condition par condition (voir plus bas) ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
-| **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale |
-| **Catégories** | nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
+| **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale ; **Répondre uniquement depuis l'AppDashboard** (activé par défaut, voir plus bas) |
+| **Catégories** | bouton **Catégories par défaut** (modèles à cocher) ; avertissement « À configurer : qui traite ? » sur une catégorie sans rôle Discord ni rôle de l'app ; nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
 | **Panneaux** | titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, salon de publication ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
 | **Messages** | accueil, prise en charge, libération, attente, fermeture, réouverture, avertissement d'inactivité, demande de note, remerciement, MP récapitulatif, réponse hors horaires ; FR et EN ; vide = texte par défaut (affiché en gris) ; variables `{utilisateur}` `{numero}` `{categorie}` `{staff}` `{raison}` `{delai}` `{serveur}` `{horaires}` `{ouverture}` `{fermeture}` `{note}` |
 | **Liste noire** | comptes Discord (Discord ID) interdits d'ouvrir un ticket, avec un nom et une raison |
 | **Horaires** | horaires du support (plages par jour, fuseau) et réponse automatique hors horaires (facultatif) |
 | **Commandes** | chaque commande `/ticket …` activable ou non, et réservée à des rôles Discord |
+
+### Catégories par défaut
+
+Demande du Fondateur : « plein de tickets par défaut avec quelques questions ». Neuf catégories prêtes à l'emploi,
+bilingues, chacune avec son **formulaire** Discord (5 questions au plus, libellés de 45 caractères au plus, exemples de
+100 au plus : limites des fenêtres Discord, vérifiées par les tests) et une icône monochrome
+(`esport/noyau/tickets/modeles.mjs`) :
+
+| Catégorie | Questions | Particularités |
+| --- | --- | --- |
+| **Support général** · General support | sujet ; question en détail | |
+| **Recrutement joueur** · Player recruitment | jeu (Valorant ou The Finals) ; pseudo et rang / elo ; rôle ou main ; disponibilités ; expérience et lien tracker (facultatif) | |
+| **Candidature staff** · Staff application | poste visé (CM, coach, analyste, manager, graphiste, monteur…) ; expérience ; portfolio (facultatif) ; disponibilités ; motivation | |
+| **Partenariat & sponsoring** · Partnership & sponsorship | entreprise ; contact ; proposition ; site (facultatif) ; type et budget (facultatif) | fermeture automatique **Jamais**, **Seul le staff peut fermer**, liaison Sponsors, rôle de l'app **Second CEO** |
+| **Signalement** · Report | personne(s) concernée(s) ; ce qui s'est passé ; quand ; preuves en liens (facultatif) | non anonyme, priorité **urgente** |
+| **Scrim & tournoi** · Scrim & tournament | équipe ; jeu ; date et heure ; format ; contact | |
+| **Contenu & médias** · Content & media | type (clip, interview, collaboration) ; proposition ; lien (facultatif) ; échéance (facultatif) | rôle de l'app **Responsable CM** |
+| **Problème AppDashboard** · AppDashboard issue | page ; ce qui s'est passé ; étapes (facultatif) ; appareil (facultatif) | |
+| **Autre** · Other | sujet ; demande en détail | |
+
+- **Semis automatique** : à la première lecture de la Configuration, s'il n'existe **aucune** catégorie (même
+  supprimée), les neuf sont créées. Une seule fois (réglage `categories_defaut`) : une installation qui a déjà des
+  catégories (par exemple « Test ») n'est jamais touchée, et des catégories supprimées ne reviennent pas.
+- **Bouton « Catégories par défaut »** (Configuration › Catégories) : la liste à cocher ; une catégorie dont le nom
+  (français ou anglais, casse et accents ignorés) existe déjà est grisée et ignorée par le serveur.
+- **Qui traite** : les rôles Discord restent à choisir ; deux rôles de l'app sont proposés quand ils existent
+  (Second CEO, Responsable CM). Tout reste modifiable.
+
+### Répondre uniquement depuis l'AppDashboard
+
+Demande du Fondateur : « personne ne peut envoyer de messages dans les salons ticket, on doit répondre que par
+l'AppDashboard ». Réglage **Configuration › Général**, **activé par défaut** :
+
+- dans chaque salon de ticket, l'**auteur**, les **rôles Discord de la catégorie** et les **personnes ajoutées** gardent
+  « Voir le salon » et « Voir les anciens messages » ; « Envoyer des messages », « Envoyer des messages dans les fils »,
+  « Créer des fils » (publics et privés) et « Ajouter des réactions » leur sont **refusés**. « Utiliser les commandes de
+  l'application » n'est pas touché : les **boutons**, les fenêtres et les commandes `/ticket` marchent. Le **bot** garde
+  tous ses droits. Si Discord refuse ces surcharges (le bot ne peut refuser que des permissions qu'il a lui-même), le
+  bot se replie sur « Envoyer des messages » refusé seul (journalisé) ; le lien d'invitation demande désormais aussi
+  « Ajouter des réactions » et « Créer des fils » ;
+- le **staff** répond depuis l'app (« Staff · pseudo : … », comme avant) ; un membre du staff qui clique « Répondre »
+  sur Discord est renvoyé vers l'AppDashboard ;
+- l'**auteur** (et une personne ajoutée) répond avec le bouton **Répondre · Reply** du bot (sur l'accueil, sous chaque
+  réponse du staff et chaque message du bot) : une fenêtre Discord (texte de 4000 caractères au plus) dont le bot poste
+  le contenu dans le salon (embed : pseudo, texte ; mentions neutralisées). Le message est enregistré dans la
+  conversation **exactement comme un message Discord** de l'auteur (activité, retour « ouvert » d'un ticket en attente,
+  notification du responsable). Pas de pièce jointe dans une fenêtre : le message d'accueil le dit (fichiers en lien) ;
+  au plus 120 messages par heure et par personne ;
+- l'**accueil** se termine par la consigne bilingue (salon en lecture seule, bouton « Répondre », fichiers en lien) ;
+  réglage désactivé : « Vous pouvez écrire et joindre des fichiers directement dans ce salon » ;
+- changer le réglage **remet à jour les droits des salons des tickets ouverts** tout de suite (au mieux : un échec
+  est compté, journalisé sans contenu, et l'écran l'annonce) ; réouverture, transfert, personne ajoutée et fermeture
+  suivent le réglage ;
+- **limite de Discord** : le propriétaire du serveur et les membres qui ont la permission **Administrateur** passent
+  outre les droits des salons et peuvent toujours écrire (leurs messages sont enregistrés comme avant). Ne donnez pas
+  Administrateur au staff.
+
+Désactivé : comportement d'avant (l'auteur, les rôles et les personnes ajoutées écrivent dans le salon).
 
 ### Langues (bilingue)
 
@@ -165,7 +226,8 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
    voit pas ; l'auteur, les **rôles Discord de la catégorie** et le bot y ont accès. Message d'**accueil** (mention de
    l'auteur et des rôles à prévenir), bilingue, avec les **réponses du formulaire**, la priorité, la catégorie et quatre
    boutons : **Prendre en charge · Ajouter quelqu'un · Priorité · Fermer**. Hors des horaires du support (s'ils sont
-   réglés) : réponse automatique. Une ligne part dans le **salon des journaux**. Numéro **séquentiel** (n° 1, 2, 3…).
+   réglés) : réponse automatique. Une ligne part dans le **salon des journaux**. Avec « Répondre uniquement depuis
+   l'AppDashboard » (défaut), personne n'écrit dans le salon et un cinquième bouton **Répondre** vient en tête. Numéro **séquentiel** (n° 1, 2, 3…).
 3. **Statuts** : ouvert → pris en charge → en attente (de la réponse de l'auteur) → résolu → fermé. Quand l'auteur
    répond à un ticket « en attente », il repasse « ouvert » (ou « pris en charge »).
 4. **Staff** d'un ticket (boutons et commandes du staff) : un membre qui a un des rôles Discord de la catégorie, un
@@ -368,6 +430,7 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `GET /tickets/config/discord[?serveur=<id>]` | serveurs du bot, salons, rôles, permissions du bot et ce qui manque ; `serveur` : serveur choisi dans l'app, pas encore enregistré (lu tout de suite) ; erreur : `erreur` (`discord-403`, `bot-absent`…) et `erreurDetail { etape, statut, code }` |
 | `PUT /tickets/config/(general\|messages\|horaires\|commandes)` | réglages |
 | `POST /tickets/config/categories` ; `PATCH\|DELETE …/categories/:id` ; `PUT …/categories/ordre` | catégories |
+| `POST /tickets/config/categories/defaut` `{ cles }` | catégories par défaut cochées : `{ ajoutees, ignorees, categories }` (nom déjà pris : ignorée) ; `GET /tickets/config` donne `modeles` |
 | `POST /tickets/config/panneaux` ; `PATCH\|DELETE …/panneaux/:id` ; `GET …/:id/apercu` ; `POST …/:id/publier` | panneaux |
 | `POST /tickets/config/liste-noire` ; `DELETE …/liste-noire/:discordId` | liste noire |
 
@@ -389,7 +452,10 @@ Identifiants : `tk:o:<catégorie>` (bouton d'un panneau), `tk:s` (menu), `tk:f:<
 `tk:c|a|p|x|r:<ticket>` (prendre, ajouter, priorité, fermer, rouvrir), `tk:as|ps:<ticket>` (choix d'un membre, d'une
 priorité), `tk:xc|xr|xm:<ticket>` (confirmer, raison, fenêtre de la raison), `tk:n:<ticket>:<1-5>` et
 `tk:nc:<ticket>:<note>` (note et commentaire, dans le MP), `tk:dc:<ticket>:<g|s>` (suppression confirmée : avis gardé
-anonyme ou supprimé).
+anonyme ou supprimé), `tk:rp:<ticket>` et `tk:rm:<ticket>` (bouton « Répondre » d'un salon en lecture seule, fenêtre
+du message). Boutons et fenêtres ne s'enregistrent pas auprès de Discord : **aucune commande à réenregistrer** pour
+le bouton « Répondre ». `PUT /tickets/config/general` rend `reapplication { ok, echecs, total }` quand « Répondre
+uniquement depuis l'AppDashboard » change.
 
 ## Pour les développeurs
 
@@ -398,7 +464,7 @@ anonyme ou supprimé).
   `gateway.mjs` (client Gateway), `superviseur.mjs` (bail, secours, état), `conversation.mjs` (messages reçus,
   pièces jointes, temps réel), `service.mjs` (configuration), `cycle.mjs` (cycle de vie : ouverture, staff,
   fermeture, note, réouverture, cron), `rgpd.mjs`, `routes.mjs`, `bot.mjs` (interactions), `bus.mjs` (événements,
-  notifications), `cron.mjs`. Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
+  notifications), `cron.mjs`, `modeles.mjs` (catégories par défaut). Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migrations `0054_tickets.sql`, `0055_tickets_permanents.sql` (ticket permanent, fermeture par le staff seul ;
   ordre de priorité de la fermeture automatique : `delaiFermeture` dans `reglages.mjs`) et `0056_tickets_avis.sql`
   (avis gardés anonymes des tickets supprimés ; suppression : `supprimer` dans `cycle.mjs`) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
@@ -420,5 +486,7 @@ anonyme ou supprimé).
   priorité, catégorie « Jamais », ticket permanent par l'app et `/ticket permanent`, staff seul),
   `esport/test/tickets-avis.test.mjs` (avis : droits par catégorie, moyenne, répartition, filtres, tri ; suppression :
   ticket fermé seulement, droits, salon Discord et 404, pièces, avis gardé anonyme ou supprimé, groupée,
-  `/ticket supprimer`), `src/esport/Tickets.test.tsx`
+  `/ticket supprimer`), `esport/test/tickets-reponses-app.test.mjs` (catégories par défaut : limites Discord, semis
+  sur base vide seulement, bouton sans doublon ; réponses depuis l'app seulement : droits des salons, accueil, fenêtre
+  « Répondre », remise à jour des salons ouverts, repli 403), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

@@ -7,6 +7,7 @@
  *   GET           /tickets/config ; /tickets/config/discord[?serveur=<id> : serveur choisi, pas encore enregistré]
  *   PUT           /tickets/config/(general|messages|horaires|commandes)
  *   POST          /tickets/config/categories ; PATCH|DELETE /tickets/config/categories/:id ; PUT …/categories/ordre
+ *   POST          /tickets/config/categories/defaut { cles }   (catégories par défaut cochées, doublons de nom ignorés)
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
  *   GET           /tickets/config/panneaux/:id/apercu ; POST …/:id/publier
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
@@ -103,6 +104,7 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
     if (b === 'categories') {
       if (n === 2 && m === 'POST') return cf.ajouterCategorie(acteur, await lireCorps());
       if (n === 3 && c === 'ordre' && m === 'PUT') return cf.ordonnerCategories(acteur, await lireCorps());
+      if (n === 3 && c === 'defaut' && m === 'POST') return cf.ajouterModeles(acteur, await lireCorps());
       if (n === 3 && m === 'PATCH') return cf.modifierCategorie(acteur, c, await lireCorps());
       if (n === 3 && m === 'DELETE') return cf.supprimerCategorie(acteur, c);
     }

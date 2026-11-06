@@ -3,7 +3,8 @@
  * permissions du bot qui manquent, création d'une catégorie avec formulaire, panneau : aperçu comme sur Discord et
  * publication), navigation (entrée « Tickets », barre du bas du téléphone : cinq entrées au plus, le reste dans
  * « Plus ») ; Avis (moyenne, répartition, filtres, avis qui ouvre son ticket) et suppression d'un ticket fermé
- * (confirmation, avis gardé anonyme ou non, suppression groupée).
+ * (confirmation, avis gardé anonyme ou non, suppression groupée) ; catégories par défaut (choix à cocher, doublons
+ * grisés, « À configurer : qui traite ? ») ; réglage « Répondre uniquement depuis l'AppDashboard ».
  */
 
 import React from 'react';
@@ -12,7 +13,7 @@ import { themeHub } from '../hub/themes';
 import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
 import { ConfigTickets } from './ui/tickets/ConfigTickets';
-import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, Panneau, ResumeTicket } from './tickets/api';
+import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, ModeleCategorie, Panneau, ResumeTicket } from './tickets/api';
 import { AvisTicketsPage } from './ui/tickets/AvisTickets';
 import { ListeTickets } from './ui/tickets/TicketsStaff';
 
@@ -22,7 +23,7 @@ afterEach(() => definirLangue('fr'));
 const VIDE = { fr: '', en: '' };
 function configDe(): Config {
   return {
-    general: { actif: true, guildId: '700', guildNom: 'Club', categorieOuverts: '710', categorieArchives: null, salonJournaux: null, langue: 'auteur', fermetureAutoH: 168, avertissementH: 24, suppressionArchivesJours: 7, retentionJours: 365, copierPieces: true, pieceMaxMo: 8 },
+    general: { actif: true, guildId: '700', guildNom: 'Club', categorieOuverts: '710', categorieArchives: null, salonJournaux: null, langue: 'auteur', fermetureAutoH: 168, avertissementH: 24, suppressionArchivesJours: 7, retentionJours: 365, copierPieces: true, pieceMaxMo: 8, reponsesAppSeules: true },
     messages: {},
     messagesDefaut: { accueil: { fr: 'Bonjour {utilisateur}', en: 'Hi {utilisateur}' } },
     horaires: { actif: false, fuseau: 'Europe/Paris', plages: [] },
@@ -540,4 +541,76 @@ test('vue : un ticket ouvert n’a pas de bouton Supprimer ; liste des fermés :
   await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/supprimer')).toBe(true));
   expect(appels.find(a => a.chemin === '/tickets/supprimer')!.corps).toEqual({ ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'], garderAvis: true });
   await screen.findByText('2 ticket(s) supprimé(s).');
+});
+
+// ------------------------------------------------------------------ Catégories par défaut, réponses depuis l'app seulement
+
+const champ = (id: string) => ({ id, libelle: { fr: id, en: id }, placeholder: VIDE, style: 'court' as const, requis: true, min: 0, max: 100 });
+const MODELES: ModeleCategorie[] = [
+  { cle: 'support', nom: { fr: 'Support général', en: 'General support' }, description: { fr: 'Une question', en: 'A question' }, icone: 'billets', couleur: '#5865f2', formulaire: [champ('sujet'), champ('details')] },
+  { cle: 'partenariat', nom: { fr: 'Partenariat & sponsoring', en: 'Partnership & sponsorship' }, description: { fr: 'Proposer', en: 'Offer' }, icone: 'membres', couleur: '#c99a1e', formulaire: [champ('entreprise')], fermetureAutoH: 0, fermetureStaffSeul: true },
+  { cle: 'autre', nom: { fr: 'Autre', en: 'Other' }, description: { fr: 'Toute autre demande', en: 'Any other request' }, icone: 'billets', couleur: '#8b8b9a', formulaire: [champ('sujet')] },
+];
+
+test('catégories par défaut : choix à cocher, nom déjà pris grisé, ajout de la sélection ; « À configurer : qui traite ? »', async () => {
+  const conf = configDe();
+  const existante: Categorie = { id: 'c0', position: 0, nom: { fr: 'autre', en: 'Misc' }, description: VIDE, icone: 'billets', couleur: '#5865f2', actif: true, rolesDiscord: [], rolesApp: [], formulaire: [], accueil: VIDE, modeleNom: 'ticket-{numero}', maxOuverts: 1, fermetureAutoH: null, fermetureStaffSeul: false, satisfaction: true, prioriteDefaut: 'moyen', mentions: [], liaison: { type: 'aucune' } };
+  conf.categories = [existante];
+  conf.modeles = MODELES;
+  const { client: base, appels } = fauxClient(conf);
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    if (chemin === '/tickets/config/categories/defaut') {
+      appels.push({ chemin, methode, corps });
+      const cles = (corps as { cles: string[] }).cles;
+      const ajout = MODELES.filter(m => cles.includes(m.cle)).map((m, i) => ({ ...existante, id: `m${i}`, nom: m.nom, rolesApp: m.cle === 'partenariat' ? ['club:r1'] : [] }));
+      conf.categories = [existante, ...ajout];
+      return { ajoutees: cles, ignorees: [], categories: conf.categories };
+    }
+    return (base as unknown as { requete: typeof requete }).requete(chemin, methode, corps);
+  };
+  await render(<ConfigTickets theme={theme} client={{ requete } as unknown as ClientEsport} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-categories'));
+  // La catégorie existante n'a ni rôle Discord ni rôle de l'app : avertissement.
+  expect(screen.getByTestId('esport-tk-cat-c0-a-configurer')).toHaveTextContent(/À configurer : qui traite/);
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-defaut'));
+  await screen.findByTestId('esport-tk-modeles');
+  // « Autre » existe déjà (casse ignorée) : grisé, non coché ; les autres cochés par défaut.
+  expect(screen.getByTestId('esport-tk-modele-autre').props.accessibilityState).toEqual({ checked: false, disabled: true });
+  expect(screen.getByTestId('esport-tk-modele-autre-existe')).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-modele-support').props.accessibilityState).toEqual({ checked: true, disabled: false });
+  expect(screen.getByText(/jamais fermée automatiquement/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-modeles-ajouter')).toHaveTextContent('Ajouter la sélection (2)');
+  // Décocher « Support général » : seul « Partenariat » part.
+  await fireEvent.press(screen.getByTestId('esport-tk-modele-support'));
+  expect(screen.getByTestId('esport-tk-modeles-ajouter')).toHaveTextContent('Ajouter la sélection (1)');
+  await fireEvent.press(screen.getByTestId('esport-tk-modeles-ajouter'));
+  await screen.findByTestId('esport-tk-cat-m0');
+  expect(appels.find(a => a.chemin === '/tickets/config/categories/defaut')!.corps).toEqual({ cles: ['partenariat'] });
+  expect(screen.queryByTestId('esport-tk-modeles')).toBeNull();
+  await screen.findByText('1 catégorie(s) ajoutée(s).');
+  // Partenariat a un rôle de l'app : pas d'avertissement.
+  expect(screen.queryByTestId('esport-tk-cat-m0-a-configurer')).toBeNull();
+  // Tout décocher : bouton désactivé.
+  await fireEvent.press(screen.getByTestId('esport-tk-cat-defaut'));
+  await fireEvent.press(await screen.findByTestId('esport-tk-modeles-rien'));
+  expect(screen.getByTestId('esport-tk-modeles-ajouter')).toHaveTextContent('Ajouter la sélection (0)');
+});
+
+test('Général : « Répondre uniquement depuis l’AppDashboard » activé par défaut, limite Administrateur expliquée ; le désactiver met à jour les salons', async () => {
+  const { client, appels } = clientGeneral();
+  const base = client as unknown as { requete(chemin: string, methode?: string, corps?: unknown): Promise<unknown> };
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    const r = await base.requete(chemin, methode, corps);
+    return chemin === '/tickets/config/general' && methode === 'PUT' ? { ...(r as object), reapplication: { ok: 2, echecs: 1, total: 3 } } : r;
+  };
+  await render(<ConfigTickets theme={theme} client={{ requete } as unknown as ClientEsport} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-general'));
+  expect(screen.getByText('Répondre uniquement depuis l’AppDashboard')).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-general-app-seule').props.value).toBe(true);
+  expect(screen.getByTestId('esport-tk-general-app-seule-admin')).toHaveTextContent(/Administrateur/);
+  await fireEvent(screen.getByTestId('esport-tk-general-app-seule'), 'valueChange', false);
+  expect(screen.queryByTestId('esport-tk-general-app-seule-admin')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-tk-general-enregistrer'));
+  await screen.findByText(/Droits mis à jour dans 2 salon\(s\) sur 3 ; 1 échec/);
+  expect((appels.find(a => a.methode === 'PUT')!.corps as Record<string, unknown>).reponsesAppSeules).toBe(false);
 });

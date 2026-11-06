@@ -17,7 +17,8 @@ import { accesAvis, comptesDeCategorie, contexteTickets, gereAvis, voitCategorie
 import { annoncer, instructionPiece } from './conversation.mjs';
 import { estRefus } from './cycle.mjs';
 import { idDiscord, rest } from './discord.mjs';
-import { PRIORITES, STATUTS, categoriePublique, delaiFermeture, instructionReglage, lireGeneral, lireReglage } from './reglages.mjs';
+import { rangeeRepondre } from './panneaux.mjs';
+import { PRIORITES, STATUTS, categoriePublique, delaiFermeture, instructionReglage, lireGeneral, lireReglage, reponsesAppSeules } from './reglages.mjs';
 import { surLong, t as tx } from './textes.mjs';
 import { transcriptHtml } from './transcript.mjs';
 
@@ -269,7 +270,10 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const pseudo = (await pseudoDe(acteur.compte)) ?? (acteur.superAdmin ? 'Fondateur' : 'Staff');
     // « Staff · pseudo » est le même dans les deux langues ; le texte du staff part tel quel (mentions neutralisées).
     const contenu = `**${tx('fr', 'staff_prefixe', { pseudo: surLong(pseudo, 60) })}** : ${surLong(texte, TEXTE_MAX)}`.slice(0, 2000);
-    const r = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${ticket.salon_id}/messages`, { content: contenu, allowed_mentions: { parse: [] } }, { fichiers: pieces.length ? pieces.map(p => ({ nom: p.nom, type: p.type, octets: p.octets })) : undefined });
+    // Salon en lecture seule : bouton « Répondre » sous la réponse du staff (l'auteur répond par une fenêtre du bot).
+    const general = await lireGeneral(base);
+    const boutons = rangeeRepondre(ticket.id, { mode: general.langue, langue: ticket.langue ?? 'en' }, reponsesAppSeules(general));
+    const r = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${ticket.salon_id}/messages`, { content: contenu, allowed_mentions: { parse: [] }, ...(boutons.length ? { components: boutons } : {}) }, { fichiers: pieces.length ? pieces.map(p => ({ nom: p.nom, type: p.type, octets: p.octets })) : undefined });
     if (!r.ok) throw echec(502, 'discord', r.statut === 429 ? 'Discord demande d’attendre : réessayez dans un instant.' : 'Discord a refusé le message (permissions du bot ?).');
     const t = maintenant();
     const messageId = nouvelId();

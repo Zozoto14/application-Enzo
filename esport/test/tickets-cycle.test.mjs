@@ -24,9 +24,10 @@ const KAI = '800000000000000002';
 const INTRUS = '800000000000000003';
 const H = 3_600_000;
 
-async function preparer({ formulaire = true, extra = {} } = {}) {
+async function preparer({ formulaire = true, extra = {}, appSeule = false } = {}) {
   const k = await bancTickets({ banc });
-  await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD, guildNom: 'Club', categorieOuverts: OUVERTS, categorieArchives: ARCHIVES, salonJournaux: JOURNAUX, actif: true } });
+  // Comportement historique (chacun écrit dans le salon) ; « Répondre uniquement depuis l'AppDashboard » : tickets-reponses-app.test.mjs.
+  await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD, guildNom: 'Club', categorieOuverts: OUVERTS, categorieArchives: ARCHIVES, salonJournaux: JOURNAUX, actif: true, reponsesAppSeules: appSeule } });
   const support = await k.compteAvec('supp1234', 'Support', ['tickets.repondre']);
   const cat = await k.api('/tickets/config/categories', undefined, {
     methode: 'POST',
