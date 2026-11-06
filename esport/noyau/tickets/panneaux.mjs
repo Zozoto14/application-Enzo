@@ -16,6 +16,12 @@ import { bilingue, libelle2, nom2, ordreLangues, sur, surLong, t as tx } from '.
 const couleurNum = c => Number.parseInt(String(c ?? '#5865f2').replace('#', ''), 16) || 0x5865f2;
 export const NOM_IMAGE_PANNEAU = 'panneau.png';
 
+/** Libellé d'un bouton : libellé propre du panneau (migration 0057), sinon nom de la catégorie ; 80 caractères au plus. */
+function libelleBouton(panneau, c, opts) {
+  const propre = panneau.libelles?.[c.id];
+  return (propre && nom2(propre, { ...opts, max: 80 })) || nom2(c.nom, { ...opts, max: 80 });
+}
+
 /**
  * Charge Discord d'un panneau. `categories` : lignes publiques (reglages.mjs : categoriePublique) dans l'ordre voulu ;
  * `image` : true si une image du Drive est jointe (`attachment://panneau.png`).
@@ -49,7 +55,7 @@ export function chargePanneau(panneau, categories, { mode = 'en_fr', image = fal
     }
   } else {
     for (let i = 0; i < actives.length; i += 5) {
-      components.push({ type: 1, components: actives.slice(i, i + 5).map((c, j) => ({ type: 2, style: (i + j) % 2 === 0 ? 1 : 2, custom_id: `tk:o:${c.id}`, label: nom2(c.nom, { ...opts, max: 80 }) })) });
+      components.push({ type: 1, components: actives.slice(i, i + 5).map((c, j) => ({ type: 2, style: (i + j) % 2 === 0 ? 1 : 2, custom_id: `tk:o:${c.id}`, label: libelleBouton(panneau, c, opts) })) });
     }
   }
   return { embeds: [embed], components, allowed_mentions: { parse: [] } };

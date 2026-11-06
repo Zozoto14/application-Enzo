@@ -13,7 +13,7 @@ import { themeHub } from '../hub/themes';
 import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
 import { ConfigTickets } from './ui/tickets/ConfigTickets';
-import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, ModeleCategorie, Panneau, ResumeTicket } from './tickets/api';
+import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, ModeleCategorie, ModelePanneau, Panneau, ResumeTicket } from './tickets/api';
 import { AvisTicketsPage } from './ui/tickets/AvisTickets';
 import { ListeTickets } from './ui/tickets/TicketsStaff';
 
@@ -613,4 +613,57 @@ test('Général : « Répondre uniquement depuis l’AppDashboard » activé par
   await fireEvent.press(screen.getByTestId('esport-tk-general-enregistrer'));
   await screen.findByText(/Droits mis à jour dans 2 salon\(s\) sur 3 ; 1 échec/);
   expect((appels.find(a => a.methode === 'PUT')!.corps as Record<string, unknown>).reponsesAppSeules).toBe(false);
+});
+
+const MODELES_PANNEAUX: ModelePanneau[] = [
+  { cle: 'support', nom: { fr: 'Support LZ — Centre d’aide', en: 'LZ Support — Help center' }, description: { fr: 'Le panneau principal', en: 'The main panel' }, titre: { fr: 'Centre d’aide LZ', en: 'LZ Help Center' }, texte: { fr: 'Texte', en: 'Text' }, couleur: '#0c66e4', style: 'auto', categories: 'toutes' },
+  { cle: 'partenariats', nom: { fr: 'Partenariats', en: 'Partnerships' }, description: { fr: 'Un seul bouton', en: 'A single button' }, titre: { fr: 'Partenariats et sponsoring', en: 'Partnerships and sponsorship' }, texte: { fr: 'Texte', en: 'Text' }, couleur: '#c99a1e', style: 'boutons', categories: ['partenariat'] },
+  { cle: 'evenement', nom: { fr: 'Tournoi / Événement', en: 'Tournament / Event' }, description: { fr: 'Inscription', en: 'Registration' }, titre: { fr: 'Inscription — {evenement}', en: 'Registration — {evenement}' }, texte: { fr: 'Texte', en: 'Text' }, couleur: '#4caf7a', style: 'boutons', categories: ['support'], evenement: true, libelleBouton: { fr: 'S’inscrire', en: 'Register' } },
+];
+
+test('panneaux par défaut : modèle choisi, catégories absentes à ajouter ou non, événement nommé ; le panneau s’ouvre dans l’éditeur sans être publié', async () => {
+  const conf = configDe();
+  const support: Categorie = { id: 'c0', position: 0, nom: { fr: 'support GÉNÉRAL', en: 'Help' }, description: VIDE, icone: 'billets', couleur: '#5865f2', actif: true, rolesDiscord: [], rolesApp: [], formulaire: [], accueil: VIDE, modeleNom: 'ticket-{numero}', maxOuverts: 1, fermetureAutoH: null, fermetureStaffSeul: false, satisfaction: true, prioriteDefaut: 'moyen', mentions: [], liaison: { type: 'aucune' } };
+  conf.categories = [support];
+  conf.modeles = MODELES;
+  conf.modelesPanneaux = MODELES_PANNEAUX;
+  const { client: base, appels } = fauxClient(conf);
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    if (chemin === '/tickets/config/panneaux/defaut') {
+      appels.push({ chemin, methode, corps });
+      const c = corps as { modele: string; evenement?: string };
+      const panneau: Panneau = { id: 'pan1', titre: { fr: c.evenement ? `Inscription — ${c.evenement}` : 'Partenariats et sponsoring', en: 'x' }, texte: { fr: 'Texte', en: 'Text' }, couleur: '#c99a1e', imageElementId: null, style: 'boutons', categories: ['c0'], libelles: { c0: { fr: 'S’inscrire', en: 'Register' } }, salonId: null, messageId: null, publieLe: null, erreur: null, majLe: '' };
+      return { panneau, ajoutees: [], ignorees: ['partenariat'], renomme: false, categories: conf.categories };
+    }
+    return (base as unknown as { requete: typeof requete }).requete(chemin, methode, corps);
+  };
+  await render(<ConfigTickets theme={theme} client={{ requete } as unknown as ClientEsport} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-panneaux'));
+  await fireEvent.press(screen.getByTestId('esport-tk-pan-defaut'));
+  await screen.findByTestId('esport-tk-pmodeles');
+  // « Support LZ » : toutes les catégories ; « Support général » existe (casse ignorée), les deux autres manquent.
+  expect(screen.getByTestId('esport-tk-pmodele-support').props.accessibilityState).toEqual({ checked: true });
+  expect(screen.getByText('Catégories absentes : Partenariat & sponsoring, Autre')).toBeTruthy();
+  // « Partenariats » : la catégorie manque ; décocher l'ajout affiche l'avertissement et l'envoie.
+  await fireEvent.press(screen.getByTestId('esport-tk-pmodele-partenariats'));
+  expect(screen.getByText('Catégories absentes : Partenariat & sponsoring')).toBeTruthy();
+  expect(screen.queryByTestId('esport-tk-pmodele-sans')).toBeNull();
+  await fireEvent(screen.getByTestId('esport-tk-pmodele-ajouter'), 'valueChange', false);
+  await fireEvent.press(screen.getByTestId('esport-tk-pmodele-ajouter'));
+  expect(await screen.findByTestId('esport-tk-pmodele-sans')).toHaveTextContent(/laissées de côté/);
+  // « Tournoi / Événement » : nom obligatoire, catégorie existante choisie (plus rien de manquant).
+  await fireEvent.press(screen.getByTestId('esport-tk-pmodele-evenement'));
+  expect(screen.getByTestId('esport-tk-pmodele-creer').props.accessibilityState).toMatchObject({ disabled: true });
+  await fireEvent.changeText(screen.getByTestId('esport-tk-pmodele-nom-evenement'), '  The Nuke End ');
+  await fireEvent.press(screen.getByTestId('esport-tk-pmodele-categorie-c0'));
+  expect(screen.queryByTestId('esport-tk-pmodele-manquantes')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-tk-pmodele-creer'));
+  await screen.findByTestId('esport-tk-pan-editeur');
+  expect(appels.find(a => a.chemin === '/tickets/config/panneaux/defaut')!.corps).toEqual({ modele: 'evenement', evenement: 'The Nuke End', categorieId: 'c0', ajouterManquantes: false });
+  expect(screen.queryByTestId('esport-tk-pmodeles')).toBeNull();
+  await screen.findByText(/Panneau créé, pas encore publié/);
+  // Éditeur : libellé propre du bouton, conseil « lecture seule » ; rien n'a été publié.
+  expect(screen.getByTestId('esport-tk-pan-libelle-c0-fr').props.value).toBe('S’inscrire');
+  expect(screen.getByTestId('esport-tk-pan-lecture-seule')).toHaveTextContent(/lecture seule pour @everyone/);
+  expect(appels.some(a => a.chemin.endsWith('/publier'))).toBe(false);
 });

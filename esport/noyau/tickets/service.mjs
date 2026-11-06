@@ -36,7 +36,7 @@ import {
   validerPanneau,
 } from './reglages.mjs';
 import { NOM_IMAGE_PANNEAU, chargePanneau } from './panneaux.mjs';
-import { CATEGORIES_DEFAUT, corpsModele, nomNormalise } from './modeles.mjs';
+import { CATEGORIES_DEFAUT, CLES_SEMEES, PANNEAUX_DEFAUT, corpsModele, nomNormalise, textesPanneauModele } from './modeles.mjs';
 import { diagnosticConnexion, diagnosticTickets } from './superviseur.mjs';
 import { PERMISSIONS_REQUISES, P, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
 
@@ -96,6 +96,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       commandes: await lireCommandes(base),
       categories: await categories(),
       modeles: CATEGORIES_DEFAUT,
+      modelesPanneaux: PANNEAUX_DEFAUT,
       panneaux: (await base.tous('SELECT * FROM tickets_panneaux ORDER BY cree_le', [])).map(panneauPublic),
       listeNoire: liste.map(l => ({ discordId: l.discord_user_id, nom: l.nom, raison: l.raison, ajouteLe: l.ajoute_le })),
       rolesApp: await rolesApp(),
@@ -218,7 +219,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     const vide = Number(n?.n ?? 0) === 0;
     const r = await base.executer("INSERT INTO tickets_reglages (cle, valeur, maj_par, maj_le) VALUES ('categories_defaut', ?, ?, ?) ON CONFLICT (cle) DO NOTHING", [JSON.stringify({ semees: vide }), acteur.compte ?? null, iso(maintenant())]);
     if (Number(r?.changements) !== 1 || !vide) return;
-    await creerModeles(acteur, CATEGORIES_DEFAUT.map(m => m.cle));
+    await creerModeles(acteur, [...CLES_SEMEES]);
   }
 
   async function ajouterModeles(acteur, corps) {
@@ -249,6 +250,10 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     await contexteTickets(base, acteur, { exiger: 'configurer' });
     const n = await base.premier('SELECT COUNT(*) AS n FROM tickets_panneaux', []);
     if (Number(n?.n ?? 0) >= LIMITES.panneaux) throw echec(409, 'trop', `${LIMITES.panneaux} panneaux au plus.`);
+    return insererPanneau(acteur, corps);
+  }
+
+  async function insererPanneau(acteur, corps) {
     const s = await validerPanneau(base, corps ?? {}, { creation: true });
     if (s.image_element_id) await imagePanneau(acteur, s.image_element_id);
     const id = nouvelId();
@@ -257,6 +262,69 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     const colonnes = Object.keys(ligne);
     await base.executer(`INSERT INTO tickets_panneaux (${colonnes.join(', ')}) VALUES (${colonnes.map(() => '?').join(', ')})`, Object.values(ligne));
     return panneauPublic(await panneau(id));
+  }
+
+  /**
+   * Panneau par défaut (modeles.mjs : PANNEAUX_DEFAUT). Corps : `{ modele, evenement?, categorieId?, ajouterManquantes? }`.
+   * Les catégories du modèle sont retrouvées par leur nom ; celles qui manquent sont créées depuis les catégories par
+   * défaut si `ajouterManquantes`, sinon laissées de côté (rendues dans `ignorees`). `categorieId` (panneau d'événement) :
+   * une catégorie existante à la place de celle du modèle. Un titre déjà pris reçoit « (2) », « (3) »… Le panneau n'est
+   * PAS publié. Rend `{ panneau, ajoutees, ignorees, renomme, categories }`.
+   */
+  async function creerPanneauModele(acteur, corps) {
+    await contexteTickets(base, acteur, { exiger: 'configurer' });
+    const m = PANNEAUX_DEFAUT.find(x => x.cle === corps?.modele);
+    if (!m) throw echec(400, 'modele', 'Panneau par défaut inconnu.');
+    const n = await base.premier('SELECT COUNT(*) AS n FROM tickets_panneaux', []);
+    if (Number(n?.n ?? 0) >= LIMITES.panneaux) throw echec(409, 'trop', `${LIMITES.panneaux} panneaux au plus.`);
+    let evenement = '';
+    if (m.evenement) {
+      evenement = typeof corps.evenement === 'string' ? corps.evenement.replace(/\s+/g, ' ').trim() : '';
+      if (!evenement || evenement.length > 100) throw echec(400, 'evenement', 'Nom de l’événement obligatoire (100 caractères au plus).');
+    }
+    let choisie = null;
+    if (m.evenement && corps.categorieId !== undefined && corps.categorieId !== null && corps.categorieId !== '') {
+      choisie = (await categories()).find(c => c.id === String(corps.categorieId));
+      if (!choisie) throw echec(400, 'categories', 'Catégorie introuvable.');
+    }
+    const refs = choisie ? [] : m.categories === 'toutes' ? [...CLES_SEMEES] : [...m.categories];
+    const trouver = (liste, cle) => {
+      const modele = CATEGORIES_DEFAUT.find(x => x.cle === cle);
+      const noms = new Set([nomNormalise(modele.nom.fr), nomNormalise(modele.nom.en)]);
+      return liste.find(c => noms.has(nomNormalise(c.nom.fr)) || noms.has(nomNormalise(c.nom.en)));
+    };
+    const avant = await categories();
+    const manquantes = refs.filter(cle => !trouver(avant, cle));
+    let ajoutees = [];
+    let ignorees = manquantes;
+    if (manquantes.length && corps.ajouterManquantes === true) ({ ajoutees, ignorees } = await creerModeles(acteur, manquantes));
+    const apres = await categories();
+    const ids = choisie ? [choisie.id] : m.categories === 'toutes' ? apres.filter(c => c.actif).map(c => c.id) : refs.map(cle => trouver(apres, cle)?.id).filter(Boolean);
+    const liste = ids.slice(0, 25);
+    const general = await lireGeneral(base);
+    const textes = textesPanneauModele(m, { evenement, appSeule: reponsesAppSeules(general), horaires: await lireHoraires(base) });
+    // Titre déjà pris (français ou anglais) : « (2) », « (3) »…
+    const pris = new Set();
+    for (const l of await base.tous('SELECT titre FROM tickets_panneaux', [])) {
+      const t = panneauPublic({ titre: l.titre }).titre;
+      pris.add(nomNormalise(t.fr));
+      pris.add(nomNormalise(t.en));
+    }
+    let titre = textes.titre;
+    let k = 1;
+    while (pris.has(nomNormalise(titre.fr)) || pris.has(nomNormalise(titre.en))) {
+      k += 1;
+      titre = { fr: `${textes.titre.fr.slice(0, 250)} (${k})`, en: `${textes.titre.en.slice(0, 250)} (${k})` };
+    }
+    const panneauCree = await insererPanneau(acteur, {
+      titre,
+      texte: textes.texte,
+      couleur: m.couleur,
+      style: m.style === 'auto' ? (liste.length > 5 ? 'menu' : 'boutons') : m.style,
+      categories: liste,
+      ...(m.libelleBouton && liste.length === 1 ? { libelles: { [liste[0]]: m.libelleBouton } } : {}),
+    });
+    return { panneau: panneauCree, ajoutees, ignorees, renomme: k > 1, categories: apres };
   }
 
   async function modifierPanneau(acteur, id, corps) {
@@ -428,6 +496,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     ordonnerCategories,
     ajouterModeles,
     ajouterPanneau,
+    creerPanneauModele,
     modifierPanneau,
     supprimerPanneau,
     apercuPanneau,

@@ -9,6 +9,7 @@
  *   POST          /tickets/config/categories ; PATCH|DELETE /tickets/config/categories/:id ; PUT …/categories/ordre
  *   POST          /tickets/config/categories/defaut { cles }   (catégories par défaut cochées, doublons de nom ignorés)
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
+ *   POST          /tickets/config/panneaux/defaut { modele, evenement?, categorieId?, ajouterManquantes? } (jamais publié)
  *   GET           /tickets/config/panneaux/:id/apercu ; POST …/:id/publier
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
  *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
@@ -110,6 +111,7 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
     }
     if (b === 'panneaux') {
       if (n === 2 && m === 'POST') return cf.ajouterPanneau(acteur, await lireCorps());
+      if (n === 3 && c === 'defaut' && m === 'POST') return cf.creerPanneauModele(acteur, await lireCorps());
       if (n === 3 && m === 'PATCH') return cf.modifierPanneau(acteur, c, await lireCorps());
       if (n === 3 && m === 'DELETE') return cf.supprimerPanneau(acteur, c);
       if (n === 4 && d === 'apercu' && m === 'GET') return cf.apercuPanneau(acteur, c);

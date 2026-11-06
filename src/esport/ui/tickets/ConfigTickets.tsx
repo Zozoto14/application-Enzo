@@ -13,7 +13,7 @@ import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
 import { heuresPourMode, joursDeHeures, modeFermeture, texteDelai, type ModeFermeture } from '../../tickets/fermeture';
-import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type ModeleCategorie, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
+import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type ModeleCategorie, type ModelePanneau, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
 import { Glyphe } from '../../../ui/icones';
 import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
@@ -74,11 +74,11 @@ function ChoixMultiple({ theme, libelle, valeurs, options, onChanger, max, testI
   );
 }
 
-function DeuxChamps({ theme, cle, valeur, onChanger, multiligne, max, testID }: { theme: ThemeHub; cle: [CleTk, CleTk]; valeur: DeuxLangues; onChanger(v: DeuxLangues): void; multiligne?: boolean; max?: number; testID: string }) {
+function DeuxChamps({ theme, cle, vars, valeur, onChanger, multiligne, max, testID }: { theme: ThemeHub; cle: [CleTk, CleTk]; vars?: Record<string, string>; valeur: DeuxLangues; onChanger(v: DeuxLangues): void; multiligne?: boolean; max?: number; testID: string }) {
   return (
     <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-      <Champ theme={theme} libelle={trTk(cle[0])} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} multiligne={multiligne} maxLength={max} testID={`${testID}-fr`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
-      <Champ theme={theme} libelle={trTk(cle[1])} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} multiligne={multiligne} maxLength={max} testID={`${testID}-en`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+      <Champ theme={theme} libelle={trTk(cle[0], vars)} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} multiligne={multiligne} maxLength={max} testID={`${testID}-fr`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+      <Champ theme={theme} libelle={trTk(cle[1], vars)} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} multiligne={multiligne} maxLength={max} testID={`${testID}-en`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
     </View>
   );
 }
@@ -662,14 +662,36 @@ function EditeurCategorie({ theme, api, conf, agir, roles, categorie, onFermer, 
 // ------------------------------------------------------------------ Panneaux
 
 function SectionPanneaux(p: PropsSection) {
-  const { theme, conf, setConf } = p;
+  const { theme, api, conf, setConf, agir } = p;
   const [edite, setEdite] = useState<Panneau | 'nouveau' | undefined>();
+  const [modeles, setModeles] = useState(false);
   const majPanneau = (pan: Panneau) => setConf({ ...conf, panneaux: conf.panneaux.some(x => x.id === pan.id) ? conf.panneaux.map(x => (x.id === pan.id ? pan : x)) : [...conf.panneaux, pan] });
   return (
     <View style={{ gap: ESP.s }} testID="esport-tk-conf-panneaux">
       <View style={{ alignSelf: 'flex-start' }}>
-        <BoutonHub theme={theme} variante="plein" titre={trTk('pan.nouveau')} onPress={() => setEdite('nouveau')} testID="esport-tk-pan-nouveau" />
+        <View style={styles.ligne}>
+          <BoutonHub theme={theme} variante="plein" titre={trTk('pan.nouveau')} onPress={() => setEdite('nouveau')} testID="esport-tk-pan-nouveau" />
+          {conf.modelesPanneaux?.length ? <BoutonHub theme={theme} titre={trTk('pan.defaut')} onPress={() => setModeles(true)} testID="esport-tk-pan-defaut" /> : null}
+        </View>
       </View>
+      {modeles && conf.modelesPanneaux ? (
+        <DialoguePanneauxModeles
+          theme={theme}
+          modeles={conf.modelesPanneaux}
+          modelesCategories={conf.modeles ?? []}
+          categories={conf.categories}
+          onFermer={() => setModeles(false)}
+          onCreer={corps =>
+            void agir('modele-panneau', async () => {
+              const r = await api.creerPanneauModele(corps);
+              setConf({ ...conf, categories: r.categories, panneaux: [...conf.panneaux, r.panneau] });
+              setModeles(false);
+              setEdite(r.panneau);
+              return [trTk('pan.defaut_cree'), r.ajoutees.length ? trTk('pan.defaut_ajoutees', { n: r.ajoutees.length }) : '', r.ignorees.length ? trTk('pan.defaut_ignorees', { n: r.ignorees.length }) : '', r.renomme ? trTk('pan.defaut_renomme') : ''].filter(Boolean).join(' ');
+            })
+          }
+        />
+      ) : null}
       {!conf.panneaux.length ? <Text style={attenue(theme)}>{trTk('pan.vide')}</Text> : null}
       {conf.panneaux.map(pan => (
         <Bloc key={pan.id} theme={theme} testID={`esport-tk-pan-${pan.id}`}>
@@ -699,8 +721,101 @@ function SectionPanneaux(p: PropsSection) {
   );
 }
 
+/**
+ * « Panneaux par défaut » : un modèle à choisir ; ses catégories absentes (comparées par nom, comme le serveur) sont
+ * listées, avec la case « Ajouter aussi les catégories par défaut manquantes ». Modèle d'événement : nom de
+ * l'événement et catégorie à relier. Le panneau créé n'est pas publié.
+ */
+export function DialoguePanneauxModeles({
+  theme,
+  modeles,
+  modelesCategories,
+  categories,
+  onFermer,
+  onCreer,
+}: {
+  theme: ThemeHub;
+  modeles: ModelePanneau[];
+  modelesCategories: ModeleCategorie[];
+  categories: Categorie[];
+  onFermer(): void;
+  onCreer(corps: { modele: string; evenement?: string; categorieId?: string | null; ajouterManquantes: boolean }): void;
+}) {
+  const [cle, setCle] = useState(modeles[0]?.cle ?? '');
+  const [evenement, setEvenement] = useState('');
+  const [categorieId, setCategorieId] = useState('modele');
+  const [ajouter, setAjouter] = useState(true);
+  const pris = useMemo(() => new Set(categories.flatMap(c => [nomCompare(c.nom.fr), nomCompare(c.nom.en)])), [categories]);
+  const m = modeles.find(x => x.cle === cle);
+  const parCle = (k: string) => modelesCategories.find(x => x.cle === k);
+  const choisie = Boolean(m?.evenement) && categorieId !== 'modele';
+  const refs = !m || choisie ? [] : m.categories === 'toutes' ? modelesCategories.filter(x => !x.evenement).map(x => x.cle) : m.categories;
+  const manquantes = refs.map(parCle).filter((x): x is ModeleCategorie => Boolean(x) && !pris.has(nomCompare(x!.nom.fr)) && !pris.has(nomCompare(x!.nom.en)));
+  const premier = m && m.categories !== 'toutes' ? parCle(m.categories[0]) : undefined;
+  const pret = Boolean(m) && (!m?.evenement || evenement.trim().length > 0);
+  return (
+    <Volet theme={theme} visible titre={trTk('pan.defaut_titre')} onFermer={onFermer} largeur={720} testID="esport-tk-pmodeles">
+      <Text style={attenue(theme)}>{trTk('pan.defaut_aide')}</Text>
+      <View accessibilityRole="radiogroup" style={{ gap: ESP.xs }}>
+        {modeles.map(x => {
+          const actif = x.cle === cle;
+          return (
+            <Pressable
+              key={x.cle}
+              testID={`esport-tk-pmodele-${x.cle}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: actif }}
+              accessibilityLabel={`${x.nom.fr} · ${x.nom.en}`}
+              onPress={() => setCle(x.cle)}
+              style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', padding: ESP.s, borderWidth: 1, borderRadius: 10, borderColor: actif ? x.couleur : theme.ligne, backgroundColor: actif ? teinteTransparente(x.couleur, 0.12) : theme.surface }}
+            >
+              <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: actif ? x.couleur : theme.ligne, alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>{actif ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: x.couleur }} /> : null}</View>
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <Text style={{ ...texte(theme), fontWeight: '700' }}>{x.nom.fr}</Text>
+                <Text style={attenue(theme)}>{x.description.fr}</Text>
+                <Text style={attenue(theme)}>{x.categories === 'toutes' ? trTk('pan.defaut_toutes') : x.categories.map(k => parCle(k)?.nom.fr ?? k).join(' · ')}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      {m?.evenement ? (
+        <>
+          <Champ theme={theme} libelle={trTk('pan.defaut_evenement')} valeur={evenement} onChanger={setEvenement} maxLength={100} testID="esport-tk-pmodele-nom-evenement" />
+          <Choix
+            theme={theme}
+            libelle={trTk('pan.defaut_categorie')}
+            valeur={categorieId}
+            options={[{ id: 'modele', nom: trTk('pan.defaut_categorie_modele', { nom: premier?.nom.fr ?? '' }) }, ...categories.map(c => ({ id: c.id, nom: c.nom.fr || c.nom.en, couleur: c.couleur }))]}
+            onChoisir={setCategorieId}
+            testID="esport-tk-pmodele-categorie"
+          />
+        </>
+      ) : null}
+      {manquantes.length ? (
+        <View style={{ gap: ESP.xs }} testID="esport-tk-pmodele-manquantes">
+          <Text style={texte(theme)}>{trTk('pan.defaut_manquantes', { noms: manquantes.map(x => x.nom.fr).join(', ') })}</Text>
+          <Interrupteur theme={theme} libelle={trTk('pan.defaut_ajouter_manquantes')} valeur={ajouter} onChanger={setAjouter} testID="esport-tk-pmodele-ajouter" />
+          {!ajouter ? <Avis theme={theme} genre="alerte" texte={trTk('pan.defaut_sans_manquantes')} testID="esport-tk-pmodele-sans" /> : null}
+        </View>
+      ) : null}
+      <View style={styles.ligne}>
+        <BoutonHub
+          theme={theme}
+          variante="plein"
+          titre={trTk('pan.defaut_creer')}
+          desactive={!pret}
+          onPress={() => onCreer({ modele: cle, ...(m?.evenement ? { evenement: evenement.trim(), categorieId: choisie ? categorieId : null } : {}), ajouterManquantes: manquantes.length > 0 && ajouter })}
+          testID="esport-tk-pmodele-creer"
+        />
+        <BoutonHub theme={theme} titre={trTk('annuler')} onPress={onFermer} testID="esport-tk-pmodele-annuler" />
+      </View>
+    </Volet>
+  );
+}
+
 function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, onMaj, onSupprime }: PropsSection & { panneau?: Panneau; onFermer(): void; onMaj(p: Panneau): void; onSupprime(id: string): void }) {
-  const [s, setS] = useState({ titre: panneau?.titre ?? VIDE, texte: panneau?.texte ?? VIDE, couleur: panneau?.couleur ?? '#5865f2', style: panneau?.style ?? ('boutons' as const), categories: panneau?.categories ?? conf.categories.filter(c => c.actif).map(c => c.id), salonId: panneau?.salonId ?? null, imageElementId: panneau?.imageElementId ?? null });
+  const [s, setS] = useState({ titre: panneau?.titre ?? VIDE, texte: panneau?.texte ?? VIDE, couleur: panneau?.couleur ?? '#5865f2', style: panneau?.style ?? ('boutons' as const), categories: panneau?.categories ?? conf.categories.filter(c => c.actif).map(c => c.id), salonId: panneau?.salonId ?? null, imageElementId: panneau?.imageElementId ?? null, libelles: panneau?.libelles ?? ({} as Record<string, DeuxLangues>) });
   const [apercu, setApercu] = useState<ChargeDiscord | undefined>();
   const [drive, setDrive] = useState(false);
   const { erreur, avis, agir } = useAgir();
@@ -722,7 +837,16 @@ function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, o
       </View>
       <Choix theme={theme} libelle={trTk('pan.style')} valeur={s.style} options={[{ id: 'boutons', nom: trTk('pan.boutons') }, { id: 'menu', nom: trTk('pan.menu') }]} onChoisir={(style: 'boutons' | 'menu') => setS({ ...s, style })} testID="esport-tk-pan-style" />
       <ChoixMultiple theme={theme} libelle={trTk('pan.categories')} valeurs={s.categories} options={conf.categories.map(c => ({ id: c.id, nom: c.nom.fr || c.nom.en, couleur: c.couleur }))} onChanger={categories => setS({ ...s, categories })} max={25} testID="esport-tk-pan-categories" />
+      {s.style === 'boutons'
+        ? s.categories.map(id => {
+            const c = conf.categories.find(x => x.id === id);
+            if (!c) return null;
+            const nom = c.nom.fr || c.nom.en;
+            return <DeuxChamps key={id} theme={theme} cle={['pan.libelle_fr', 'pan.libelle_en']} vars={{ nom }} valeur={s.libelles[id] ?? VIDE} onChanger={v => setS({ ...s, libelles: { ...s.libelles, [id]: v } })} max={80} testID={`esport-tk-pan-libelle-${id}`} />;
+          })
+        : null}
       {textes.length ? <Choix theme={theme} libelle={trTk('pan.salon')} valeur={s.salonId ?? undefined} options={textes} onChoisir={salonId => setS({ ...s, salonId })} testID="esport-tk-pan-salon" /> : <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text>}
+      <Avis theme={theme} genre="info" texte={trTk('pan.lecture_seule')} testID="esport-tk-pan-lecture-seule" />
       <View style={styles.ligne}>
         <Text style={texte(theme)}>{s.imageElementId ? trTk('pan.image_choisie') : trTk('pan.image')}</Text>
         <BoutonHub theme={theme} titre={trTk('pan.image_choisir')} onPress={() => setDrive(true)} testID="esport-tk-pan-image" />

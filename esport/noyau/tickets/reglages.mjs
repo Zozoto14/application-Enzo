@@ -309,6 +309,12 @@ export async function creerCategorie(base, acteur, c, t) {
 
 // ------------------------------------------------------------------ Panneaux
 
+/** Libellés propres des boutons (migration 0057) : { idCatégorie: { fr, en } }, objet vide par défaut. */
+function libellesLus(v) {
+  const o = jsonOu(v, {});
+  return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+}
+
 export function panneauPublic(l) {
   return {
     id: l.id,
@@ -318,6 +324,7 @@ export function panneauPublic(l) {
     imageElementId: l.image_element_id ?? null,
     style: l.style,
     categories: jsonOu(l.categories, []),
+    libelles: libellesLus(l.libelles),
     salonId: l.salon_id ?? null,
     messageId: l.message_id ?? null,
     publieLe: l.publie_le ?? null,
@@ -347,6 +354,16 @@ export async function validerPanneau(base, c, { creation = false } = {}) {
     if (!Array.isArray(c.categories) || c.categories.length > 25) throw echec(400, 'categories', '25 catégories au plus par panneau.');
     for (const id of c.categories) if (!(await base.premier('SELECT id FROM tickets_categories WHERE id = ? AND supprime_le IS NULL', [String(id)]))) throw echec(400, 'categories', 'Catégorie introuvable.');
     s.categories = JSON.stringify([...new Set(c.categories.map(String))]);
+  }
+  if (c.libelles !== undefined) {
+    if (c.libelles === null || typeof c.libelles !== 'object' || Array.isArray(c.libelles) || Object.keys(c.libelles).length > 25) throw echec(400, 'libelles', 'Libellés des boutons illisibles (25 au plus).');
+    const propres = {};
+    for (const [id, v] of Object.entries(c.libelles)) {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw echec(400, 'libelles', 'Libellés des boutons illisibles.');
+      const l = deuxLangues(v, 80, 'libelle');
+      if (l.fr || l.en) propres[id] = l;
+    }
+    s.libelles = JSON.stringify(propres);
   }
   if (c.salonId !== undefined) s.salon_id = idOuNull(c.salonId, 'salon');
   return s;

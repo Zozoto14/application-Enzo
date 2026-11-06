@@ -59,6 +59,9 @@ arrêté, avec la commande à copier dans cPanel).
    ajouter, ou **Nouvelle catégorie**. Pour chacune, choisir **qui traite** (rôles Discord, rôles de l'app) : l'écran
    affiche « À configurer : qui traite ? » tant qu'aucun n'est choisi.
 3. **Panneaux** : un message fixe avec les boutons (ou un menu) « ouvrir un ticket », publié dans un salon public.
+   Le plus simple : **Panneaux par défaut**, modèle **Support LZ — Centre d'aide** (voir « Panneaux par défaut »),
+   puis choisir le salon et **Publier**. Sur Discord, rendre ce salon **en lecture seule pour @everyone**
+   (« Envoyer des messages » refusé) ; le bot y garde Voir le salon, Envoyer des messages et Intégrer des liens.
 4. **Connexion** : la pastille doit passer à **en direct** dans la minute. Sinon, le **diagnostic** de cet onglet
    dit quelle condition manque (voir « Diagnostic de la connexion »).
 
@@ -141,7 +144,7 @@ Demande du Fondateur : « voir les avis » (migration `0056_tickets_avis.sql`). 
 | **Connexion** | état de la connexion et explication ; **diagnostic** condition par condition (voir plus bas) ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
 | **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale ; **Répondre uniquement depuis l'AppDashboard** (activé par défaut, voir plus bas) |
 | **Catégories** | bouton **Catégories par défaut** (modèles à cocher) ; avertissement « À configurer : qui traite ? » sur une catégorie sans rôle Discord ni rôle de l'app ; nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
-| **Panneaux** | titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, salon de publication ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
+| **Panneaux** | bouton **Panneaux par défaut** (modèles prêts, voir plus bas) ; titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, **libellé propre de chaque bouton** (facultatif, FR / EN, 80 caractères : « S'inscrire » au lieu du nom de la catégorie), salon de publication ; conseil « salon en lecture seule pour @everyone » ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
 | **Messages** | accueil, prise en charge, libération, attente, fermeture, réouverture, avertissement d'inactivité, demande de note, remerciement, MP récapitulatif, réponse hors horaires ; FR et EN ; vide = texte par défaut (affiché en gris) ; variables `{utilisateur}` `{numero}` `{categorie}` `{staff}` `{raison}` `{delai}` `{serveur}` `{horaires}` `{ouverture}` `{fermeture}` `{note}` |
 | **Liste noire** | comptes Discord (Discord ID) interdits d'ouvrir un ticket, avec un nom et une raison |
 | **Horaires** | horaires du support (plages par jour, fuseau) et réponse automatique hors horaires (facultatif) |
@@ -149,7 +152,8 @@ Demande du Fondateur : « voir les avis » (migration `0056_tickets_avis.sql`). 
 
 ### Catégories par défaut
 
-Demande du Fondateur : « plein de tickets par défaut avec quelques questions ». Neuf catégories prêtes à l'emploi,
+Demande du Fondateur : « plein de tickets par défaut avec quelques questions ». Neuf catégories prêtes à l'emploi (plus
+une catégorie d'**événement**, « Inscription The Nuke End », jamais semée : voir « Panneaux par défaut »),
 bilingues, chacune avec son **formulaire** Discord (5 questions au plus, libellés de 45 caractères au plus, exemples de
 100 au plus : limites des fenêtres Discord, vérifiées par les tests) et une icône monochrome
 (`esport/noyau/tickets/modeles.mjs`) :
@@ -165,6 +169,7 @@ bilingues, chacune avec son **formulaire** Discord (5 questions au plus, libell�
 | **Contenu & médias** · Content & media | type (clip, interview, collaboration) ; proposition ; lien (facultatif) ; échéance (facultatif) | rôle de l'app **Responsable CM** |
 | **Problème AppDashboard** · AppDashboard issue | page ; ce qui s'est passé ; étapes (facultatif) ; appareil (facultatif) | |
 | **Autre** · Other | sujet ; demande en détail | |
+| **Inscription The Nuke End** · The Nuke End registration | nom de l'équipe (50) ; TAG (3 à 4 caractères) ; joueurs 1 à 3 (une ligne par joueur : Discord ID — Embark ID) ; coach (facultatif) ; remplaçants (facultatif, Sub 1 et Sub 2) | **événement** : jamais semé ; fermeture automatique **Jamais**, **Seul le staff peut fermer** ; accueil propre qui demande le **logo en lien** et annonce la confirmation par le staff ; qui traite : à configurer |
 
 - **Semis automatique** : à la première lecture de la Configuration, s'il n'existe **aucune** catégorie (même
   supprimée), les neuf sont créées. Une seule fois (réglage `categories_defaut`) : une installation qui a déjà des
@@ -173,6 +178,33 @@ bilingues, chacune avec son **formulaire** Discord (5 questions au plus, libell�
   (français ou anglais, casse et accents ignorés) existe déjà est grisée et ignorée par le serveur.
 - **Qui traite** : les rôles Discord restent à choisir ; deux rôles de l'app sont proposés quand ils existent
   (Second CEO, Responsable CM). Tout reste modifiable.
+
+### Panneaux par défaut
+
+Demande du Fondateur : « fais un panneau pour les tickets », puis un panneau dédié au tournoi The Nuke End. Bouton
+**Panneaux par défaut** (Configuration › Panneaux) : on choisit un modèle (`PANNEAUX_DEFAUT`,
+`esport/noyau/tickets/modeles.mjs`), bilingue, sans emoji, en formatage Discord simple (gras, listes) :
+
+| Modèle | Catégories | Présentation |
+| --- | --- | --- |
+| **Support LZ — Centre d'aide** | **toutes** les catégories actives, dans leur ordre | menu déroulant au-delà de 5 catégories, boutons sinon ; texte : comment ça marche (catégorie, formulaire, salon privé, bouton **Répondre**), règles (un ticket par sujet, respect, pas de spam), horaires du support s'ils sont actifs |
+| **Recrutement** | Recrutement joueur, Candidature staff | boutons |
+| **Partenariats** | Partenariat & sponsoring | un bouton |
+| **Tournoi / Événement** | au choix (par défaut Scrim & tournoi) | titre « Inscription — {nom de l'événement} » (nom demandé, 100 caractères) ; un bouton **S'inscrire · Register** |
+| **The Nuke End — Inscription** | Inscription The Nuke End | titre « Inscription — The Nuke End » ; texte : tournoi The Finals **3v3v3v3**, ce qu'il faut préparer (nom, TAG, 3 joueurs avec Discord ID et Embark ID, coach et 2 remplaçants facultatifs, logo en lien) ; un bouton **S'inscrire · Register** |
+
+- **Catégories absentes** (comparées par nom, comme les doublons) : l'écran les liste avec la case **Ajouter aussi les
+  catégories par défaut manquantes** (cochée par défaut) ; décochée, elles sont laissées de côté et le message le dit.
+  Un panneau sans catégorie se crée mais ne se publie pas.
+- **Textes remplis à la création** : la consigne suit le réglage « Répondre uniquement depuis l'AppDashboard » (bouton
+  **Répondre**, ou « écrivez directement dans votre ticket ») ; les horaires du support (Configuration › Horaires) sont
+  ajoutés seulement s'ils sont actifs. La couleur, le texte, les catégories et le libellé restent modifiables.
+- **Jamais publié tout seul** : le panneau créé s'ouvre dans l'éditeur ; choisir le salon, vérifier l'aperçu, puis
+  **Publier**. Un titre déjà pris reçoit « (2) », « (3) »… ; 20 panneaux au plus.
+- **Salon du panneau** : un salon normal du serveur. Le rendre en lecture seule pour @everyone sur Discord (l'éditeur
+  le rappelle) : personne n'y écrit, seul le bot y publie.
+- **Libellé propre d'un bouton** (migration `0057_tickets_panneaux_libelles.sql`, colonne `libelles`) : remplace le nom
+  de la catégorie sur le bouton (panneau à boutons) ; le menu déroulant garde les noms des catégories.
 
 ### Répondre uniquement depuis l'AppDashboard
 
@@ -431,7 +463,8 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `PUT /tickets/config/(general\|messages\|horaires\|commandes)` | réglages |
 | `POST /tickets/config/categories` ; `PATCH\|DELETE …/categories/:id` ; `PUT …/categories/ordre` | catégories |
 | `POST /tickets/config/categories/defaut` `{ cles }` | catégories par défaut cochées : `{ ajoutees, ignorees, categories }` (nom déjà pris : ignorée) ; `GET /tickets/config` donne `modeles` |
-| `POST /tickets/config/panneaux` ; `PATCH\|DELETE …/panneaux/:id` ; `GET …/:id/apercu` ; `POST …/:id/publier` | panneaux |
+| `POST /tickets/config/panneaux` ; `PATCH\|DELETE …/panneaux/:id` ; `GET …/:id/apercu` ; `POST …/:id/publier` | panneaux (`libelles` : `{ idCatégorie: { fr, en } }`) |
+| `POST /tickets/config/panneaux/defaut` `{ modele, evenement?, categorieId?, ajouterManquantes? }` | panneau par défaut, **non publié** : `{ panneau, ajoutees, ignorees, renomme, categories }` ; `GET /tickets/config` donne `modelesPanneaux` |
 | `POST /tickets/config/liste-noire` ; `DELETE …/liste-noire/:discordId` | liste noire |
 
 | `POST /tickets/rgpd/(export\|effacer)` `{ discordId }` | RGPD d'une personne sans compte (Fondateur) |
@@ -464,10 +497,11 @@ uniquement depuis l'AppDashboard » change.
   `gateway.mjs` (client Gateway), `superviseur.mjs` (bail, secours, état), `conversation.mjs` (messages reçus,
   pièces jointes, temps réel), `service.mjs` (configuration), `cycle.mjs` (cycle de vie : ouverture, staff,
   fermeture, note, réouverture, cron), `rgpd.mjs`, `routes.mjs`, `bot.mjs` (interactions), `bus.mjs` (événements,
-  notifications), `cron.mjs`, `modeles.mjs` (catégories par défaut). Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
+  notifications), `cron.mjs`, `modeles.mjs` (catégories et panneaux par défaut). Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migrations `0054_tickets.sql`, `0055_tickets_permanents.sql` (ticket permanent, fermeture par le staff seul ;
   ordre de priorité de la fermeture automatique : `delaiFermeture` dans `reglages.mjs`) et `0056_tickets_avis.sql`
-  (avis gardés anonymes des tickets supprimés ; suppression : `supprimer` dans `cycle.mjs`) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
+  (avis gardés anonymes des tickets supprimés ; suppression : `supprimer` dans `cycle.mjs`), `0057_tickets_panneaux_libelles.sql`
+  (libellé propre d'un bouton de panneau) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
 - Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `TicketsStaff.tsx` : liste, vue, statistiques, suppression ;
   `AvisTickets.tsx` : avis, étoiles ;
@@ -488,5 +522,7 @@ uniquement depuis l'AppDashboard » change.
   ticket fermé seulement, droits, salon Discord et 404, pièces, avis gardé anonyme ou supprimé, groupée,
   `/ticket supprimer`), `esport/test/tickets-reponses-app.test.mjs` (catégories par défaut : limites Discord, semis
   sur base vide seulement, bouton sans doublon ; réponses depuis l'app seulement : droits des salons, accueil, fenêtre
-  « Répondre », remise à jour des salons ouverts, repli 403), `src/esport/Tickets.test.tsx`
+  « Répondre », remise à jour des salons ouverts, repli 403), `esport/test/tickets-panneaux-modeles.test.mjs` (panneaux
+  par défaut et catégorie The Nuke End : limites Discord dans tous les modes de langue, catégories manquantes ajoutées
+  ou laissées de côté, titres renumérotés, libellés propres, jamais publié à la création), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

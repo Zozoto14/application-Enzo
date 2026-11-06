@@ -93,6 +93,26 @@ export interface ModeleCategorie {
   fermetureAutoH?: number | null;
   fermetureStaffSeul?: boolean;
   rolesApp?: string[];
+  /** Catégorie d'événement (tournoi) : jamais semée automatiquement. */
+  evenement?: boolean;
+}
+
+/** Panneau par défaut (esport/noyau/tickets/modeles.mjs : PANNEAUX_DEFAUT). */
+export interface ModelePanneau {
+  cle: string;
+  nom: DeuxLangues;
+  description: DeuxLangues;
+  titre: DeuxLangues;
+  texte: DeuxLangues;
+  couleur: string;
+  style: 'boutons' | 'menu' | 'auto';
+  /** Clés de catégories par défaut, ou 'toutes' (toutes les catégories actives). */
+  categories: string[] | 'toutes';
+  /** Le nom de l'événement est demandé, et la catégorie peut être choisie. */
+  evenement?: boolean;
+  /** Nom de l'événement déjà fixé (panneau prêt d'un tournoi). */
+  evenementFixe?: string;
+  libelleBouton?: DeuxLangues;
 }
 
 export interface ChampFormulaire {
@@ -137,6 +157,8 @@ export interface Panneau {
   imageElementId: string | null;
   style: 'boutons' | 'menu';
   categories: string[];
+  /** Libellé propre d'un bouton, par catégorie (à la place de son nom). */
+  libelles?: Record<string, DeuxLangues>;
   salonId: string | null;
   messageId: string | null;
   publieLe: string | null;
@@ -161,6 +183,8 @@ export interface ConfigTickets {
   categories: Categorie[];
   /** Catégories par défaut proposées (bouton « Catégories par défaut »). */
   modeles?: ModeleCategorie[];
+  /** Panneaux par défaut proposés (bouton « Panneaux par défaut »). */
+  modelesPanneaux?: ModelePanneau[];
   panneaux: Panneau[];
   listeNoire: Array<{ discordId: string; nom: string; raison: string; ajouteLe: string }>;
   rolesApp: Array<{ cle: string; nom: string; couleur: string; famille: 'club' | 'cm' }>;
@@ -363,6 +387,7 @@ export function apiTickets(client: ClientEsport) {
     supprimerCategorie: (id: string) => r<{ categories: Categorie[] }>(`/tickets/config/categories/${encodeURIComponent(id)}`, 'DELETE'),
     ajouterModeles: (cles: string[]) => r<{ ajoutees: string[]; ignorees: string[]; categories: Categorie[] }>('/tickets/config/categories/defaut', 'POST', { cles }),
     ordonnerCategories: (ordre: string[]) => r<{ categories: Categorie[] }>('/tickets/config/categories/ordre', 'PUT', { ordre }),
+    creerPanneauModele: (c: { modele: string; evenement?: string; categorieId?: string | null; ajouterManquantes: boolean }) => r<{ panneau: Panneau; ajoutees: string[]; ignorees: string[]; renomme: boolean; categories: Categorie[] }>('/tickets/config/panneaux/defaut', 'POST', c),
     creerPanneau: (c: Partial<Panneau>) => r<Panneau>('/tickets/config/panneaux', 'POST', c),
     modifierPanneau: (id: string, c: Partial<Panneau>) => r<Panneau>(`/tickets/config/panneaux/${encodeURIComponent(id)}`, 'PATCH', c),
     supprimerPanneau: (id: string) => r<{ ok: true }>(`/tickets/config/panneaux/${encodeURIComponent(id)}`, 'DELETE'),

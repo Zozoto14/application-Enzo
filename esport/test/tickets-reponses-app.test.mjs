@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { banc } from './aide.mjs';
 import { bancTickets } from './tickets-aide.mjs';
-import { CATEGORIES_DEFAUT, corpsModele } from '../noyau/tickets/modeles.mjs';
+import { CATEGORIES_DEFAUT, CLES_SEMEES, corpsModele } from '../noyau/tickets/modeles.mjs';
 import { ICONES, LIMITES, PRIORITES } from '../noyau/tickets/reglages.mjs';
 
 const OUVERTS = '710000000000000010';
@@ -75,8 +75,11 @@ test('semis : base sans catégorie → catégories par défaut une seule fois (r
   const k = await bancTickets({ banc, modeles: true });
   const c1 = await k.api('/tickets/config');
   assert.equal(c1.statut, 200, JSON.stringify(c1.corps));
-  assert.equal(c1.corps.categories.length, CATEGORIES_DEFAUT.length);
-  assert.deepEqual(c1.corps.categories.map(c => c.nom.fr), CATEGORIES_DEFAUT.map(m => m.nom.fr), 'dans l’ordre des modèles');
+  const semees = CATEGORIES_DEFAUT.filter(m => !m.evenement);
+  assert.equal(c1.corps.categories.length, semees.length);
+  assert.deepEqual(c1.corps.categories.map(c => c.nom.fr), semees.map(m => m.nom.fr), 'dans l’ordre des modèles, sans les événements');
+  assert.deepEqual(CLES_SEMEES, semees.map(m => m.cle));
+  assert.ok(!c1.corps.categories.some(c => c.nom.fr === 'Inscription The Nuke End'), 'tournoi jamais semé');
   assert.equal(c1.corps.modeles.length, CATEGORIES_DEFAUT.length, 'modèles rendus à l’app');
   const part = c1.corps.categories.find(c => c.nom.fr === 'Partenariat & sponsoring');
   assert.equal(part.fermetureAutoH, 0);
@@ -87,7 +90,7 @@ test('semis : base sans catégorie → catégories par défaut une seule fois (r
   assert.deepEqual(c1.corps.categories.find(c => c.nom.fr === 'Recrutement joueur').rolesApp, []);
   assert.equal(c1.corps.categories.find(c => c.nom.fr === 'Recrutement joueur').formulaire.length, 5);
   // Une deuxième lecture ne sème rien ; une catégorie supprimée ne revient pas.
-  assert.equal((await k.api('/tickets/config')).corps.categories.length, CATEGORIES_DEFAUT.length);
+  assert.equal((await k.api('/tickets/config')).corps.categories.length, semees.length);
   await k.api(`/tickets/config/categories/${part.id}`, undefined, { methode: 'DELETE' });
   for (const c of (await k.api('/tickets/config')).corps.categories) await k.api(`/tickets/config/categories/${c.id}`, undefined, { methode: 'DELETE' });
   assert.equal((await k.api('/tickets/config')).corps.categories.length, 0, 'tout supprimé : rien n’est resemé');
