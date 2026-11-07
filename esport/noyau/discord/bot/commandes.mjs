@@ -162,3 +162,47 @@ COMMANDES.push(
 export function definitionsCommandes() {
   return COMMANDES.map(c => ({ type: 1, integration_types: [0], ...c }));
 }
+
+/**
+ * Enregistrement des commandes : commandes GLOBALES de l'application (PUT remplace toute la liste). Même appel pour
+ * le script (esport/outils/discord-commandes.mjs) et pour le bouton « Réenregistrer les commandes » de l'app
+ * (Administration › Bot Esport HQ).
+ */
+export const cheminCommandes = applicationId => `/applications/${applicationId}/commands`;
+export const appelEnregistrement = applicationId => ({ methode: 'PUT', chemin: cheminCommandes(applicationId), corps: definitionsCommandes(), quoi: 'commandes' });
+
+/**
+ * Forme comparable d'une commande ou d'une option (attendue, ou relue chez Discord avec `with_localizations=true`) :
+ * ce que voit l'utilisateur (nom, type, descriptions anglaise et française, options, choix, obligatoire,
+ * autocomplétion, contextes, permission par défaut). Les champs que Discord ajoute (id, version…) sont ignorés.
+ */
+function forme(o, racine = false) {
+  const f = {
+    type: Number(o?.type ?? 1),
+    name: String(o?.name ?? ''),
+    description: String(o?.description ?? ''),
+    fr: String(o?.description_localizations?.fr ?? ''),
+    required: Boolean(o?.required),
+    autocomplete: Boolean(o?.autocomplete),
+    choices: (o?.choices ?? []).map(c => [String(c.name), String(c.name_localizations?.fr ?? ''), String(c.value)]),
+    options: (o?.options ?? []).map(x => forme(x)),
+  };
+  if (racine) {
+    f.default_member_permissions = o?.default_member_permissions ?? null;
+    f.contexts = Array.isArray(o?.contexts) ? [...o.contexts].map(Number).sort() : null;
+  }
+  return JSON.stringify(f);
+}
+
+/**
+ * Compare les commandes enregistrées chez Discord à celles attendues : `{ aJour, manquantes, enTrop, differentes }`
+ * (noms des commandes de premier niveau).
+ */
+export function comparerCommandes(enregistrees, attendues = definitionsCommandes()) {
+  const lues = new Map((Array.isArray(enregistrees) ? enregistrees : []).filter(c => Number(c?.type ?? 1) === 1).map(c => [String(c.name), c]));
+  const voulues = new Map(attendues.map(c => [c.name, c]));
+  const manquantes = [...voulues.keys()].filter(n => !lues.has(n));
+  const enTrop = [...lues.keys()].filter(n => !voulues.has(n));
+  const differentes = [...voulues.keys()].filter(n => lues.has(n) && forme(lues.get(n), true) !== forme(voulues.get(n), true));
+  return { aJour: !manquantes.length && !enTrop.length && !differentes.length, manquantes, enTrop, differentes };
+}

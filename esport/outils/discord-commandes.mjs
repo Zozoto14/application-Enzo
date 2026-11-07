@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { definitionsCommandes } from '../noyau/discord/bot/commandes.mjs';
+import { appelEnregistrement } from '../noyau/discord/bot/commandes.mjs';
 
 const API = 'https://discord.com/api/v10';
 const racine = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -32,7 +32,8 @@ export function imageDataUri(chemin) {
  * `identite` : contenu de docs/esport/bot/identite.json.
  */
 export function appelsDiscord({ applicationId, identite, avecIdentite = false, adresse, images = {} }) {
-  const appels = [{ methode: 'PUT', chemin: `/applications/${applicationId}/commands`, corps: definitionsCommandes(), quoi: 'commandes' }];
+  // Même appel que le bouton « Réenregistrer les commandes » de l'app (Administration › Bot Esport HQ).
+  const appels = [appelEnregistrement(applicationId)];
   const app = {};
   if (avecIdentite && identite) {
     // Description de l'application = « À propos » du profil du bot.

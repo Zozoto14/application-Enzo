@@ -1135,6 +1135,8 @@ export const en: Record<Cle, string> = {
   'administration.onglet_roles_description': 'Roles and permissions: club, CM and team roles',
   'administration.onglet_devblog': 'Devblog',
   'administration.onglet_devblog_description': 'Devblog: drafts, writing, automatic publishing',
+  'administration.onglet_bot': 'Esport HQ bot',
+  'administration.onglet_bot_description': 'Esport HQ Discord bot: connection, server, messages, commands, features',
   'cadreEsport.dashboard_toutes_vos_teams': 'Dashboard: all your teams',
   'cadreEsport.teams_la_liste_la': 'Teams: the list, creation, your notifications',
   'cadreEsport.membres_tous_les_comptes': 'Members: all accounts, invitations',

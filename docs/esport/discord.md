@@ -149,7 +149,8 @@ dernier échec et son motif. Le bouton **Envoyer un message de test** essaie aus
 
 **Permissions du bot à activer dans le salon** (rôle « Esport HQ » ou permissions du salon) : View Channel, Send
 Messages, Embed Links, Read Message History, **Create Public Threads**, **Send Messages in Threads**. Le lien
-d'invitation de l'app les demande toutes (`permissions=309237861376`) ; un bot invité avant doit les recevoir à la
+d'invitation de l'app les demande toutes, avec celles des tickets (`permissions=378225806416`, Administration › Bot
+Esport HQ) ; un bot invité avant doit les recevoir à la
 main (voir [bot-discord.md](bot-discord.md), étape 5).
 
 **Une seule tâche, sans doublon** : l'anglais, le fil et le français forment une seule ligne de la file d'envoi.

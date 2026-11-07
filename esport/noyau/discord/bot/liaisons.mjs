@@ -17,15 +17,17 @@ import { evenement } from '../../evenements.mjs';
 import { echec, iso, sha256Hex } from '../../outils.mjs';
 import { TYPES_EVENEMENT } from '../../planning/service.mjs';
 import { nomType } from '../embeds.mjs';
+import { FONCTIONNALITES_PERMISSIONS, entierPermissions, lienInvitationBot } from '../permissions-bot.mjs';
 
 export const DUREE_CODE_MS = 10 * 60_000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 /**
- * Permissions demandées à l'invitation : voir les salons (1 << 10), envoyer (1 << 11), intégrer des
- * liens (1 << 14), lire l'historique (1 << 16), mentionner les rôles (1 << 17), et pour le fil
- * français : créer des fils publics (1 << 35), envoyer dans les fils (1 << 38).
+ * Permissions des annonces : voir les salons (1 << 10), envoyer (1 << 11), intégrer des liens (1 << 14), lire
+ * l'historique (1 << 16), mentionner les rôles (1 << 17), et pour le fil français : créer des fils publics (1 << 35),
+ * envoyer dans les fils (1 << 38). Le lien d'invitation demande celles de TOUTES les fonctionnalités du bot
+ * (liste centrale : ../permissions-bot.mjs).
  */
-export const PERMISSIONS_BOT = String(2 ** 10 + 2 ** 11 + 2 ** 14 + 2 ** 16 + 2 ** 17 + 2 ** 35 + 2 ** 38);
+export const PERMISSIONS_BOT = entierPermissions(FONCTIONNALITES_PERMISSIONS.find(f => f.id === 'annonces').permissions).toString();
 
 /** Code lisible de 8 caractères (sans I, L, O, 0, 1), affiché « ABCD-EFGH ». */
 export function nouveauCode() {
@@ -49,11 +51,8 @@ export function lireCode(saisie) {
 
 const empreinte = code => sha256Hex(`esport-discord-code:${code}`);
 
-/** Lien d'invitation du bot (public : l'Application ID n'est pas un secret). */
-export function lienInvitation(applicationId) {
-  if (!/^\d{5,25}$/.test(String(applicationId ?? ''))) return null;
-  return `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=bot%20applications.commands&permissions=${PERMISSIONS_BOT}`;
-}
+/** Lien d'invitation du bot, avec les permissions de toutes ses fonctionnalités (public : l'Application ID n'est pas un secret). */
+export const lienInvitation = applicationId => lienInvitationBot(applicationId);
 
 /** Masque d'un identifiant Discord : « 1234…5678 ». */
 export const masquerId = id => (id ? `${String(id).slice(0, 4)}…${String(id).slice(-4)}` : null);

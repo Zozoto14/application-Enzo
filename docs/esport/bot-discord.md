@@ -74,8 +74,12 @@ Le plus simple : dans l'app, **Esport › votre team › Réglages › Discord �
 bouton apparaît après l'étape 6). Sinon, remplacez `APPLICATION_ID` dans ce lien et ouvrez-le :
 
 ```
-https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=309237861376
+https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=378225806416
 ```
+
+(Ce nombre réunit les permissions de **toutes** les fonctionnalités du bot : annonces, tickets, et celles à venir. Il
+est calculé depuis une liste centrale, `esport/noyau/discord/permissions-bot.mjs` ; le lien à jour est toujours dans
+**Administration › Bot Esport HQ › Connexion et état**.)
 
 Il demande les scopes **bot** et **applications.commands**, et seulement ces permissions : **voir les salons**
 (View Channel), **envoyer des messages** (Send Messages), **intégrer des liens** (Embed Links), **voir les anciens
@@ -165,6 +169,34 @@ boutons Oui / Non…), le joueur doit toujours lier son compte avec `/lier` (le 
 vérifiée pour savoir qui agit).
 
 ---
+
+## Administration › Bot Esport HQ
+
+Tous les réglages du bot réunis sur une page : **Esport › Administration › Bot Esport HQ** (le Fondateur, ou un rôle du
+club avec `tickets.configurer`). Chaque réglage reste enregistré à sa place (aucune copie) ; la page les montre et y
+mène :
+
+- **Connexion et état** : variables du serveur (`DISCORD_APPLICATION_ID` affiché, clé publique et jeton : présents ou
+  non, jamais leur valeur), connexion en direct et diagnostic (ceux des tickets), dernier passage du cron, lien
+  d'invitation avec toutes les permissions, **Vérifier le serveur Discord** (ce qui manque au bot, fonctionnalité par
+  fonctionnalité), et les **commandes slash** : celles enregistrées chez Discord (commandes globales,
+  `GET /applications/{id}/commands`) comparées à celles de cette version. Si elles diffèrent : « Commandes à
+  réenregistrer », la commande cPanel à lancer, et le bouton **Réenregistrer les commandes** (le serveur fait le même
+  appel que `esport/outils/discord-commandes.mjs`).
+- **Serveur Discord** : le serveur du club, un seul réglage (Tickets › Configuration › Général), et combien de teams
+  ont lié un serveur pour leurs annonces.
+- **Messages et langue** : réglages par défaut (anglais + fil français, une mention par événement, rappels en MP),
+  langue de chaque team, langue des tickets, et le test des MP (même panneau que la page Discord de la team).
+- **Annonces par team** : webhook, serveur lié, langue, rappels, envois abandonnés, avec un lien vers la page Discord
+  de chaque team (ses lignes : toutes pour le Fondateur, sinon les teams où l'on a `discord.manage`).
+- **Commandes** : chaque commande et sous-commande, et l'état des commandes des tickets (activée, coupée, rôles), à
+  régler dans Tickets › Configuration › Commandes.
+- **Fonctionnalités** : une carte par fonctionnalité du bot (registre `src/esport/ui/bot/sections.ts` : une nouvelle
+  fonctionnalité y ajoute son entrée, avec ses réglages ou un lien vers sa page, et déclare ses permissions Discord
+  dans `esport/noyau/discord/permissions-bot.mjs`).
+
+API (Fondateur ou `tickets.configurer`, 404 sinon) : `GET /bot-discord`, `GET /bot-discord/serveur`,
+`GET|POST /bot-discord/commandes`.
 
 ## Ce que fait le bot
 

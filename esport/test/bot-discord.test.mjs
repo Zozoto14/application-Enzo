@@ -18,6 +18,7 @@ import { occurrenceCourte } from '../noyau/discord/embeds.mjs';
 import { lireDateSaisie, lireHeureSaisie } from '../noyau/discord/bot/interactions.mjs';
 import { verifierSignature } from '../noyau/discord/bot/signature.mjs';
 import { definitionsCommandes } from '../noyau/discord/bot/commandes.mjs';
+import { permissionsInvitation } from '../noyau/discord/permissions-bot.mjs';
 import { banc, CLE, teamAvecMembres } from './aide.mjs';
 
 const APP = '424242424242424242';
@@ -195,7 +196,7 @@ test('liaison serveur : admin du serveur seulement, code à usage unique, salon 
   const etat = (await p.b.appel(`/teams/${p.A.teamId}/discord/bot`, { jeton: p.s.max12345 })).corps;
   assert.equal(etat.serveur.salonNom, 'annonces');
   assert.equal(etat.serveur.serveur, `${G1.slice(0, 4)}…${G1.slice(-4)}`, 'identifiant masqué');
-  assert.match(etat.invitation, new RegExp(`client_id=${APP}&scope=bot%20applications.commands&permissions=309237861376`));
+  assert.match(etat.invitation, new RegExp(`client_id=${APP}&scope=bot%20applications.commands&permissions=${permissionsInvitation()}`));
   assert.equal((await p.b.appel(`/teams/${p.A.teamId}/discord/bot`, { jeton: p.s.lea12345 })).statut, 403, 'un Joueur ne voit pas qui est lié');
   const journal = await p.b.base.tous("SELECT action FROM journal WHERE team_id = ? AND action = 'discord.server_linked'", [p.A.teamId]);
   assert.equal(journal.length, 1);

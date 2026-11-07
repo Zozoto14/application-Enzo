@@ -15,6 +15,7 @@ import { servicesDiscord, routerDiscord } from './discord/routes.mjs';
 import { traiterFile } from './discord/file.mjs';
 import { creerBot } from './discord/bot/interactions.mjs';
 import { routesLiaisons, servicesLiaisons } from './discord/bot/liaisons.mjs';
+import { routesBotAdmin, servicesBotAdmin } from './discord/bot/administration.mjs';
 import { distribuer, evenement } from './evenements.mjs';
 import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
@@ -80,7 +81,7 @@ import { contexteTickets } from './tickets/acces.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications', 'temps-reel', 'tickets'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi', 'roles-permissions', 'devblog', 'deploiement', 'centre-notifications', 'temps-reel', 'tickets', 'bot-discord'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -246,6 +247,8 @@ export function creerApi({
     jetonBot,
     liaisons: { creerProspect: (a, c) => sp.creerProspect(a, c), prospect: (a, id) => sp.prospect(a, id), creerCarte: (a, t, c) => cm.tableaux.creerCarte(a, t, c), carte: (a, id) => cm.tableaux.carte(a, id) },
   });
+  // Administration › Bot Esport HQ : réglages du bot réunis (lus là où ils vivent), commandes, permissions.
+  const botAdmin = servicesBotAdmin({ base, maintenant, fetch: envoiDiscord, jetonBot, config: configBot, noyau: s, serveurTickets: ticketsServeur });
   const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets, config: tk.config });
   const bot = creerBot({
     base,
@@ -485,6 +488,8 @@ export function creerApi({
     if (devblog !== undefined) return devblog;
     const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (trombi !== undefined) return trombi;
+    const administrationBot = await routesBotAdmin(botAdmin, { acteur, chemin, methode: m, limite });
+    if (administrationBot !== undefined) return administrationBot;
     const tickets = await routesTickets({ tk, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
     if (tickets !== undefined) return tickets;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });

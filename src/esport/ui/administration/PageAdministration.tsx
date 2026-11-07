@@ -4,6 +4,8 @@
  *  - « Statistiques » (statistiques d'usage : Fondateur, ou statistiques.voir) ;
  *  - « Jeux » (profils de jeu, assistant IA : Fondateur, ou jeux.gerer) ;
  *  - « Rôles et permissions » (Fondateur, ou roles.gerer) ;
+ *  - « Bot Esport HQ » (tous les réglages du bot Discord réunis : Fondateur, ou tickets.configurer ; chaque section
+ *    garde ses contrôles côté serveur et mène aux pages qui gardent les réglages) ;
  *  - « Devblog » (brouillons, éditeur, publication automatique : Fondateur, ou devblog.gerer ; la lecture des
  *    devblogs reste pour tous via « Nouveautés » du Dashboard).
  * Un sous-onglet n'apparaît qu'avec sa permission (le serveur contrôle chaque requête, comme avant). Les Tickets
@@ -18,19 +20,21 @@ import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { tr } from '../../i18n';
 import { ESP, LARGEUR_CONTENU, Onglets } from '../design';
-import { Jeux, PageDevblog, RolesPermissions, Statistiques } from '../differe';
+import { Jeux, PageBot, PageDevblog, RolesPermissions, Statistiques } from '../differe';
+import type { NavigationBot } from '../bot/PageBot';
 
-export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'devblog';
+export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'bot' | 'devblog';
 
 /** Ce que le compte peut ouvrir dans l'Administration (d'après GET /moi). */
 export type DroitsAdministration = Partial<Record<SousOngletAdmin, boolean>>;
 
-const ORDRE: readonly SousOngletAdmin[] = ['statistiques', 'jeux', 'roles', 'devblog'];
+const ORDRE: readonly SousOngletAdmin[] = ['statistiques', 'jeux', 'roles', 'bot', 'devblog'];
 
 const LIBELLES: Record<SousOngletAdmin, { libelle(): string; description(): string }> = {
   statistiques: { libelle: () => tr('administration.onglet_statistiques'), description: () => tr('administration.onglet_statistiques_description') },
   jeux: { libelle: () => tr('administration.onglet_jeux'), description: () => tr('administration.onglet_jeux_description') },
   roles: { libelle: () => tr('administration.onglet_roles'), description: () => tr('administration.onglet_roles_description') },
+  bot: { libelle: () => tr('administration.onglet_bot'), description: () => tr('administration.onglet_bot_description') },
   devblog: { libelle: () => tr('administration.onglet_devblog'), description: () => tr('administration.onglet_devblog_description') },
 };
 
@@ -48,6 +52,7 @@ export function PageAdministration({
   fondateur,
   ongletInitial,
   onExporter,
+  navigationBot,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -57,6 +62,8 @@ export function PageAdministration({
   fondateur: boolean;
   ongletInitial?: SousOngletAdmin;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+  /** Bot Esport HQ : liens vers les pages qui gardent les réglages (Tickets › Configuration, Discord d'une team). */
+  navigationBot?: NavigationBot;
 }) {
   const permis = sousOngletsAdmin(droits);
   const [choix, setChoix] = useState<SousOngletAdmin | undefined>(ongletInitial);
@@ -88,6 +95,8 @@ export function PageAdministration({
           <Jeux theme={theme} client={client} large={large} fondateur={fondateur} />
         ) : onglet === 'roles' ? (
           <RolesPermissions theme={theme} client={client} large={large} />
+        ) : onglet === 'bot' ? (
+          <PageBot theme={theme} client={client} large={large} navigation={navigationBot} />
         ) : onglet === 'devblog' ? (
           <PageDevblog theme={theme} client={client} large={large} />
         ) : null}

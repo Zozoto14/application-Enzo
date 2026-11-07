@@ -35,6 +35,7 @@ import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } fro
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
 import { EspaceCm, PageDevblog, PageTickets } from './differe';
+import type { SectionConfigTickets } from './tickets/ConfigTickets';
 import { PageAdministration, aAdministration, type DroitsAdministration, type SousOngletAdmin } from './administration/PageAdministration';
 import { apiTickets, type MoiTickets } from '../tickets/api';
 import { useCompteurTickets } from '../tickets/compteur';
@@ -64,6 +65,7 @@ type Onglet = OngletEsport;
 type Vue =
   | { v: Exclude<Onglet, 'membres' | 'administration'> }
   | { v: 'administration'; sous?: SousOngletAdmin }
+  | { v: 'tickets'; config?: SectionConfigTickets }
   | { v: 'devblog' }
   | { v: 'notifications' }
   | { v: 'membres'; sous?: SousOngletMembres }
@@ -174,6 +176,8 @@ export function Esport(props: PropsRacineApp) {
     jeux: Boolean(moiPret?.peutGererJeux),
     roles: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererRoles)),
     devblog: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererDevblog)),
+    // Bot Esport HQ : le Fondateur, ou qui configure les tickets (chaque section est contrôlée par le serveur).
+    bot: Boolean(moiPret && (moiPret.superAdmin || moiTickets?.configurer)),
   };
   const administration = aAdministration(droitsAdmin);
   const pageVue =
@@ -303,7 +307,9 @@ export function Esport(props: PropsRacineApp) {
     } else if (vue.v === 'tickets' && tickets && moiTickets) {
       // Tickets Discord : sous-onglets Tickets, Statistiques, Avis, Configuration (selon les permissions, contrôlées
       // par le serveur).
-      page = <PageTickets theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} />;
+      // `config` : lien depuis Administration › Bot Esport HQ (Configuration, à la bonne section).
+      const sectionConfig = 'config' in vue ? vue.config : undefined;
+      page = <PageTickets key={sectionConfig ?? 'tickets'} theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} sectionConfig={sectionConfig} />;
     } else if (vue.v === 'administration' && administration) {
       // Administration : Statistiques, Jeux, Rôles et permissions, Devblog ; un sous-onglet par permission
       // (contrôlée par le serveur). `key` : un lien rouvre son sous-onglet.
@@ -317,6 +323,10 @@ export function Esport(props: PropsRacineApp) {
           fondateur={etat.moi.superAdmin}
           ongletInitial={vue.sous}
           onExporter={exporter}
+          navigationBot={{
+            ouvrirTickets: moiTickets?.configurer ? section => setVue({ v: 'tickets', config: section as SectionConfigTickets | undefined }) : undefined,
+            ouvrirTeam: (id, section) => setVue({ v: 'team', id, section: section as SectionTeam | undefined }),
+          }}
         />
       );
     } else if (vue.v === 'plus') {

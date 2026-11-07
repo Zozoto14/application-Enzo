@@ -1,7 +1,7 @@
 /**
  * Non-régression : aucune page principale de l'Esport ni du hub ne doit défiler horizontalement sur téléphone
  * (390 × 844 et 360 × 800). Parcourt Dashboard, Teams, Membres, Administration (chaque sous-onglet : Tickets et sa
- * configuration, Statistiques, Jeux, Rôles et permissions, Devblog), Notifications, l'espace CM (chaque
+ * configuration, Statistiques, Jeux, Rôles et permissions, Bot Esport HQ et chacune de ses sections, Devblog), Notifications, l'espace CM (chaque
  * groupe et chaque sous-onglet), la page de la team (chaque section et chaque module), les Réglages de la team
  * et ceux du hub. Mesure `document.documentElement.scrollWidth > window.innerWidth` ; en cas d'échec, liste les
  * éléments qui dépassent à droite. Code de sortie 1 au moindre débordement.
@@ -137,10 +137,18 @@ async function parcourir(page, taille) {
     await controler(page, `esport-${onglet}`, taille);
     // Administration : chaque sous-onglet.
     if (onglet === 'administration') {
-      for (const sous of ['statistiques', 'jeux', 'roles', 'devblog']) {
+      for (const sous of ['statistiques', 'jeux', 'roles', 'bot', 'devblog']) {
         if (!(await present(page, `esport-admin-onglet-${sous}`, 1500))) continue;
         await page.getByTestId(`esport-admin-onglet-${sous}`).first().click();
         await controler(page, `esport-administration-${sous}`, taille);
+        // Bot Esport HQ : chaque section.
+        if (sous === 'bot') {
+          for (const s of ['connexion', 'serveur', 'messages', 'annonces', 'commandes', 'fonctionnalites']) {
+            if (!(await present(page, `esport-bot-onglet-${s}`, 2000))) continue;
+            await page.getByTestId(`esport-bot-onglet-${s}`).first().click();
+            await controler(page, `esport-bot-${s}`, taille);
+          }
+        }
       }
     }
     // Tickets (entrée à part) : Statistiques, Avis, puis chaque section de la configuration.

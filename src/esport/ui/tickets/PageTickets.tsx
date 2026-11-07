@@ -12,15 +12,15 @@ import { trTk } from '../../i18n/tickets';
 import { apiTickets, type Connexion, type MoiTickets } from '../../tickets/api';
 import { PageEsport } from '../CadreEsport';
 import { EnTetePage, Onglets, Squelette } from '../design';
-import { ConfigTickets, PastilleConnexion } from './ConfigTickets';
+import { ConfigTickets, PastilleConnexion, type SectionConfigTickets } from './ConfigTickets';
 import { AvisTicketsPage } from './AvisTickets';
 import { ListeTickets, StatsTicketsPage } from './TicketsStaff';
 
-type OngletTk = 'tickets' | 'stats' | 'avis' | 'config';
+export type OngletTk = 'tickets' | 'stats' | 'avis' | 'config';
 
-export function PageTickets({ theme, client, large, moi, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiTickets; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
+export function PageTickets({ theme, client, large, moi, onExporter, sectionConfig }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiTickets; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>; /** Ouvre Configuration à cette section (lien depuis Administration › Bot Esport HQ). */ sectionConfig?: SectionConfigTickets }) {
   const api = useMemo(() => apiTickets(client), [client]);
-  const [onglet, setOnglet] = useState<OngletTk>(moi.voir ? 'tickets' : 'config');
+  const [onglet, setOnglet] = useState<OngletTk>(sectionConfig && moi.configurer ? 'config' : moi.voir ? 'tickets' : 'config');
   // Ticket à ouvrir depuis l'onglet Avis (toucher un avis ouvre son ticket).
   const [aOuvrir, setAOuvrir] = useState<{ id: string; numero: number } | undefined>();
   const [etat, setEtat] = useState<{ actif: boolean; connexion: Connexion } | undefined>();
@@ -42,7 +42,7 @@ export function PageTickets({ theme, client, large, moi, onExporter }: { theme: 
       <EnTetePage theme={theme} large={large} titre={trTk('titre')} sous={trTk('sous')} />
       <View style={{ alignSelf: 'flex-start', maxWidth: '100%' }}>{etat ? <PastilleConnexion theme={theme} connexion={etat.connexion} actif={etat.actif} /> : <Squelette theme={theme} lignes={1} />}</View>
       {entrees.length > 1 ? <Onglets theme={theme} prefixe="esport-tk-onglet" testID="esport-tk-onglets" actif={onglet} onChoisir={id => setOnglet(id as OngletTk)} entrees={entrees} /> : null}
-      {onglet === 'config' && moi.configurer ? <ConfigTickets theme={theme} client={client} large={large} /> : null}
+      {onglet === 'config' && moi.configurer ? <ConfigTickets theme={theme} client={client} large={large} sectionInitiale={sectionConfig} /> : null}
       {onglet === 'tickets' && moi.voir ? <ListeTickets theme={theme} client={client} large={large} onExporter={onExporter} ouvrir={aOuvrir} /> : null}
       {onglet === 'stats' && moi.gerer ? <StatsTicketsPage theme={theme} client={client} /> : null}
       {onglet === 'avis' && (moi.gerer || moi.configurer) ? <AvisTicketsPage theme={theme} client={client} onOuvrir={moi.voir ? (id, numero) => (setAOuvrir({ id, numero }), setOnglet('tickets')) : undefined} /> : null}

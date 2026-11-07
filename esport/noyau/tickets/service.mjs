@@ -39,11 +39,9 @@ import { NOM_IMAGE_PANNEAU, chargePanneau } from './panneaux.mjs';
 import { CATEGORIES_DEFAUT, CLES_SEMEES, PANNEAUX_DEFAUT, corpsModele, nomNormalise, textesPanneauModele } from './modeles.mjs';
 import { diagnosticConnexion, diagnosticTickets } from './superviseur.mjs';
 import { MESSAGE_DEFAUT as BIENVENUE_MESSAGE_DEFAUT, lireBienvenue, lireEtatBienvenue, noterTitulaires, texteBienvenue, validerBienvenue } from './bienvenue.mjs';
-import { PERMISSIONS_REQUISES, P, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
+import { lienInvitationBot } from '../discord/permissions-bot.mjs';
+import { PERMISSIONS_REQUISES, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
 
-/** Lien d'invitation : permissions du bot d'annonces (bot-discord.md) + celles des tickets (Gérer les salons, Gérer les rôles, Joindre des fichiers). */
-/** (+ Réactions et Créer des fils privés : le bot ne peut refuser dans un salon que des permissions qu'il a lui-même.) */
-const PERMISSIONS_INVITATION = (309237861376n | P.VOIR_SALON | P.GERER_SALONS | P.GERER_ROLES | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS | P.REACTIONS | P.CREER_FILS_PRIVES | P.CREER_FILS_PUBLICS | P.ENVOYER_FILS).toString();
 const TYPES_IMAGE = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const IMAGE_MAX = 8 * 1024 * 1024;
 
@@ -107,7 +105,8 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       tableauxCm: tableaux.map(t => ({ id: t.id, nom: t.nom ?? t.cle_defaut ?? t.id })),
       choix: { langues: MODES_LANGUE, icones: ICONES, priorites: PRIORITES, liaisons: LIAISONS, commandes: COMMANDES_TICKETS, commandesStaff: COMMANDES_STAFF, limites: LIMITES, permissionsBot: PERMISSIONS_REQUISES.map(([cle]) => cle) },
       bot: Boolean(jetonBot),
-      lienInvitation: applicationId ? `https://discord.com/oauth2/authorize?client_id=${applicationId}&scope=bot%20applications.commands&permissions=${PERMISSIONS_INVITATION}` : null,
+      // Lien d'invitation : permissions de TOUTES les fonctionnalités du bot (liste centrale, discord/permissions-bot.mjs).
+      lienInvitation: lienInvitationBot(applicationId),
     };
   }
 

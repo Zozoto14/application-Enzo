@@ -1250,6 +1250,8 @@ export const fr = {
   'administration.onglet_roles_description': 'Rôles et permissions : rôles du club, du CM et des teams',
   'administration.onglet_devblog': 'Devblog',
   'administration.onglet_devblog_description': 'Devblog : brouillons, rédaction, publication automatique',
+  'administration.onglet_bot': 'Bot Esport HQ',
+  'administration.onglet_bot_description': 'Bot Discord Esport HQ : connexion, serveur, messages, commandes, fonctionnalités',
   'cadreEsport.dashboard_toutes_vos_teams': 'Dashboard : toutes vos teams',
   'cadreEsport.teams_la_liste_la': 'Teams : la liste, la création, vos notifications',
   'cadreEsport.membres_tous_les_comptes': 'Membres : tous les comptes, les invitations',

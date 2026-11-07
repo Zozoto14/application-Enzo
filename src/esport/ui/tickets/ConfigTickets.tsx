@@ -20,7 +20,8 @@ import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from 
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
 
-type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
+export type SectionConfigTickets = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
+type Section = SectionConfigTickets;
 const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
   ['connexion', 'conf.connexion'],
   ['general', 'conf.general'],
@@ -89,12 +90,12 @@ const entier = (v: string): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; client: ClientEsport; large: boolean }) {
+export function ConfigTickets({ theme, client, large, sectionInitiale }: { theme: ThemeHub; client: ClientEsport; large: boolean; /** Section ouverte d'abord (lien depuis Administration › Bot Esport HQ). */ sectionInitiale?: SectionConfigTickets }) {
   const api = useMemo(() => apiTickets(client), [client]);
   const [conf, setConf] = useState<Config | undefined>();
   const [serveur, setServeur] = useState<ServeurDiscord | undefined>();
   const [connexion, setConnexion] = useState<EtatTickets | undefined>();
-  const [section, setSection] = useState<Section>('connexion');
+  const [section, setSection] = useState<Section>(sectionInitiale && SECTIONS.some(([id]) => id === sectionInitiale) ? sectionInitiale : 'connexion');
   const { erreur, avis, agir, enCours } = useAgir();
   const relire = useCallback(async () => {
     const [c, e] = await Promise.all([api.config(), api.etat()]);
@@ -196,7 +197,8 @@ function LigneDiag({ theme, ok, titre, detail, commande, testID }: { theme: Them
   );
 }
 
-function Diagnostic({ theme, d }: { theme: ThemeHub; d: DiagnosticTickets }) {
+/** Diagnostic de la connexion (aussi dans Administration › Bot Esport HQ › Connexion et état). */
+export function Diagnostic({ theme, d }: { theme: ThemeHub; d: DiagnosticTickets }) {
   const c = d.connexion;
   const pret = d.bot && d.serveur && d.categorie && d.actif;
   const etatGw = c.gateway ? trTk(`diag.etat.${c.gateway}` as CleTk) : '—';
