@@ -28,6 +28,9 @@ function configDe(): Config {
     messagesDefaut: { accueil: { fr: 'Bonjour {utilisateur}', en: 'Hi {utilisateur}' } },
     horaires: { actif: false, fuseau: 'Europe/Paris', plages: [] },
     commandes: { ouvrir: { actif: true, roles: [] } },
+    bienvenue: { actif: false, roleId: null, roleNom: '', salonId: null, message: 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥', depuis: null, existantsNotes: false },
+    bienvenueEtat: {},
+    bienvenueMessageDefaut: 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥',
     categories: [],
     panneaux: [],
     listeNoire: [],
@@ -54,6 +57,8 @@ function fauxClient(conf: Config) {
         roles: [{ id: '720', nom: 'Staff', couleur: null }],
         permissions: { membreTrouve: true, serveur: ['gerer_roles'], ouverts: { id: '710', nom: 'Tickets', manquantes: [] }, archives: null, journaux: null },
       };
+    if (chemin === '/tickets/config/bienvenue' && methode === 'PUT') return { ...conf, bienvenue: { ...conf.bienvenue, ...(corps as object), existantsNotes: true }, titulaires: { ok: true, notes: 3 } };
+    if (chemin === '/tickets/config/bienvenue/test' && methode === 'POST') return { ok: true };
     if (chemin === '/tickets/config/categories' && methode === 'POST') {
       const c = corps as Partial<Categorie>;
       const cat = { ...(c as Categorie), id: 'cat1', position: 0 };
@@ -666,4 +671,30 @@ test('panneaux par défaut : modèle choisi, catégories absentes à ajouter ou 
   expect(screen.getByTestId('esport-tk-pan-libelle-c0-fr').props.value).toBe('S’inscrire');
   expect(screen.getByTestId('esport-tk-pan-lecture-seule')).toHaveTextContent(/lecture seule pour @everyone/);
   expect(appels.some(a => a.chemin.endsWith('/publier'))).toBe(false);
+});
+
+test('Bienvenue : rôle, salon et message choisis, activation enregistrée ; titulaires actuels annoncés ; message d’essai', async () => {
+  const { client, appels } = fauxClient(configDe());
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-bienvenue'));
+  expect(screen.getByText(/Server Members Intent/)).toBeTruthy();
+  await fireEvent(screen.getByTestId('esport-tk-bv-actif'), 'valueChange', true);
+  await fireEvent.press(await screen.findByTestId('esport-tk-bv-role-720'));
+  await fireEvent.press(screen.getByTestId('esport-tk-bv-salon-713'));
+  await fireEvent.changeText(screen.getByTestId('esport-tk-bv-message'), 'Bienvenue {membre} dans {role} 💥');
+  await fireEvent.press(screen.getByTestId('esport-tk-bv-enregistrer'));
+  await screen.findByText(/3 membre\(s\) qui avaient déjà le rôle/);
+  const put = appels.find(a => a.chemin === '/tickets/config/bienvenue' && a.methode === 'PUT')!.corps as Record<string, unknown>;
+  expect(put).toMatchObject({ actif: true, roleId: '720', roleNom: 'Staff', salonId: '713', message: 'Bienvenue {membre} dans {role} 💥' });
+  await fireEvent.press(screen.getByTestId('esport-tk-bv-tester'));
+  await screen.findByText('Message d’essai publié dans le salon.');
+});
+
+test('Bienvenue : intent « Server Members » refusé par Discord : rappel affiché', async () => {
+  const conf = configDe();
+  conf.bienvenueEtat = { membresRefuses: true };
+  const { client } = fauxClient(conf);
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-bienvenue'));
+  expect(screen.getByTestId('esport-tk-bv-refus')).toBeTruthy();
 });

@@ -376,6 +376,36 @@ set -a; . ~/.appdashboard/esport.env; set +a
 /home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.fr
 ```
 
+## Bienvenue par rôle
+
+Demande du Fondateur : « quand ils rejoignent le serveur avec le rôle **The Nuke End**, ça les ping dans un salon
+Discord qu'on peut configurer », avec Esport HQ. Réglage : **Tickets › Configuration › Bienvenue**.
+
+- Quand un membre du serveur du club **reçoit le rôle choisi** (à son arrivée, par un lien d'invitation ou
+  l'onboarding, ou plus tard), Esport HQ publie le **message** dans le **salon** choisi en le mentionnant. Seule cette
+  personne est notifiée (jamais @everyone ni un rôle écrit dans le message).
+- **Une seule fois par personne et par rôle** (table `discord_bienvenues`, migration `0058`) : un changement de pseudo
+  ou d'un autre rôle ne la mentionne pas à nouveau.
+- À l'**activation** (ou quand le rôle change), les membres qui ont **déjà** le rôle sont notés sans message (aucune
+  vague de mentions). Si Discord refuse la liste des membres, l'écran le dit : seules les personnes qui **arrivent sur
+  le serveur** après l'activation sont alors accueillies.
+- Variables du message : `{membre}` (mention), `{pseudo}`, `{role}`, `{serveur}`. Bouton **Envoyer un message
+  d'essai** : publie le message dans le salon, sans mentionner personne, pour vérifier les droits du bot.
+- Il faut le **serveur** choisi dans l'onglet Général ; les tickets eux-mêmes peuvent rester désactivés : la connexion
+  Discord est alors tenue pour la bienvenue seule.
+
+**Côté Discord (une fois)** : portail développeur › Esport HQ › **Bot** › **Privileged Gateway Intents** › activer
+**Server Members Intent** › **Save Changes**. Le bot doit pouvoir **voir le salon** et **y envoyer des messages**.
+Sans cet intent, Discord refuse la connexion qui le demande (code 4014) : elle repart **aussitôt sans lui** (les
+tickets continuent), l'onglet Bienvenue affiche le rappel, et un nouvel essai a lieu toutes les 30 minutes.
+
+Code : `esport/noyau/tickets/bienvenue.mjs` (règles, message, titulaires), `superviseur.mjs` (intents
+`GUILD_MEMBERS`, événements `GUILD_MEMBER_ADD` / `GUILD_MEMBER_UPDATE`, repli), `service.mjs` et `routes.mjs`
+(`PUT /tickets/config/bienvenue`, `POST /tickets/config/bienvenue/test`). Tests : `esport/test/tickets-bienvenue.test.mjs`,
+`src/esport/Tickets.test.tsx`.
+
+---
+
 ## Connexion Discord : un seul processus, et un secours
 
 L'app Esport tourne sous **Passenger** chez o2switch : plusieurs processus Node possibles, qui peuvent être arrêtés

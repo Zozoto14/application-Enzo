@@ -240,6 +240,8 @@ export const TABLES = [
   ['tickets_lectures', 'compte_id, ticket_id'],
   // Avis gardés (anonymes) des tickets supprimés (migration 0056).
   ['tickets_avis_anonymes', 'id'],
+  // Bienvenue par rôle (migration 0058) : personnes déjà accueillies (jamais deux fois).
+  ['discord_bienvenues', 'guild_id, discord_user_id, role_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

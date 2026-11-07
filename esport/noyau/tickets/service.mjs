@@ -38,6 +38,7 @@ import {
 import { NOM_IMAGE_PANNEAU, chargePanneau } from './panneaux.mjs';
 import { CATEGORIES_DEFAUT, CLES_SEMEES, PANNEAUX_DEFAUT, corpsModele, nomNormalise, textesPanneauModele } from './modeles.mjs';
 import { diagnosticConnexion, diagnosticTickets } from './superviseur.mjs';
+import { MESSAGE_DEFAUT as BIENVENUE_MESSAGE_DEFAUT, lireBienvenue, lireEtatBienvenue, noterTitulaires, texteBienvenue, validerBienvenue } from './bienvenue.mjs';
 import { PERMISSIONS_REQUISES, P, idDiscord, manquantes, permissionsMembre, rest } from './discord.mjs';
 
 /** Lien d'invitation : permissions du bot d'annonces (bot-discord.md) + celles des tickets (Gérer les salons, Gérer les rôles, Joindre des fichiers). */
@@ -94,6 +95,9 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       messagesDefaut: MESSAGES_DEFAUT,
       horaires: await lireHoraires(base),
       commandes: await lireCommandes(base),
+      bienvenue: await lireBienvenue(base),
+      bienvenueEtat: await lireEtatBienvenue(base),
+      bienvenueMessageDefaut: BIENVENUE_MESSAGE_DEFAUT,
       categories: await categories(),
       modeles: CATEGORIES_DEFAUT,
       modelesPanneaux: PANNEAUX_DEFAUT,
@@ -132,6 +136,37 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     await contexteTickets(base, acteur, { exiger: 'configurer' });
     return changerReglage(acteur, 'horaires', validerHoraires(corps));
   }
+  /**
+   * Bienvenue par rôle. À l'activation (ou au changement de rôle), les titulaires actuels du rôle sont notés sans
+   * message ; si Discord refuse la liste des membres (intent « Server Members » non activé), seules les arrivées sur
+   * le serveur après l'activation seront accueillies (rendu dans `titulaires`).
+   */
+  async function changerBienvenue(acteur, corps) {
+    await contexteTickets(base, acteur, { exiger: 'configurer' });
+    const general = await lireGeneral(base);
+    const { reglages, recommencer } = validerBienvenue(corps ?? {}, await lireBienvenue(base), maintenant());
+    if (reglages.actif && !general.guildId) throw echec(400, 'bienvenue-serveur', 'Choisissez d’abord le serveur Discord (onglet Général).');
+    let titulaires = null;
+    if (recommencer && jetonBot) {
+      titulaires = await noterTitulaires({ base, fetch: fetchDiscord, jetonBot, guildId: general.guildId, roleId: reglages.roleId, maintenant });
+      reglages.existantsNotes = titulaires.ok;
+    }
+    const sortie = await changerReglage(acteur, 'bienvenue', reglages);
+    return titulaires ? { ...sortie, titulaires } : sortie;
+  }
+
+  /** Message d'essai dans le salon choisi (sans mentionner personne) : vérifie que le bot peut y écrire. */
+  async function testerBienvenue(acteur) {
+    await contexteTickets(base, acteur, { exiger: 'configurer' });
+    const b = await lireBienvenue(base);
+    const general = await lireGeneral(base);
+    if (!jetonBot) return { ok: false, erreur: 'bot-absent' };
+    if (!b.salonId) throw echec(400, 'bienvenue-salon', 'Choisissez le salon où publier la bienvenue.');
+    const contenu = `🧪 ${texteBienvenue(b.message, { membreId: null, pseudo: acteur.nom || 'Nouveau membre', role: b.roleNom, serveur: general.guildNom ?? '' })}`;
+    const r = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${b.salonId}/messages`, { content: contenu, allowed_mentions: { parse: [] } });
+    return r.ok ? { ok: true } : { ok: false, ...erreurRest('bienvenue', r) };
+  }
+
   async function changerCommandes(acteur, corps) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
     return changerReglage(acteur, 'commandes', { ...(await lireCommandes(base)), ...validerCommandes(corps) });
@@ -490,6 +525,8 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     changerMessages,
     changerHoraires,
     changerCommandes,
+    changerBienvenue,
+    testerBienvenue,
     ajouterCategorie,
     modifierCategorie,
     supprimerCategorie,

@@ -20,7 +20,7 @@ import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from 
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
 
-type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes';
+type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
 const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
   ['connexion', 'conf.connexion'],
   ['general', 'conf.general'],
@@ -30,6 +30,7 @@ const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
   ['liste', 'conf.liste_noire'],
   ['horaires', 'conf.horaires'],
   ['commandes', 'conf.commandes'],
+  ['bienvenue', 'conf.bienvenue'],
 ];
 const VIDE: DeuxLangues = { fr: '', en: '' };
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -143,6 +144,7 @@ export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; clien
       {section === 'liste' ? <SectionListeNoire {...props} /> : null}
       {section === 'horaires' ? <SectionHoraires {...props} /> : null}
       {section === 'commandes' ? <SectionCommandes {...props} /> : null}
+      {section === 'bienvenue' ? <SectionBienvenue {...props} /> : null}
     </View>
   );
 }
@@ -977,6 +979,54 @@ function SectionCommandes({ theme, api, conf, setConf, agir, roles }: PropsSecti
         </View>
       ))}
       <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={() => void agir('commandes', async () => (setConf(await api.changerCommandes(c)), trTk('enregistre')))} testID="esport-tk-cmd-enregistrer" />
+    </Bloc>
+  );
+}
+
+// ------------------------------------------------------------------ Bienvenue par rôle
+
+function SectionBienvenue({ theme, api, conf, setConf, agir, roles, salons }: PropsSection) {
+  const [b, setB] = useState(conf.bienvenue);
+  const etat = conf.bienvenueEtat ?? {};
+  const textes = salons.filter(x => x.type === 'texte').map(x => ({ id: x.id, nom: `# ${x.nom}` }));
+  const optionsRoles = roles.map(x => ({ id: x.id, nom: x.nom }));
+  const enregistrer = () =>
+    void agir('bienvenue', async () => {
+      const roleNom = roles.find(x => x.id === b.roleId)?.nom ?? b.roleNom;
+      const r = await api.changerBienvenue({ actif: b.actif, roleId: b.roleId, roleNom, salonId: b.salonId, message: b.message });
+      setConf(r);
+      setB(r.bienvenue);
+      if (r.titulaires) return r.titulaires.ok ? trTk('bv.titulaires_ok', { n: r.titulaires.notes ?? 0 }) : trTk('bv.titulaires_echec');
+      return trTk('enregistre');
+    });
+  const tester = () =>
+    void agir('bienvenue-test', async () => {
+      const r = await api.testerBienvenue();
+      if (!r.ok) throw new Error(trTk('bv.test_echec', { erreur: r.erreur ?? '?' }));
+      return trTk('bv.test_ok');
+    });
+  return (
+    <Bloc theme={theme} testID="esport-tk-conf-bienvenue">
+      <Text style={attenue(theme)}>{trTk('bv.aide')}</Text>
+      {!conf.general.guildId ? <Avis theme={theme} genre="alerte" texte={trTk('bv.sans_serveur')} testID="esport-tk-bv-sans-serveur" /> : null}
+      {etat.membresRefuses ? <Avis theme={theme} genre="critique" texte={trTk('bv.membres_refuses')} testID="esport-tk-bv-refus" /> : <Text style={attenue(theme)}>{trTk('bv.intent')}</Text>}
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+        <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('bv.actif')}</Text>
+        <Interrupteur theme={theme} libelle={trTk('bv.actif')} valeur={b.actif} onChanger={actif => setB({ ...b, actif })} testID="esport-tk-bv-actif" />
+      </View>
+      <Choix theme={theme} libelle={trTk('bv.role')} valeur={b.roleId ?? undefined} options={optionsRoles} onChoisir={id => setB({ ...b, roleId: id, roleNom: roles.find(x => x.id === id)?.nom ?? '' })} testID="esport-tk-bv-role" />
+      <Choix theme={theme} libelle={trTk('bv.salon')} valeur={b.salonId ?? undefined} options={textes} onChoisir={id => setB({ ...b, salonId: id })} testID="esport-tk-bv-salon" />
+      <Champ theme={theme} libelle={trTk('bv.message')} valeur={b.message} onChanger={message => setB({ ...b, message })} multiligne maxLength={1800} testID="esport-tk-bv-message" />
+      <Text style={attenue(theme)}>{trTk('bv.variables')}</Text>
+      {etat.dernier ? (
+        <Text style={attenue(theme)} testID="esport-tk-bv-dernier">
+          {etat.dernier.ok ? trTk('bv.dernier_ok', { le: quand(etat.dernier.le) }) : trTk('bv.dernier_echec', { le: quand(etat.dernier.le), statut: etat.dernier.statut ?? 0 })}
+        </Text>
+      ) : null}
+      <View style={styles.ligne}>
+        <BoutonHub theme={theme} variante="plein" titre={trTk('enregistrer')} onPress={enregistrer} testID="esport-tk-bv-enregistrer" />
+        <BoutonHub theme={theme} titre={trTk('bv.tester')} onPress={tester} testID="esport-tk-bv-tester" />
+      </View>
     </Bloc>
   );
 }

@@ -174,12 +174,30 @@ export interface Horaires {
 
 export type Commandes = Record<string, { actif: boolean; roles: string[] }>;
 
+/** Bienvenue par rôle (Tickets › Configuration › Bienvenue). */
+export interface Bienvenue {
+  actif: boolean;
+  roleId: string | null;
+  roleNom: string;
+  salonId: string | null;
+  message: string;
+  depuis: string | null;
+  existantsNotes: boolean;
+}
+export interface EtatBienvenue {
+  membresRefuses?: boolean;
+  dernier?: { le: string; ok: boolean; statut?: number; code?: number | null };
+}
+
 export interface ConfigTickets {
   general: General;
   messages: Partial<Record<string, DeuxLangues>>;
   messagesDefaut: Record<string, DeuxLangues>;
   horaires: Horaires;
   commandes: Commandes;
+  bienvenue: Bienvenue;
+  bienvenueEtat: EtatBienvenue;
+  bienvenueMessageDefaut: string;
   categories: Categorie[];
   /** Catégories par défaut proposées (bouton « Catégories par défaut »). */
   modeles?: ModeleCategorie[];
@@ -382,6 +400,8 @@ export function apiTickets(client: ClientEsport) {
     changerMessages: (c: Record<string, DeuxLangues>) => r<ConfigTickets>('/tickets/config/messages', 'PUT', c),
     changerHoraires: (c: Horaires) => r<ConfigTickets>('/tickets/config/horaires', 'PUT', c),
     changerCommandes: (c: Commandes) => r<ConfigTickets>('/tickets/config/commandes', 'PUT', c),
+    changerBienvenue: (c: Partial<Bienvenue>) => r<ConfigTickets & { titulaires?: { ok: boolean; notes?: number } }>('/tickets/config/bienvenue', 'PUT', c),
+    testerBienvenue: () => r<{ ok: boolean; erreur?: string }>('/tickets/config/bienvenue/test', 'POST', {}),
     creerCategorie: (c: Partial<Categorie>) => r<{ id: string; categories: Categorie[] }>('/tickets/config/categories', 'POST', c),
     modifierCategorie: (id: string, c: Partial<Categorie>) => r<{ categories: Categorie[] }>(`/tickets/config/categories/${encodeURIComponent(id)}`, 'PATCH', c),
     supprimerCategorie: (id: string) => r<{ categories: Categorie[] }>(`/tickets/config/categories/${encodeURIComponent(id)}`, 'DELETE'),

@@ -13,6 +13,9 @@
  *     tickets ouverts toutes les 45 s (25 salons au plus par passage, les plus anciennement relus d'abord ; arrêt au
  *     premier 429). Après une nouvelle session (READY sans reprise), une relecture rattrape ce qui a pu être manqué.
  * Le cron (toutes les 5 min) relit aussi les tickets si plus aucun processus n'est meneur, et réveille l'app.
+ * BIENVENUE PAR RÔLE (bienvenue.mjs) : la Gateway est aussi tenue quand seule la bienvenue est activée ; elle demande
+ * alors l'intent GUILD_MEMBERS (privilégié). Si Discord le refuse (4014, « Server Members Intent » non activé), la
+ * connexion repart aussitôt sans lui (les tickets continuent) et l'app affiche le rappel ; nouvel essai après 30 min.
  * MAINTIEN EN ÉVEIL : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes) ; le meneur
  * appelle donc sa propre adresse publique (`reveil`, URL_PUBLIQUE/sante) toutes les 4 min pour garder la Gateway.
  *
@@ -30,6 +33,7 @@ import { creerGateway } from './gateway.mjs';
 import { ingererMessage, modifierMessage, plusRecent, supprimerMessage, telechargeurCdn } from './conversation.mjs';
 import { lireGeneral } from './reglages.mjs';
 import { rest } from './discord.mjs';
+import { INTENT_MEMBRES, accueillirMembre, ecrireEtatBienvenue, intentsVoulus, lireBienvenue } from './bienvenue.mjs';
 
 export const BAIL = 'gateway';
 export const DUREE_BAIL_MS = 60_000;
@@ -142,22 +146,36 @@ export function creerSuperviseurTickets({
   let dernierReveil = 0;
   let etatReveil = null;
   let noteSuperviseur = { role: null, le: 0 };
+  let bienvenue = null;
+  let intentsCourants = null;
+  // Intent GUILD_MEMBERS refusé par Discord : on repart sans lui (date du refus, nouvel essai après 30 min).
+  let membresRefusesLe = 0;
   const telecharger = telechargeurCdn(fetchDiscord);
 
   const ctx = () => ({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte, surNouveau, surSalonSupprime, fetch: fetchDiscord, jetonBot });
 
+  const ctxBienvenue = () => ({ base, bienvenue, guildId: reglages?.guildId, guildNom: reglages?.guildNom, fetch: fetchDiscord, jetonBot, maintenant, journal });
+
   async function evenement(type, d) {
     if (type === 'READY') botId = d?.user?.id ?? botId;
+    if (type === 'GUILD_MEMBER_ADD' || type === 'GUILD_MEMBER_UPDATE') {
+      await accueillirMembre(ctxBienvenue(), d);
+      return;
+    }
     if (type === 'MESSAGE_CREATE') await ingererMessage(ctx(), d);
     else if (type === 'MESSAGE_UPDATE') await modifierMessage(ctx(), d);
     else if (type === 'MESSAGE_DELETE') await supprimerMessage(ctx(), d);
     else if (type === 'CHANNEL_DELETE' && d?.id && surSalonSupprime) await surSalonSupprime(d.id);
   }
 
-  async function demarrerGateway() {
+  async function demarrerGateway(intents) {
+    // Intents changés (bienvenue activée ou coupée) : une session ne peut pas être reprise avec d'autres intents.
+    if (intentsCourants !== null && intents !== intentsCourants) await ecrireEtat(base, 'session', {}, maintenant()).catch(() => undefined);
+    intentsCourants = intents;
     const session = await lireEtat(base, 'session');
     gw = creerGateway({
       jetonBot,
+      intents,
       fetch: fetchDiscord,
       ...(WebSocket ? { WebSocket } : {}),
       session: session?.id ? { id: session.id, seq: session.seq ?? null, url: session.url ?? null } : null,
@@ -210,7 +228,8 @@ export function creerSuperviseurTickets({
     enCours = (async () => {
       const t = maintenant();
       reglages = await lireGeneral(base);
-      if (!jetonBot || !reglages.actif || !reglages.guildId) {
+      bienvenue = await lireBienvenue(base);
+      if (!jetonBot || !(reglages.actif || bienvenue.actif) || !reglages.guildId) {
         if (meneur) await rendreBail(base, identifiant, t);
         meneur = false;
         await arreterGateway();
@@ -225,13 +244,26 @@ export function creerSuperviseurTickets({
       }
       await noter('meneur', null, t);
       maintenirEveil(t);
-      if (!gw) await demarrerGateway();
+      if (membresRefusesLe && t - membresRefusesLe > 30 * 60_000) membresRefusesLe = 0;
+      const voulus = intentsVoulus(reglages, bienvenue, { sansMembres: Boolean(membresRefusesLe) });
+      if (gw && voulus !== intentsCourants) await arreterGateway();
+      if (!gw) await demarrerGateway(voulus);
       let e = gw.etat();
+      // GUILD_MEMBERS refusé (intent privilégié non activé sur le portail) : on repart tout de suite sans lui.
+      if (e.etat === 'fatal' && (e.code === 4014 || e.code === 4013) && intentsCourants & INTENT_MEMBRES) {
+        membresRefusesLe = t;
+        await ecrireEtatBienvenue(base, { membresRefuses: true, refusLe: iso(t) }, t).catch(() => undefined);
+        await arreterGateway();
+        await demarrerGateway(intentsVoulus(reglages, bienvenue, { sansMembres: true }));
+        e = gw.etat();
+      } else if (e.etat === 'pret' && intentsCourants & INTENT_MEMBRES) {
+        await ecrireEtatBienvenue(base, { membresRefuses: false }, t).catch(() => undefined);
+      }
       // Fermeture définitive (jeton refusé, intent non activé…) : un seul nouvel essai toutes les 30 min, le temps que
       // le Fondateur corrige le portail Discord (jamais de rafale d'IDENTIFY).
       if (e.etat === 'fatal' && Date.now() - e.depuis > 30 * 60_000) {
         await arreterGateway();
-        await demarrerGateway();
+        await demarrerGateway(intentsCourants ?? voulus);
         e = gw.etat();
       }
       const vivant = e.etat === 'pret' && (!e.dernierAck || t - e.dernierAck < Math.max(120_000, intervalle * 4));

@@ -5,7 +5,7 @@
  *
  *   GET           /tickets/moi ; /tickets/etat
  *   GET           /tickets/config ; /tickets/config/discord[?serveur=<id> : serveur choisi, pas encore enregistré]
- *   PUT           /tickets/config/(general|messages|horaires|commandes)
+ *   PUT           /tickets/config/(general|messages|horaires|commandes|bienvenue) ; POST /tickets/config/bienvenue/test
  *   POST          /tickets/config/categories ; PATCH|DELETE /tickets/config/categories/:id ; PUT …/categories/ordre
  *   POST          /tickets/config/categories/defaut { cles }   (catégories par défaut cochées, doublons de nom ignorés)
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
@@ -101,6 +101,14 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
       if (b === 'messages') return cf.changerMessages(acteur, await lireCorps(128 * 1024));
       if (b === 'horaires') return cf.changerHoraires(acteur, await lireCorps());
       if (b === 'commandes') return cf.changerCommandes(acteur, await lireCorps());
+      if (b === 'bienvenue') {
+        await limite('tickets_discord', acteur.compte);
+        return cf.changerBienvenue(acteur, await lireCorps());
+      }
+    }
+    if (n === 3 && b === 'bienvenue' && c === 'test' && m === 'POST') {
+      await limite('tickets_discord', acteur.compte);
+      return cf.testerBienvenue(acteur);
     }
     if (b === 'categories') {
       if (n === 2 && m === 'POST') return cf.ajouterCategorie(acteur, await lireCorps());

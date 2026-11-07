@@ -58,6 +58,7 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
       { sql: `UPDATE tickets SET auteur_nom = '', auteur_compte_id = NULL, reponses = '[]', note_commentaire = NULL WHERE auteur_discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       { sql: `DELETE FROM tickets_membres WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       { sql: `DELETE FROM tickets_liste_noire WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
+      { sql: `DELETE FROM discord_bienvenues WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
     );
   }
   if (compte) {

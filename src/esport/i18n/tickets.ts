@@ -73,6 +73,7 @@ const fr = {
   'conf.liste_noire': 'Liste noire',
   'conf.horaires': 'Horaires',
   'conf.commandes': 'Commandes',
+  'conf.bienvenue': 'Bienvenue',
 
   // ---- Général
   'general.actif': 'Tickets activés',
@@ -309,6 +310,24 @@ const fr = {
   'jour.5': 'Vendredi',
   'jour.6': 'Samedi',
   'jour.7': 'Dimanche',
+
+  // ---- Bienvenue par rôle
+  'bv.aide': 'Quand un membre du serveur reçoit le rôle choisi (par exemple « The Nuke End »), Esport HQ le mentionne une seule fois dans le salon choisi. Les membres qui ont déjà ce rôle ne sont pas mentionnés.',
+  'bv.actif': 'Bienvenue activée',
+  'bv.role': 'Rôle qui déclenche la bienvenue',
+  'bv.salon': 'Salon où publier la bienvenue',
+  'bv.message': 'Message',
+  'bv.variables': 'Variables : {membre} (mention), {pseudo}, {role}, {serveur}.',
+  'bv.tester': 'Envoyer un message d’essai',
+  'bv.test_ok': 'Message d’essai publié dans le salon.',
+  'bv.test_echec': 'Discord a refusé le message d’essai ({erreur}) : vérifiez que le bot peut voir le salon et y écrire.',
+  'bv.sans_serveur': 'Choisissez d’abord le serveur Discord dans l’onglet Général.',
+  'bv.intent': 'À activer une fois sur le portail Discord : Bot › Privileged Gateway Intents › Server Members Intent. Sans lui, la bienvenue ne peut pas voir les nouveaux membres.',
+  'bv.membres_refuses': 'Discord refuse l’accès aux membres : activez « Server Members Intent » sur le portail Discord (Bot › Privileged Gateway Intents). La bienvenue reprendra seule dans les 30 minutes.',
+  'bv.titulaires_ok': 'Activée : {n} membre(s) qui avaient déjà le rôle ne seront pas mentionnés.',
+  'bv.titulaires_echec': 'Activée, mais Discord n’a pas donné la liste des membres (Server Members Intent ?) : seules les personnes qui rejoignent le serveur à partir de maintenant seront accueillies.',
+  'bv.dernier_ok': 'Dernière bienvenue publiée le {le}.',
+  'bv.dernier_echec': 'Dernière bienvenue refusée par Discord le {le} (erreur {statut}) : vérifiez les droits du bot dans le salon.',
 
   // ---- Commandes
   'cmd.aide': 'Chaque commande peut être coupée, ou réservée à des rôles Discord. Après une mise à jour du bot, relancez l’enregistrement des commandes (node esport/outils/discord-commandes.mjs, voir la documentation).',
@@ -570,6 +589,7 @@ const en: Record<keyof typeof fr, string> = {
   'conf.liste_noire': 'Blacklist',
   'conf.horaires': 'Hours',
   'conf.commandes': 'Commands',
+  'conf.bienvenue': 'Welcome',
 
   'general.actif': 'Tickets enabled',
   'general.actif_aide': 'Disabled: buttons and commands answer “not configured yet”, the Discord connection is closed.',
@@ -799,6 +819,24 @@ const en: Record<keyof typeof fr, string> = {
   'jour.5': 'Friday',
   'jour.6': 'Saturday',
   'jour.7': 'Sunday',
+
+  // ---- Welcome by role
+  'bv.aide': 'When a server member gets the chosen role (for example “The Nuke End”), Esport HQ mentions them once in the chosen channel. Members who already have the role are not mentioned.',
+  'bv.actif': 'Welcome enabled',
+  'bv.role': 'Role that triggers the welcome',
+  'bv.salon': 'Channel for the welcome message',
+  'bv.message': 'Message',
+  'bv.variables': 'Variables: {membre} (mention), {pseudo}, {role}, {serveur}.',
+  'bv.tester': 'Send a test message',
+  'bv.test_ok': 'Test message posted in the channel.',
+  'bv.test_echec': 'Discord refused the test message ({erreur}): check that the bot can see the channel and write in it.',
+  'bv.sans_serveur': 'Choose the Discord server first in the General tab.',
+  'bv.intent': 'Turn on once in the Discord developer portal: Bot › Privileged Gateway Intents › Server Members Intent. Without it, the welcome cannot see new members.',
+  'bv.membres_refuses': 'Discord refuses access to members: turn on “Server Members Intent” in the Discord portal (Bot › Privileged Gateway Intents). The welcome will resume by itself within 30 minutes.',
+  'bv.titulaires_ok': 'Enabled: {n} member(s) who already had the role will not be mentioned.',
+  'bv.titulaires_echec': 'Enabled, but Discord did not give the member list (Server Members Intent?): only people who join the server from now on will be welcomed.',
+  'bv.dernier_ok': 'Last welcome posted on {le}.',
+  'bv.dernier_echec': 'Last welcome refused by Discord on {le} (error {statut}): check the bot’s permissions in the channel.',
 
   'cmd.aide': 'Each command can be turned off, or kept for some Discord roles. After a bot update, register the commands again (node esport/outils/discord-commandes.mjs, see the documentation).',
   'cmd.staff': 'Staff',
