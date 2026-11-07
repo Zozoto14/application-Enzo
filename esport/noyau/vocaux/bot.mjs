@@ -10,27 +10,38 @@
  * déverrouiller), `n` (limite → fenêtre `vc:nm:`), `k` (expulser → menu `vc:ks:`), `a` (liste d'amis → menus `vc:aa:`
  * ajouter, `vc:ar:` retirer), `t` (transférer → menu `vc:ts:`).
  *
+ * /voc <renommer|verrouiller|deverrouiller|expulser|ami-ajouter|ami-retirer|limite|proprietaire> : dans le salon
+ * temporaire (son fil de discussion intégré), ou ailleurs en étant dedans ; chaque sous-commande peut être désactivée
+ * ou réservée à des rôles (réglage `vocaux_commandes`, comme les commandes des tickets).
+ *
  * `interaction(i)` rend la réponse pour Discord, ou `undefined` si l'interaction n'est pas pour les salons vocaux. Une
  * réponse peut porter `apres` (mise à jour du panneau, lancée une fois la réponse partie).
  */
 
 import { lireLangue } from '../langues.mjs';
 import { lireGeneral } from '../tickets/reglages.mjs';
-import { lireVocaux } from './reglages.mjs';
-import { RefusVocal, ajouterAmis, expulser, limiter, lireSalon, majPanneau, nomMembre, renommer, retirerAmi, transferer, verrouiller } from './salons.mjs';
+import { lireCommandesVocaux, lireVocaux } from './reglages.mjs';
+import { RefusVocal, ajouterAmis, expulser, limiter, lireSalon, majPanneau, nomMembre, renommer, retirerAmi, salonsAvecOccupant, salonsDuProprietaire, transferer, verrouiller } from './salons.mjs';
 import { tv } from './textes.mjs';
 
 const EPHEMERE = 64;
-const T = { COMPOSANT: 3, FENETRE: 5 };
+const T = { COMMANDE: 2, COMPOSANT: 3, FENETRE: 5 };
 const PERMISSION_ADMIN = 0x8n;
 const ID = /^\d{5,25}$/;
 
-export const estInteractionVocaux = i => String(i?.data?.custom_id ?? '').startsWith('vc:');
+export const estInteractionVocaux = i => String(i?.data?.custom_id ?? '').startsWith('vc:') || (i?.type === T.COMMANDE && i?.data?.name === 'voc');
 
 const avis = texte => ({ type: 4, data: { content: String(texte).slice(0, 2000), flags: EPHEMERE, allowed_mentions: { parse: [] } } });
 const fenetre = (custom_id, titre, champs) => ({ type: 9, data: { custom_id, title: String(titre).slice(0, 45), components: champs.map(c => ({ type: 1, components: [c] })) } });
 const valeursFenetre = i => Object.fromEntries((i.data?.components ?? []).flatMap(r => r.components ?? []).map(c => [String(c.custom_id), String(c.value ?? '')]));
 const menu = (contenu, composants) => ({ type: 4, data: { flags: EPHEMERE, content: contenu, allowed_mentions: { parse: [] }, components: composants.map(c => ({ type: 1, components: [c] })) } });
+
+/** Sous-commande et options de /voc. */
+function commande(i) {
+  const premier = i.data?.options?.[0];
+  if (!premier || Number(premier.type) !== 1) return { nom: '', options: {} };
+  return { nom: premier.name, options: Object.fromEntries((premier.options ?? []).map(o => [o.name, o.value])) };
+}
 
 /**
  * `options.tournoi` : `{ rolesEquipe(ctx, salon), equipeDe(salon) }` (salons d'équipe de tournoi, tournoi.mjs).
@@ -170,10 +181,69 @@ export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fet
     return ok(ctx, suivant, suivant.limite ? tv(langue, 'limite_ok', { n: suivant.limite }) : tv(langue, 'limite_aucune'));
   }
 
+  // ---------------------------------------------------------------- /voc
+
+  /** Salon visé par /voc : celui où la commande est tapée, sinon celui où la personne est, sinon le sien. */
+  async function salonDeCommande(i, ctx) {
+    const ici = await lireSalon(base, i.channel_id);
+    if (ici) return salonPour(i, ctx, ici.salonId);
+    const qui = acteur(i);
+    const dedans = (await salonsAvecOccupant(base, qui)).find(s => s.guildId === ctx.guildId);
+    if (dedans) return salonPour(i, ctx, dedans.salonId);
+    const sien = (await salonsDuProprietaire(base, ctx.guildId, qui))[0];
+    if (sien) return sien;
+    throw new RefusVocal('hors_salon');
+  }
+
+  async function exigerCommande(i, nom) {
+    const c = (await lireCommandesVocaux(base))[nom];
+    if (!c || c.actif === false) throw new RefusVocal('commande_desactivee');
+    if (c.roles.length && !adminServeur(i) && !c.roles.some(r => (i.member?.roles ?? []).includes(r))) throw new RefusVocal('commande_interdite');
+  }
+
+  async function commandeRecue(i, langue) {
+    const { nom, options: o } = commande(i);
+    const ctx = await contexte(i);
+    if (!ctx.reglages.actif) throw new RefusVocal('non_configure');
+    await exigerCommande(i, nom);
+    const s = await salonDeCommande(i, ctx);
+    const membre = String(o.membre ?? '');
+    const u = i.data?.resolved?.users?.[membre];
+    const nomCible = nomMembre({ ...(i.data?.resolved?.members?.[membre] ?? {}), user: u ?? { id: membre } }) || `<@${membre}>`;
+    switch (nom) {
+      case 'renommer': {
+        const suivant = await renommer(ctx, s, String(o.nom ?? ''));
+        return ok(ctx, suivant, tv(langue, 'renomme', { nom: suivant.nom }));
+      }
+      case 'verrouiller':
+        return ok(ctx, await verrouiller(ctx, s, true), tv(langue, 'verrouille_ok'));
+      case 'deverrouiller':
+        return ok(ctx, await verrouiller(ctx, s, false), tv(langue, 'deverrouille_ok'));
+      case 'expulser':
+        return faireExpulser(i, ctx, s, membre, langue);
+      case 'ami-ajouter': {
+        if (s.tournoiId) throw new RefusVocal('tournoi_verrou');
+        const suivant = await ajouterAmis(ctx, s, [{ id: membre, nom: nomCible, bot: Boolean(u?.bot) }]);
+        return ok(ctx, suivant, tv(langue, 'amis_ajoutes', { membres: nomCible }));
+      }
+      case 'ami-retirer':
+        return ok(ctx, await retirerAmi(ctx, s, membre), tv(langue, 'ami_retire', { membre: nomCible }));
+      case 'limite': {
+        const suivant = await limiter(ctx, s, Number(o.places));
+        return ok(ctx, suivant, suivant.limite ? tv(langue, 'limite_ok', { n: suivant.limite }) : tv(langue, 'limite_aucune'));
+      }
+      case 'proprietaire':
+        return faireTransferer(i, ctx, s, membre, langue);
+      default:
+        return avis(tv(langue, 'erreur'));
+    }
+  }
+
   async function interaction(i) {
     if (!estInteractionVocaux(i)) return undefined;
     const langue = await langueDe(i);
     try {
+      if (i.type === T.COMMANDE) return await commandeRecue(i, langue);
       if (i.type === T.COMPOSANT) return await composant(i, langue);
       if (i.type === T.FENETRE) return await fenetreRecue(i, langue);
       return avis(tv(langue, 'erreur'));

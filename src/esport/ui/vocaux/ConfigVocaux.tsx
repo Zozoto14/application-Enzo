@@ -14,7 +14,7 @@ import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trVc, type CleVc } from '../../i18n/vocaux';
-import { apiVocaux, type ConfigVocaux as Config, type Hub, type ReglagesVocaux, type ServeurVocaux } from '../../vocaux/api';
+import { apiVocaux, type CommandesVocaux, type ConfigVocaux as Config, type Hub, type ReglagesVocaux, type ServeurVocaux } from '../../vocaux/api';
 import { Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, LARGEUR_CONTENU, Squelette, attenue, texte, type Ton } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
@@ -41,10 +41,12 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
   const [conf, setConf] = useState<Config | undefined>();
   const [r, setR] = useState<ReglagesVocaux | undefined>();
   const [serveur, setServeur] = useState<ServeurVocaux | undefined>();
+  const [cmd, setCmd] = useState<CommandesVocaux>({});
   const { erreur, avis, agir, enCours } = useAgir();
   const recevoir = useCallback((c: Config) => {
     setConf(c);
     setR(c.reglages);
+    setCmd(c.commandes);
   }, []);
   const lireServeur = useCallback(
     () =>
@@ -154,6 +156,21 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
         <Choix theme={theme} libelle={trVc('proprietaire_part')} valeur={r.quandProprietairePart} options={conf.choix.modesProprietaire.map(m => ({ id: m, nom: trVc(`mode.${m}` as CleVc) }))} onChoisir={quandProprietairePart => setR({ ...r, quandProprietairePart })} testID="esport-vc-proprietaire" />
         {textes.length > 1 ? <Choix theme={theme} libelle={trVc('journaux')} valeur={r.salonJournaux ?? AUCUN} options={textes} onChoisir={id => setR({ ...r, salonJournaux: id === AUCUN ? null : id })} testID="esport-vc-journaux" /> : null}
         <BoutonHub theme={theme} variante="plein" titre={trVc('enregistrer')} onPress={enregistrer} desactive={enCours === 'enregistrer'} testID="esport-vc-enregistrer" />
+      </Bloc>
+
+      <Bloc theme={theme} testID="esport-vc-commandes">
+        <Intertitre theme={theme}>{trVc('commandes')}</Intertitre>
+        <Text style={attenue(theme)}>{trVc('commandes_aide')}</Text>
+        {conf.choix.commandes.map(nom => (
+          <View key={nom} style={{ gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-vc-cmd-${nom}`}>
+            <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+              <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc(`cmd.${nom}` as CleVc)}</Text>
+              <Interrupteur theme={theme} libelle={trVc(`cmd.${nom}` as CleVc)} valeur={cmd[nom]?.actif !== false} onChanger={actif => setCmd({ ...cmd, [nom]: { roles: cmd[nom]?.roles ?? [], actif } })} testID={`esport-vc-cmd-${nom}-actif`} />
+            </View>
+            {roles.length && cmd[nom]?.actif !== false ? <ChoixMultiple theme={theme} libelle={trVc('commande_roles')} valeurs={cmd[nom]?.roles ?? []} options={roles} onChanger={x => setCmd({ ...cmd, [nom]: { actif: true, roles: x } })} max={conf.choix.limites.roles} testID={`esport-vc-cmd-${nom}-roles`} /> : null}
+          </View>
+        ))}
+        <BoutonHub theme={theme} variante="plein" titre={trVc('enregistrer')} onPress={() => void agir('commandes', async () => (recevoir(await api.changerCommandes(cmd)), trVc('enregistre')))} desactive={enCours === 'commandes'} testID="esport-vc-cmd-enregistrer" />
       </Bloc>
 
       <Bloc theme={theme} testID="esport-vc-salons">

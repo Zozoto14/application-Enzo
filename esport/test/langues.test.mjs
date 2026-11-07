@@ -194,7 +194,7 @@ test('commandes slash : mêmes noms, descriptions et choix en anglais par défau
   const defs = definitionsCommandes();
   assert.deepEqual(
     defs.map(d => d.name),
-    ['aide', 'lier', 'delier', 'prochain', 'planning', 'rsvp', 'dispo', 'taches', 'strat', 'resume', 'evenement-creer', 'relancer', 'esport-lier-serveur', 'ticket', 'tickets'],
+    ['aide', 'lier', 'delier', 'prochain', 'planning', 'rsvp', 'dispo', 'taches', 'strat', 'resume', 'evenement-creer', 'relancer', 'esport-lier-serveur', 'ticket', 'tickets', 'voc'],
   );
   assert.deepEqual(LOCALES_FRANCAIS, ['fr']);
   const verifier = (o, chemin) => {

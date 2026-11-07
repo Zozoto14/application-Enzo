@@ -595,11 +595,11 @@ test('saisies de /evenement-creer, définitions des commandes', () => {
   assert.equal(lireHeureSaisie('9h'), '09:00');
   assert.equal(lireHeureSaisie('25:00'), null);
   const defs = definitionsCommandes();
-  assert.deepEqual(defs.map(d => d.name).sort(), ['aide', 'delier', 'dispo', 'esport-lier-serveur', 'evenement-creer', 'lier', 'planning', 'prochain', 'relancer', 'resume', 'rsvp', 'strat', 'taches', 'ticket', 'tickets']);
+  assert.deepEqual(defs.map(d => d.name).sort(), ['aide', 'delier', 'dispo', 'esport-lier-serveur', 'evenement-creer', 'lier', 'planning', 'prochain', 'relancer', 'resume', 'rsvp', 'strat', 'taches', 'ticket', 'tickets', 'voc']);
   for (const d of defs) {
     assert.match(d.name, /^[a-z-]{1,32}$/);
     assert.ok(d.description.length <= 100, d.name);
-    for (const o of d.options ?? []) assert.ok(o.description.length <= 100 && /^[a-z]{1,32}$/.test(o.name), `${d.name}.${o.name}`);
+    for (const o of d.options ?? []) assert.ok(o.description.length <= 100 && /^[a-z][a-z-]{0,31}$/.test(o.name), `${d.name}.${o.name}`);
   }
   assert.equal(defs.find(d => d.name === 'esport-lier-serveur').default_member_permissions, '32');
 });

@@ -94,6 +94,19 @@ test('hubs : ajout, salon, catégorie, modèle, limite, verrouillage ; staff, d�
   expect((put.hubs as unknown[])[0]).toMatchObject({ id: '751', nom: 'Créer un salon', categorieId: '750', modeleNom: 'Vocal de {pseudo}', limite: 5, verrouille: true });
 });
 
+test('commandes /voc : désactiver une sous-commande, la réserver à un rôle ; enregistré', async () => {
+  const { client, appels } = fauxClient(configDe());
+  await render(<ConfigVocaux theme={theme} client={client} large />);
+  expect(await screen.findByText('/voc renommer : renommer son salon')).toBeTruthy();
+  await fireEvent(screen.getByTestId('esport-vc-cmd-renommer-actif'), 'valueChange', false);
+  await fireEvent.press(await screen.findByTestId('esport-vc-cmd-verrouiller-roles-720'));
+  await fireEvent.press(screen.getByTestId('esport-vc-cmd-enregistrer'));
+  await screen.findByText('Enregistré.');
+  const put = appels.find(a => a.chemin === '/vocaux/config/commandes' && a.methode === 'PUT')!.corps as Record<string, { actif: boolean; roles: string[] }>;
+  expect(put.renommer).toEqual({ actif: false, roles: [] });
+  expect(put.verrouiller).toEqual({ actif: true, roles: ['720'] });
+});
+
 test('anglais ; onglet Bot Esport HQ : carte « Salons vocaux temporaires » avec ses réglages (selon la permission)', async () => {
   definirLangue('en');
   const { client } = fauxClient(configDe());

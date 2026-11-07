@@ -15,6 +15,7 @@ import { baseMigree } from './base.mjs';
 import { creerMoteurVocaux, INTENT_VOCAL } from '../noyau/vocaux/moteur.mjs';
 import { creerBotVocaux } from '../noyau/vocaux/bot.mjs';
 import { VOCAUX_DEFAUT, nomSalon, validerVocaux } from '../noyau/vocaux/reglages.mjs';
+import { definitionsCommandes } from '../noyau/discord/bot/commandes.mjs';
 import { PV, lireSalon, surchargesSalon } from '../noyau/vocaux/salons.mjs';
 import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
 import { intentsVoulus, INTENT_GUILDS } from '../noyau/tickets/bienvenue.mjs';
@@ -355,4 +356,71 @@ test('application : réglages (vocaux.configurer), serveur Discord lu (salons vo
   assert.equal(i.statut, 200);
   assert.equal(i.corps.data.flags, 64);
   assert.ok(TABLES.some(([n]) => n === 'vocaux_salons'));
+});
+
+/** Commande /voc <sous> tapée dans `salon` (fil du salon vocal, ou un autre salon). */
+const voc = (salonId, userId, sous, options = [], extra = {}) => ({
+  type: 2,
+  guild_id: GUILD,
+  channel_id: salonId,
+  locale: 'fr',
+  member: { user: { id: userId }, roles: extra.roles ?? [], permissions: extra.permissions ?? '0' },
+  data: { name: 'voc', options: [{ type: 1, name: sous, options }], resolved: extra.resolved ?? {} },
+});
+
+test('/voc : définition enregistrée (huit sous-commandes) ; chaque sous-commande dans son salon', async () => {
+  const def = definitionsCommandes().find(c => c.name === 'voc');
+  assert.deepEqual(def.options.map(o => o.name), ['renommer', 'verrouiller', 'deverrouiller', 'expulser', 'ami-ajouter', 'ami-retirer', 'limite', 'proprietaire']);
+  assert.deepEqual(def.contexts, [0]);
+  const k = await monter();
+  const salon = await rejoindreHub(k, U1, 'Léa');
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vs(U2, salon, 'Max'));
+  const r = await k.bot.interaction(voc(salon, U1, 'renommer', [{ name: 'nom', type: 3, value: 'Ranked' }]));
+  assert.match(r.data.content, /Salon renommé : Ranked/);
+  assert.equal(r.data.flags, 64);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'verrouiller'))).data.content, /verrouillé/);
+  assert.equal((await lireSalon(k.base, salon)).verrouille, true);
+  const ami = await k.bot.interaction(voc(salon, U1, 'ami-ajouter', [{ name: 'membre', type: 6, value: U3 }], { resolved: { users: { [U3]: { id: U3, username: 'chloe' } } } }));
+  assert.match(ami.data.content, /chloe/);
+  assert.equal(BigInt(k.rest.appels.filter(a => a.methode === 'PATCH' && a.chemin === `/channels/${salon}`).at(-1).corps.permission_overwrites.find(o => o.id === U3).allow) & CONNECT, CONNECT);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'ami-retirer', [{ name: 'membre', type: 6, value: U3 }]))).data.content, /n’est plus/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'limite', [{ name: 'places', type: 4, value: 3 }]))).data.content, /3 places/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'deverrouiller'))).data.content, /déverrouillé/);
+  // Hors du salon, mais en étant dedans : la commande vise ce salon.
+  assert.match((await k.bot.interaction(voc('710000000000000013', U1, 'expulser', [{ name: 'membre', type: 6, value: U2 }]))).data.content, /a été expulsé du salon\./);
+  assert.deepEqual(k.rest.appels.filter(a => a.chemin === `/guilds/${GUILD}/members/${U2}`).at(-1).corps, { channel_id: null });
+  // Max revient (salon ouvert), Léa lui donne la propriété ; la sienne passe, plus de contrôle pour elle.
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vs(U2, salon, 'Max'));
+  assert.match((await k.bot.interaction(voc(salon, U1, 'proprietaire', [{ name: 'membre', type: 6, value: U2 }]))).data.content, /Max est maintenant propriétaire/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'verrouiller'))).data.content, /Seul le propriétaire/);
+  // Personne ne peut viser un absent ; quelqu'un sans salon temporaire reçoit l'explication.
+  assert.match((await k.bot.interaction(voc(salon, U2, 'proprietaire', [{ name: 'membre', type: 6, value: U4 }]))).data.content, /n’est pas dans ton salon/);
+  assert.match((await k.bot.interaction(voc('710000000000000013', U4, 'verrouiller'))).data.content, /Utilise cette commande dans ton salon vocal temporaire/);
+  k.moteur.arreter();
+});
+
+test('/voc : sous-commande désactivée ou réservée à des rôles (administrateur toujours permis) ; salons vocaux éteints', async () => {
+  const k = await monter();
+  const salon = await rejoindreHub(k, U1, 'Léa');
+  await k.base.executer("INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES ('vocaux_commandes', ?, '2026-01-01T00:00:00.000Z')", [JSON.stringify({ renommer: { actif: false, roles: [] }, limite: { actif: true, roles: ['720000000000000055'] } })]);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'renommer', [{ name: 'nom', type: 3, value: 'X' }]))).data.content, /désactivée/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'limite', [{ name: 'places', type: 4, value: 2 }]))).data.content, /réservée à certains rôles/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'limite', [{ name: 'places', type: 4, value: 2 }], { roles: ['720000000000000055'] }))).data.content, /2 places/);
+  assert.match((await k.bot.interaction(voc(salon, U1, 'limite', [{ name: 'places', type: 4, value: 4 }], { permissions: '8' }))).data.content, /4 places/);
+  await regler(k.base, { actif: false });
+  assert.match((await k.bot.interaction(voc(salon, U1, 'verrouiller'))).data.content, /ne sont pas activés/);
+  k.moteur.arreter();
+});
+
+test('application : commandes /voc réglées (vocaux.configurer) ; interaction /voc signée', async () => {
+  const k = await bancTickets({ banc });
+  await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD } });
+  const r = await k.api('/vocaux/config/commandes', undefined, { methode: 'PUT', corps: { expulser: { actif: false }, limite: { actif: true, roles: [STAFF] } } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.deepEqual([r.corps.commandes.expulser.actif, r.corps.commandes.limite.roles, r.corps.commandes.renommer.actif], [false, [STAFF], true]);
+  assert.equal((await k.api('/vocaux/config/commandes', undefined, { methode: 'PUT', corps: { limite: { roles: ['@everyone'] } } })).statut, 400);
+  const i = await k.interaction({ type: 2, guild_id: k.GUILD, channel_id: '710000000000000013', member: { user: { id: U1, username: 'lea' }, roles: [], permissions: '0' }, data: { name: 'voc', options: [{ type: 1, name: 'verrouiller', options: [] }] } });
+  assert.equal(i.statut, 200);
+  assert.equal(i.corps.data.flags, 64);
+  assert.match(i.corps.data.content, /not enabled/, 'sans locale ni compte lié : anglais');
 });

@@ -130,6 +130,11 @@ set -a; . ~/.appdashboard/esport.env; set +a
 Le jeton n'est lu que dans l'environnement (jamais en argument, jamais affiché). À la fin,
 `curl -s https://esport.appdashboard.fr/sante` répond `"bot":true`.
 
+**À relancer après chaque mise à jour qui ajoute ou change une commande** (ex. `/voc` des salons vocaux temporaires,
+[vocaux.md](vocaux.md)) : la même ligne sans `--identite` —
+`node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.fr` — ou, dans l'app, **Administration
+› Bot Esport HQ › Connexion et état › Réenregistrer les commandes** (même appel).
+
 ### 7. Lier le serveur à la team : `/esport-lier-serveur`
 
 1. Dans l'app : **Esport › votre team › Réglages › Discord › Lier un serveur Discord**. Un code s'affiche
@@ -181,7 +186,7 @@ vérifiée pour savoir qui agit).
 ## Administration › Bot Esport HQ
 
 Tous les réglages du bot réunis sur une page : **Esport › Administration › Bot Esport HQ** (le Fondateur, ou un rôle du
-club avec `tickets.configurer`). Chaque réglage reste enregistré à sa place (aucune copie) ; la page les montre et y
+club avec `tickets.configurer` ou `vocaux.configurer`). Chaque réglage reste enregistré à sa place (aucune copie) ; la page les montre et y
 mène :
 
 - **Connexion et état** : variables du serveur (`DISCORD_APPLICATION_ID` affiché, clé publique et jeton : présents ou
@@ -203,7 +208,7 @@ mène :
   fonctionnalité y ajoute son entrée, avec ses réglages ou un lien vers sa page, et déclare ses permissions Discord
   dans `esport/noyau/discord/permissions-bot.mjs`).
 
-API (Fondateur ou `tickets.configurer`, 404 sinon) : `GET /bot-discord`, `GET /bot-discord/serveur`,
+API (Fondateur, `tickets.configurer` ou `vocaux.configurer`, 404 sinon) : `GET /bot-discord`, `GET /bot-discord/serveur`,
 `GET|POST /bot-discord/commandes`.
 
 ## Ce que fait le bot
@@ -257,6 +262,8 @@ Réponses visibles **par vous seul** (éphémères).
 | `/ticket ouvrir [categorie]` · `/ticket fermer [raison]` · `/tickets [liste]` | tout membre du serveur du club (sans compte lié) | tickets : ouvrir un ticket, fermer le sien, voir ses tickets — voir [tickets.md](tickets.md) |
 | messages dans un salon de ticket | l'auteur du ticket, une personne ajoutée | ils écrivent et envoient leurs fichiers directement (plus de bouton « Répondre ») ; réglage « Le staff répond uniquement depuis l'AppDashboard » (défaut) : le staff lit sans écrire ([tickets.md](tickets.md#le-staff-répond-uniquement-depuis-lappdashboard)) |
 | `/ticket prendre`, `liberer`, `ajouter`, `retirer`, `renommer`, `priorite`, `transferer`, `attente`, `note`, `transcript`, `rouvrir`, `stats`, `permanent`, `ping`, `panneau` | staff du ticket (rôles de la catégorie, compte lié qui répond aux tickets ; `panneau` : administrateur) | tickets : gestion depuis le salon ([tickets.md](tickets.md#commandes-discord)) |
+| `/voc renommer nom:` · `verrouiller` · `deverrouiller` · `expulser membre:` · `ami-ajouter membre:` · `ami-retirer membre:` · `limite places:` · `proprietaire membre:` | le propriétaire d'un salon vocal temporaire (ou le staff : rôles du staff, administrateurs) | gérer son salon vocal temporaire, tapée dans le salon (son fil) ou ailleurs en étant dedans ; chaque sous-commande peut être coupée ou réservée à des rôles ([vocaux.md](vocaux.md#commandes-voc)) |
+| boutons du **panneau de contrôle** d'un salon vocal temporaire (rien à enregistrer) | son propriétaire, le staff | Renommer, Verrouiller / Déverrouiller, Limite de places, Expulser, Liste d'amis, Transférer ([vocaux.md](vocaux.md)) |
 | `/ticket supprimer [avis]` | compte Esport lié avec `tickets.gerer` (ou `tickets.configurer` pour la catégorie) | tickets : supprimer définitivement le ticket **fermé** du salon, après confirmation ; avis de l'auteur gardé anonyme (défaut) ou supprimé ([tickets.md](tickets.md#supprimer-un-ticket-fermé)) |
 
 Chaque commande fait **les mêmes contrôles que l'app** avec le compte lié : membre de la team, module activé, bon

@@ -167,6 +167,24 @@ COMMANDES.push(
   },
 );
 
+/**
+ * Salons vocaux temporaires (docs/esport/vocaux.md) : /voc <sous-commande>, pour le propriétaire de son salon (ou le
+ * staff), tapée dans le salon vocal temporaire (son fil de discussion) ou ailleurs en étant dedans. Chaque
+ * sous-commande peut être désactivée ou réservée à des rôles (Administration › Bot Esport HQ › Fonctionnalités).
+ */
+const optionMembreVoc = { type: T.UTILISATEUR, name: 'membre', ...desc('Le membre du serveur', 'The server member'), required: true };
+export const SOUS_COMMANDES_VOC = [
+  { type: T.SOUS_COMMANDE, name: 'renommer', ...desc('Renommer ton salon vocal temporaire', 'Rename your temporary voice channel'), options: [{ type: T.CHAINE, name: 'nom', ...desc('Nouveau nom du salon', 'New channel name'), required: true, min_length: 1, max_length: 100 }] },
+  { type: T.SOUS_COMMANDE, name: 'verrouiller', ...desc('Verrouiller ton salon : toi, ta liste d’amis et le staff', 'Lock your channel: you, your friends list and the staff') },
+  { type: T.SOUS_COMMANDE, name: 'deverrouiller', ...desc('Déverrouiller ton salon : ouvert à tous', 'Unlock your channel: open to everyone') },
+  { type: T.SOUS_COMMANDE, name: 'expulser', ...desc('Expulser quelqu’un de ton salon', 'Kick someone from your channel'), options: [optionMembreVoc] },
+  { type: T.SOUS_COMMANDE, name: 'ami-ajouter', ...desc('Ajouter à ta liste d’amis (entre même verrouillé)', 'Add to your friends list (can join even when locked)'), options: [optionMembreVoc] },
+  { type: T.SOUS_COMMANDE, name: 'ami-retirer', ...desc('Retirer de ta liste d’amis', 'Remove from your friends list'), options: [optionMembreVoc] },
+  { type: T.SOUS_COMMANDE, name: 'limite', ...desc('Limiter les places de ton salon (0 : illimité)', 'Limit the slots of your channel (0: unlimited)'), options: [{ type: T.ENTIER, name: 'places', ...desc('Nombre de places, de 0 à 99', 'Number of slots, from 0 to 99'), required: true, min_value: 0, max_value: 99 }] },
+  { type: T.SOUS_COMMANDE, name: 'proprietaire', ...desc('Donner la propriété de ton salon à quelqu’un de présent', 'Give your channel to someone who is in it'), options: [optionMembreVoc] },
+];
+COMMANDES.push({ name: 'voc', ...desc('Ton salon vocal temporaire', 'Your temporary voice channel'), contexts: SERVEUR, options: SOUS_COMMANDES_VOC });
+
 /** Définitions telles que Discord les attend (commandes de type 1, « chat input »). */
 export function definitionsCommandes() {
   return COMMANDES.map(c => ({ type: 1, integration_types: [0], ...c }));

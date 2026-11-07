@@ -76,7 +76,32 @@ hubs, le bot doit pouvoir voir et gérer les salons.
 
 ## Commandes /voc
 
-Voir [bot-discord.md, « Les commandes »](bot-discord.md#les-commandes) (étape 2 de la fonction).
+Les mêmes actions que le panneau, en commande (réponses visibles de la personne seule) :
+
+| Commande | Effet |
+| --- | --- |
+| `/voc renommer nom:` | renommer (même limite de Discord : 2 toutes les 10 minutes) |
+| `/voc verrouiller` · `/voc deverrouiller` | verrouiller / déverrouiller |
+| `/voc expulser membre:` | déconnecter une personne présente |
+| `/voc ami-ajouter membre:` · `/voc ami-retirer membre:` | liste d'amis |
+| `/voc limite places:` | 0 (illimité) à 99 |
+| `/voc proprietaire membre:` | donner la propriété à une personne présente |
+
+Elle vise le salon où elle est tapée (le fil de discussion intégré du salon vocal), sinon celui où la personne se
+trouve, sinon le sien ; mêmes droits que le panneau (propriétaire ou staff). **Réglages › Commandes /voc** (carte des
+salons vocaux) : chaque sous-commande peut être **coupée** ou **réservée à des rôles** Discord (les administrateurs du
+serveur passent toujours), comme les commandes des tickets.
+
+**Enregistrer `/voc` auprès de Discord** (une fois, après la mise à jour) : Administration › Bot Esport HQ ›
+Connexion et état › **Réenregistrer les commandes**, ou dans le Terminal cPanel :
+
+```bash
+cd ~/application-enzo
+set -a; . ~/.appdashboard/esport.env; set +a
+node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.fr
+```
+
+(avec le chemin de Node de votre compte, [bot-discord.md](bot-discord.md#6-enregistrer-les-commandes)).
 
 ## Données
 
