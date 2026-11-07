@@ -47,6 +47,16 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       choix: { commandes: COMMANDES_VOCAUX, modesProprietaire: MODES_PROPRIETAIRE, limites: LIMITES_VOCAUX, modeleDefaut: MODELE_DEFAUT, modeleTournoiDefaut: MODELE_TOURNOI_DEFAUT, permissionsBot: [...PERMISSIONS_VOCAUX] },
       bot: Boolean(jetonBot),
       lienInvitation: lienInvitationBot(applicationId),
+      // Tournois proposés pour un hub d'équipe : ceux qui ont des équipes notées (fiche du tournoi › Équipes et rôles
+      // Discord), pas terminés ni annulés ; plus ceux déjà liés à un hub.
+      tournois: (
+        await base.tous(
+          `SELECT DISTINCT t.id, t.nom, te.nom AS team FROM tournois t JOIN teams te ON te.id = t.team_id
+            WHERE t.supprime_le IS NULL AND (t.id IN (SELECT tournoi_id FROM tournoi_equipes) AND t.statut NOT IN ('termine', 'annule')${reglages.hubs.some(h => h.tournoiId) ? ` OR t.id IN (${reglages.hubs.filter(h => h.tournoiId).map(() => '?').join(', ')})` : ''})
+            ORDER BY t.nom LIMIT 50`,
+          reglages.hubs.filter(h => h.tournoiId).map(h => h.tournoiId),
+        )
+      ).map(t => ({ id: t.id, nom: t.nom, team: t.team })),
     };
   }
 

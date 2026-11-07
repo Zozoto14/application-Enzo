@@ -94,6 +94,28 @@ test('hubs : ajout, salon, catégorie, modèle, limite, verrouillage ; staff, d�
   expect((put.hubs as unknown[])[0]).toMatchObject({ id: '751', nom: 'Créer un salon', categorieId: '750', modeleNom: 'Vocal de {pseudo}', limite: 5, verrouille: true });
 });
 
+test('hub de tournoi : tournoi lié, modèle des équipes, toujours verrouillé, rôles autorisés (casters) ; enregistré', async () => {
+  const conf = configDe();
+  conf.tournois = [{ id: 't1', nom: 'The Nuke End', team: 'Organisation' }];
+  const { client, appels } = fauxClient(conf);
+  await render(<ConfigVocaux theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-vc-hub-ajouter'));
+  await fireEvent.press(await screen.findByTestId('esport-vc-hub-0-salon-751'));
+  expect(screen.getByTestId('esport-vc-hub-0-verrouille')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-tournoi-t1'));
+  expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('{tag} — {nom}');
+  expect(screen.queryByTestId('esport-vc-hub-0-verrouille')).toBeNull();
+  expect(screen.getByText(/reste verrouillé sur son rôle/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-roles-720'));
+  await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
+  await screen.findByText('Enregistré.');
+  const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as { hubs: unknown[] };
+  expect(put.hubs[0]).toMatchObject({ id: '751', tournoiId: 't1', modeleNom: '{tag} — {nom}', verrouille: true, rolesAutorises: ['720'] });
+  // Retour à un hub ordinaire : le modèle par défaut revient.
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-tournoi--'));
+  expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('Salon de {pseudo}');
+});
+
 test('commandes /voc : désactiver une sous-commande, la réserver à un rôle ; enregistré', async () => {
   const { client, appels } = fauxClient(configDe());
   await render(<ConfigVocaux theme={theme} client={client} large />);

@@ -138,10 +138,33 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
               <Champ theme={theme} libelle={trVc('hub_modele')} valeur={h.modeleNom} onChanger={modeleNom => hub(i, { modeleNom })} maxLength={conf.choix.limites.modele} testID={`esport-vc-hub-${i}-modele`} style={{ flexGrow: 2, flexBasis: 220, minWidth: 0 }} />
               <Champ theme={theme} libelle={trVc('hub_limite')} valeur={String(h.limite)} onChanger={v => hub(i, { limite: entier(v) })} maxLength={2} clavier="number-pad" testID={`esport-vc-hub-${i}-limite`} style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
             </View>
-            <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-              <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_verrouille')}</Text>
-              <Interrupteur theme={theme} libelle={trVc('hub_verrouille')} valeur={h.verrouille} onChanger={verrouille => hub(i, { verrouille })} testID={`esport-vc-hub-${i}-verrouille`} />
-            </View>
+            {conf.tournois?.length ? (
+              <Choix
+                theme={theme}
+                libelle={trVc('hub_tournoi_choisir')}
+                valeur={h.tournoiId ?? AUCUN}
+                options={[{ id: AUCUN, nom: trVc('hub_tournoi_aucun') }, ...conf.tournois.map(t => ({ id: t.id, nom: `${t.nom} · ${t.team}` }))]}
+                onChoisir={id => {
+                  const tournoiId = id === AUCUN ? null : id;
+                  // Modèle du nom : celui des équipes ({tag} — {nom}) pour un hub de tournoi, s'il n'a pas été personnalisé.
+                  const modeleNom = tournoiId && h.modeleNom === conf.choix.modeleDefaut ? conf.choix.modeleTournoiDefaut : !tournoiId && h.modeleNom === conf.choix.modeleTournoiDefaut ? conf.choix.modeleDefaut : h.modeleNom;
+                  hub(i, { tournoiId, modeleNom, verrouille: tournoiId ? true : h.verrouille });
+                }}
+                testID={`esport-vc-hub-${i}-tournoi`}
+              />
+            ) : null}
+            {h.tournoiId ? (
+              <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-tournoi-reglages`}>
+                <Badge theme={theme} ton="accent" texte={trVc('hub_tournoi')} />
+                <Text style={attenue(theme)}>{trVc('hub_tournoi_aide')}</Text>
+                <ChoixMultiple theme={theme} libelle={trVc('hub_roles_autorises')} valeurs={h.rolesAutorises} options={roles} onChanger={rolesAutorises => hub(i, { rolesAutorises })} max={conf.choix.limites.roles} testID={`esport-vc-hub-${i}-roles`} />
+              </View>
+            ) : (
+              <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+                <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_verrouille')}</Text>
+                <Interrupteur theme={theme} libelle={trVc('hub_verrouille')} valeur={h.verrouille} onChanger={verrouille => hub(i, { verrouille })} testID={`esport-vc-hub-${i}-verrouille`} />
+              </View>
+            )}
             <BoutonHub theme={theme} variante="danger" titre={trVc('hub_retirer')} onPress={() => setR({ ...r, hubs: r.hubs.filter((_, j) => j !== i) })} testID={`esport-vc-hub-${i}-retirer`} />
           </View>
         ))}

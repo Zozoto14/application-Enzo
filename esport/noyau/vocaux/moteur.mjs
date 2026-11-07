@@ -13,13 +13,14 @@
  *    supprimés, présents et propriétaires resynchronisés) et personnes restées dans un hub servies ; après RESUMED,
  *    Discord rejoue les événements manqués.
  * Les événements sont traités UN PAR UN (file) : deux arrivées rapides dans un hub ne créent pas deux salons.
- * Salons d'équipe de tournoi (hub lié à un tournoi) : `tournoi.mjs` (`gererHubTournoi`), branché par `options.tournoi`.
+ * Salons d'équipe de tournoi (hub lié à un tournoi) : `tournoi.mjs` (`gererHubTournoi`, `rolesEquipe`).
  */
 
 import { iso, jsonOu } from '../outils.mjs';
 import { rest } from '../tickets/discord.mjs';
 import { lireGeneral } from '../tickets/reglages.mjs';
 import { lireVocaux, nomSalon } from './reglages.mjs';
+import { gererHubTournoi, rolesEquipe } from './tournoi.mjs';
 import {
   annoncerProprietaire,
   chargePanneau,
@@ -59,7 +60,7 @@ const VOCAL = 2;
  * `delaiMs` (tests : remplace le délai de suppression réglé), `tournoi` (salons d'équipe : `{ hub(ctx, hub, membre),
  * rolesEquipe(salon) }`).
  */
-export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, maintenant = () => Date.now(), journal = console, botId = () => null, delaiMs = null, tournoi = null } = {}) {
+export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, maintenant = () => Date.now(), journal = console, botId = () => null, delaiMs = null, tournoi = { hub: gererHubTournoi, rolesEquipe } } = {}) {
   const cache = { pret: false, guildId: null, salons: new Map(), vocal: new Map() };
   const minuteries = new Map();
   let file = Promise.resolve();

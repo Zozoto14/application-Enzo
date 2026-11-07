@@ -163,3 +163,118 @@ test('cron : rôles supprimés quand le tournoi est terminé, ou N heures après
   assert.ok(['tournoi_discord', 'tournoi_equipes', 'tournoi_equipe_membres'].every(t => TABLES.some(([n]) => n === t)));
   assert.ok(effacementParDiscord([J1]).some(i => i.sql.includes('tournoi_equipe_membres')));
 });
+
+// ------------------------------------------------------------------ Hub vocal du tournoi (étape 4)
+
+const GUILD = '700000000000000001';
+const BOT = '424242424242424242';
+const CAT = '710000000000000050';
+const HUB_T = '710000000000000052';
+const STAFF = '720000000000000001';
+const CASTER = '720000000000000060';
+const R1 = '720000000000000071';
+const R2 = '720000000000000072';
+const TOURNOI = '11111111-2222-4333-8444-555555555555';
+const PV_CONNECT = 1n << 20n;
+const silencieux = { error() {}, warn() {} };
+
+async function monterHub() {
+  const { baseMigree } = await import('./base.mjs');
+  const { fauxDiscordRest } = await import('./tickets-aide.mjs');
+  const { creerMoteurVocaux } = await import('../noyau/vocaux/moteur.mjs');
+  const { creerBotVocaux } = await import('../noyau/vocaux/bot.mjs');
+  const base = await baseMigree();
+  const t = '2026-11-20T10:00:00.000Z';
+  await base.executer('INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', ['general', JSON.stringify({ actif: false, guildId: GUILD, guildNom: 'Club', langue: 'fr' }), t]);
+  await base.executer('INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', ['vocaux', JSON.stringify({ actif: true, hubs: [{ id: HUB_T, nom: 'Vocal équipe The Nuke End', modeleNom: '{tag} — {nom}', limite: 0, verrouille: true, tournoiId: TOURNOI, rolesAutorises: [CASTER] }], rolesStaff: [STAFF], delaiSuppressionS: 5, maxParMembre: 1, quandProprietairePart: 'transferer' }), t]);
+  for (const [id, nom, tag, role, pos] of [['e1', 'Ligne Zéro', 'LZ0', R1, 0], ['e2', 'Bravo', 'BRV', R2, 1]]) {
+    await base.executer('INSERT INTO tournoi_equipes (id, tournoi_id, team_id, nom, tag, role_id, position, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [`00000000-0000-4000-8000-0000000000${id === 'e1' ? '01' : '02'}`, TOURNOI, 'team', nom, tag, role, pos, t, t]);
+  }
+  const rest = fauxDiscordRest();
+  rest.etat.salons.set(CAT, { id: CAT, type: 4, name: 'The Nuke End', guild_id: GUILD, position: 2, permission_overwrites: [] });
+  rest.etat.salons.set(HUB_T, { id: HUB_T, type: 2, name: 'Vocal équipe The Nuke End', guild_id: GUILD, parent_id: CAT, position: 3, permission_overwrites: [] });
+  for (const r of [R1, R2]) rest.etat.roles.set(r, { id: r, name: r === R1 ? 'LZ0 Ligne Zéro' : 'BRV Bravo' });
+  const moteur = creerMoteurVocaux({ base, fetch: rest.fetch, jetonBot: 'jeton-bot-de-test-jamais-reel', botId: () => BOT, delaiMs: 60, journal: silencieux });
+  await moteur.evenement('GUILD_CREATE', { id: GUILD, channels: [...rest.etat.salons.values()], voice_states: [], members: [] });
+  const bot = creerBotVocaux({ base, fetch: rest.fetch, jetonBot: 'jeton-bot-de-test-jamais-reel', botId: BOT });
+  return { base, rest, moteur, bot };
+}
+
+const vsT = (userId, channelId, nom, roles = []) => ({ guild_id: GUILD, user_id: userId, channel_id: channelId, member: { user: { id: userId, username: nom.toLowerCase() }, nick: nom, roles } });
+const creationsT = rest => rest.appels.filter(a => a.methode === 'POST' && a.chemin === `/guilds/${GUILD}/channels`);
+
+test('hub du tournoi : sans rôle d’équipe → déconnecté et prévenu en MP ; avec : salon de l’équipe verrouillé sur son rôle', async () => {
+  const k = await monterHub();
+  // Personne sans équipe : déconnectée du hub, MP d'explication, aucun salon.
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J3, HUB_T, 'Intrus', ['720000000000000999']));
+  assert.equal(creationsT(k.rest).length, 0);
+  assert.deepEqual(k.rest.appels.find(a => a.chemin === `/guilds/${GUILD}/members/${J3}`).corps, { channel_id: null });
+  assert.equal(k.rest.appels.find(a => a.chemin === '/users/@me/channels').corps.recipient_id, J3);
+  const mp = k.rest.etat.mp.at(-1);
+  assert.match(mp.content, /réservé aux équipes inscrites au tournoi/);
+  // Joueur de Ligne Zéro : salon « LZ0 — Ligne Zéro », verrouillé : @everyone refusé, rôle de l'équipe, staff et casters admis.
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J1, HUB_T, 'Kira', [R1]));
+  const [c] = creationsT(k.rest);
+  assert.equal(c.corps.name, 'LZ0 — Ligne Zéro');
+  const de = id => c.corps.permission_overwrites.find(o => o.id === id);
+  assert.equal(BigInt(de(GUILD).deny) & PV_CONNECT, PV_CONNECT);
+  for (const id of [R1, STAFF, CASTER, J1]) assert.equal(BigInt(de(id).allow) & PV_CONNECT, PV_CONNECT, id);
+  assert.ok(!de(R2), 'l’autre équipe n’entre pas');
+  const salon = [...k.rest.etat.salons.values()].find(s => s.name === 'LZ0 — Ligne Zéro').id;
+  const ligne = await k.base.premier('SELECT tournoi_id, equipe_id, verrouille FROM vocaux_salons WHERE salon_id = ?', [salon]);
+  assert.deepEqual([ligne.tournoi_id, Number(ligne.verrouille)], [TOURNOI, 1]);
+  // Panneau : ni renommer ni déverrouiller (boutons grisés), pas de liste d'amis.
+  const panneau = k.rest.etat.messages.get(salon)[0];
+  const boutons = panneau.components.flatMap(r => r.components);
+  assert.equal(boutons.find(b => b.custom_id === `vc:r:${salon}`).disabled, true);
+  assert.equal(boutons.find(b => b.custom_id === `vc:u:${salon}`).disabled, true);
+  assert.ok(!boutons.some(b => b.custom_id === `vc:a:${salon}`));
+  assert.match(panneau.embeds[0].description, /équipe \*\*LZ0 Ligne Zéro\*\*/);
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J1, salon, 'Kira', [R1]));
+  // Coéquipier : déplacé dans le salon de l'équipe, pas de deuxième salon ; l'autre équipe a le sien.
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J2, HUB_T, 'Nox', [R1]));
+  assert.equal(creationsT(k.rest).length, 1);
+  assert.deepEqual(k.rest.appels.filter(a => a.chemin === `/guilds/${GUILD}/members/${J2}`).at(-1).corps, { channel_id: salon });
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J2, salon, 'Nox', [R1]));
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(COACH, HUB_T, 'Zed', [R2]));
+  assert.equal(creationsT(k.rest).length, 2);
+  assert.equal(creationsT(k.rest)[1].corps.name, 'BRV — Bravo');
+  // Les joueurs ne peuvent ni déverrouiller ni renommer ; ils peuvent expulser.
+  const clic = (id, extra = {}) => ({ type: 3, guild_id: GUILD, channel_id: salon, locale: 'fr', member: { user: { id: J1 }, roles: [R1], permissions: '0' }, data: { custom_id: id, ...extra } });
+  assert.match((await k.bot.interaction(clic(`vc:u:${salon}`))).data.content, /reste verrouillé sur le rôle de l’équipe/);
+  assert.match((await k.bot.interaction(clic(`vc:r:${salon}`))).data.content, /nom d’un salon d’équipe de tournoi est fixe/);
+  const voc = { type: 2, guild_id: GUILD, channel_id: salon, locale: 'fr', member: { user: { id: J1 }, roles: [R1], permissions: '0' }, data: { name: 'voc', options: [{ type: 1, name: 'deverrouiller', options: [] }] } };
+  assert.match((await k.bot.interaction(voc)).data.content, /reste verrouillé/);
+  assert.match((await k.bot.interaction(clic(`vc:ks:${salon}`, { values: [J2] }))).data.content, /expulsé/);
+  // Verrouiller (recalcul des surcharges) garde le rôle de l'équipe et les casters.
+  await k.bot.interaction(clic(`vc:l:${salon}`));
+  const patch = k.rest.appels.filter(a => a.methode === 'PATCH' && a.chemin === `/channels/${salon}`).at(-1);
+  assert.ok([R1, CASTER].every(id => BigInt(patch.corps.permission_overwrites.find(o => o.id === id).allow) & PV_CONNECT));
+  k.moteur.arreter();
+});
+
+test('fin du tournoi : rôles et salons des équipes supprimés ensemble', async () => {
+  const k = await monterHub();
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J1, HUB_T, 'Kira', [R1]));
+  const salon = [...k.rest.etat.salons.values()].find(s => s.name === 'LZ0 — Ligne Zéro').id;
+  const { nettoyerTournoi } = await import('../noyau/vocaux/tournoi.mjs');
+  const r = await nettoyerTournoi({ base: k.base, fetch: k.rest.fetch, jetonBot: 'jeton-bot-de-test-jamais-reel', guildId: GUILD, maintenant: () => Date.now() }, TOURNOI);
+  assert.deepEqual([r.roles, r.salons, r.echecs.length], [2, 1, 0]);
+  assert.ok(!k.rest.etat.salons.has(salon));
+  assert.equal(k.rest.etat.roles.size, 0);
+  assert.equal((await k.base.tous('SELECT * FROM vocaux_salons', [])).length, 0);
+  k.moteur.arreter();
+});
+
+test('application : hub lié à un tournoi (tournoi existant exigé), tournois proposés', async () => {
+  const k = await monter();
+  await k.api(`${k.chemin}/equipes`, undefined, { methode: 'POST', corps: { nom: 'Ligne Zéro', tag: 'LZ0' } });
+  const r0 = await k.api('/vocaux/config', undefined, { methode: 'PUT', corps: { actif: true, hubs: [{ id: HUB_T, tournoiId: TOURNOI }] } });
+  assert.equal(r0.statut, 400, 'tournoi inconnu');
+  const c = await k.api('/vocaux/config');
+  assert.deepEqual(c.corps.tournois.map(t => t.nom), ['The Nuke End']);
+  const r = await k.api('/vocaux/config', undefined, { methode: 'PUT', corps: { actif: true, hubs: [{ id: HUB_T, tournoiId: k.tournoiId, rolesAutorises: [CASTER], verrouille: false }] } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.deepEqual([r.corps.reglages.hubs[0].verrouille, r.corps.reglages.hubs[0].modeleNom, r.corps.reglages.hubs[0].rolesAutorises], [true, '{tag} — {nom}', [CASTER]]);
+  assert.deepEqual((await k.api(k.chemin)).corps.hubs.map(h => h.id), [HUB_T]);
+});

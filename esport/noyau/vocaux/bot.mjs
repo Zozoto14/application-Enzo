@@ -23,6 +23,7 @@ import { lireGeneral } from '../tickets/reglages.mjs';
 import { lireCommandesVocaux, lireVocaux } from './reglages.mjs';
 import { RefusVocal, ajouterAmis, expulser, limiter, lireSalon, majPanneau, nomMembre, renommer, retirerAmi, salonsAvecOccupant, salonsDuProprietaire, transferer, verrouiller } from './salons.mjs';
 import { tv } from './textes.mjs';
+import { equipeDe, rolesEquipe } from './tournoi.mjs';
 
 const EPHEMERE = 64;
 const T = { COMMANDE: 2, COMPOSANT: 3, FENETRE: 5 };
@@ -47,7 +48,7 @@ function commande(i) {
  * `options.tournoi` : `{ rolesEquipe(ctx, salon), equipeDe(salon) }` (salons d'équipe de tournoi, tournoi.mjs).
  * `botId` : identifiant du bot (celui de l'application).
  */
-export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fetchDiscord, jetonBot, botId = null, tournoi = null }) {
+export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fetchDiscord, jetonBot, botId = null, tournoi = { rolesEquipe, equipeDe: s => equipeDe(base, s) } }) {
   async function langueDe(i) {
     const u = i.member?.user ?? i.user;
     const l = u?.id ? await base.premier('SELECT c.langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [u.id]) : null;

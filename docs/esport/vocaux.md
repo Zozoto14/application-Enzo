@@ -35,7 +35,8 @@ Permission du club **`vocaux.configurer`** (le Fondateur l'a d'office ; le Secon
 
 - **Activer** (au moins un hub) ;
 - **Hubs** (10 au plus), chacun : salon vocal, catégorie des salons créés (celle du hub par défaut), modèle du nom
-  (`{pseudo}`), places par défaut, salons verrouillés à la création ;
+  (`{pseudo}`), places par défaut, salons verrouillés à la création ; ou **hub de tournoi** (tournoi lié, rôles
+  autorisés en plus : voir « Hub vocal du tournoi ») ;
 - **Rôles du staff** : entrent partout, utilisent les contrôles de tout salon ;
 - **Suppression d'un salon vide après** (secondes), **salons par membre**, **départ du propriétaire**, **salon des
   journaux** (facultatif : création, suppression, refus de Discord) ;
@@ -126,6 +127,20 @@ Pour un tournoi organisé par le club (ex. **The Nuke End**, The Finals 3v3v3v3)
 4. **Fin du tournoi** : bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par
    le cron (5 min) dès que le tournoi est **Terminé** ou **Annulé**, ou **N heures après sa date de fin** (réglage, 24
    par défaut, 0 : jamais par la date).
+
+### Hub vocal du tournoi
+
+Dans les réglages des salons vocaux, un hub peut être **lié à un tournoi** (ex. « Vocal équipe The Nuke End ») ; les
+tournois proposés sont ceux qui ont des équipes notées.
+
+- Seuls les membres qui ont le **rôle d'une équipe** du tournoi peuvent s'en servir : les autres sont **déconnectés**
+  du hub et reçoivent un **MP** qui explique pourquoi.
+- Le salon créé porte le nom de l'équipe (`{tag} — {nom}` par défaut) et reste **verrouillé sur son rôle** :
+  « Se connecter » refusé à @everyone, accordé au rôle de l'équipe, aux rôles du staff et aux **rôles autorisés** du hub
+  (casters, admins). Les joueurs peuvent expulser, limiter les places, transférer ; ils ne peuvent **ni renommer ni
+  déverrouiller** (boutons grisés, refus de `/voc`), et il n'y a pas de liste d'amis.
+- **Un salon par équipe** à la fois : un coéquipier qui passe par le hub est déplacé dans le salon existant.
+- Le salon est supprimé une fois vide (comme les autres), et à la **fin du tournoi** avec les rôles.
 
 **Hiérarchie Discord** : les rôles créés naissent tout en bas ; le rôle « Esport HQ » doit être **au-dessus** d'eux
 (Paramètres du serveur › Rôles). Si Discord refuse (code 50013), l'écran explique quoi faire.
