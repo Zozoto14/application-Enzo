@@ -6,16 +6,28 @@
  *    « HH:MM » muraux, `type` disponible|indisponible, `fuseau` de saisie) :
  *    une heure murale n'est pas un instant, elle est convertie en UTC date par
  *    date (changement d'heure compris) ;
+ *  - semaines personnalisées (`[{ semaine: 'AAAA-MM-JJ' (lundi), regles }]`, migration 0060) : une semaine
+ *    personnalisée REMPLACE les règles récurrentes (le « modèle ») pour ses sept jours ; les autres semaines
+ *    gardent le modèle. Le jour d'un créneau (donc sa semaine) est sa date murale dans le fuseau du créneau ;
  *  - exceptions datées (`debut`/`fin` : instants UTC), prioritaires sur les règles.
  *
  * Libre sur [s, e[ : le créneau est entièrement couvert par
  *   ((règles disponibles − règles indisponibles) ∪ exceptions disponibles) − exceptions indisponibles.
  */
 
-import { ajouterJours, dateLocale, instantMural, jourSemaine, lireHeure, texteDate, texteHeure } from './temps.mjs';
+import { ajouterJours, dateLocale, instantMural, jourSemaine, lireHeure, lundiDe, texteDate, texteHeure } from './temps.mjs';
 
 export const TYPES_DISPO = ['disponible', 'indisponible'];
 export const PAS_AUTORISES = [30, 60];
+/** Rétention des semaines personnalisées : effacées par le cron N semaines après leur fin. */
+export const RETENTION_SEMAINES_DISPOS = 8;
+/** Semaines personnalisables à l'avance (au-delà : 400). */
+export const SEMAINES_MAX_AVANCE = 52;
+/** « Appliquer aux N semaines suivantes » : N au plus. */
+export const APPLIQUER_MAX = 12;
+
+/** Lundi (texte AAAA-MM-JJ) de la semaine d'une date civile. */
+export const cleSemaine = date => texteDate(lundiDe(date));
 
 // ------------------------------------------------------------------ Intervalles [s, e[ en ms
 
@@ -51,8 +63,11 @@ export function soustraire(a, b) {
 
 export const couvre = (intervalles, s, e) => intervalles.some(i => i.s <= s && i.e >= e);
 
-/** Règles → intervalles UTC concrets qui touchent [du, au[. */
-export function intervallesRegles(regles, du, au) {
+/**
+ * Règles → intervalles UTC concrets qui touchent [du, au[. `garder(date)` (facultatif) : ne retient que les
+ * dates murales (dans le fuseau de la règle) pour lesquelles il rend vrai.
+ */
+export function intervallesRegles(regles, du, au, garder) {
   const sortie = [];
   for (const r of regles) {
     const fuseau = r.fuseau || 'UTC';
@@ -64,6 +79,7 @@ export function intervallesRegles(regles, du, au) {
     const dernier = ajouterJours(dateLocale(fuseau, au), 1);
     for (let d = premier; texteDate(d) <= texteDate(dernier); d = ajouterJours(d, 1)) {
       if (jourSemaine(d) !== Number(r.jour)) continue;
+      if (garder && !garder(d)) continue;
       const s = instantMural(fuseau, d, debut);
       const e = instantMural(fuseau, d, fin);
       if (e > du && s < au) sortie.push({ s, e, type: r.type });
@@ -72,9 +88,21 @@ export function intervallesRegles(regles, du, au) {
   return sortie;
 }
 
+/**
+ * Règles EFFECTIVES (intervalles typés) sur [du, au[ : le modèle hors des semaines personnalisées, et les règles
+ * de chaque semaine personnalisée sur ses sept jours.
+ */
+export function intervallesEffectifs(regles = [], semaines = [], du, au) {
+  const perso = new Map(semaines.map(s => [s.semaine, s.regles ?? []]));
+  if (perso.size === 0) return intervallesRegles(regles, du, au);
+  const sortie = intervallesRegles(regles, du, au, d => !perso.has(cleSemaine(d)));
+  for (const [semaine, rs] of perso) sortie.push(...intervallesRegles(rs, du, au, d => cleSemaine(d) === semaine));
+  return sortie;
+}
+
 /** Intervalles libres d'un joueur sur [du, au[. */
-export function libresDe({ regles = [], exceptions = [] }, du, au) {
-  const r = intervallesRegles(regles, du, au);
+export function libresDe({ regles = [], semaines = [], exceptions = [] }, du, au) {
+  const r = intervallesEffectifs(regles, semaines, du, au);
   const x = exceptions.map(e => ({ s: typeof e.debut === 'number' ? e.debut : Date.parse(e.debut), e: typeof e.fin === 'number' ? e.fin : Date.parse(e.fin), type: e.type }));
   const base = soustraire(
     r.filter(i => i.type === 'disponible'),
@@ -87,7 +115,7 @@ export function libresDe({ regles = [], exceptions = [] }, du, au) {
 /**
  * Heatmap d'une semaine, dans le fuseau d'affichage :
  *  - `lundi` : date civile `{ annee, mois, jour }` ; `pas` : 30 ou 60 minutes ;
- *  - `joueurs` : `[{ compte, regles, exceptions }]` ; `seuil` : effectif minimum.
+ *  - `joueurs` : `[{ compte, regles, semaines?, exceptions }]` ; `seuil` : effectif minimum.
  * Rend `{ jours, creneaux, cellules[jour][creneau] }` ; une cellule vaut
  * `{ debut, fin, n, comptes, atteint }`, ou `null` si l'heure n'existe pas ce
  * jour-là (passage à l'heure d'été).
@@ -132,4 +160,16 @@ export function plagesPropices(carte) {
     }
   });
   return sortie;
+}
+
+/**
+ * Rétention (cron, seule fonction NON pure du fichier) : efface les semaines personnalisées finies depuis plus de
+ * `semaines` semaines (lundi antérieur au lundi courant − N semaines, en UTC : un jour d'écart n'a pas d'effet).
+ * Rend le nombre de lignes effacées.
+ */
+export async function purgerDisposSemaines(base, { maintenant = Date.now(), semaines = RETENTION_SEMAINES_DISPOS } = {}) {
+  const auj = dateLocale('UTC', maintenant);
+  const limite = texteDate(ajouterJours(lundiDe(auj), -7 * semaines));
+  const r = await base.executer('DELETE FROM dispo_semaines WHERE semaine < ?', [limite]);
+  return r?.changements ?? 0;
 }

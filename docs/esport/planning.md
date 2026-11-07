@@ -115,6 +115,50 @@ Code : `esport/noyau/planning/convocations.mjs` (règles pures, serveur) et `src
   prérempli (Coach, Manager, Propriétaire).
 - Effectif minimum : 5 par défaut, réglable (1 à 30) dans Paramètres › Planning (Propriétaire, Manager).
 
+### Semaine par semaine (migration 0062)
+
+Demande du Fondateur : « une option pour qu'un membre puisse faire semaine par semaine son planning car il a un
+planning différent entre chaque semaine ».
+
+- En haut de **Mes disponibilités**, le choix **Même planning chaque semaine** (la semaine type, comme avant) ou
+  **Planning différent chaque semaine** (ouvert d'office dès qu'une semaine à venir est personnalisée).
+- **Choix de la semaine** : précédente / **Cette semaine** / suivante, **Aller au** (une date, n'importe quel jour de
+  la semaine), et un bandeau des 6 semaines où les semaines personnalisées portent le repère « Perso ». La semaine
+  s'affiche en clair (« Semaine du 9 au 15 nov. », « en cours ») avec son état : **Semaine personnalisée** (cadre
+  accentué) ou **Suit la semaine type**.
+- **Éditer** les créneaux de cette semaine (jours datés « lun. 09/11 ») puis **Enregistrer cette semaine** : elle
+  remplace la semaine type pour ses sept jours. Enregistrer une semaine sans créneau = indisponible toute la semaine.
+- **Copier depuis le modèle** (la semaine type, à retoucher), **Copier la semaine précédente** (ce qui valait la
+  semaine d'avant, personnalisée ou non), **Revenir au modèle** (la semaine personnalisée est effacée),
+  **Appliquer aux N semaines suivantes** (1, 2, 3, 4 ou 8 ; 12 au plus par l'API ; remplace celles déjà
+  personnalisées, confirmation en deux temps).
+- Une semaine finie, ou à plus de 52 semaines, se lit mais ne se modifie pas (400 `semaine-hors-limites`).
+- **Staff** : qui a `availability.view_all` **et** `planning.update` (Coach, Manager, Propriétaire) choisit un membre
+  (« Planning de ») et modifie ses semaines ; la carte affiche « Dernière modification : Zed ». Un joueur ne touche
+  qu'aux siennes (403 `dispos-autrui` pour un autre, Analyste compris ; 404 pour un non-membre). La semaine type et
+  les exceptions restent personnelles.
+- **Partout la semaine effective** : la heatmap, « Effectif minimum libre » et « Proposer un événement » prennent,
+  pour chaque date, la semaine personnalisée si elle existe, sinon la semaine type (puis les exceptions datées par
+  dessus) ; la heatmap nomme les membres dont la semaine affichée est personnalisée. La commande Discord `/dispo`
+  montre la semaine en cours effective (« Cette semaine suit ton planning de la semaine »). Export RGPD et transfert
+  de base incluent les semaines ; la suppression d'un compte les efface.
+- **Semaine et fuseau** : une semaine va du lundi au dimanche ; le jour d'un créneau (donc sa semaine) est sa date
+  murale dans le fuseau de saisie (celui de la semaine type, ou celui de la team). Un créneau du dimanche 23:00–01:00
+  reste au dimanche. Le dimanche 25 octobre (passage à l'heure d'hiver) appartient à la semaine du 19 : 18:00 Paris y
+  vaut 17:00 UTC.
+- **Verrou optimiste et temps réel** : chaque écriture envoie la version lue (`versionAttendue`, 0 si la semaine suit
+  le modèle) ; si un autre appareil ou le staff a enregistré entre-temps : **409** (`version`), l'écran relit la
+  semaine et le dit, rien n'est écrasé. Les écritures sont diffusées sur `team:<id>:availability` : l'écran et la
+  heatmap se relisent.
+- **Rétention** : le cron efface les semaines finies depuis plus de **8 semaines**
+  (`RETENTION_SEMAINES_DISPOS`, `esport/noyau/planning/dispos.mjs`).
+
+Données (`0062_dispo_semaines.sql`) : `dispo_semaines (team_id, compte_id, semaine, regles JSON, fuseau, version,
+maj_le, maj_par)`, clé `(team_id, compte_id, semaine)` ; `semaine` = lundi « AAAA-MM-JJ ». Code : `dispos.mjs`
+(`intervallesEffectifs`, `libresDe`, `purgerDisposSemaines`), `service.mjs` (`semaineDispos`, `enregistrerSemaine`,
+`reinitialiserSemaine`, `appliquerSemaine`), app `src/esport/ui/planning/DisposSemaine.tsx` et
+`EditeurCreneaux.tsx`. Tests : `esport/test/dispos-semaines.test.mjs`, `src/esport/planning/planning.test.tsx`.
+
 ## Présence (refonte, migration 0013)
 
 La réponse du joueur (**RSVP**, à l'avance) et la **présence réelle** (constatée par le staff) sont deux choses
@@ -279,6 +323,8 @@ annulé (membres concernés), rappel de réponse.
 | `GET /teams/:t/presence/joueurs/:compte` (`moi` : la sienne) | attendance.view_all (ou la sienne) |
 | `GET /teams/:t/dispos/moi` ; `PUT …/moi/regles` ; `POST …/moi/exceptions` ; `DELETE …/moi/exceptions/:id` | availability.edit_own |
 | `GET /teams/:t/dispos/carte?semaine&fuseau&pas` | availability.view_all |
+| `GET /teams/:t/dispos/semaines/:qui/:jour` (`qui` : `moi` ou un compte ; `jour` : un jour de la semaine) | edit_own (soi) ; view_all + planning.update (autre) |
+| `PUT …/semaines/:qui/:jour` (`regles` ou `copier: modele\|precedente`, `fuseau?`, `versionAttendue?`) ; `DELETE …?versionAttendue=` (revenir au modèle) ; `POST …/:jour/appliquer` (`semaines: 1-12`) | idem |
 
 Ajouter `?format=json` aux exports pour recevoir `{ nom, type, contenu }` (utilisé par l'app).
 
@@ -290,7 +336,7 @@ Ajouter `?format=json` aux exports pour recevoir `{ nom, type, contenu }` (utili
 - App : `src/esport/planning/` (client, libellés) et `src/esport/ui/planning/` ; écrans branchés par
   `src/esport/ui/modules.tsx`.
 - Graines : `esport/outils/graines-planning.mjs` (`npm run esport:local`).
-- Tests : `esport/test/planning.test.mjs`, `esport/test/planning-api.test.mjs`, `esport/test/convocations.test.mjs`,
+- Tests : `esport/test/planning.test.mjs`, `esport/test/planning-api.test.mjs`, `esport/test/convocations.test.mjs`, `esport/test/dispos-semaines.test.mjs`,
   `esport/test/presence-notes.test.mjs`, `src/esport/planning/planning.test.tsx`, `src/esport/planning/presence.test.tsx`,
   e2e `scripts/e2e-esport-planning.mjs`, `scripts/e2e-esport-convocations.mjs` et `scripts/e2e-esport-presence-notes.mjs`.
 - Migrations : numéros croissants, **trous permis** (une autre branche peut livrer `0003` avant `0002`).

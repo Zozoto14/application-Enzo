@@ -99,6 +99,20 @@ export const dateLongue = (d: string): string => {
 /** « mar. 20/10 » / « Tue 20/10 » */
 export const dateCourteJour = (d: string): string => `${nomJour(jourSemaine(d), 'short')} ${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
+/**
+ * Semaine (du lundi au dimanche) en clair : « Semaine du 9 au 15 nov. », « Semaine du 30 nov. au 6 déc. »,
+ * « Semaine du 28 déc. 2026 au 3 janv. 2027 ».
+ */
+export function libelleSemaine(lundi: string): string {
+  const dimanche = ajouterJours(lundi, 6);
+  const memeAnnee = lundi.slice(0, 4) === dimanche.slice(0, 4);
+  const memeMois = memeAnnee && lundi.slice(5, 7) === dimanche.slice(5, 7);
+  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => formaterDate(utc(d), { ...o, timeZone: 'UTC' });
+  const fin = fmt(dimanche, memeAnnee ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  const debut = memeMois ? fmt(lundi, { day: 'numeric' }) : fmt(lundi, memeAnnee ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  return tr('planning.semaine.du_au', { debut, fin });
+}
+
 /** Fuseau de l'appareil (IANA), « UTC » à défaut. */
 export function fuseauAppareil(): string {
   try {

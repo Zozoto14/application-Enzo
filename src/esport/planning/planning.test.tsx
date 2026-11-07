@@ -14,7 +14,7 @@ import { phraseJournal, phraseNotification } from '../libelles';
 import { PageTeam, type SectionTeam } from '../ui/PageTeam';
 import { CONVOCATION_DEFAUT, basculerGroupe, basculerMembre, basculerProprietaire, convoquesParmi, memeConvocation, resumeConvocation } from './convocations';
 import { MEMBRES_CONVOCABLES, fauxPlanning } from './faux';
-import { ajouterJours, dateLongue, grilleMois, jourSemaine, lundiDe, moisVoisin, nomMois, pourcentage, resumeRecurrence, typeEvenement } from './libelles';
+import { ajouterJours, dateLongue, grilleMois, jourSemaine, libelleSemaine, lundiDe, moisVoisin, nomMois, pourcentage, resumeRecurrence, typeEvenement } from './libelles';
 
 const theme = themeHub('nuit');
 const COACH = ['members.view', 'planning.view', 'planning.create', 'planning.update', 'planning.delete', 'availability.view_all', 'availability.edit_own', 'attendance.view_all', 'attendance.mark', 'attendance.rsvp_own'];
@@ -252,6 +252,78 @@ describe('écrans Disponibilités, Présence et accueil', () => {
       { jour: 1, debut: '20:00', fin: '22:00', type: 'disponible' },
       { jour: 3, debut: '20:00', fin: '22:00', type: 'disponible' },
     ]);
+  });
+
+  it('semaine par semaine : libellé de la semaine (mois, année)', () => {
+    expect(libelleSemaine('2026-11-09')).toBe('Semaine du 9 au 15 nov.');
+    expect(libelleSemaine('2026-11-30')).toBe('Semaine du 30 nov. au 6 déc.');
+    expect(libelleSemaine('2026-12-28')).toBe('Semaine du 28 déc. 2026 au 3 janv. 2027');
+  });
+
+  it('semaine par semaine : choisir une semaine, la personnaliser, copier, revenir au modèle (téléphone)', async () => {
+    const { appels } = await monter(JOUEUR, 'module:availability', 'telephone');
+    await screen.findByTestId('esport-dispos-creneaux');
+    expect(screen.queryByTestId('esport-semaine-membres')).toBeNull();
+    await fireEvent.press(screen.getByText('Planning différent chaque semaine'));
+    await screen.findByTestId('esport-semaine');
+    // Aller à la semaine du 9 novembre (n'importe quel jour de la semaine).
+    await fireEvent.changeText(screen.getByTestId('esport-semaine-date'), '2026-11-11');
+    await fireEvent.press(screen.getByTestId('esport-semaine-aller'));
+    await waitFor(() => expect(screen.getByTestId('esport-semaine-libelle')).toHaveTextContent('Semaine du 9 au 15 nov.'));
+    expect(screen.getByTestId('esport-semaine-etat-modele')).toBeTruthy();
+    // Le modèle (lundi 19:00-23:00) est proposé : on le retire, on pose le mercredi après-midi, on enregistre.
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-1-19:00'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-jour-1'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-jour-3'));
+    await fireEvent.changeText(screen.getByTestId('esport-semaine-creneau-debut'), '14:00');
+    await fireEvent.changeText(screen.getByTestId('esport-semaine-creneau-fin'), '18:00');
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-ajouter'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-enregistrer'));
+    await screen.findByTestId('esport-semaine-etat-perso');
+    const put = appels.find(a => a.methode === 'PUT' && a.chemin.endsWith('/dispos/semaines/moi/2026-11-09'))!;
+    expect(put.corps).toEqual({ regles: [{ jour: 3, debut: '14:00', fin: '18:00', type: 'disponible' }], fuseau: 'Europe/Paris', versionAttendue: 0 });
+    // Repère « Perso » dans le bandeau des semaines.
+    expect(screen.getByTestId('esport-semaine-bandeau-2026-11-09-perso')).toBeTruthy();
+    // Semaine suivante : elle suit le modèle ; « Copier la semaine précédente » la personnalise avec le mercredi.
+    await fireEvent.press(screen.getByTestId('esport-semaine-suivante'));
+    await waitFor(() => expect(screen.getByTestId('esport-semaine-libelle')).toHaveTextContent('Semaine du 16 au 22 nov.'));
+    expect(screen.getByTestId('esport-semaine-etat-modele')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-semaine-copier-precedente'));
+    await screen.findByTestId('esport-semaine-etat-perso');
+    expect(screen.getByTestId('esport-semaine-creneau-3-14:00')).toBeTruthy();
+    expect(appels.some(a => a.methode === 'PUT' && a.chemin.endsWith('/2026-11-16') && (a.corps as { copier?: string }).copier === 'precedente')).toBe(true);
+    // Revenir au modèle (confirmation en deux temps).
+    await fireEvent.press(screen.getByTestId('esport-semaine-reinitialiser'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-reinitialiser-confirmer'));
+    await screen.findByTestId('esport-semaine-etat-modele');
+    expect(appels.some(a => a.methode === 'DELETE' && a.chemin.includes('/dispos/semaines/moi/2026-11-16'))).toBe(true);
+    // Appliquer la semaine aux 2 suivantes.
+    await fireEvent.press(screen.getByTestId('esport-semaine-precedente'));
+    await screen.findByTestId('esport-semaine-etat-perso');
+    await fireEvent.press(screen.getByTestId('esport-semaine-appliquer-2'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-appliquer'));
+    await fireEvent.press(screen.getByTestId('esport-semaine-appliquer-confirmer'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'POST' && a.chemin.endsWith('/2026-11-09/appliquer'))).toBe(true));
+    expect(appels.find(a => a.chemin.endsWith('/appliquer'))!.corps).toEqual({ semaines: 2 });
+    await screen.findByTestId('esport-semaine-bandeau-2026-11-23-perso');
+  });
+
+  it('semaine par semaine : le staff choisit un membre ; conflit de version (409) relu sans rien écraser', async () => {
+    const { appels, client: c } = await monter(COACH, 'module:availability');
+    await screen.findByTestId('esport-dispos-creneaux');
+    await fireEvent.press(screen.getByText('Planning différent chaque semaine'));
+    await screen.findByTestId('esport-semaine-membres');
+    await fireEvent.press(screen.getByTestId('esport-semaine-membre-lea12345'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'GET' && a.chemin.includes('/dispos/semaines/lea12345/'))).toBe(true));
+    await fireEvent.changeText(screen.getByTestId('esport-semaine-date'), '2026-11-09');
+    await fireEvent.press(screen.getByTestId('esport-semaine-aller'));
+    await waitFor(() => expect(screen.getByTestId('esport-semaine-libelle')).toHaveTextContent('Semaine du 9 au 15 nov.'));
+    expect(screen.getByText('Planning de Léa')).toBeTruthy();
+    // Quelqu'un d'autre enregistre la semaine pendant que l'écran est ouvert (version 0 → 1).
+    await c.requete('/teams/t1/dispos/semaines/lea12345/2026-11-09', 'PUT', { regles: [] });
+    await fireEvent.press(screen.getByTestId('esport-semaine-creneau-enregistrer'));
+    expect(await screen.findByText(/modifiée entre-temps/)).toBeTruthy();
+    await screen.findByTestId('esport-semaine-etat-perso');
   });
 
   it('présence : taux, par joueur et par type, export CSV', async () => {

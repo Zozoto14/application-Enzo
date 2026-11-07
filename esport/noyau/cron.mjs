@@ -2,7 +2,7 @@
  * Tâches planifiées de l'Esport (toutes les 5 minutes par une tâche cron sur le serveur Node) : rappels de présence, d'échéance des tâches et J-1/H-1 Discord,
  * rappels des réunions de l'équipe CM (in-app et MP du bot),
  * débuts d'événements, événements en attente (nouvel essai), file d'envoi Discord (réessais), purge de
- * rétention (journal selon la durée de chaque team, événements traités), agrégation journalière et rétention (90 jours)
+ * rétention (journal selon la durée de chaque team, événements traités, semaines de disponibilités personnalisées), agrégation journalière et rétention (90 jours)
  * des statistiques d'usage, ménage des compteurs de débit
  * et des tentatives anciennes, envois de vidéos inachevés (plus de 24 h), transcriptions demandées à une
  * API externe (désactivé par défaut), tickets Discord (relecture de secours, cycle de vie). Lancé par esport/serveur/cron.mjs.
@@ -18,6 +18,7 @@ import { purgerNotifications } from './notifications/centre.mjs';
 import { purgerLimites } from './limites.mjs';
 import { rappelsEcheances } from './objectifs.mjs';
 import { rappelsPresence } from './planning/rappels.mjs';
+import { purgerDisposSemaines } from './planning/dispos.mjs';
 import { nettoyerEnvois, servicesMedias } from './medias/service.mjs';
 import { servicesResumes } from './resumes.mjs';
 import { agregerUsage, purgerUsage } from './usage/collecte.mjs';
@@ -76,6 +77,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     // Statistiques d'usage : agrégation des jours terminés (une fois par jour), puis détail brut de plus de 90 jours effacé.
     ['agrégation de l’usage', () => agregerUsage(base, { maintenant: maintenant() })],
     ['rétention de l’usage', () => purgerUsage(base, { maintenant: maintenant() })],
+    // Disponibilités semaine par semaine (migration 0062) : semaines finies depuis plus de 8 semaines effacées.
+    ['rétention des semaines de disponibilités', () => purgerDisposSemaines(base, { maintenant: maintenant() })],
     ['limites de débit', () => purgerLimites(base, maintenant())],
     ['tentatives anciennes', () => base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(maintenant() - 7 * 86_400_000).toISOString()])],
     ['envois inachevés', () => nettoyerEnvois(base, stockage, { maintenant: maintenant() })],

@@ -27,6 +27,8 @@ export const TABLES = [
   ['dispo_regles', 'id'],
   ['dispo_exceptions', 'id'],
   ['ical_jetons', 'id'],
+  // Semaines personnalisées des disponibilités (migration 0062).
+  ['dispo_semaines', 'team_id, compte_id, semaine'],
   ['evenements', 'id'],
   ['journal', 'id'],
   ['notifications', 'id'],

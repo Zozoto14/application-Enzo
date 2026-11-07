@@ -4,7 +4,8 @@
  * fixes. Les droits suivent la liste de permissions donnée.
  */
 
-import type { AccueilPlanning, AMarquer, LignePresence, Marque, CarteDispos, DroitsPlanning, FichePresence, HistoriquePresence, ListePlanning, MembreConvocable, MesDispos, Occurrence, PresenceOccurrence, StatsPresence } from './api';
+import { ErreurEsport } from '../client';
+import type { AccueilPlanning, AMarquer, LignePresence, Marque, CarteDispos, DroitsPlanning, FichePresence, HistoriquePresence, ListePlanning, MembreConvocable, MesDispos, Occurrence, PresenceOccurrence, RegleDispo, SemaineDispos, StatsPresence } from './api';
 
 export function droitsDe(permissions: readonly string[]): DroitsPlanning {
   const a = (p: string) => permissions.includes(p);
@@ -70,6 +71,42 @@ export function fauxPlanning(permissions: readonly string[], { occurrences = [OC
   const droits = droitsDe(permissions);
   // Feuille d'appel : les marquages envoyés sont gardés (le faux serveur les rend ensuite).
   const marques = new Map<string, Marque>();
+  // Semaines personnalisées (« Semaine par semaine ») : `qui|lundi` → règles et version. Horloge : semaine du 19/10/2026.
+  const MODELE: RegleDispo[] = [{ id: 'r1', jour: 1, debut: '19:00', fin: '23:00', type: 'disponible', fuseau: 'Europe/Paris' }];
+  const semaines = new Map<string, { regles: RegleDispo[]; version: number }>();
+  const lundi = (d: string) => {
+    const t = Date.parse(`${d}T00:00:00Z`);
+    const j = new Date(t).getUTCDay() || 7;
+    return new Date(t - (j - 1) * 86_400_000).toISOString().slice(0, 10);
+  };
+  const decaler = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  const semaineDe = (qui: string, l: string): SemaineDispos => {
+    const eff = (x: string) => semaines.get(`${qui}|${x}`);
+    const e = eff(l);
+    const p = eff(decaler(l, -7));
+    return {
+      compte: qui === 'moi' ? 'zed12345' : qui,
+      pseudo: qui === 'moi' ? 'Zed' : (MEMBRES_CONVOCABLES.find(m => m.compte === qui)?.pseudo ?? null),
+      soi: qui === 'moi',
+      semaine: l,
+      dimanche: decaler(l, 6),
+      cetteSemaine: '2026-10-19',
+      personnalisee: Boolean(e),
+      version: e?.version ?? 0,
+      fuseau: 'Europe/Paris',
+      fuseauTeam: 'Europe/Paris',
+      regles: e?.regles ?? MODELE,
+      modele: MODELE,
+      precedente: { semaine: decaler(l, -7), personnalisee: Boolean(p), regles: p?.regles ?? MODELE },
+      personnalisees: [...semaines.keys()].filter(k => k.startsWith(`${qui}|`)).map(k => k.split('|')[1]).sort(),
+      majLe: null,
+      majPar: e ? 'Zed' : null,
+      modifiable: l >= '2026-10-19',
+      appliquerMax: 12,
+      membres: droits.modifier && droits.voirDispos ? [{ compte: 'zed12345', pseudo: 'Zed' }, { compte: 'lea12345', pseudo: 'Léa' }] : [],
+      droits,
+    };
+  };
   const requete = async <T>(chemin: string, methode = 'GET', corps?: unknown): Promise<T> => {
     appels.push({ chemin, methode, corps });
     const c = chemin.split('?')[0];
@@ -174,8 +211,29 @@ export function fauxPlanning(permissions: readonly string[], { occurrences = [OC
       r = { notes: [] };
     } else if (/\/presence\/export\.csv$/.test(c)) {
       r = { nom: 'presence.csv', type: 'text/csv', contenu: '"Date"\r\n' };
+    } else if (/\/dispos\/semaines\//.test(c)) {
+      const [, qui, jour, action] = /\/dispos\/semaines\/([^/]+)\/([^/]+)(?:\/([a-z]+))?$/.exec(c) ?? [];
+      const l = lundi(jour);
+      const cle = `${qui}|${l}`;
+      const x = (corps ?? {}) as { regles?: RegleDispo[]; copier?: string; versionAttendue?: number; semaines?: number };
+      const actuelle = semaines.get(cle);
+      if (methode === 'PUT') {
+        if (x.versionAttendue !== undefined && x.versionAttendue !== (actuelle?.version ?? 0)) throw new ErreurEsport('Modifiée entre-temps.', 409, 'version');
+        const prec = semaines.get(`${qui}|${decaler(l, -7)}`)?.regles ?? MODELE;
+        const regles = x.copier === 'modele' ? MODELE : x.copier === 'precedente' ? prec : (x.regles ?? []);
+        semaines.set(cle, { regles, version: (actuelle?.version ?? 0) + 1 });
+      } else if (methode === 'DELETE') {
+        semaines.delete(cle);
+      } else if (methode === 'POST' && action === 'appliquer') {
+        const source = actuelle?.regles ?? MODELE;
+        for (let i = 1; i <= (x.semaines ?? 1); i++) {
+          const k = `${qui}|${decaler(l, 7 * i)}`;
+          semaines.set(k, { regles: source, version: (semaines.get(k)?.version ?? 0) + 1 });
+        }
+      }
+      r = semaineDe(qui, l);
     } else if (/\/dispos\/moi/.test(c)) {
-      r = { fuseau: 'Europe/Paris', fuseauTeam: 'Europe/Paris', regles: [{ id: 'r1', jour: 1, debut: '19:00', fin: '23:00', type: 'disponible', fuseau: 'Europe/Paris' }], exceptions: [], droits } satisfies MesDispos;
+      r = { fuseau: 'Europe/Paris', fuseauTeam: 'Europe/Paris', regles: MODELE, exceptions: [], personnalisees: [...semaines.keys()].filter(k => k.startsWith('moi|')).map(k => k.split('|')[1]), droits } satisfies MesDispos;
     } else if (/\/dispos\/carte$/.test(c)) {
       const jours = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'];
       const creneaux = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
@@ -191,6 +249,7 @@ export function fauxPlanning(permissions: readonly string[], { occurrences = [OC
         creneaux,
         cellules: jours.map((j, d) => creneaux.map((h, i) => ({ debut: `${j}T${h}:00.000Z`, fin: `${j}T${h}:00.000Z`, n: d === 0 && i >= 20 && i < 22 ? 2 : 0, comptes: d === 0 && i >= 20 && i < 22 ? ['a', 'b'] : [], atteint: d === 0 && i >= 20 && i < 22 }))),
         plages: [{ jour: '2026-10-19', debut: '2026-10-19T18:00:00.000Z', fin: '2026-10-19T20:00:00.000Z', n: 2, heureDebut: '20:00', heureFin: '22:00' }],
+        personnalisees: [...semaines.keys()].some(k => k.endsWith('|2026-10-19')) ? ['a'] : [],
         droits,
       } satisfies CarteDispos;
     }

@@ -220,6 +220,11 @@ async function parcourir(page, taille) {
     if (await present(page, `esport-onglet-${id}`, 1200)) await page.getByTestId(`esport-onglet-${id}`).first().click();
     else if (groupe !== 'accueil' && !(await present(page, `esport-contenu-${id}`, 800))) continue;
     await controler(page, `team-${id}`, taille);
+    // Disponibilités : aussi le mode « Planning différent chaque semaine » (choix de la semaine, bandeau, actions).
+    if (id === 'module-availability' && (await present(page, 'esport-dispos-mode-semaine', 1500))) {
+      await page.getByTestId('esport-dispos-mode-semaine').first().click();
+      if (await present(page, 'esport-semaine', 3000)) await controler(page, 'team-dispos-semaine', taille);
+    }
   }
   await page.getByTestId('esport-team-retour').first().click();
   // Réglages du hub.

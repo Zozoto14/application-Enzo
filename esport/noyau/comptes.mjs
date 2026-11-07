@@ -474,6 +474,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       { sql: 'DELETE FROM notifications WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM dispo_semaines WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [compte] },
       // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
       { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },

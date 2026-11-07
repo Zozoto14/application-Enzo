@@ -865,6 +865,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       disponibilites: {
         regles: (await q('SELECT team_id, jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? ORDER BY team_id, jour, debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
         exceptions: (await q('SELECT team_id, debut, fin, type, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
+        // Semaines personnalisées (migration 0062).
+        semaines: (await q('SELECT team_id, semaine, regles, fuseau FROM dispo_semaines WHERE compte_id = ? ORDER BY team_id, semaine')).map(r => ({ semaine: r.semaine, fuseau: r.fuseau, regles: JSON.parse(r.regles || '[]'), team: team(r.team_id) })),
       },
       presences: (await q('SELECT p.team_id, e.titre, p.occurrence, p.rsvp, p.reel, p.note FROM presences p LEFT JOIN planning_evenements e ON e.id = p.evenement_id WHERE p.compte_id = ? ORDER BY p.occurrence')).map(r => ({ team: team(r.team_id), evenement: r.titre ?? null, occurrence: r.occurrence, rsvp: r.rsvp, presence: r.reel, note: r.note })),
       reunionsDeposees: (await q('SELECT team_id, titre, lien, date_reunion, note, statut, cree_le FROM reunions WHERE depose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(r => ({ team: team(r.team_id), titre: r.titre, lien: r.lien, date: r.date_reunion, note: r.note, statut: r.statut, deposeLe: r.cree_le })),
@@ -985,6 +987,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'DELETE FROM notifications WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM dispo_semaines WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [compte] },
       // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
       { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },

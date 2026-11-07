@@ -879,7 +879,10 @@
   "Discord demande d’attendre : réessayez dans un instant.": "Discord asks to wait: try again in a moment.",
   "Discord a refusé le message (permissions du bot ?).": "Discord refused the message (bot permissions?).",
   "Pièce jointe trop volumineuse : 5 Mo au plus.": "Attachment too large: 5 MB at most.",
-  "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total."
+  "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total.",
+  "Seul le staff qui gère le planning modifie les disponibilités d’un autre membre.": "Only staff who manage the schedule can change another member’s availability.",
+  "Cette semaine a été modifiée entre-temps (autre appareil ou membre du staff) : rechargez-la.": "This week was changed in the meantime (another device or a staff member): reload it.",
+  "Copier : « modele » ou « precedente ».": "Copy: “modele” or “precedente”."
  },
  "motifs": [
   [
@@ -1329,6 +1332,14 @@
   [
    "^(\\d+) caractères au plus\\.$",
    "$1 characters at most."
+  ],
+  [
+   "^Seules la semaine en cours et les (\\d+) suivantes se modifient\\.$",
+   "Only the current week and the next $1 can be changed."
+  ],
+  [
+   "^Nombre de semaines : 1 à (\\d+)\\.$",
+   "Number of weeks: 1 to $1."
   ]
  ]
 }

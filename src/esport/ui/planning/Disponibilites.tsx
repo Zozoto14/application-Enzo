@@ -1,6 +1,7 @@
 /**
- * Disponibilités : mes créneaux récurrents (par jour de la semaine) et mes
- * exceptions datées ; heatmap créneaux × jours du nombre de joueurs libres,
+ * Disponibilités : mes créneaux récurrents (par jour de la semaine : la semaine
+ * type) ou, en mode « Planning différent chaque semaine », semaine par semaine
+ * (DisposSemaine.tsx, migration 0062) ; mes exceptions datées ; heatmap créneaux × jours du nombre de joueurs libres,
  * avec « Proposer un événement » là où l'effectif minimum (réglage de la
  * team) est libre.
  *
@@ -14,17 +15,17 @@ import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { apiPlanning, type CarteDispos, type CelluleCarte, type MesDispos, type RegleDispo } from '../../planning/api';
-import { joursCourts, joursSemaine, ajouterJours, aujourdhui, dateCourteJour, dateLongue, dateValide, heureValide, lundiDe, nomFuseau } from '../../planning/libelles';
+import { joursCourts, ajouterJours, aujourdhui, dateCourteJour, dateLongue, dateValide, heureValide, lundiDe, nomFuseau } from '../../planning/libelles';
+import { useTempsReel } from '../../tempsReel/hooks';
 import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
-import { Pastille, SelecteurFuseau, useFuseau } from './commun';
+import { SelecteurFuseau, useFuseau } from './commun';
+import { EditeurCreneaux, typesDispo, type TypeDispo } from './EditeurCreneaux';
+import { MaSemaine } from './DisposSemaine';
 import { tr, trn } from '../../i18n';
 
-type TypeDispo = 'disponible' | 'indisponible';
-const typesDispo = (): ReadonlyArray<readonly [TypeDispo, string]> => [
-  ['disponible', tr('planning.disponibilites.disponible')],
-  ['indisponible', tr('planning.disponibilites.indisponible')],
-];
+/** Saisie : la même semaine type chaque semaine, ou semaine par semaine (migration 0062). */
+type ModeSaisie = 'modele' | 'semaine';
 
 /** « HH:MM » + minutes. */
 function plusMinutes(h: string, m: number): string {
@@ -37,13 +38,26 @@ export function Disponibilites({ theme, client, detail, large, onAller }: PropsM
   const api = useMemo(() => apiPlanning(client, detail.team.id), [client, detail.team.id]);
   const f = useFuseau(detail.team.fuseau);
   const [mes, setMes] = useState<MesDispos | undefined>();
+  const [mode, setMode] = useState<ModeSaisie | undefined>();
+  const [version, setVersion] = useState(0);
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const { erreur, agir } = useAgir();
 
+  const chargerMes = useCallback(async () => {
+    const m = await api.mesDispos(f.fuseau);
+    setMes(m);
+    // Mode par défaut : semaine par semaine dès qu'une semaine à venir est personnalisée.
+    setMode(courant => courant ?? (m.personnalisees?.length ? 'semaine' : 'modele'));
+  }, [api, f.fuseau]);
   useEffect(() => {
-    if (peut('availability.edit_own')) void agir('', async () => setMes(await api.mesDispos(f.fuseau)));
+    if (peut('availability.edit_own')) void agir('', chargerMes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agir, api, f.fuseau]);
+  }, [agir, chargerMes]);
+  // Temps réel : un autre appareil, ou le staff, a modifié des disponibilités de la team → on relit.
+  useTempsReel(client, [`team:${detail.team.id}:availability`], () => {
+    setVersion(v => v + 1);
+    if (peut('availability.edit_own')) void chargerMes().catch(() => undefined);
+  });
 
   return (
     <View style={{ gap: 16 }} testID="esport-dispos">
@@ -53,7 +67,22 @@ export function Disponibilites({ theme, client, detail, large, onAller }: PropsM
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
         {mes ? (
           <View style={{ flex: 1, gap: 16, minWidth: 0 }}>
-            <MesCreneaux theme={theme} mes={mes} fuseau={f.fuseau} onEnregistrer={async (regles, fuseau) => setMes(await api.remplacerRegles(regles, fuseau))} />
+            <Segments
+              theme={theme}
+              libelle={tr('planning.semaine.mode')}
+              valeur={mode ?? 'modele'}
+              options={[
+                ['modele', tr('planning.semaine.mode_modele')],
+                ['semaine', tr('planning.semaine.mode_semaine')],
+              ]}
+              onChoisir={v => setMode(v === 'semaine' ? 'semaine' : 'modele')}
+              testID="esport-dispos-mode"
+            />
+            {mode === 'semaine' ? (
+              <MaSemaine theme={theme} api={api} fuseau={f.fuseau} relire={version} onChange={() => void chargerMes().catch(() => undefined)} />
+            ) : (
+              <MesCreneaux theme={theme} mes={mes} fuseau={f.fuseau} onEnregistrer={async (regles, fuseau) => setMes(await api.remplacerRegles(regles, fuseau))} />
+            )}
             <MesExceptions
               theme={theme}
               mes={mes}
@@ -65,7 +94,7 @@ export function Disponibilites({ theme, client, detail, large, onAller }: PropsM
         ) : null}
         {peut('availability.view_all') ? (
           <View style={{ flex: large ? 1.4 : undefined, minWidth: 0 }}>
-            <Heatmap theme={theme} api={api} fuseau={f.fuseau} peutCreer={peut('planning.create')} onProposer={b => onAller('module:planning', b)} />
+            <Heatmap theme={theme} api={api} fuseau={f.fuseau} relire={version} peutCreer={peut('planning.create')} onProposer={b => onAller('module:planning', b)} />
           </View>
         ) : null}
       </View>
@@ -73,96 +102,23 @@ export function Disponibilites({ theme, client, detail, large, onAller }: PropsM
   );
 }
 
-// ------------------------------------------------------------------ Mes créneaux
+// ------------------------------------------------------------------ Mes créneaux (semaine type)
 
 function MesCreneaux({ theme, mes, fuseau, onEnregistrer }: { theme: ThemeHub; mes: MesDispos; fuseau: string; onEnregistrer(r: RegleDispo[], fuseau: string): Promise<void> }) {
   // On garde le fuseau de saisie des créneaux existants (sinon celui de l'affichage).
   const fuseauRegles = mes.regles[0]?.fuseau ?? fuseau;
-  const [regles, setRegles] = useState<RegleDispo[]>(mes.regles);
-  const [jours, setJours] = useState<number[]>([1]);
-  const [debut, setDebut] = useState('19:00');
-  const [fin, setFin] = useState('23:00');
-  const [type, setType] = useState<TypeDispo>('disponible');
-  const { enCours, erreur, avis, agir } = useAgir();
-  useEffect(() => setRegles(mes.regles), [mes.regles]);
-  const modifie = JSON.stringify(regles.map(r => [r.jour, r.debut, r.fin, r.type])) !== JSON.stringify(mes.regles.map(r => [r.jour, r.debut, r.fin, r.type]));
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <Panneau theme={theme} testID="esport-dispos-creneaux">
       <Intertitre theme={theme}>{tr('planning.disponibilites.mes_creneaux_de_la')}</Intertitre>
       <Text style={attenue}>{tr('planning.disponibilites.heures_de_elles_suivent', { v: nomFuseau(fuseauRegles) })}</Text>
-      {joursSemaine().map((nom, i) => {
-        const duJour = regles.filter(r => r.jour === i + 1).sort((a, b) => a.debut.localeCompare(b.debut));
-        return (
-          <View key={nom} style={[styles.ligne, { flexWrap: 'nowrap', alignItems: 'flex-start' }]}>
-            <Text style={{ width: 76, color: theme.texte, fontWeight: '600', ...police(theme.policeTexte) }}>{nom}</Text>
-            <View style={[styles.ligne, { flex: 1 }]}>
-              {duJour.length === 0 ? <Text style={attenue}>—</Text> : null}
-              {duJour.map(r => (
-                <Pressable
-                  key={`${r.jour}-${r.debut}-${r.fin}-${r.type}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={tr('planning.disponibilites.retirer', { nom, debut: r.debut, fin: r.fin })}
-                  onPress={() => setRegles(l => l.filter(x => x !== r))}
-                  testID={`esport-creneau-${r.jour}-${r.debut}`}
-                  style={[
-                    styles.pastille,
-                    {
-                      borderColor: r.type === 'disponible' ? theme.ok : theme.critique,
-                      backgroundColor: teinteTransparente(r.type === 'disponible' ? theme.ok : theme.critique, 0.14),
-                      borderRadius: 8,
-                    },
-                  ]}>
-                  <Text style={{ color: theme.texte, fontSize: 12, ...police(theme.policeChiffres) }}>
-                    {r.type === 'indisponible' ? '✕ ' : ''}
-                    {r.debut}–{r.fin} ×
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        );
-      })}
-      <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 10 }}>
-        <View style={styles.ligne}>
-          {joursCourts().map((j, i) => (
-            <Pastille key={i} theme={theme} actif={jours.includes(i + 1)} libelle={j} role="checkbox" onPress={() => setJours(l => (l.includes(i + 1) ? l.filter(x => x !== i + 1) : [...l, i + 1]))} testID={`esport-creneau-jour-${i + 1}`} />
-          ))}
-        </View>
-        <View style={styles.ligne}>
-          <Champ theme={theme} libelle={tr('planning.disponibilites.de')} valeur={debut} onChanger={setDebut} maxLength={5} style={{ width: 90 }} testID="esport-creneau-debut" />
-          <Champ theme={theme} libelle={tr('planning.disponibilites.a')} valeur={fin} onChanger={setFin} maxLength={5} style={{ width: 90 }} testID="esport-creneau-fin" />
-          <Segments theme={theme} libelle={tr('resumes.type')} valeur={type} options={typesDispo()} onChoisir={v => setType(v as TypeDispo)} testID="esport-creneau-type" />
-        </View>
-        <View style={styles.ligne}>
-          <BoutonHub
-            theme={theme}
-            titre={tr('ajoutTeams.ajouter')}
-            onPress={() => {
-              if (!heureValide(debut) || !heureValide(fin) || debut === fin || !jours.length) return;
-              setRegles(l => [...l, ...jours.map(jour => ({ jour, debut, fin, type }))]);
-            }}
-            testID="esport-creneau-ajouter"
-          />
-          <BoutonHub
-            theme={theme}
-            titre={enCours ? tr('membresRoles.enregistrement') : tr('planning.disponibilites.enregistrer_mes_creneaux')}
-            variante="plein"
-            desactive={!modifie || Boolean(enCours)}
-            onPress={() =>
-              void agir('creneaux', async () => {
-                await onEnregistrer(
-                  regles.map(r => ({ jour: r.jour, debut: r.debut, fin: r.fin, type: r.type })),
-                  fuseauRegles,
-                );
-                return tr('planning.disponibilites.creneaux_enregistres');
-              })
-            }
-            testID="esport-creneau-enregistrer"
-          />
-        </View>
-        <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-creneaux" />
-      </View>
+      <EditeurCreneaux
+        theme={theme}
+        regles={mes.regles}
+        titreEnregistrer={tr('planning.disponibilites.enregistrer_mes_creneaux')}
+        avisEnregistre={tr('planning.disponibilites.creneaux_enregistres')}
+        onEnregistrer={r => onEnregistrer(r, fuseauRegles)}
+      />
     </Panneau>
   );
 }
@@ -235,12 +191,15 @@ function Heatmap({
   theme,
   api,
   fuseau,
+  relire,
   peutCreer,
   onProposer,
 }: {
   theme: ThemeHub;
   api: ReturnType<typeof apiPlanning>;
   fuseau: string;
+  /** Compteur de relecture (temps réel). */
+  relire: number;
   peutCreer: boolean;
   onProposer(b: { type: 'scrim'; titre: string; date: string; heureDebut: string; heureFin: string; fuseau: string }): void;
 }) {
@@ -253,7 +212,8 @@ function Heatmap({
   const charger = useCallback(async () => {
     setCarte(await api.carte({ semaine, fuseau, pas: pas === '30' ? 30 : 60 }));
     setChoisie(undefined);
-  }, [api, semaine, fuseau, pas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, semaine, fuseau, pas, relire]);
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
@@ -276,6 +236,11 @@ function Heatmap({
       {carte ? (
         <Text style={attenue} testID="esport-heatmap-legende">
           {tr('planning.disponibilites.nombre_de_joueurs_libres', { total: carte.total, renseignes: carte.renseignes, seuil: carte.seuil })}</Text>
+      ) : null}
+      {carte?.personnalisees?.length ? (
+        <Text style={attenue} testID="esport-heatmap-personnalisees">
+          {tr('planning.semaine.heatmap_personnalisees', { v: carte.personnalisees.map(c => carte.noms[c] ?? c).join(', ') })}
+        </Text>
       ) : null}
       {carte ? (
         <View style={{ gap: 2 }}>

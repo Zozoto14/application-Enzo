@@ -195,6 +195,7 @@ export const EN = {
   'bot.dispo.titre': '🟢 Your availability · {team}',
   'bot.dispo.description': 'Time zone: {fuseau}. 🟢 available · 🔴 unavailable.',
   'bot.dispo.vide': 'You haven’t entered anything yet: open the app to fill in your typical week.',
+  'bot.dispo.semaine_personnalisee': 'This week follows your week-specific schedule (different from your typical week).',
   'bot.dispo.exceptions': '📌 Exceptions this week',
   'bot.dispo.indisponible_module': 'The Availability module isn’t enabled for your teams, or you don’t have permission to enter your availability.',
   'bot.taches.titre': '✅ Your tasks',

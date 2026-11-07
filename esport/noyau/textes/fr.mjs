@@ -196,6 +196,7 @@ export const FR = {
   'bot.dispo.titre': '🟢 Tes disponibilités · {team}',
   'bot.dispo.description': 'Fuseau : {fuseau}. 🟢 disponible · 🔴 indisponible.',
   'bot.dispo.vide': 'Tu n’as encore rien saisi : ouvre l’app pour remplir ta semaine type.',
+  'bot.dispo.semaine_personnalisee': 'Cette semaine suit ton planning de la semaine (différent de ta semaine type).',
   'bot.dispo.exceptions': '📌 Exceptions cette semaine',
   'bot.dispo.indisponible_module': 'Le module Disponibilités n’est pas activé pour tes teams, ou tu n’as pas la permission de saisir tes dispos.',
   'bot.taches.titre': '✅ Tes tâches',

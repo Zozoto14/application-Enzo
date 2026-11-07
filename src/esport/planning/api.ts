@@ -301,6 +301,38 @@ export interface MesDispos {
   fuseauTeam: string;
   regles: RegleDispo[];
   exceptions: ExceptionDispo[];
+  /** Semaine en cours EFFECTIVE (personnalisée ou modèle) ; absent sur un ancien serveur. */
+  semaine?: { semaine: string; personnalisee: boolean; regles: RegleDispo[] };
+  /** Lundis des semaines personnalisées à venir (semaine en cours comprise). */
+  personnalisees?: string[];
+  droits: DroitsPlanning;
+}
+
+/** Disponibilités d'une semaine précise (migration 0062) : personnalisée, ou le modèle (créneaux récurrents). */
+export interface SemaineDispos {
+  compte: string;
+  pseudo: string | null;
+  soi: boolean;
+  /** Lundi (AAAA-MM-JJ) et dimanche de la semaine. */
+  semaine: string;
+  dimanche: string;
+  cetteSemaine: string;
+  personnalisee: boolean;
+  /** Verrou optimiste : 0 tant que la semaine n'est pas personnalisée. */
+  version: number;
+  fuseau: string;
+  fuseauTeam: string;
+  /** Règles effectives de la semaine. */
+  regles: RegleDispo[];
+  modele: RegleDispo[];
+  precedente: { semaine: string; personnalisee: boolean; regles: RegleDispo[] };
+  personnalisees: string[];
+  majLe: string | null;
+  majPar: string | null;
+  modifiable: boolean;
+  appliquerMax: number;
+  /** Membres dont le staff peut modifier la semaine (vide pour un joueur). */
+  membres: Array<{ compte: string; pseudo: string }>;
   droits: DroitsPlanning;
 }
 
@@ -324,6 +356,8 @@ export interface CarteDispos {
   creneaux: string[];
   cellules: Array<Array<CelluleCarte | null>>;
   plages: Array<{ jour: string; debut: string; fin: string; n: number; heureDebut: string; heureFin: string }>;
+  /** Membres dont CETTE semaine est personnalisée (le reste suit le modèle). */
+  personnalisees?: string[];
   droits: DroitsPlanning;
 }
 
@@ -395,6 +429,13 @@ export function apiPlanning(client: ClientEsport, teamId: string) {
     ajouterException: (x: { date: string; heureDebut: string; heureFin: string; fuseau: string; type: 'disponible' | 'indisponible'; note?: string }) =>
       client.requete<MesDispos>(`${t}/dispos/moi/exceptions`, 'POST', x),
     supprimerException: (id: string) => client.requete<MesDispos>(`${t}/dispos/moi/exceptions/${encodeURIComponent(id)}`, 'DELETE'),
+    // Semaine par semaine : `qui` = « moi » ou le compte visé (staff du planning), `jour` = un jour de la semaine.
+    semaine: (qui: string, jour: string) => client.requete<SemaineDispos>(`${t}/dispos/semaines/${encodeURIComponent(qui)}/${jour}`),
+    enregistrerSemaine: (qui: string, jour: string, corps: { regles?: RegleDispo[]; fuseau?: string; copier?: 'modele' | 'precedente'; versionAttendue?: number }) =>
+      client.requete<SemaineDispos>(`${t}/dispos/semaines/${encodeURIComponent(qui)}/${jour}`, 'PUT', corps),
+    reinitialiserSemaine: (qui: string, jour: string, versionAttendue?: number) =>
+      client.requete<SemaineDispos>(`${t}/dispos/semaines/${encodeURIComponent(qui)}/${jour}${q({ versionAttendue })}`, 'DELETE'),
+    appliquerSemaine: (qui: string, jour: string, semaines: number) => client.requete<SemaineDispos>(`${t}/dispos/semaines/${encodeURIComponent(qui)}/${jour}/appliquer`, 'POST', { semaines }),
     /** Adversaires du scouting (sélecteur du formulaire) ; vide si le scouting n'est pas accessible. */
     adversaires: async () => (await client.requete<{ adversaires?: Array<{ id: string; nom: string }> }>(`${t}/scouting/adversaires`)).adversaires ?? [],
     carte: (p: { semaine: string; fuseau?: string; pas?: 30 | 60 }) => client.requete<CarteDispos>(`${t}/dispos/carte${q(p)}`),

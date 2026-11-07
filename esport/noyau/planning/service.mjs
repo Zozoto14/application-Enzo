@@ -12,7 +12,7 @@ import { evenement } from '../evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from '../permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, texteLong, texteNettoye } from '../outils.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
-import { heatmap, plagesPropices, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
+import { APPLIQUER_MAX, heatmap, plagesPropices, SEMAINES_MAX_AVANCE, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
 import { calendrierIcs, LIBELLES_TYPES } from './ical.mjs';
 import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from '../langues.mjs';
 import { convocationDe, convocationDepuisListe, convoques, CONVOCATION_DEFAUT, estConvoque, groupeDe, normaliserConvocation, preparerConvocation } from './convocations.mjs';
@@ -1217,24 +1217,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return { id: x.id, debut: x.debut, fin: x.fin, type: x.type, note: x.note, jour: d.jour, heureDebut: d.heure, jourFin: f.jour, heureFin: f.heure };
   };
 
-  async function mesDispos(acteur, teamId, params = {}) {
-    const ctx = await contexteTeam(acteur, teamId);
-    exiger(ctx, 'availability.edit_own');
-    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
-    const regles = await base.tous('SELECT * FROM dispo_regles WHERE team_id = ? AND compte_id = ? ORDER BY jour, debut', [teamId, acteur.compte]);
-    const exceptions = await base.tous('SELECT * FROM dispo_exceptions WHERE team_id = ? AND compte_id = ? AND fin > ? ORDER BY debut', [teamId, acteur.compte, iso(maintenant() - JOUR_MS)]);
-    return { fuseau, fuseauTeam: ctx.team.fuseau, regles: regles.map(reglePublique), exceptions: exceptions.map(x => exceptionPublique(x, fuseau)), droits: droits(ctx) };
-  }
-
-  async function remplacerRegles(acteur, teamId, corps) {
-    const ctx = await contexteTeam(acteur, teamId);
-    exiger(ctx, 'availability.edit_own');
-    if (!ctx.membre) throw echec(403, 'non-membre', 'Seuls les membres de la team saisissent leurs disponibilités.');
-    const fuseau = corps?.fuseau ?? ctx.team.fuseau;
-    if (!fuseauValide(fuseau)) throw echec(400, 'fuseau', 'Fuseau horaire invalide.');
-    const regles = corps?.regles;
+  /** Créneaux saisis (modèle ou semaine) : `[{ jour, debut, fin, type }]` validés, 60 au plus. */
+  function lireRegles(regles) {
     if (!Array.isArray(regles) || regles.length > 60) throw echec(400, 'regles', 'Liste de créneaux illisible (60 au plus).');
-    const propres = regles.map(r => {
+    return regles.map(r => {
       const jour = Number(r?.jour);
       const debut = lireHeure(r?.debut);
       const fin = lireHeure(r?.fin);
@@ -1244,6 +1230,49 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       if (!TYPES_DISPO.includes(type)) throw echec(400, 'type', 'Type : disponible ou indisponible.');
       return { jour, debut: texteHeure(debut), fin: texteHeure(fin), type };
     });
+  }
+
+  /** Semaine personnalisée (ligne) → `{ semaine, regles (avec fuseau), version, ... }`. */
+  const semainePublique = l => ({
+    semaine: l.semaine,
+    fuseau: l.fuseau,
+    regles: jsonOu(l.regles, []).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: l.fuseau })),
+    version: Number(l.version),
+    majLe: l.maj_le,
+    majPar: l.maj_par ?? null,
+  });
+  const triRegles = l => [...l].sort((a, b) => a.jour - b.jour || a.debut.localeCompare(b.debut));
+  /** Lundi de la semaine en cours dans le fuseau de la team. */
+  const lundiCourant = ctx => texteDate(lundiDe(dateLocale(ctx.team.fuseau, maintenant())));
+
+  async function mesDispos(acteur, teamId, params = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'availability.edit_own');
+    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
+    const regles = await base.tous('SELECT * FROM dispo_regles WHERE team_id = ? AND compte_id = ? ORDER BY jour, debut', [teamId, acteur.compte]);
+    const exceptions = await base.tous('SELECT * FROM dispo_exceptions WHERE team_id = ? AND compte_id = ? AND fin > ? ORDER BY debut', [teamId, acteur.compte, iso(maintenant() - JOUR_MS)]);
+    // Semaine en cours (effective : personnalisée ou modèle) et semaines personnalisées à venir (bot, indicateurs).
+    const courant = lundiCourant(ctx);
+    const perso = (await base.tous('SELECT * FROM dispo_semaines WHERE team_id = ? AND compte_id = ? AND semaine >= ? ORDER BY semaine', [teamId, acteur.compte, courant])).map(semainePublique);
+    const cette = perso.find(x => x.semaine === courant);
+    return {
+      fuseau,
+      fuseauTeam: ctx.team.fuseau,
+      regles: regles.map(reglePublique),
+      exceptions: exceptions.map(x => exceptionPublique(x, fuseau)),
+      semaine: { semaine: courant, personnalisee: Boolean(cette), regles: cette ? triRegles(cette.regles) : regles.map(reglePublique) },
+      personnalisees: perso.map(x => x.semaine),
+      droits: droits(ctx),
+    };
+  }
+
+  async function remplacerRegles(acteur, teamId, corps) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'availability.edit_own');
+    if (!ctx.membre) throw echec(403, 'non-membre', 'Seuls les membres de la team saisissent leurs disponibilités.');
+    const fuseau = corps?.fuseau ?? ctx.team.fuseau;
+    if (!fuseauValide(fuseau)) throw echec(400, 'fuseau', 'Fuseau horaire invalide.');
+    const propres = lireRegles(corps?.regles);
     const t = maintenant();
     await base.lot([
       { sql: 'DELETE FROM dispo_regles WHERE team_id = ? AND compte_id = ?', params: [teamId, acteur.compte] },
@@ -1286,6 +1315,200 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return mesDispos(acteur, teamId);
   }
 
+  // -------------------------------------------------------------- Disponibilités semaine par semaine (migration 0062)
+
+  /**
+   * Qui est visé : `moi` (ou son propre compte) → availability.edit_own ; un autre membre → lecture des
+   * disponibilités de la team ET planning.update (staff qui tient le planning). La cible doit être un membre
+   * actif qui saisit ses disponibilités. Rend `{ ctx, cible: { compte, pseudo }, soi }`.
+   */
+  async function cibleSemaine(acteur, teamId, qui, { ecriture = false } = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    const soi = qui === undefined || qui === 'moi' || qui === acteur.compte;
+    if (soi) {
+      exiger(ctx, 'availability.edit_own');
+      if (ecriture && !ctx.membre) throw echec(403, 'non-membre', 'Seuls les membres de la team saisissent leurs disponibilités.');
+      return { ctx, soi, cible: { compte: acteur.compte, pseudo: null } };
+    }
+    exiger(ctx, 'availability.view_all');
+    if (!peut(ctx, 'planning.update')) throw echec(403, 'dispos-autrui', 'Seul le staff qui gère le planning modifie les disponibilités d’un autre membre.');
+    if (typeof qui !== 'string' || !MOTIF_COMPTE.test(qui)) throw echec(404, 'membre-introuvable', 'Membre introuvable.');
+    const m = (await membresActifs(teamId)).find(x => x.compte === qui && x.a('availability.edit_own'));
+    if (!m) throw echec(404, 'membre-introuvable', 'Membre introuvable.');
+    return { ctx, soi, cible: { compte: m.compte, pseudo: m.pseudo } };
+  }
+
+  /** Lundi d'une semaine demandée (`AAAA-MM-JJ`, n'importe quel jour de la semaine) ; la semaine en cours par défaut. */
+  function lireSemaine(ctx, texte) {
+    if (texte === undefined || texte === '') return lundiCourant(ctx);
+    const d = lireDate(texte);
+    if (!d) throw echec(400, 'semaine', 'Semaine invalide (AAAA-MM-JJ).');
+    return texteDate(lundiDe(d));
+  }
+
+  /** On ne réécrit ni une semaine finie, ni une semaine à plus d'un an. */
+  function semaineModifiable(ctx, semaine) {
+    const courant = lundiCourant(ctx);
+    if (semaine < courant) return false;
+    return ecartJours(lireDate(courant), lireDate(semaine)) <= SEMAINES_MAX_AVANCE * 7;
+  }
+  function exigerModifiable(ctx, semaine) {
+    if (!semaineModifiable(ctx, semaine)) throw echec(400, 'semaine-hors-limites', `Seules la semaine en cours et les ${SEMAINES_MAX_AVANCE} suivantes se modifient.`);
+  }
+
+  async function modeleDe(teamId, compte) {
+    return (await base.tous('SELECT * FROM dispo_regles WHERE team_id = ? AND compte_id = ? ORDER BY jour, debut', [teamId, compte])).map(reglePublique);
+  }
+  async function ligneSemaine(teamId, compte, semaine) {
+    return base.premier('SELECT * FROM dispo_semaines WHERE team_id = ? AND compte_id = ? AND semaine = ?', [teamId, compte, semaine]);
+  }
+  /** Règles effectives d'une semaine : la semaine personnalisée, sinon le modèle. */
+  async function effectiveDe(teamId, compte, semaine, modele) {
+    const l = await ligneSemaine(teamId, compte, semaine);
+    return l ? { personnalisee: true, ...semainePublique(l) } : { personnalisee: false, semaine, regles: modele, version: 0 };
+  }
+
+  function exigerVersion(corps, actuelle) {
+    const v = corps?.versionAttendue;
+    if (v !== undefined && v !== null && Number(v) !== Number(actuelle)) throw echec(409, 'version', 'Cette semaine a été modifiée entre-temps (autre appareil ou membre du staff) : rechargez-la.');
+  }
+
+  async function semaineDispos(acteur, teamId, qui, params = {}) {
+    const { ctx, cible, soi } = await cibleSemaine(acteur, teamId, qui);
+    const semaine = lireSemaine(ctx, params.semaine);
+    const modele = await modeleDe(teamId, cible.compte);
+    const eff = await effectiveDe(teamId, cible.compte, semaine, modele);
+    const prec = await effectiveDe(teamId, cible.compte, texteDate(ajouterJours(lireDate(semaine), -7)), modele);
+    const courant = lundiCourant(ctx);
+    const depuis = semaine < courant ? semaine : courant;
+    const perso = await base.tous('SELECT semaine FROM dispo_semaines WHERE team_id = ? AND compte_id = ? AND semaine >= ? ORDER BY semaine', [teamId, cible.compte, depuis]);
+    const gereAutres = peut(ctx, 'availability.view_all') && peut(ctx, 'planning.update');
+    const membres = gereAutres ? (await membresActifs(teamId)).filter(m => m.a('availability.edit_own')).map(m => ({ compte: m.compte, pseudo: m.pseudo })) : [];
+    const majPar = eff.majPar ? (membres.find(m => m.compte === eff.majPar)?.pseudo ?? (await pseudosDe(base, [eff.majPar]))[eff.majPar] ?? null) : null;
+    return {
+      compte: cible.compte,
+      pseudo: cible.pseudo ?? membres.find(m => m.compte === cible.compte)?.pseudo ?? null,
+      soi,
+      semaine,
+      dimanche: texteDate(ajouterJours(lireDate(semaine), 6)),
+      cetteSemaine: courant,
+      personnalisee: eff.personnalisee,
+      version: eff.version,
+      fuseau: eff.personnalisee ? eff.fuseau : (modele[0]?.fuseau ?? ctx.team.fuseau),
+      fuseauTeam: ctx.team.fuseau,
+      regles: triRegles(eff.regles),
+      modele,
+      precedente: { semaine: prec.semaine, personnalisee: prec.personnalisee, regles: triRegles(prec.regles) },
+      personnalisees: perso.map(l => l.semaine),
+      majLe: eff.majLe ?? null,
+      majPar,
+      modifiable: semaineModifiable(ctx, semaine) && (soi ? Boolean(ctx.membre) : true),
+      appliquerMax: APPLIQUER_MAX,
+      membres,
+      droits: droits(ctx),
+    };
+  }
+
+  /** Écrit (ou remplace) la semaine personnalisée : lignes du lot. */
+  function ecritureSemaine(teamId, compte, semaine, regles, fuseau, version, acteur, t) {
+    const json = JSON.stringify(regles.map(r => ({ jour: r.jour, debut: r.debut, fin: r.fin, type: r.type })));
+    return version
+      ? { sql: 'UPDATE dispo_semaines SET regles = ?, fuseau = ?, version = ?, maj_le = ?, maj_par = ? WHERE team_id = ? AND compte_id = ? AND semaine = ? AND version = ?', params: [json, fuseau, version + 1, iso(t), acteur, teamId, compte, semaine, version] }
+      : { sql: 'INSERT INTO dispo_semaines (team_id, compte_id, semaine, regles, fuseau, version, maj_le, maj_par) VALUES (?, ?, ?, ?, ?, 1, ?, ?)', params: [teamId, compte, semaine, json, fuseau, iso(t), acteur] };
+  }
+
+  /** Lot d'écriture, refusé (409) si une autre écriture est passée entre la lecture et l'écriture. */
+  async function lotSemaine(lignes) {
+    let res;
+    try {
+      res = await base.lot(lignes);
+    } catch (e) {
+      if (/unique|primary|constraint/i.test(String(e?.message ?? e))) throw echec(409, 'version', 'Cette semaine a été modifiée entre-temps (autre appareil ou membre du staff) : rechargez-la.');
+      throw e;
+    }
+    if (Array.isArray(res) && lignes.some((l, i) => l.sql.startsWith('UPDATE dispo_semaines') && res[i]?.changements === 0)) {
+      throw echec(409, 'version', 'Cette semaine a été modifiée entre-temps (autre appareil ou membre du staff) : rechargez-la.');
+    }
+    return res;
+  }
+
+  /**
+   * Personnalise une semaine : `regles` (liste, vide = indisponible toute la semaine) ou `copier` : « modele »
+   * (copie du modèle, à retoucher) ou « precedente » (règles effectives de la semaine d'avant).
+   * `versionAttendue` (facultatif) : 409 si la semaine a changé depuis la lecture (0 : pas encore personnalisée).
+   */
+  async function enregistrerSemaine(acteur, teamId, qui, semaineTexte, corps = {}) {
+    const { ctx, cible } = await cibleSemaine(acteur, teamId, qui, { ecriture: true });
+    const semaine = lireSemaine(ctx, semaineTexte);
+    exigerModifiable(ctx, semaine);
+    const modele = await modeleDe(teamId, cible.compte);
+    const actuelle = await ligneSemaine(teamId, cible.compte, semaine);
+    exigerVersion(corps, actuelle ? actuelle.version : 0);
+    let regles;
+    let fuseau;
+    if (corps?.copier === 'modele') {
+      regles = modele;
+      fuseau = modele[0]?.fuseau ?? ctx.team.fuseau;
+    } else if (corps?.copier === 'precedente') {
+      const prec = await effectiveDe(teamId, cible.compte, texteDate(ajouterJours(lireDate(semaine), -7)), modele);
+      regles = prec.regles;
+      fuseau = prec.personnalisee ? prec.fuseau : (modele[0]?.fuseau ?? ctx.team.fuseau);
+    } else if (corps?.copier !== undefined) {
+      throw echec(400, 'copier', 'Copier : « modele » ou « precedente ».');
+    } else {
+      regles = lireRegles(corps?.regles);
+      fuseau = corps?.fuseau ?? actuelle?.fuseau ?? modele[0]?.fuseau ?? ctx.team.fuseau;
+    }
+    if (!fuseauValide(fuseau)) throw echec(400, 'fuseau', 'Fuseau horaire invalide.');
+    const t = maintenant();
+    await lotSemaine([
+      ecritureSemaine(teamId, cible.compte, semaine, regles, fuseau, actuelle ? Number(actuelle.version) : 0, acteur.compte, t),
+      evenement('availability.updated', { teamId, acteur: acteur.compte, entiteType: 'dispos', entiteId: cible.compte, charge: { semaine, regles: regles.length, ...(corps?.copier ? { copie: corps.copier } : {}) }, maintenant: t }),
+    ]);
+    return semaineDispos(acteur, teamId, qui, { semaine });
+  }
+
+  /** Revenir au modèle : la semaine personnalisée est effacée. */
+  async function reinitialiserSemaine(acteur, teamId, qui, semaineTexte, params = {}) {
+    const { ctx, cible } = await cibleSemaine(acteur, teamId, qui, { ecriture: true });
+    const semaine = lireSemaine(ctx, semaineTexte);
+    exigerModifiable(ctx, semaine);
+    const actuelle = await ligneSemaine(teamId, cible.compte, semaine);
+    exigerVersion({ versionAttendue: params.versionAttendue ?? params.version }, actuelle ? actuelle.version : 0);
+    if (actuelle) {
+      const t = maintenant();
+      await base.lot([
+        { sql: 'DELETE FROM dispo_semaines WHERE team_id = ? AND compte_id = ? AND semaine = ?', params: [teamId, cible.compte, semaine] },
+        evenement('availability.updated', { teamId, acteur: acteur.compte, entiteType: 'dispos', entiteId: cible.compte, charge: { semaine, reinitialisee: true }, maintenant: t }),
+      ]);
+    }
+    return semaineDispos(acteur, teamId, qui, { semaine });
+  }
+
+  /** « Appliquer aux N semaines suivantes » : les règles effectives de cette semaine, copiées sur les N suivantes. */
+  async function appliquerSemaine(acteur, teamId, qui, semaineTexte, corps = {}) {
+    const { ctx, cible } = await cibleSemaine(acteur, teamId, qui, { ecriture: true });
+    const semaine = lireSemaine(ctx, semaineTexte);
+    const n = Number(corps?.semaines);
+    if (!Number.isInteger(n) || n < 1 || n > APPLIQUER_MAX) throw echec(400, 'semaines', `Nombre de semaines : 1 à ${APPLIQUER_MAX}.`);
+    exigerModifiable(ctx, semaine);
+    const derniere = texteDate(ajouterJours(lireDate(semaine), 7 * n));
+    exigerModifiable(ctx, derniere);
+    const modele = await modeleDe(teamId, cible.compte);
+    const source = await effectiveDe(teamId, cible.compte, semaine, modele);
+    const fuseau = source.personnalisee ? source.fuseau : (modele[0]?.fuseau ?? ctx.team.fuseau);
+    const existantes = new Map((await base.tous('SELECT semaine, version FROM dispo_semaines WHERE team_id = ? AND compte_id = ? AND semaine > ? AND semaine <= ?', [teamId, cible.compte, semaine, derniere])).map(l => [l.semaine, Number(l.version)]));
+    const t = maintenant();
+    const lignes = [];
+    for (let i = 1; i <= n; i++) {
+      const s = texteDate(ajouterJours(lireDate(semaine), 7 * i));
+      lignes.push(ecritureSemaine(teamId, cible.compte, s, source.regles, fuseau, existantes.get(s) ?? 0, acteur.compte, t));
+    }
+    lignes.push(evenement('availability.updated', { teamId, acteur: acteur.compte, entiteType: 'dispos', entiteId: cible.compte, charge: { semaine, appliquee: n }, maintenant: t }));
+    await lotSemaine(lignes);
+    return semaineDispos(acteur, teamId, qui, { semaine });
+  }
+
   async function carte(acteur, teamId, params = {}) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'availability.view_all');
@@ -1300,7 +1523,15 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const membres = (await membresActifs(teamId)).filter(m => m.a('availability.edit_own'));
     const regles = await base.tous('SELECT * FROM dispo_regles WHERE team_id = ?', [teamId]);
     const exceptions = await base.tous('SELECT * FROM dispo_exceptions WHERE team_id = ? AND fin > ? AND debut < ?', [teamId, iso(du), iso(au)]);
-    const joueurs = membres.map(m => ({ compte: m.compte, regles: regles.filter(r => r.compte_id === m.compte), exceptions: exceptions.filter(x => x.compte_id === m.compte) }));
+    // Semaines personnalisées autour de la semaine affichée (le fuseau d'un membre peut décaler la semaine d'un jour).
+    const semaines = await base.tous('SELECT * FROM dispo_semaines WHERE team_id = ? AND semaine >= ? AND semaine <= ?', [teamId, texteDate(ajouterJours(lundi, -14)), texteDate(ajouterJours(lundi, 14))]);
+    const joueurs = membres.map(m => ({
+      compte: m.compte,
+      regles: regles.filter(r => r.compte_id === m.compte),
+      semaines: semaines.filter(x => x.compte_id === m.compte).map(semainePublique),
+      exceptions: exceptions.filter(x => x.compte_id === m.compte),
+    }));
+    const lundiTexte = texteDate(lundi);
     const { effectifMin } = await reglages(teamId);
     const h = heatmap({ lundi, fuseau, pas, joueurs, seuil: effectifMin });
     return {
@@ -1309,7 +1540,9 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       pas,
       seuil: effectifMin,
       total: membres.length,
-      renseignes: joueurs.filter(j => j.regles.length + j.exceptions.length > 0).length,
+      renseignes: joueurs.filter(j => j.regles.length + j.exceptions.length + j.semaines.length > 0).length,
+      // Membres dont CETTE semaine est personnalisée (le reste suit le modèle).
+      personnalisees: joueurs.filter(j => j.semaines.some(x => x.semaine === lundiTexte)).map(j => j.compte),
       noms: Object.fromEntries(membres.map(m => [m.compte, m.pseudo])),
       ...h,
       plages: plagesPropices(h).map(pl => ({ ...pl, heureDebut: local(fuseau, Date.parse(pl.debut)).heure, heureFin: local(fuseau, Date.parse(pl.fin)).heure })),
@@ -1344,6 +1577,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     remplacerRegles,
     ajouterException,
     supprimerException,
+    semaineDispos,
+    enregistrerSemaine,
+    reinitialiserSemaine,
+    appliquerSemaine,
     carte,
     // Pour le cron (rappels) :
     membresActifs,

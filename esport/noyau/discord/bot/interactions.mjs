@@ -401,13 +401,15 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       const d = await p.mesDispos(acteur, ctx.team.id);
       await journaliser(ctx.team.id, acteur, 'dispo');
       const champs = [];
+      // Semaine en cours EFFECTIVE : la semaine personnalisée (migration 0062) si le membre en a fait une, sinon le modèle.
+      const effectives = d.semaine?.regles ?? d.regles;
       for (let jour = 1; jour <= 7; jour++) {
-        const regles = d.regles.filter(r => r.jour === jour);
+        const regles = effectives.filter(r => r.jour === jour);
         champs.push({ nom: T(l, `bot.jour.${jour}`), valeur: regles.length ? regles.map(r => `${r.type === 'indisponible' ? '🔴' : '🟢'} ${r.debut}–${r.fin}`).join('\n') : '—', inline: true });
       }
       const semaine = d.exceptions.filter(x => Date.parse(x.debut) < maintenant() + 7 * JOUR).slice(0, 8);
       if (semaine.length) champs.push({ nom: T(l, 'bot.dispo.exceptions'), valeur: semaine.map(x => `${x.type === 'indisponible' ? '🔴' : '🟢'} ${x.jour} ${x.heureDebut}–${x.heureFin}${x.note ? ` · ${nettoyerVariable(x.note)}` : ''}`).join('\n') });
-      embeds.push(embedReponse({ titre: T(l, 'bot.dispo.titre', { team: nettoyerVariable(ctx.team.nom) }), description: d.regles.length ? T(l, 'bot.dispo.description', { fuseau: d.fuseau }) : T(l, 'bot.dispo.vide'), champs, couleur: COULEUR_OK, lien }));
+      embeds.push(embedReponse({ titre: T(l, 'bot.dispo.titre', { team: nettoyerVariable(ctx.team.nom) }), description: effectives.length || d.semaine?.personnalisee ? `${T(l, 'bot.dispo.description', { fuseau: d.fuseau })}${d.semaine?.personnalisee ? `\n${T(l, 'bot.dispo.semaine_personnalisee')}` : ''}` : T(l, 'bot.dispo.vide'), champs, couleur: COULEUR_OK, lien }));
     }
     if (embeds.length === 0) return erreur(i, T(l, 'bot.dispo.indisponible_module'));
     return message({ embeds, components: boutonLien(lien, T(l, 'bouton.modifier_app')) });

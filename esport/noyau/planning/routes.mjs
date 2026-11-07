@@ -21,6 +21,8 @@
  *   GET                /teams/:t/presence/joueurs/:c        fiche d'un joueur (« moi » : la sienne)
  *   GET                /teams/:t/dispos/moi ; PUT …/moi/regles ; POST …/moi/exceptions ; DELETE …/moi/exceptions/:id
  *   GET                /teams/:t/dispos/carte                heatmap (?semaine&fuseau&pas)
+ *   GET|PUT|DELETE     /teams/:t/dispos/semaines/:qui/:jour  semaine personnalisée (qui : moi ou un compte)
+ *   POST               /teams/:t/dispos/semaines/:qui/:jour/appliquer   copie sur les N semaines suivantes
  */
 
 import { ENTETES_FICHIER, disposition } from '../entetes.mjs';
@@ -96,6 +98,14 @@ export async function routesPlanning({ p, acteur, chemin, methode, url, lireCorp
     if (n === 2 && a === 'moi' && b === 'exceptions' && methode === 'POST') return p.ajouterException(acteur, teamId, await lireCorps());
     if (n === 3 && a === 'moi' && b === 'exceptions' && methode === 'DELETE') return p.supprimerException(acteur, teamId, c);
     if (n === 1 && a === 'carte' && methode === 'GET') return p.carte(acteur, teamId, q);
+    // Semaine par semaine (migration 0062) : `b` = « moi » ou le compte visé, `c` = un jour de la semaine (AAAA-MM-JJ).
+    if (a === 'semaines' && b) {
+      if (n === 2 && methode === 'GET') return p.semaineDispos(acteur, teamId, b, q);
+      if (n === 3 && methode === 'GET') return p.semaineDispos(acteur, teamId, b, { ...q, semaine: c });
+      if (n === 3 && methode === 'PUT') return p.enregistrerSemaine(acteur, teamId, b, c, await lireCorps());
+      if (n === 3 && methode === 'DELETE') return p.reinitialiserSemaine(acteur, teamId, b, c, q);
+      if (n === 4 && d === 'appliquer' && methode === 'POST') return p.appliquerSemaine(acteur, teamId, b, c, await lireCorps());
+    }
   }
   return undefined;
 }
