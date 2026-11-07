@@ -75,6 +75,9 @@ import { servicesConfigTickets } from './tickets/service.mjs';
 import { routePieceTicket, routesTickets } from './tickets/routes.mjs';
 import { servicesVueTickets } from './tickets/vue.mjs';
 import { creerBotTickets } from './tickets/bot.mjs';
+import { creerBotVocaux } from './vocaux/bot.mjs';
+import { servicesVocaux } from './vocaux/service.mjs';
+import { routesVocaux } from './vocaux/routes.mjs';
 import { servicesCycleTickets } from './tickets/cycle.mjs';
 import { servicesRgpdTickets } from './tickets/rgpd.mjs';
 import { contexteTickets } from './tickets/acces.mjs';
@@ -250,10 +253,14 @@ export function creerApi({
   // Administration › Bot Esport HQ : réglages du bot réunis (lus là où ils vivent), commandes, permissions.
   const botAdmin = servicesBotAdmin({ base, maintenant, fetch: envoiDiscord, jetonBot, config: configBot, noyau: s, serveurTickets: ticketsServeur });
   const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets, config: tk.config });
+  // Salons vocaux temporaires (migration 0060, docs/esport/vocaux.md) : réglages (Administration › Bot Esport HQ › Fonctionnalités) et
+  // panneau de contrôle / commandes du bot ; les arrivées dans un hub sont vues par la Gateway du superviseur.
+  const vc = servicesVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, serveurTickets: ticketsServeur });
+  const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   const bot = creerBot({
     base,
     maintenant,
-    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb, tickets: botTickets },
+    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb, tickets: botTickets, vocaux: botVocaux },
     config: configBot,
     fetch: envoiDiscord,
     lienApp,
@@ -492,6 +499,8 @@ export function creerApi({
     if (administrationBot !== undefined) return administrationBot;
     const tickets = await routesTickets({ tk, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
     if (tickets !== undefined) return tickets;
+    const vocaux = await routesVocaux({ vc, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
+    if (vocaux !== undefined) return vocaux;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (sponsors !== undefined) return sponsors;
     const reseaux = await routesReseaux({ rs: rsx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });

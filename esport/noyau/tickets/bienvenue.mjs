@@ -85,13 +85,18 @@ export function validerBienvenue(c, actuel, t) {
   return { reglages: s, recommencer };
 }
 
+/** Intent GUILD_VOICE_STATES (1 << 7, non privilégié) : salons vocaux temporaires (vocaux/moteur.mjs). */
+export const INTENT_VOCAL = 1 << 7;
+
 /**
  * Intents de la Gateway : ceux des tickets quand ils sont activés (messages des salons), sinon GUILDS seul ; plus
- * GUILD_MEMBERS quand la bienvenue est activée (sauf si Discord l'a refusé : `sansMembres`).
+ * GUILD_MEMBERS quand la bienvenue est activée (sauf si Discord l'a refusé : `sansMembres`) ; plus GUILD_VOICE_STATES
+ * quand les salons vocaux temporaires sont activés (`vocaux`).
  */
-export function intentsVoulus(general, bienvenue, { sansMembres = false } = {}) {
+export function intentsVoulus(general, bienvenue, { sansMembres = false, vocaux = false } = {}) {
   let i = general?.actif ? INTENTS_TICKETS : INTENT_GUILDS;
   if (bienvenue?.actif && !sansMembres) i |= INTENT_MEMBRES;
+  if (vocaux) i |= INTENT_VOCAL;
   return i;
 }
 

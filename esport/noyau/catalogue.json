@@ -338,7 +338,8 @@
     {"cle":"tickets.voir"},
     {"cle":"tickets.repondre"},
     {"cle":"tickets.gerer"},
-    {"cle":"tickets.configurer"}
+    {"cle":"tickets.configurer"},
+    {"cle":"vocaux.configurer"}
   ],
   "rolesGlobauxSysteme": [
     {"cle":"second_ceo","nom":"Second CEO","couleur":"#c99a1e","description":"Adjoint du Fondateur : presque tous les droits du club, des teams et du CM, sauf la page Rôles et permissions et ce qui reste au Fondateur.","descriptionEn":"The Founder’s deputy: almost every right over the club, the teams and the CM, except the Roles & permissions page and what stays with the Founder.","sauf":["roles.gerer","devblog.gerer","deploiement.voir"]}
@@ -427,6 +428,7 @@
     "tickets.repondre": {"categorie":"tickets","fr":"Tickets : répondre depuis l’app, notes internes, prendre en charge, mettre en attente, fermer et rouvrir les tickets qu’on voit.","en":"Tickets: reply from the app, internal notes, claim, put on hold, close and reopen the tickets you can see.","sensible":true},
     "tickets.gerer": {"categorie":"tickets","fr":"Tickets : toutes les catégories, assigner, changer de catégorie, ajouter ou retirer quelqu’un, transcripts, statistiques, avis de satisfaction, supprimer un ticket fermé.","en":"Tickets: every category, assign, change category, add or remove people, transcripts, statistics, satisfaction ratings, delete a closed ticket.","sensible":true},
     "tickets.configurer": {"categorie":"tickets","fr":"Tickets : configurer le système (serveur, catégories, formulaires, panneaux, messages, liste noire, horaires, commandes) ; avis et suppression des tickets fermés des catégories de ses rôles.","en":"Tickets: configure the system (server, categories, forms, panels, messages, blacklist, hours, commands); ratings and deletion of closed tickets in the categories of their roles.","sensible":true},
+    "vocaux.configurer": {"categorie":"discord","fr":"Salons vocaux : configurer les salons vocaux temporaires d’Esport HQ (hubs, rôles du staff, commandes /voc) et les rôles Discord des équipes des tournois.","en":"Voice channels: configure Esport HQ’s temporary voice channels (hubs, staff roles, /voc commands) and the Discord roles of tournament teams.","sensible":true},
     "statistiques.voir": {"categorie":"administration","fr":"Statistiques d’usage : voir la page (activité par membre comprise).","en":"Usage statistics: see the page (per-member activity included).","sensible":true},
     "roles.gerer": {"categorie":"administration","fr":"Rôles et permissions : ouvrir la page et modifier les rôles du club, du CM et le modèle des teams. Seul le Fondateur l’accorde.","en":"Roles & permissions: open the page and edit club and CM roles and the team template. Only the Founder grants it.","sensible":true}
   }

@@ -34,6 +34,8 @@ export interface EtatBotAdmin {
   invitation: string | null;
   permissions: { entier: string; fonctionnalites: Array<{ id: string; permissions: string[] }> };
   tickets: { actif: boolean; langue: ModeLangue; connexion: Connexion; diagnostic: DiagnosticTickets; commandes: Commandes };
+  /** Salons vocaux temporaires (absent d'un ancien serveur). */
+  vocaux?: { actif: boolean; configurer: boolean };
   serveur: { id: string; nom: string } | null;
   teams: TeamBot[];
   commandes: CommandeBot[];

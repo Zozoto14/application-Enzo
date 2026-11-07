@@ -240,6 +240,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       peutVoirStatistiques: acteur.superAdmin || globales.has('statistiques.voir'),
       // Devblog (migration 0036) : gérer les notes de mise à jour et les publier sur Discord.
       peutGererDevblog: acteur.superAdmin || globales.has(PERMISSION_DEVBLOG),
+      // Salons vocaux temporaires d'Esport HQ (migration 0060) : Administration › Bot Esport HQ › Fonctionnalités.
+      peutConfigurerVocaux: acteur.superAdmin || globales.has('vocaux.configurer'),
     };
   }
 

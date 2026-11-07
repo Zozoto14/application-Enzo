@@ -30,11 +30,15 @@ export const BITS = Object.freeze({
  * Permissions de chaque fonctionnalité du bot.
  *  - annonces : messages des teams et fil français (bot-discord.md) ;
  *  - tickets  : salons privés, rôles, pièces jointes, refus d'écriture (le bot ne peut refuser dans un salon que des
- *               permissions qu'il a lui-même : réactions, fils) (tickets.md).
+ *               permissions qu'il a lui-même : réactions, fils) (tickets.md) ;
+ *  - vocaux   : salons vocaux temporaires (créer, renommer, supprimer ; droits des salons pour le verrouillage ; se
+ *               connecter ; déplacer et déconnecter des membres ; panneau dans le salon) et rôles des équipes de
+ *               tournoi (vocaux.md).
  */
 export const FONCTIONNALITES_PERMISSIONS = [
   { id: 'annonces', permissions: ['voir_salons', 'envoyer', 'integrer', 'historique', 'mentionner', 'creer_fils_publics', 'envoyer_fils'] },
   { id: 'tickets', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'envoyer', 'historique', 'joindre', 'integrer', 'reactions', 'creer_fils_prives', 'creer_fils_publics', 'envoyer_fils'] },
+  { id: 'vocaux', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'connecter', 'deplacer_membres', 'envoyer', 'integrer', 'historique'] },
 ];
 
 const bit = cle => {

@@ -320,12 +320,14 @@ test('catalogue : un rôle du club porte les permissions du club et du CM ; le S
   const sc = permissionsParDefautGlobal('second_ceo');
   assert.deepEqual(PERMISSIONS_ROLE_GLOBAL.filter(p => !sc.includes(p)).sort(), ['deploiement.voir', 'devblog.gerer', 'roles.gerer']);
   // La migration 0033 pose exactement ces permissions (sinon « Modifié » s'afficherait dès l'installation), complétée
-  // par les migrations suivantes (0039 : réunions de l'équipe CM ; 0054 : tickets).
+  // par les migrations suivantes (0039 : réunions de l'équipe CM ; 0054 : tickets ; 0060 : salons vocaux).
   const sql = readFileSync(fileURLToPath(new URL('../migrations/0033_roles_globaux.sql', import.meta.url)), 'utf8');
   const sql38 = readFileSync(fileURLToPath(new URL('../migrations/0039_cm_reunions.sql', import.meta.url)), 'utf8');
   // 0054 : les quatre permissions des tickets.
   const sql54 = readFileSync(fileURLToPath(new URL('../migrations/0054_tickets.sql', import.meta.url)), 'utf8');
-  const suivantes = [sql38, sql54].flatMap(s => [...s.matchAll(/SELECT id, '([a-z_.]+)' FROM roles_globaux WHERE id = 'role-global-second-ceo'/g)].map(m => m[1]));
+  // 0060 : configuration des salons vocaux temporaires.
+  const sql60 = readFileSync(fileURLToPath(new URL('../migrations/0060_vocaux_temporaires.sql', import.meta.url)), 'utf8');
+  const suivantes = [sql38, sql54, sql60].flatMap(s => [...s.matchAll(/SELECT id, '([a-z_.]+)' FROM roles_globaux WHERE id = 'role-global-second-ceo'/g)].map(m => m[1]));
   const posees = [...[...sql.matchAll(/\('role-global-second-ceo', '([a-z_.]+)'\)/g)].map(m => m[1]), ...suivantes];
   assert.deepEqual(posees.sort(), [...sc].sort());
 });

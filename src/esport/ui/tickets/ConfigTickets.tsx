@@ -43,8 +43,8 @@ export function PastilleConnexion({ theme, connexion, actif }: { theme: ThemeHub
   return <Badge theme={theme} ton={ton} texte={`${trTk('connexion.titre')} : ${trTk(`connexion.${mode}` as CleTk)}`} testID={`esport-tk-connexion-${mode}`} />;
 }
 
-/** Choix multiple en pastilles (rôles, catégories). */
-function ChoixMultiple({ theme, libelle, valeurs, options, onChanger, max, testID }: { theme: ThemeHub; libelle: string; valeurs: string[]; options: ReadonlyArray<{ id: string; nom: string; couleur?: string | null }>; onChanger(v: string[]): void; max?: number; testID: string }) {
+/** Choix multiple en pastilles (rôles, catégories) ; aussi utilisé par Administration › Bot Esport HQ › Fonctionnalités. */
+export function ChoixMultiple({ theme, libelle, valeurs, options, onChanger, max, testID }: { theme: ThemeHub; libelle: string; valeurs: string[]; options: ReadonlyArray<{ id: string; nom: string; couleur?: string | null }>; onChanger(v: string[]): void; max?: number; testID: string }) {
   return (
     <View style={{ gap: 6 }}>
       <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{libelle}</Text>

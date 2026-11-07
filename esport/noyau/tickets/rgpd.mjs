@@ -59,6 +59,8 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
       { sql: `DELETE FROM tickets_membres WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       { sql: `DELETE FROM tickets_liste_noire WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       { sql: `DELETE FROM discord_bienvenues WHERE discord_user_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
+      // Salons vocaux temporaires : le nom affiché du propriétaire (le salon, éphémère, disparaît une fois vide).
+      { sql: `UPDATE vocaux_salons SET proprietaire_nom = '' WHERE proprietaire_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
     );
   }
   if (compte) {

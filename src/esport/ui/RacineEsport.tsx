@@ -177,7 +177,8 @@ export function Esport(props: PropsRacineApp) {
     roles: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererRoles)),
     devblog: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererDevblog)),
     // Bot Esport HQ : le Fondateur, ou qui configure les tickets (chaque section est contrôlée par le serveur).
-    bot: Boolean(moiPret && (moiPret.superAdmin || moiTickets?.configurer)),
+    // (ou qui configure les salons vocaux temporaires : leur carte est dans « Fonctionnalités »).
+    bot: Boolean(moiPret && (moiPret.superAdmin || moiTickets?.configurer || moiPret.peutConfigurerVocaux)),
   };
   const administration = aAdministration(droitsAdmin);
   const pageVue =

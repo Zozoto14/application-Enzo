@@ -16,6 +16,7 @@ import type { NomIcone } from '../../../ui/icones';
 import type { ClientEsport } from '../../client';
 import { trBot } from '../../i18n/bot';
 import type { EtatBotAdmin } from '../../bot/api';
+import { ReglagesVocaux } from '../vocaux/ConfigVocaux';
 
 /** Ce que l'onglet donne à une fonctionnalité (navigation vers les pages qui gardent les réglages). */
 export interface ContexteBot {
@@ -59,13 +60,14 @@ export const FONCTIONNALITES_BOT: FonctionnaliteBot[] = [
     etat: ctx => (ctx.etat.tickets.actif ? { texte: trBot('fn.actif'), ton: 'ok' } : { texte: trBot('fn.inactif'), ton: 'neutre' }),
     ouvrir: { libelle: () => trBot('fn.tickets_ouvrir'), action: ctx => ctx.ouvrirTickets?.('connexion'), disponible: ctx => Boolean(ctx.ouvrirTickets) },
   },
-  // Salons vocaux temporaires : en cours de développement ; remplacer cette entrée par la vraie (Reglages / ouvrir).
+  // Salons vocaux temporaires (docs/esport/vocaux.md) : leurs réglages s'affichent sous la carte (vocaux.configurer).
   {
     id: 'vocaux',
     titre: () => trBot('fn.vocaux'),
     description: () => trBot('fn.vocaux_description'),
     icone: 'micro',
-    bientot: true,
+    etat: ctx => (ctx.etat.vocaux?.actif ? { texte: trBot('fn.actif'), ton: 'ok' } : { texte: trBot('fn.inactif'), ton: 'neutre' }),
+    Reglages: ReglagesVocaux,
   },
 ];
 

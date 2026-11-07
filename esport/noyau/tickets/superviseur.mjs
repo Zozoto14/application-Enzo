@@ -16,6 +16,10 @@
  * BIENVENUE PAR RÔLE (bienvenue.mjs) : la Gateway est aussi tenue quand seule la bienvenue est activée ; elle demande
  * alors l'intent GUILD_MEMBERS (privilégié). Si Discord le refuse (4014, « Server Members Intent » non activé), la
  * connexion repart aussitôt sans lui (les tickets continuent) et l'app affiche le rappel ; nouvel essai après 30 min.
+ * SALONS VOCAUX TEMPORAIRES (vocaux/moteur.mjs, docs/esport/vocaux.md) : la Gateway est aussi tenue quand ils sont
+ * activés, avec l'intent GUILD_VOICE_STATES (non privilégié) ; le moteur reçoit les événements vocaux et salons, et
+ * chaque passage du meneur supprime les salons vides arrivés au délai. Sans Gateway (relecture de secours), aucune
+ * arrivée dans un hub n'est vue : l'app le dit (Administration › Bot Esport HQ › Fonctionnalités).
  * MAINTIEN EN ÉVEIL : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes) ; le meneur
  * appelle donc sa propre adresse publique (`reveil`, URL_PUBLIQUE/sante) toutes les 4 min pour garder la Gateway.
  *
@@ -34,6 +38,8 @@ import { ingererMessage, modifierMessage, plusRecent, supprimerMessage, telechar
 import { lireGeneral } from './reglages.mjs';
 import { rest } from './discord.mjs';
 import { INTENT_MEMBRES, accueillirMembre, ecrireEtatBienvenue, effacerBienvenues, intentsVoulus, lireBienvenue } from './bienvenue.mjs';
+import { lireVocaux } from '../vocaux/reglages.mjs';
+import { creerMoteurVocaux } from '../vocaux/moteur.mjs';
 
 export const BAIL = 'gateway';
 export const DUREE_BAIL_MS = 60_000;
@@ -131,6 +137,7 @@ export function creerSuperviseurTickets({
   reveil = null,
   fetchReveil = (...a) => globalThis.fetch(...a),
   intervalleReveil = INTERVALLE_REVEIL_MS,
+  vocaux: optionsVocaux = {},
   journal = console,
 }) {
   let minuterie = null;
@@ -151,6 +158,9 @@ export function creerSuperviseurTickets({
   // Intent GUILD_MEMBERS refusé par Discord : on repart sans lui (date du refus, nouvel essai après 30 min).
   let membresRefusesLe = 0;
   const telecharger = telechargeurCdn(fetchDiscord);
+  let vocaux = null;
+  // Moteur des salons vocaux temporaires (meneur seulement : il ne reçoit que les événements de SA Gateway).
+  const moteur = creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, maintenant, journal, botId: () => botId, ...optionsVocaux });
 
   const ctx = () => ({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte, surNouveau, surSalonSupprime, fetch: fetchDiscord, jetonBot });
 
@@ -158,6 +168,7 @@ export function creerSuperviseurTickets({
 
   async function evenement(type, d) {
     if (type === 'READY') botId = d?.user?.id ?? botId;
+    if (['READY', 'RESUMED', 'GUILD_CREATE', 'VOICE_STATE_UPDATE', 'CHANNEL_CREATE', 'CHANNEL_UPDATE', 'CHANNEL_DELETE'].includes(type)) await moteur.evenement(type, d);
     if (type === 'GUILD_MEMBER_ADD' || type === 'GUILD_MEMBER_UPDATE') {
       await accueillirMembre(ctxBienvenue(), d);
       return;
@@ -196,7 +207,10 @@ export function creerSuperviseurTickets({
   async function arreterGateway(opts) {
     const g = gw;
     gw = null;
-    if (g) await g.arreter(opts);
+    if (g) {
+      moteur.reinitialiser();
+      await g.arreter(opts);
+    }
   }
 
   /** Note le passage de ce processus (au plus une fois par minute, ou quand le rôle change). */
@@ -229,7 +243,8 @@ export function creerSuperviseurTickets({
       const t = maintenant();
       reglages = await lireGeneral(base);
       bienvenue = await lireBienvenue(base);
-      if (!jetonBot || !(reglages.actif || bienvenue.actif) || !reglages.guildId) {
+      vocaux = await lireVocaux(base);
+      if (!jetonBot || !(reglages.actif || bienvenue.actif || vocaux.actif) || !reglages.guildId) {
         if (meneur) await rendreBail(base, identifiant, t);
         meneur = false;
         await arreterGateway();
@@ -245,7 +260,7 @@ export function creerSuperviseurTickets({
       await noter('meneur', null, t);
       maintenirEveil(t);
       if (membresRefusesLe && t - membresRefusesLe > 30 * 60_000) membresRefusesLe = 0;
-      const voulus = intentsVoulus(reglages, bienvenue, { sansMembres: Boolean(membresRefusesLe) });
+      const voulus = intentsVoulus(reglages, bienvenue, { sansMembres: Boolean(membresRefusesLe), vocaux: vocaux.actif });
       if (gw && voulus !== intentsCourants) await arreterGateway();
       if (!gw) await demarrerGateway(voulus);
       let e = gw.etat();
@@ -254,7 +269,7 @@ export function creerSuperviseurTickets({
         membresRefusesLe = t;
         await ecrireEtatBienvenue(base, { membresRefuses: true, refusLe: iso(t) }, t).catch(() => undefined);
         await arreterGateway();
-        await demarrerGateway(intentsVoulus(reglages, bienvenue, { sansMembres: true }));
+        await demarrerGateway(intentsVoulus(reglages, bienvenue, { sansMembres: true, vocaux: vocaux.actif }));
         e = gw.etat();
       } else if (e.etat === 'pret' && intentsCourants & INTENT_MEMBRES) {
         await ecrireEtatBienvenue(base, { membresRefuses: false }, t).catch(() => undefined);
@@ -269,6 +284,8 @@ export function creerSuperviseurTickets({
       // Messages de bienvenue à effacer (rattrapage si un processus s'est arrêté avant l'heure).
       if (bienvenue.actif) await effacerBienvenues(ctxBienvenue()).catch(err => journal.error?.('[esport] bienvenue : effacement', err?.message ?? err));
       const vivant = e.etat === 'pret' && (!e.dernierAck || t - e.dernierAck < Math.max(120_000, intervalle * 4));
+      // Salons vocaux vides arrivés au délai (rattrapage des minuteries : processus remplacé, redémarrage).
+      if (vivant) await moteur.passage().catch(err => journal.error?.('[esport] vocaux : passage', err?.message ?? err));
       let mode = vivant ? 'direct' : 'secours';
       let releve = null;
       if (mode === 'secours' ? t - dernierSecours >= intervalleSecours : rattraper) {
@@ -307,10 +324,13 @@ export function creerSuperviseurTickets({
       minuterie = null;
       await enCours?.catch(() => undefined);
       await arreterGateway();
+      moteur.arreter();
       if (meneur) await rendreBail(base, identifiant, maintenant()).catch(() => undefined);
       meneur = false;
     },
-    etat: () => ({ meneur, gateway: gw?.etat() ?? null }),
+    etat: () => ({ meneur, gateway: gw?.etat() ?? null, vocaux: moteur.etat() }),
+    /** Tests : le moteur des salons vocaux (file d'événements à attendre). */
+    moteurVocaux: moteur,
     /** Tests : processus « mort » (plus de passage, connexion coupée net, bail NON rendu : il expirera). */
     async figer() {
       arrete = true;

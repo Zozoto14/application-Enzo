@@ -8,7 +8,8 @@
  *  - commandes : celles attendues (commandes.mjs) comparées à celles enregistrées chez Discord, et le
  *    réenregistrement (même appel que esport/outils/discord-commandes.mjs).
  *
- * Droits : le Fondateur, ou `tickets.configurer` (404 sinon). Les lignes des teams : toutes pour le Fondateur, sinon
+ * Droits : le Fondateur, `tickets.configurer` ou `vocaux.configurer` (salons vocaux temporaires, carte de
+ * « Fonctionnalités ») (404 sinon). Les lignes des teams : toutes pour le Fondateur, sinon
  * celles où le compte a `discord.manage`. Chaque page d'origine garde ses propres contrôles.
  *
  *   GET  /bot-discord              état complet (sans appel à Discord)
@@ -18,6 +19,8 @@
  */
 
 import { echec } from '../../outils.mjs';
+import { aGlobale } from '../../roles/globales.mjs';
+import { lireVocaux } from '../../vocaux/reglages.mjs';
 import { droitsTickets } from '../../tickets/acces.mjs';
 import { lireCommandes, lireGeneral } from '../../tickets/reglages.mjs';
 import { diagnosticConnexion, diagnosticTickets } from '../../tickets/superviseur.mjs';
@@ -47,7 +50,7 @@ export function servicesBotAdmin({ base, maintenant = () => Date.now(), fetch: f
 
   async function acces(acteur) {
     const droits = await droitsTickets(base, acteur);
-    if (!droits.fondateur && !droits.configurer) throw echec(404, 'route', 'Adresse inconnue.');
+    if (!droits.fondateur && !droits.configurer && !(await aGlobale(base, acteur, 'vocaux.configurer'))) throw echec(404, 'route', 'Adresse inconnue.');
     return droits;
   }
 
@@ -112,6 +115,8 @@ export function servicesBotAdmin({ base, maintenant = () => Date.now(), fetch: f
         diagnostic: await diagnosticTickets(base, t, { jetonBot, general, serveurTickets }),
         commandes: await lireCommandes(base),
       },
+      // Salons vocaux temporaires (vocaux/) : activés ou non, et si l'acteur peut les régler (carte « Fonctionnalités »).
+      vocaux: { actif: Boolean((await lireVocaux(base)).actif), configurer: await aGlobale(base, acteur, 'vocaux.configurer') },
       // Serveur Discord du club : un seul réglage, celui des tickets (Tickets › Configuration › Général).
       serveur: general.guildId ? { id: general.guildId, nom: general.guildNom ?? '' } : null,
       teams: await teams(acteur),

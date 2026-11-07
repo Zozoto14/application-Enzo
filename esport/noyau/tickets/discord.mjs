@@ -25,6 +25,9 @@ export const P = Object.freeze({
   CREER_FILS_PUBLICS: 1n << 35n,
   CREER_FILS_PRIVES: 1n << 36n,
   ENVOYER_FILS: 1n << 38n,
+  // Salons vocaux temporaires (vocaux/) : se connecter, déplacer des membres (et les déconnecter).
+  CONNECTER: 1n << 20n,
+  DEPLACER: 1n << 24n,
 });
 
 /** Permissions demandées au bot pour les tickets (nom affiché dans l'app : clé de traduction côté app). */

@@ -72,6 +72,8 @@ export interface Moi {
   peutVoirStatistiques?: boolean;
   /** Devblog : rédiger, publier, annoncer sur Discord (Fondateur, ou permission du club devblog.gerer). */
   peutGererDevblog?: boolean;
+  /** Salons vocaux temporaires d'Esport HQ (vocaux.configurer) : Administration › Bot Esport HQ › Fonctionnalités. */
+  peutConfigurerVocaux?: boolean;
 }
 export interface Team {
   id: string;

@@ -2,7 +2,7 @@
  * Administration › Bot Esport HQ : sous-onglet visible pour le Fondateur et pour qui configure les tickets (jamais
  * pour tickets.voir seul ni pour un autre droit d'Administration) ; sections Connexion et état (configuration sans
  * secret, diagnostic, invitation, vérification du serveur, commandes à réenregistrer et bouton), Serveur Discord,
- * Messages et langue, Annonces par team, Commandes, Fonctionnalités (registre, salons vocaux « Bientôt ») ; liens
+ * Messages et langue, Annonces par team, Commandes, Fonctionnalités (registre, salons vocaux et leurs réglages) ; liens
  * vers Tickets › Configuration (à la bonne section) et vers le Discord d'une team.
  */
 
@@ -198,7 +198,8 @@ test('Serveur Discord, Messages et langue, Annonces par team, Commandes, Fonctio
 
   await fireEvent.press(screen.getByTestId('esport-bot-onglet-fonctionnalites'));
   for (const f of FONCTIONNALITES_BOT) expect(await screen.findByTestId(`esport-bot-fn-${f.id}`)).toBeTruthy();
-  expect(screen.getByTestId('esport-bot-fn-vocaux-bientot')).toBeTruthy();
+  // Salons vocaux temporaires : disponibles, leurs réglages sous la carte (docs/esport/vocaux.md).
+  expect(screen.queryByTestId('esport-bot-fn-vocaux-bientot')).toBeNull();
   expect(screen.queryByTestId('esport-bot-fn-vocaux-ouvrir')).toBeNull();
   expect(screen.getByTestId('esport-bot-fn-tickets-ouvrir')).toBeTruthy();
 });

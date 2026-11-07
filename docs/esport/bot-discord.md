@@ -41,7 +41,10 @@ tickets.
      parler à la place du bot. Ne le collez nulle part ailleurs qu'à l'étape 3.
    - Laissez **Public Bot** comme vous voulez (désactivé : vous seul pouvez l'inviter). « Privileged Gateway
      Intents » : activez **Message Content Intent** si vous utilisez les **tickets** ([tickets.md](tickets.md) : le bot
-     lit alors les messages des salons de tickets) ; laissez **Presence** et **Server Members** éteints.
+     lit alors les messages des salons de tickets) ; laissez **Presence** et **Server Members** éteints (Server Members
+     seulement pour la bienvenue par rôle). Les **salons vocaux temporaires** ([vocaux.md](vocaux.md)) ajoutent
+     l'intent `GUILD_VOICE_STATES` à la connexion permanente : il n'est **pas privilégié**, rien à activer ici (l'app
+     le demande d'elle-même quand ils sont activés).
 
 ### 3. Poser les valeurs (serveur o2switch)
 
@@ -74,10 +77,11 @@ Le plus simple : dans l'app, **Esport › votre team › Réglages › Discord �
 bouton apparaît après l'étape 6). Sinon, remplacez `APPLICATION_ID` dans ce lien et ouvrez-le :
 
 ```
-https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=378225806416
+https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=378243632208
 ```
 
-(Ce nombre réunit les permissions de **toutes** les fonctionnalités du bot : annonces, tickets, et celles à venir. Il
+(Ce nombre réunit les permissions de **toutes** les fonctionnalités du bot : annonces, tickets, salons vocaux
+temporaires, et celles à venir. Il
 est calculé depuis une liste centrale, `esport/noyau/discord/permissions-bot.mjs` ; le lien à jour est toujours dans
 **Administration › Bot Esport HQ › Connexion et état**.)
 
@@ -86,6 +90,10 @@ Il demande les scopes **bot** et **applications.commands**, et seulement ces per
 messages** (Read Message History), **mentionner** (pour les rôles qu'on choisit de prévenir), et pour le **fil
 français** : **créer des fils publics** (Create Public Threads) et **envoyer des messages dans les fils** (Send
 Messages in Threads). Le bot ne mentionne jamais `@everyone` ni `@here`. Choisissez le serveur, **Autoriser**.
+
+**Serveur du club (tickets, salons vocaux temporaires)** : ce même lien demande aussi Gérer les salons, Gérer les
+rôles, Joindre des fichiers, Se connecter et Déplacer des membres. Le rôle « Esport HQ » doit être placé
+**au-dessus** des rôles qu'il gère ([vocaux.md](vocaux.md)).
 
 **Messages privés (relances par MP)** : aucune permission ni intent de plus. Le bot écrit par l'API HTTP
 (`POST /users/@me/channels` puis `POST /channels/{mp}/messages`) : pas de gateway, donc pas d'intent

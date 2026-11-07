@@ -136,7 +136,8 @@ export function lireHeureSaisie(saisie) {
  */
 export function creerBot({ base, maintenant = () => Date.now(), services, config = {}, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), lienApp = '', limite = async () => {}, attenteDiffere }) {
   // `tickets` (tickets/bot.mjs) : boutons, menus, fenêtres et commandes des tickets (sans compte lié).
-  const { noyau, planning: p, resumes, objectifs, playbook, liaisons, tickets } = services;
+  // `vocaux` (vocaux/bot.mjs) : panneau de contrôle des salons vocaux temporaires et /voc (sans compte lié).
+  const { noyau, planning: p, resumes, objectifs, playbook, liaisons, tickets, vocaux } = services;
   const lien = /^https:\/\//.test(lienApp) ? lienApp : '';
   const attendreLent = attenteDiffere ?? (() => new Promise(ok => setTimeout(ok, 2000).unref?.()));
 
@@ -611,6 +612,11 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       // Tickets : traités à part (tout membre du serveur du club, compte lié ou non).
       if (tickets) {
         const r = await tickets.interaction(i);
+        if (r !== undefined) return r;
+      }
+      // Salons vocaux temporaires : traités à part, comme les tickets.
+      if (vocaux) {
+        const r = await vocaux.interaction(i);
         if (r !== undefined) return r;
       }
       if (i.type === TYPE.COMMANDE) {

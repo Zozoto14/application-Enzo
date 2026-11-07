@@ -66,7 +66,7 @@ test('état : Fondateur et tickets.configurer seulement ; aucun secret ; invitat
   assert.deepEqual(e.bot, { configure: true, applicationId: k.APP, clePublique: true, jeton: true });
   assert.equal(e.fondateur, true);
   assert.equal(e.permissions.entier, permissionsInvitation().toString());
-  assert.deepEqual(e.permissions.fonctionnalites.map(f => f.id), ['annonces', 'tickets']);
+  assert.deepEqual(e.permissions.fonctionnalites.map(f => f.id), ['annonces', 'tickets', 'vocaux']);
   assert.equal(e.invitation, `https://discord.com/oauth2/authorize?client_id=${k.APP}&scope=bot%20applications.commands&permissions=${permissionsInvitation()}`);
   // Même lien partout : Tickets › Configuration et Discord d'une team.
   assert.equal((await k.api('/tickets/config')).corps.lienInvitation, e.invitation);
@@ -114,6 +114,7 @@ test('vérifier le serveur : ce qui manque au bot, par fonctionnalité ; bot abs
   assert.deepEqual(v.fonctionnalites, [
     { id: 'annonces', manquantes: ['mentionner', 'creer_fils_publics', 'envoyer_fils'] },
     { id: 'tickets', manquantes: ['reactions', 'creer_fils_prives', 'creer_fils_publics', 'envoyer_fils'] },
+    { id: 'vocaux', manquantes: ['connecter', 'deplacer_membres'] },
   ]);
   // Bot retiré du serveur.
   k.discord.programme.push({ si: (m, c) => c === '/users/@me/guilds', statut: 200, corps: [] });
