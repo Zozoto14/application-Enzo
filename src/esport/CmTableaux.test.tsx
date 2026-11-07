@@ -15,6 +15,7 @@ import { themeHub } from '../hub/themes';
 import { clientEsport, oublierSessions, type ClientEsport } from './client';
 import { apiCm, type CarteResume, type DetailTableau, type ReponseCarte } from './cm/api';
 import { definirLangue } from './i18n';
+import { PageEsport } from './ui/CadreEsport';
 import { Calendrier, joursEvenement } from './ui/cm/Calendrier';
 import { Tableau, carteAInfos } from './ui/cm/Tableau';
 
@@ -250,6 +251,55 @@ describe('tableaux CM façon Trello', () => {
     expect([pref.methode, pref.xMethode, pref.corps]).toEqual(['POST', 'PUT', { valeur: [L1] }]);
     await fireEvent.press(screen.getByLabelText('Agrandir la liste The Nuke End (17 cartes)'));
     expect(await screen.findByTestId(`esport-cm-liste-${L1}-cartes`)).toBeTruthy();
+  });
+
+  it('place pour le tableau : « Filtres » dans la ligne d’en-tête (panneau dessous à la demande), plein écran sur PC', async () => {
+    const { client } = fauxServeur(a => {
+      const c = a.url.split('?')[0];
+      if (c === `/cm/tableaux/${T}`) return { corps: tableau() };
+      if (c === '/cm/preferences') return { corps: { preferences: {} } };
+      return undefined;
+    });
+    const vue = await render(<Tableau theme={theme} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-liste-${L1}-cartes`);
+    // Le bouton « Filtres » est dans la ligne du nom du tableau (pas sur une ligne à lui) ; le panneau est fermé.
+    const entete = screen.getByTestId('esport-cm-tableau-entete');
+    expect(within(entete).getByTestId('esport-cm-filtres')).toBeTruthy();
+    expect(within(entete).getByTestId('esport-cm-tableau-nom')).toBeTruthy();
+    expect(screen.queryByTestId('esport-cm-filtres-panneau')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-cm-filtres'));
+    expect(within(entete).queryByTestId('esport-cm-filtres-panneau')).toBeNull();
+    expect(screen.getByTestId('esport-cm-filtre-q')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-cm-filtres'));
+    expect(screen.queryByTestId('esport-cm-filtres-panneau')).toBeNull();
+    // Plein écran : le tableau passe dans une fenêtre qui couvre l'app ; le bouton devient « Quitter le plein écran ».
+    expect(screen.getByTestId('esport-cm-tableau-plein')).toHaveTextContent('Plein écran');
+    await fireEvent.press(screen.getByTestId('esport-cm-tableau-plein'));
+    expect(screen.getByTestId('esport-cm-tableau-plein')).toHaveTextContent('Quitter le plein écran');
+    expect(screen.getByTestId(`esport-cm-liste-${L1}-cartes`)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-cm-tableau-plein'));
+    expect(screen.getByTestId('esport-cm-tableau-plein')).toHaveTextContent('Plein écran');
+    // Téléphone : pas de plein écran (le tableau prend déjà tout l'écran).
+    await vue.rerender(<Tableau theme={theme} api={apiCm(client)} id={T} large={false} />);
+    expect(screen.queryByTestId('esport-cm-tableau-plein')).toBeNull();
+  });
+
+  it('page d’un tableau ouvert : pas de largeur maximale (barre latérale réduite = tableau plus large), marges serrées', async () => {
+    await render(
+      <PageEsport large largeur={null} serre testID="page-tableau">
+        <></>
+      </PageEsport>,
+    );
+    const style = screen.getByTestId('page-tableau').props.contentContainerStyle;
+    const plat = Object.assign({}, ...[style].flat(3));
+    expect(plat.maxWidth).toBeUndefined();
+    expect(plat.paddingBottom).toBe(0);
+    await render(
+      <PageEsport large largeur={1600} testID="page-normale">
+        <></>
+      </PageEsport>,
+    );
+    expect(Object.assign({}, ...[screen.getByTestId('page-normale').props.contentContainerStyle].flat(3)).maxWidth).toBeGreaterThan(1600);
   });
 
   it('colonnes réduites relues depuis les préférences du compte', async () => {

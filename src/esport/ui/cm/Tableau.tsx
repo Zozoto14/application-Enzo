@@ -24,7 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Image, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { Icone } from '../../../ui/icones';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
@@ -37,7 +37,7 @@ import { minuscules } from '../../i18n';
 import { trCm, trnCm, type CleCm } from '../../i18n/cm';
 import { ACCEPT_IMAGE_FOND, choisirFichier, choixFichierDisponible } from '../../medias/choixFichier';
 import { Retours, styles, useAgir } from '../commun';
-import { Badge, Compteur, ESP, MenuActions, Pliable, Volet, attenue, initiales, rayonCarte, texte, type ActionSecondaire, type EtatPresse } from '../design';
+import { Badge, BoutonPliable, Compteur, ESP, MenuActions, Volet, attenue, initiales, rayonCarte, texte, type ActionSecondaire, type EtatPresse } from '../design';
 import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { trDr } from '../../i18n/drive';
 import { ChoixDrive } from './drive/ChoixDrive';
@@ -202,6 +202,12 @@ export function Tableau({
   const [d, setD] = useState<DetailTableau | undefined>();
   const [archives, setArchives] = useState(false);
   const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
+  // Filtres : bouton dans la ligne d'en-tête (pas de ligne à lui), panneau sous l'en-tête quand il est ouvert.
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
+  // Plein écran (PC) : le tableau seul par-dessus l'app (ni fil d'Ariane, ni onglets, ni barre latérale) ; Échap en sort.
+  const [plein, setPlein] = useState(false);
+  /** Échap tapé dans un champ (ajout d'une carte…) : il ferme le champ, pas le plein écran. */
+  const echapDansChamp = useRef(false);
   const [ouverte, setOuverte] = useState<string | undefined>();
   const [ajout, setAjout] = useState<string | undefined>();
   const [titreAjout, setTitreAjout] = useState('');
@@ -296,6 +302,35 @@ export function Tableau({
   useEffect(() => {
     mesurerZone();
   }, [mesurerZone, height, width]);
+  // Ce qui est au-dessus de la zone change de hauteur (filtres, légende, bannières, messages, plein écran) : la zone ne
+  // change pas de taille (pas d'onLayout), mais son haut bouge ; on le remesure après l'affichage.
+  const bannieres = d?.droits.gerer ? colonnesAProposer(d.listes).length : 0;
+  useEffect(() => {
+    const t = setTimeout(() => mesurerZone(), 0);
+    return () => clearTimeout(t);
+  }, [mesurerZone, filtresOuverts, legendeUrgence, plein, bannieres, erreur, avis, d?.nonLus]);
+  // Plein écran : Échap en sort au lieu de ramener au hub (écouteur en capture, avant celui de l'app). La sortie
+  // elle-même passe par la fenêtre (onRequestClose), qui ne réagit que si elle est au-dessus (pas sous la fiche d'une carte).
+  useEffect(() => {
+    if (!plein) return undefined;
+    const doc = (globalThis as { document?: { addEventListener(t: string, f: (e: never) => void, c: boolean): void; removeEventListener(t: string, f: (e: never) => void, c: boolean): void } }).document;
+    if (!doc) return undefined;
+    const surTouche = (e: { key: string; target?: { tagName?: string; isContentEditable?: boolean }; preventDefault(): void }) => {
+      if (e.key !== 'Escape') return;
+      const tag = e.target?.tagName?.toLowerCase();
+      echapDansChamp.current = tag === 'input' || tag === 'textarea' || Boolean(e.target?.isContentEditable);
+      e.preventDefault();
+    };
+    doc.addEventListener('keydown', surTouche, true);
+    return () => doc.removeEventListener('keydown', surTouche, true);
+  }, [plein]);
+  const quitterPlein = () => {
+    if (echapDansChamp.current) {
+      echapDansChamp.current = false;
+      return;
+    }
+    setPlein(false);
+  };
 
   const maintenant = Date.now();
   const etiquettes = useMemo(() => new Map((d?.etiquettes ?? []).map(e => [e.id, e])), [d]);
@@ -774,7 +809,7 @@ export function Tableau({
                   hauteurColonne !== undefined ? { maxHeight: hauteurColonne } : null,
                 ]}>
                 {/* En-tête fixe : nom, nombre de cartes, réduire, menu ⋯. */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: ESP.s, paddingRight: 4, paddingTop: 6, paddingBottom: 2 }} testID={`esport-cm-liste-${l.id}-entete`}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: ESP.s, paddingRight: 4, paddingTop: 6, paddingBottom: 2, flexShrink: 0 }} testID={`esport-cm-liste-${l.id}-entete`}>
                   <EnteteGlissable
                     actif={Boolean(d.droits.editer) && !l.archive && actifs.length > 1}
                     libelle={trCm('liste.poignee', { nom: nomListe(l) })}
@@ -814,7 +849,7 @@ export function Tableau({
                   <Text
                     numberOfLines={1}
                     accessibilityHint={trCm('tri.actif_aide')}
-                    style={{ ...attenue(theme, 11), paddingLeft: ESP.s + 2, paddingBottom: 2 }}
+                    style={{ ...attenue(theme, 11), paddingLeft: ESP.s + 2, paddingBottom: 2, flexShrink: 0 }}
                     testID={`esport-cm-liste-${l.id}-tri-actif`}
                     {...({ title: trCm('tri.actif_aide') } as object)}>
                     {trCm('tri.actif')}
@@ -934,9 +969,9 @@ export function Tableau({
   // Colonnes : surface presque opaque sur un fond (lisible en clair comme en sombre), teinte légère sinon.
   const fondColonne = fond ? (theme.sombre ? 'rgba(22,26,30,0.94)' : 'rgba(241,242,244,0.96)') : teinteTransparente(theme.attenue, theme.sombre ? 0.14 : 0.08);
   const hauteurColonne = hauteurTableau === undefined ? undefined : hauteurTableau - 2 * ESP.s;
-  return (
-    <View testID={testID} style={{ gap: ESP.s }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: ESP.s, justifyContent: 'space-between' }}>
+  const contenu = (
+    <View testID={testID} style={plein ? { flex: 1, gap: ESP.xs, padding: ESP.s, backgroundColor: theme.fond } : { gap: ESP.xs }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: ESP.s, justifyContent: 'space-between' }} testID="esport-cm-tableau-entete">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, flexShrink: 1, minWidth: 0 }}>
           {onRetour ? <BoutonHub theme={theme} titre="‹" libelle={trCm('tableau.retour')} onPress={onRetour} testID="esport-cm-tableau-retour" /> : null}
           <View style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: t.couleur }} />
@@ -951,6 +986,7 @@ export function Tableau({
           {t.acces === 'restreint' ? <Badge theme={theme} icone="cadenas" texte={trCm('acces.restreint_badge')} testID="esport-cm-tableau-restreint" /> : null}
         </View>
         <View style={[styles.ligne, { gap: ESP.xs }]}>
+          <BoutonPliable theme={theme} titre={trCm('filtres.titre')} resume={nbFiltres ? trnCm('filtres.actifs', nbFiltres) : undefined} ouvert={filtresOuverts} onBasculer={() => setFiltresOuverts(o => !o)} testID="esport-cm-filtres" />
           {d.nonLus ? (
             <BoutonHub
               theme={theme}
@@ -968,6 +1004,15 @@ export function Tableau({
           ) : null}
           <BoutonHub theme={theme} titre="?" libelle={legendeUrgence ? trCm('urgence.legende_masquer') : trCm('urgence.legende')} onPress={() => setLegendeUrgence(v => !v)} testID="esport-cm-urgence-legende-bouton" />
           {d.droits.editer ? <BoutonHub theme={theme} titre={trCm('liste.nouvelle')} onPress={() => setNouvelleListe({ nom: '', fin: false, manuel: false })} testID="esport-cm-liste-nouvelle" /> : null}
+          {large ? (
+            <BoutonHub
+              theme={theme}
+              titre={plein ? trCm('tableau.plein_ecran_quitter') : trCm('tableau.plein_ecran')}
+              libelle={plein ? trCm('tableau.plein_ecran_quitter_libelle') : trCm('tableau.plein_ecran_libelle')}
+              onPress={() => setPlein(p => !p)}
+              testID="esport-cm-tableau-plein"
+            />
+          ) : null}
           <MenuActions
             theme={theme}
             testID="esport-cm-tableau-menu"
@@ -997,13 +1042,14 @@ export function Tableau({
       {/* Proposition : « Fini », « Terminé », « Done »… marquées colonne de fin (réservé à qui gère le CM). */}
       {d.droits.gerer
         ? colonnesAProposer(listes).map(l => (
-            <View key={l.id} style={{ gap: ESP.xs, padding: ESP.s, borderRadius: rayonCarte(theme), borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }} testID={`esport-cm-liste-${l.id}-fin-banniere`}>
+            // Compacte (une ligne sur PC) : elle ne doit pas manger la hauteur du tableau.
+            <View key={l.id} style={{ gap: ESP.xxs, paddingHorizontal: ESP.s, paddingVertical: ESP.xs, borderRadius: rayonCarte(theme), borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }} testID={`esport-cm-liste-${l.id}-fin-banniere`}>
               <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'center' }]}>
                 <Icone nom="valide" taille={16} couleur={theme.ok} />
-                <Text accessibilityRole="header" style={{ ...texte(theme), fontWeight: '700', flex: 1, minWidth: 0 }}>{trCm('fin.banniere', { nom: nomListe(l) })}</Text>
-              </View>
-              <Aide theme={theme}>{trCm('fin.banniere_aide')}</Aide>
-              <View style={[styles.ligne, { gap: ESP.xs }]}>
+                <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0 }}>
+                  <Text accessibilityRole="header" accessibilityHint={trCm('fin.banniere_aide')} style={{ ...texte(theme), fontWeight: '700' }}>{trCm('fin.banniere', { nom: nomListe(l) })}</Text>
+                  {large ? <Text style={attenue(theme, 12)} numberOfLines={2}>{trCm('fin.banniere_aide')}</Text> : null}
+                </View>
                 <BoutonHub theme={theme} titre={trCm('fin.banniere_oui')} variante="plein" onPress={() => marquerFin(l, true)} testID={`esport-cm-liste-${l.id}-fin-oui`} />
                 <BoutonHub
                   theme={theme}
@@ -1020,7 +1066,8 @@ export function Tableau({
             </View>
           ))
         : null}
-      <Pliable theme={theme} titre={trCm('filtres.titre')} resume={nbFiltres ? trnCm('filtres.actifs', nbFiltres) : undefined} testID="esport-cm-filtres">
+      {filtresOuverts ? (
+      <View style={{ gap: ESP.s }} testID="esport-cm-filtres-panneau">
         <Champ theme={theme} libelle={trCm('filtres.recherche')} valeur={filtres.q} onChanger={q => setFiltres(f => ({ ...f, q }))} maxLength={80} testID="esport-cm-filtre-q" />
         {d.etiquettes.length ? (
           <View style={[styles.ligne, { gap: ESP.xs }]} accessibilityLabel={trCm('filtres.etiquettes')}>
@@ -1114,7 +1161,8 @@ export function Tableau({
           <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trCm('filtres.terminees')}</Text>
         </View>
         {nbFiltres ? <BoutonHub theme={theme} titre={trCm('filtres.effacer')} onPress={() => setFiltres(FILTRES_VIDES)} testID="esport-cm-filtres-effacer" /> : null}
-      </Pliable>
+      </View>
+      ) : null}
       {/* Annonce des déplacements pour les lecteurs d'écran. */}
       <Text accessibilityLiveRegion="polite" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }} testID="esport-cm-annonce">
         {annonce}
@@ -1310,6 +1358,14 @@ export function Tableau({
         </Volet>
       ) : null}
     </View>
+  );
+  // Plein écran : le même contenu dans une fenêtre qui couvre l'app ; sa hauteur est remesurée à l'ouverture.
+  return plein ? (
+    <Modal transparent visible animationType="none" onRequestClose={quitterPlein}>
+      {contenu}
+    </Modal>
+  ) : (
+    contenu
   );
 }
 

@@ -705,30 +705,40 @@ export function Pliable({
   const [ouvert, setOuvert] = useState(ouvertParDefaut);
   return (
     <View style={{ gap: ESP.s }}>
-      <Pressable
-        testID={testID}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: ouvert }}
-        accessibilityLabel={`${t}${resume ? ` (${resume})` : ''}`}
-        onPress={() => setOuvert(o => !o)}
-        style={(etat: EtatPresse) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: ESP.xs,
-          alignSelf: 'flex-start',
-          minHeight: 44,
-          paddingHorizontal: ESP.s,
-          borderWidth: 1,
-          borderColor: etat.hovered || ouvert ? theme.accent : theme.ligne,
-          borderRadius: rayonControle(theme),
-          backgroundColor: ouvert ? teinteTransparente(theme.accent, 0.1) : theme.surface,
-        })}>
-        <Text style={{ ...texte(theme), fontWeight: '600' }}>{t}</Text>
-        {resume ? <Text style={attenue(theme)}>{`· ${resume}`}</Text> : null}
-        <Text style={{ color: theme.attenue, fontSize: 12 }}>{ouvert ? '▲' : '▼'}</Text>
-      </Pressable>
+      <BoutonPliable theme={theme} titre={t} resume={resume} ouvert={ouvert} onBasculer={() => setOuvert(o => !o)} testID={testID} />
       {ouvert ? <View style={{ gap: ESP.s }}>{children}</View> : null}
     </View>
+  );
+}
+
+/**
+ * Bouton d'une section pliable (titre, résumé, flèche), seul : l'appelant place le contenu ailleurs (les filtres d'un
+ * tableau CM : bouton dans la ligne d'en-tête, panneau dessous).
+ */
+export function BoutonPliable({ theme, titre: t, resume, ouvert, onBasculer, testID }: { theme: ThemeHub; titre: string; resume?: string; ouvert: boolean; onBasculer(): void; testID?: string }) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: ouvert }}
+      accessibilityLabel={`${t}${resume ? ` (${resume})` : ''}`}
+      onPress={onBasculer}
+      style={(etat: EtatPresse) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: ESP.xs,
+        alignSelf: 'flex-start',
+        minHeight: 44,
+        paddingHorizontal: ESP.s,
+        borderWidth: 1,
+        borderColor: etat.hovered || ouvert ? theme.accent : theme.ligne,
+        borderRadius: rayonControle(theme),
+        backgroundColor: ouvert ? teinteTransparente(theme.accent, 0.1) : theme.surface,
+      })}>
+      <Text style={{ ...texte(theme), fontWeight: '600' }}>{t}</Text>
+      {resume ? <Text style={attenue(theme)}>{`· ${resume}`}</Text> : null}
+      <Text style={{ color: theme.attenue, fontSize: 12 }}>{ouvert ? '▲' : '▼'}</Text>
+    </Pressable>
   );
 }
 

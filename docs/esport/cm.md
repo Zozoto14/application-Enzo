@@ -267,6 +267,14 @@ Demande du Fondateur : « qu'on puisse mettre des fichiers dans l'onglet Ressour
   colonne **réduite** devient une **bande verticale** (nom vertical, nombre de cartes ; un clic l'agrandit) ; le
   choix est **mémorisé par compte** (`cm_preferences`, clé `tableau.<id>.reduites`). Téléphone : **une colonne par
   écran**, balayage latéral (le bas de l'écran reste à la barre de navigation).
+- **Place pour le tableau** (PC) : un tableau ouvert n'a **pas de largeur maximale** (la page n'est plus bornée à
+  1600 px) : réduire la **barre latérale** («, en haut de la barre) élargit le tableau d'autant. Marges serrées, fil
+  d'Ariane et sous-onglets sur **une seule ligne**, bouton **Filtres** dans la **ligne du nom** (le panneau s'ouvre
+  dessous), bannière « colonne de fin » sur une ligne ; la zone va jusqu'au **bas de la fenêtre** (haut remesuré quand
+  ce qui est au-dessus change). Une colonne grandit avec ses cartes jusqu'à la hauteur de la zone, puis défile.
+  **Plein écran** (bouton de l'en-tête, PC) : le tableau seul par-dessus l'app (ni barre de l'app, ni fil d'Ariane, ni
+  onglets, ni barre latérale) ; **Échap** en sort (au lieu de ramener au hub ; dans un champ, Échap ferme le champ ;
+  une fiche ouverte se ferme d'abord). Le rappel « Échap pour fermer » à côté de « ← Hub » a été retiré.
 - **Cartes compactes** : par défaut le **titre seul** (deux lignes au plus, environ 36 px). La carte ne grandit que
   si elle a quelque chose à montrer : **étiquettes** (pastilles au-dessus du titre), **couverture**, et sous le
   titre une ligne d'informations : statut et réseaux d'un post, date prévue, **échéance**, icône **description**
@@ -329,7 +337,7 @@ Demande du Fondateur : « qu'on puisse mettre des fichiers dans l'onglet Ressour
   (`cm.editer`). Le journal de la section note `cm.etiquette_modifiee`, `cm.etiquette_supprimee` (avec le nombre de
   cartes) et `cm.etiquette_fusionnee`. Les **étiquettes des fichiers du Drive** (tags) se gèrent dans le Drive :
   [drive.md](drive.md).
-- **Recherche et filtres** : texte, étiquettes, membres, échéance (en retard, 7 jours, sans), posts / cartes ;
+- **Recherche et filtres** (bouton **Filtres** de l'en-tête) : texte, étiquettes, membres, échéance (en retard, 7 jours, sans), posts / cartes ;
   recherche dans tous les tableaux (titre et description). **Archives** affichables.
 - **Grands tableaux** : sept requêtes par tableau quelle que soit sa taille ; 60 cartes affichées par liste, puis
   « Afficher plus » ; 10 000 cartes au plus par tableau.

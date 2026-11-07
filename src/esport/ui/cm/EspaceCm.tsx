@@ -277,11 +277,14 @@ export function EspaceCm({
     setOnglet('tableaux');
     setDerniers(d => ({ ...d, contenus: 'tableaux' }));
   };
+  // Tableau ouvert : la page prend toute la largeur (barre latérale réduite comprise) et toute la hauteur, avec des
+  // marges serrées ; fil d'Ariane et sous-onglets sur une seule ligne (PC).
+  const tableauOuvert = onglet === 'tableaux' && voirCm && Boolean(ouvert);
   return (
-    <PageEsport large={large} testID="esport-cm" largeur={1600}>
+    <PageEsport large={large} testID="esport-cm" largeur={tableauOuvert ? null : 1600} serre={tableauOuvert}>
       {large ? (
-        <View style={{ gap: ESP.s }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')} testID="esport-cm-fil">
+        <View style={tableauOuvert ? { flexDirection: 'row', alignItems: 'center', gap: ESP.l } : { gap: ESP.s }} testID="esport-cm-entete">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap', flexShrink: 0 }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')} testID="esport-cm-fil">
             {onQuitter ? (
               <>
                 <Pressable testID="esport-cm-retour" accessibilityRole="link" onPress={onQuitter} style={{ minHeight: 32, justifyContent: 'center' }}>
@@ -304,7 +307,7 @@ export function EspaceCm({
               </>
             ) : null}
           </View>
-          {sousOnglets}
+          {tableauOuvert && sousOnglets ? <View style={{ flex: 1, minWidth: 0 }}>{sousOnglets}</View> : sousOnglets}
         </View>
       ) : (
         // Téléphone : pas de nouvelle section dans la barre du bas ; retour, titre, sélecteur de groupe et sous-onglets en haut de page.

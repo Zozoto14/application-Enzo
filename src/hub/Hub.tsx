@@ -1164,8 +1164,8 @@ export function RetourHub({
   return (
     <View style={styles.retour}>
       <View style={styles.retourGauche}>
+        {/* Plus de rappel « Échap pour fermer » à côté : la ligne reste libre (Échap ramène toujours au hub). */}
         <BoutonHub theme={theme} titre="← Hub" onPress={onRetour} testID="retour-hub" />
-        {CLAVIER_PROBABLE ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
       </View>
       {droite ? (
         <View style={styles.retourGauche}>
@@ -1253,6 +1253,5 @@ const styles = StyleSheet.create({
   retourGauche: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   retourMobile: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 52, marginHorizontal: -8 },
   retourBouton: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 44, paddingHorizontal: 6 },
-  echap: { fontSize: 11, letterSpacing: 0.9 },
   bandeauTuile: { fontSize: 13, lineHeight: 18, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderLeftWidth: 4, marginTop: 12, overflow: 'hidden' },
 });

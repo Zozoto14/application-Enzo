@@ -504,20 +504,24 @@ export function CadreEsport({
   );
 }
 
-/** Conteneur de page : défilement vertical, largeur bornée et centrée, marges généreuses. */
-export function PageEsport({ children, large, testID, largeur = 1240 }: { children: React.ReactNode; large: boolean; testID?: string; largeur?: number }) {
+/**
+ * Conteneur de page : défilement vertical, largeur bornée et centrée, marges généreuses. `largeur` à `null` : pas de
+ * borne (un tableau CM prend toute la largeur libérée quand la barre latérale est réduite). `serre` : marges et
+ * espacements réduits, presque pas de marge basse (une page qui remplit la hauteur de la fenêtre).
+ */
+export function PageEsport({ children, large, testID, largeur = 1240, serre = false }: { children: React.ReactNode; large: boolean; testID?: string; largeur?: number | null; serre?: boolean }) {
   // Marges, espacement et largeur suivent la fenêtre (densité compacte sur iPad / portable) ; contenu centré et borné au-delà.
   const { marge, compacte } = useDensite();
-  const m = large ? marge : ESP.m;
+  const m = large ? (serre ? Math.min(marge, ESP.l) : marge) : ESP.m;
   return (
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{
         paddingHorizontal: m,
-        paddingTop: large ? (compacte ? ESP.l : ESP.xl) : ESP.m,
-        paddingBottom: ESP.xxxl,
-        gap: large ? (compacte ? ESP.l : ESP.xl) : ESP.l,
-        maxWidth: largeur + 2 * m,
+        paddingTop: serre ? (large ? ESP.m : ESP.s) : large ? (compacte ? ESP.l : ESP.xl) : ESP.m,
+        paddingBottom: serre ? 0 : ESP.xxxl,
+        gap: serre ? ESP.s : large ? (compacte ? ESP.l : ESP.xl) : ESP.l,
+        ...(largeur === null ? null : { maxWidth: largeur + 2 * m }),
         width: '100%',
         alignSelf: 'center',
       }}

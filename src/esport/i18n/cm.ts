@@ -205,6 +205,10 @@ const fr = {
 
   // ---- Tableau
   'tableau.retour': 'Retour aux tableaux',
+  'tableau.plein_ecran': 'Plein écran',
+  'tableau.plein_ecran_libelle': 'Afficher le tableau en plein écran (Échap pour en sortir)',
+  'tableau.plein_ecran_quitter': 'Quitter le plein écran',
+  'tableau.plein_ecran_quitter_libelle': 'Quitter le plein écran (Échap)',
   'tableau.voir_archives': 'Voir les archives',
   'tableau.masquer_archives': 'Masquer les archives',
   'tableau.renommer': 'Renommer le tableau',
@@ -848,6 +852,10 @@ const en: Record<keyof typeof fr, string> = {
   'espace.modele_contenus': 'Lists Ideas → Published',
   'espace.modele_vide': 'Empty board',
   'tableau.retour': 'Back to the boards',
+  'tableau.plein_ecran': 'Full screen',
+  'tableau.plein_ecran_libelle': 'Show the board full screen (Esc to exit)',
+  'tableau.plein_ecran_quitter': 'Exit full screen',
+  'tableau.plein_ecran_quitter_libelle': 'Exit full screen (Esc)',
   'tableau.voir_archives': 'Show archives',
   'tableau.masquer_archives': 'Hide archives',
   'tableau.renommer': 'Rename the board',
