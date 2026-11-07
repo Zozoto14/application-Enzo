@@ -78,9 +78,15 @@ export interface General {
   retentionJours: number;
   copierPieces: boolean;
   pieceMaxMo: number;
-  /** Personne n'écrit dans les salons : le staff répond depuis l'app, l'auteur avec le bouton « Répondre » du bot. */
+  /** « Le staff répond uniquement depuis l'AppDashboard » : le staff lit les salons sans y écrire ; l'auteur écrit. */
   reponsesAppSeules: boolean;
+  /** Messages automatiques postés dans le salon, par événement (les autres restent notés dans l'app). */
+  annonces?: Partial<Record<CleAnnonce, boolean>>;
 }
+
+/** Événements dont le message automatique se règle (Configuration › Messages › « Messages automatiques dans le salon »). */
+export const CLES_ANNONCES = ['prise_en_charge', 'liberation', 'attente', 'priorite', 'ajoute', 'retire', 'transfere', 'permanent', 'hors_horaires', 'avertissement', 'fermeture', 'reouverture', 'mp_fermeture'] as const;
+export type CleAnnonce = (typeof CLES_ANNONCES)[number];
 
 /** Catégorie par défaut (modèle proposé par le serveur, esport/noyau/tickets/modeles.mjs). */
 export interface ModeleCategorie {
@@ -195,6 +201,8 @@ export interface ConfigTickets {
   general: General;
   messages: Partial<Record<string, DeuxLangues>>;
   messagesDefaut: Record<string, DeuxLangues>;
+  /** Réglage par défaut des messages automatiques dans le salon. */
+  annoncesDefaut?: Partial<Record<CleAnnonce, boolean>>;
   horaires: Horaires;
   commandes: Commandes;
   bienvenue: Bienvenue;
@@ -286,6 +294,8 @@ export interface MessageTicket {
   staff: boolean;
   contenu: string;
   envoi: 'ok' | 'attente' | 'echec';
+  /** Événement noté dans l'app sans être posté dans le salon (message automatique coupé). */
+  nonPublie?: boolean;
   le: string;
   modifieLe: string | null;
   supprimeLe: string | null;
@@ -383,6 +393,24 @@ export interface ListeAvis {
   voirTickets: boolean;
 }
 
+/** Qui mentionner dans un ticket (« Mentionner ») ; `recherche` : membres du serveur trouvés (null : pas de recherche). */
+export interface Mentionnables {
+  auteur: { discordId: string; nom: string };
+  membres: Array<{ discordId: string; nom: string }>;
+  roles: Array<{ id: string; nom: string }>;
+  staff: Array<{ discordId: string; nom: string }>;
+  recherche: Array<{ discordId: string; nom: string; pseudo: string }> | null;
+  rechercheErreur?: string;
+}
+
+/** Cible d'une mention ; `ajouter` : la personne (trouvée par la recherche) est d'abord ajoutée au ticket. */
+export interface CibleMention {
+  type: 'membre' | 'role';
+  id: string;
+  nom: string;
+  ajouter?: boolean;
+}
+
 /** Pièce jointe envoyée depuis l'appareil (contenu en base64, 8 Mo au plus). */
 export interface PieceEnvoyee {
   nom: string;
@@ -424,6 +452,8 @@ export function apiTickets(client: ClientEsport) {
     repondre: (id: string, c: { texte: string; pieces?: PieceEnvoyee[]; drive?: string[] }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/messages`, 'POST', c),
     noter: (id: string, texte: string) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/notes`, 'POST', { texte }),
     action: (id: string, action: string, corps: Record<string, unknown> = {}) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/${action}`, 'POST', corps),
+    mentionnables: (id: string, q?: string) => r<Mentionnables>(`/tickets/${encodeURIComponent(id)}/mentionnables${requeteUrl({ q: q?.trim() || undefined })}`),
+    mentionner: (id: string, c: { cibles: CibleMention[]; message?: string }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/mentionner`, 'POST', c),
     assignables: (id: string) => r<{ comptes: Array<{ compte: string; pseudo: string | null }> }>(`/tickets/${encodeURIComponent(id)}/assignables`),
     transcript: (id: string) => r<{ nom: string; contenu: string; type: string }>(`/tickets/${encodeURIComponent(id)}/transcript`),
     lienPiece: (id: string, piece: string, telecharger = false) => r<{ url: string; expire: number }>(`/tickets/${encodeURIComponent(id)}/pieces/${encodeURIComponent(piece)}/lien${requeteUrl({ telecharger: telecharger ? '1' : undefined })}`, 'POST'),

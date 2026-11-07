@@ -64,9 +64,9 @@ test('panneaux par défaut : bilingues, sans emoji, dans les limites de Discord 
       }
       if (m.libelleBouton) assert.ok(m.libelleBouton[l].length <= 80);
     }
-    for (const appSeule of [true, false]) {
+    {
       for (const horaires of [null, HORAIRES_PLEINS]) {
-        const t = textesPanneauModele(m, { evenement: 'E'.repeat(100), appSeule, horaires });
+        const t = textesPanneauModele(m, { evenement: 'E'.repeat(100), horaires });
         for (const l of ['fr', 'en']) {
           assert.ok(t.titre[l].length <= 256, `${m.cle} titre ${l}`);
           assert.ok(t.texte[l].length <= 1800, `${m.cle} texte ${l} : ${t.texte[l].length} (validerPanneau : 1800)`);
@@ -74,7 +74,8 @@ test('panneaux par défaut : bilingues, sans emoji, dans les limites de Discord 
         }
         if (horaires && m.texte.fr.includes('{horaires}')) assert.match(t.texte.fr, /Horaires du support/);
         else assert.doesNotMatch(t.texte.fr, /Horaires|horaires/);
-        assert.match(t.texte.fr, appSeule ? /Répondre/ : /Écrivez directement/);
+        assert.match(t.texte.fr, /Écrivez et envoyez vos fichiers directement/);
+        assert.doesNotMatch(t.texte.fr + t.texte.en, /Répondre|Reply/, 'plus de bouton « Répondre »');
         const cats = categoriesDe(m.categories === 'toutes' ? CLES_SEMEES : m.categories);
         const style = m.style === 'auto' ? (cats.length > 5 ? 'menu' : 'boutons') : m.style;
         const libelles = m.libelleBouton ? { [cats[0].id]: m.libelleBouton } : {};
@@ -150,7 +151,8 @@ test('création « Support LZ » : catégories manquantes ajoutées sur demande,
   assert.equal(p.categories[0], r.corps.categories[0].id, 'dans l’ordre des catégories');
   assert.deepEqual([p.salonId, p.messageId, p.publieLe], [null, null, null], 'pas publié');
   assert.equal(p.titre.fr, 'Centre d’aide LZ');
-  assert.match(p.texte.fr, /bouton \*\*Répondre\*\*/, 'réglage par défaut : réponses depuis le bouton');
+  assert.match(p.texte.fr, /Écrivez et envoyez vos fichiers directement dans votre ticket/, 'consigne : écrire directement');
+  assert.doesNotMatch(p.texte.fr, /Répondre/);
   assert.equal(k.discord.appels.filter(a => a.methode === 'POST' && a.chemin.endsWith('/messages')).length, 0, 'rien posté sur Discord');
   const ap = (await k.api(`/tickets/config/panneaux/${p.id}/apercu`)).corps.charge;
   verifierCharge(ap, 'aperçu');
@@ -175,7 +177,7 @@ test('création sans les catégories manquantes : laissées de côté et signal�
   assert.deepEqual(r.corps.ignorees, ['recrutement']);
   assert.deepEqual(r.corps.panneau.categories, [staff]);
   assert.equal(r.corps.panneau.style, 'boutons');
-  assert.match(r.corps.panneau.texte.fr, /Écrivez directement/);
+  assert.match(r.corps.panneau.texte.fr, /Écrivez et envoyez vos fichiers directement/);
   assert.match(r.corps.panneau.texte.fr, /\*\*Horaires du support\*\* : lundi 18:00-22:00 \(Europe\/Paris\)/);
   assert.match(r.corps.panneau.texte.en, /Monday 18:00-22:00/);
   // Partenariats sans rien : panneau vide (publication refusée tant qu'aucune catégorie n'est choisie).

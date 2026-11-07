@@ -17,8 +17,8 @@
  *   GET           /tickets/avis?categorie&note&du&au&responsable&tri   (tickets.gerer, ou configurer : ses catégories)
  *   POST          /tickets/supprimer { ids, garderAvis } ; /tickets/:id/supprimer { garderAvis }   (ticket FERMÉ)
  *   GET|PUT       /tickets/preferences (MP Discord)
- *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript
- *   POST          /tickets/:id/(lu|messages|notes|liaison) ; /tickets/:id/pieces/:piece/lien
+ *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript ; /tickets/:id/mentionnables?q
+ *   POST          /tickets/:id/(lu|messages|notes|liaison|mentionner) ; /tickets/:id/pieces/:piece/lien
  *   POST          /tickets/:id/(prendre|liberer|attente|statut|priorite|fermer|rouvrir|assigner|categorie|ajouter|retirer|permanent)
  *   GET           /tickets/pieces/:piece?c&exp&sig  (lien signé, sans session)
  */
@@ -72,6 +72,12 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
     if (n === 2 && b === 'notes' && m === 'POST') return v.noter(acteur, a, await lireCorps());
     if (n === 2 && b === 'liaison' && m === 'POST') return v.lier(acteur, a, await lireCorps());
     if (n === 2 && b === 'assignables' && m === 'GET') return v.assignables(acteur, a);
+    if (n === 2 && b === 'mentionnables' && m === 'GET') {
+      // Lecture des rôles (et recherche de membres) sur Discord : comptée comme les autres lectures du serveur.
+      await limite('tickets_discord', acteur.compte);
+      return v.mentionnables(acteur, a, { q: q.get('q') || undefined });
+    }
+    if (n === 2 && b === 'mentionner' && m === 'POST') return v.mentionner(acteur, a, await lireCorps());
     if (n === 2 && b === 'transcript' && m === 'GET') {
       await limite('export', acteur.compte);
       return v.transcript(acteur, a, { langue: acteur.langue });

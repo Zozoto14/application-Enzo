@@ -147,7 +147,9 @@ test('ticket permanent depuis l’app (tickets.gerer) : avertissement annulé, j
   const l = await p.ticket(tk.id);
   assert.equal(Number(l.permanent), 1);
   assert.equal(l.avertissement_le, null, 'avertissement en attente annulé');
-  assert.match(p.k.discord.etat.messages.get(tk.salon_id).at(-1).embeds[0].description, /jamais fermé automatiquement/);
+  // Par défaut, rien n'est posté dans le salon (« Messages automatiques dans le salon ») : noté dans l'app seulement.
+  assert.doesNotMatch(JSON.stringify(p.k.discord.etat.messages.get(tk.salon_id).at(-1)), /jamais fermé automatiquement/);
+  assert.ok(r.corps.messages.some(m => m.genre === 'systeme' && m.nonPublie && /jamais fermé automatiquement/.test(m.contenu)), 'noté dans la conversation de l’app');
   const liste = (await p.k.api('/tickets', gestion.jeton)).corps;
   assert.equal(liste.tickets.find(x => x.id === tk.id).permanent, true);
 

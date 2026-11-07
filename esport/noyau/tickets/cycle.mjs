@@ -3,10 +3,16 @@
  * commandes), par l'app (étape 3) et par le cron (fermeture automatique, archives, rétention).
  *
  *  - ouverture : contrôles (tickets activés, catégorie active, liste noire, plafond par personne, débit), numéro
- *    séquentiel, SALON PRIVÉ dans la catégorie Discord des tickets ouverts (droits : @everyone refusé ; l'auteur, les
- *    rôles Discord de la catégorie et le bot autorisés), message d'accueil (réponses du formulaire, boutons), réponse
- *    hors horaires, journal ;
+ *    séquentiel, SALON PRIVÉ dans la catégorie Discord des tickets ouverts (droits : @everyone refusé ; l'auteur et les
+ *    personnes ajoutées écrivent et envoient leurs fichiers ; les rôles Discord de la catégorie lisent seulement avec
+ *    « Le staff répond uniquement depuis l'AppDashboard », par défaut ; le bot a tous ses droits), message d'accueil
+ *    (réponses du formulaire, boutons), réponse hors horaires, journal ;
  *  - prise en charge, libération, assignation, priorité, attente, personnes ajoutées / retirées, renommage, transfert ;
+ *    seuls les événements réglés dans « Messages automatiques dans le salon » (reglages.mjs : ANNONCES_DEFAUT) sont
+ *    postés dans le salon ; les autres restent notés dans la conversation de l'app (message du bot non publié) et dans
+ *    le salon des journaux du staff ;
+ *  - mentions (« Mentionner » de l'app, /ticket ping) : le bot mentionne exactement les personnes et rôles choisis
+ *    (allowed_mentions), 3 par minute et par ticket au plus ;
  *  - fermeture : derniers messages relus, statut, message de fermeture, salon VERROUILLÉ (l'auteur ne peut plus écrire)
  *    et déplacé dans la catégorie des archives, MP récapitulatif à l'auteur avec la demande de note (1 à 5, puis
  *    commentaire facultatif), journal ; transcript = la conversation gardée en base (transcript.mjs) ;
@@ -28,8 +34,9 @@ import { comptesDeCategorie, droitsTickets, voitCategorie } from './acces.mjs';
 import { publierEnBase } from '../temps-reel/diffusion.mjs';
 import { annoncer, ingererMessage, plusRecent, telechargeurCdn } from './conversation.mjs';
 import { DROITS_BOT, DROITS_LECTURE, DROITS_PARTICIPANT, P, REFUS_ECRITURE, REFUS_ECRITURE_MINIMAL, idDiscord, rest } from './discord.mjs';
-import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, rangeeRepondre, titreTicket } from './panneaux.mjs';
-import { STATUTS_OUVERTS, categoriePublique, dansHoraires, delaiFermeture, lireGeneral, lireHoraires, lireMessages, lireReglage, reponsesAppSeules } from './reglages.mjs';
+import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, titreTicket } from './panneaux.mjs';
+import { STATUTS_OUVERTS, annonceActive, categoriePublique, dansHoraires, delaiFermeture, instructionReglage, lireGeneral, lireHoraires, lireMessages, lireReglage, reponsesAppSeules } from './reglages.mjs';
+import { REPONSES_ANCIENNES, REPONSE_SALON } from './modeles.mjs';
 import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, surLong, t as tx } from './textes.mjs';
 
 const H = 3_600_000;
@@ -87,10 +94,41 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     return r;
   }
 
-  /** Message court bilingue dans le salon (prise en charge, attente…), avec le bouton « Répondre » si le salon est en lecture seule. */
-  async function annonceSalon(ticket, general, messages, cle, vars) {
+  /**
+   * Événement NON publié dans le salon (« Messages automatiques dans le salon » coupé pour lui) : noté dans la
+   * conversation de l'app comme un message du bot sans message Discord (`discord_message_id` vide, envoi « ok » :
+   * vue.mjs le montre « non publié sur Discord »), et une ligne dans le salon des journaux du staff.
+   */
+  async function noterSilencieux(ticket, general, texte, acteur) {
+    await base.executer(
+      `INSERT INTO tickets_messages (id, ticket_id, discord_message_id, genre, auteur_discord_id, auteur_compte_id, auteur_nom, staff, contenu, envoi, cree_le)
+       VALUES (?, ?, NULL, 'systeme', ?, ?, ?, 1, ?, 'ok', ?)`,
+      [nouvelId(), ticket.id, botId, acteur?.compte ?? null, 'Esport HQ', String(texte ?? '').slice(0, 8000), iso(maintenant())],
+    );
+    const optsJournal = { mode: general.langue === 'auteur' ? 'en_fr' : general.langue };
+    const ligne = bilingue(l => tx(l, 'journal_evenement', { numero: ticket.numero, texte: ticket.salon_id ? `<#${ticket.salon_id}> · ${String(texte ?? '').split('\n')[0]}` : String(texte ?? '').split('\n')[0] }), optsJournal);
+    await journalDiscord(general, { description: ligne.slice(0, 4000), color: 0x8b8b9a }).catch(() => undefined);
+    return null;
+  }
+
+  /**
+   * Message d'un événement du ticket : posté dans le salon si l'événement `cle` est activé (Configuration › Messages ›
+   * « Messages automatiques dans le salon »), sinon noté sans bruit (noterSilencieux). `charge` : message Discord.
+   */
+  async function evenementSalon(ticket, general, cle, charge, texte, { acteur } = {}) {
+    if (annonceActive(general, cle)) return posterSysteme(ticket, charge, texte);
+    return noterSilencieux(ticket, general, texte, acteur);
+  }
+
+  /** Message court bilingue d'un événement (prise en charge, attente…), personnalisable (Configuration › Messages). */
+  async function annonceSalon(ticket, general, messages, cle, vars, { acteur } = {}) {
     const texte = messageBilingue(messages, cle, vars, optsLangue(general, ticket));
-    return posterSysteme(ticket, { embeds: [{ description: texte.slice(0, 4000), color: 0x5865f2 }], components: rangeeRepondre(ticket.id, optsLangue(general, ticket), reponsesAppSeules(general)) }, texte);
+    return evenementSalon(ticket, general, cle, { embeds: [{ description: texte.slice(0, 4000), color: 0x5865f2 }] }, texte, { acteur });
+  }
+
+  /** Texte fixe bilingue d'un événement (priorité, personne retirée, transfert…). */
+  async function annonceFixe(ticket, general, cle, texte, couleur, { acteur } = {}) {
+    return evenementSalon(ticket, general, cle, { embeds: [{ description: texte, color: couleur }] }, texte, { acteur });
   }
 
   async function journalDiscord(general, embed) {
@@ -103,22 +141,23 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   // ---------------------------------------------------------------- Droits des salons
 
+  /** Droits de l'auteur et des personnes ajoutées : ils écrivent et envoient leurs fichiers (ticket ouvert). */
+  const DROITS_PERSONNE = Object.freeze({ allow: DROITS_PARTICIPANT, deny: '0' });
   /**
-   * Droits d'un participant (auteur, rôle de la catégorie, personne ajoutée) : écrire (réglage désactivé), ou lire
-   * seulement (« Répondre uniquement depuis l'AppDashboard », par défaut ; `minimal` : repli, seul « Envoyer des
-   * messages » refusé).
+   * Droits des rôles Discord de la catégorie (le staff) : écrire (réglage désactivé), ou lire seulement (« Le staff
+   * répond uniquement depuis l'AppDashboard », par défaut ; `minimal` : repli, seul « Envoyer des messages » refusé).
    */
-  const droitsParticipant = (general, { minimal = false } = {}) => (reponsesAppSeules(general) ? { allow: DROITS_LECTURE, deny: minimal ? REFUS_ECRITURE_MINIMAL : REFUS_ECRITURE } : { allow: DROITS_PARTICIPANT, deny: '0' });
+  const droitsStaff = (general, { minimal = false } = {}) => (reponsesAppSeules(general) ? { allow: DROITS_LECTURE, deny: minimal ? REFUS_ECRITURE_MINIMAL : REFUS_ECRITURE } : { allow: DROITS_PARTICIPANT, deny: '0' });
 
   /**
-   * Surcharges de droits d'un salon de ticket. `verrouille` (ticket fermé) : l'auteur et les personnes ajoutées lisent
-   * seulement. Réglage « Répondre uniquement depuis l'AppDashboard » : personne n'écrit (auteur, rôles de la catégorie,
-   * personnes ajoutées) ; le bot garde tous ses droits.
+   * Surcharges de droits d'un salon de ticket. L'auteur et les personnes ajoutées écrivent (ticket ouvert) ou lisent
+   * seulement (`verrouille` : ticket fermé). Les rôles de la catégorie lisent sans écrire avec « Le staff répond
+   * uniquement depuis l'AppDashboard » (par défaut). Le bot garde tous ses droits.
    */
   async function surcharges(ticket, cat, general, { verrouille = false, minimal = false } = {}) {
     const ajoutes = await base.tous('SELECT discord_user_id FROM tickets_membres WHERE ticket_id = ?', [ticket.id]);
-    const droits = droitsParticipant(general, { minimal });
-    const personne = verrouille ? { allow: VOIR_HISTORIQUE, deny: reponsesAppSeules(general) ? droits.deny : P.ENVOYER.toString() } : droits;
+    const droits = droitsStaff(general, { minimal });
+    const personne = verrouille ? { allow: VOIR_HISTORIQUE, deny: P.ENVOYER.toString() } : DROITS_PERSONNE;
     const liste = [{ id: general.guildId, type: 0, allow: '0', deny: P.VOIR_SALON.toString() }];
     for (const r of cat?.rolesDiscord ?? []) if (r !== general.guildId) liste.push({ id: r, type: 0, ...droits });
     liste.push({ id: ticket.auteur_discord_id, type: 1, ...personne });
@@ -218,10 +257,9 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const opts = optsLangue(general, ticket);
     const vars = l => ({ utilisateur: `<@${auteur.id}>`, pseudo: sur(auteur.nom, 80), numero, categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) });
     const accueilRegle = l => (cat.accueil?.[l]?.trim() ? cat.accueil[l] : messageRegle(messages, 'accueil', l));
-    // Consigne ajoutée à l'accueil : salon en lecture seule (bouton « Répondre », fichiers en lien), ou pièces jointes possibles.
-    const appSeule = reponsesAppSeules(general);
-    const accueil = bilingue(l => `${remplir(accueilRegle(l), vars(l)).trim()}\n\n${tx(l, appSeule ? 'consigne_app' : 'consigne_fichiers')}`, opts);
-    const charge = chargeAccueil({ ticket: { ...ticket, reponses: lues }, categorie: cat, accueil, mentions: cat.mentions, opts, repondre: appSeule });
+    // Consigne ajoutée à l'accueil : l'auteur écrit et envoie ses fichiers directement dans le salon.
+    const accueil = bilingue(l => `${remplir(accueilRegle(l), vars(l)).trim()}\n\n${tx(l, 'consigne_fichiers')}`, opts);
+    const charge = chargeAccueil({ ticket: { ...ticket, reponses: lues }, categorie: cat, accueil, mentions: cat.mentions, opts });
     await posterSysteme(ticket, charge, accueil);
     if (horaires.actif && !dansHoraires(horaires, t)) {
       const plages = horaires.plages.map(p => `${p.jour}:${p.debut}-${p.fin}`).join(', ');
@@ -256,7 +294,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const t = maintenant();
     await base.executer("UPDATE tickets SET responsable_discord_id = ?, responsable_compte_id = ?, responsable_nom = ?, statut = 'pris_en_charge', pris_le = COALESCE(pris_le, ?) WHERE id = ?", [acteur.discordId ?? null, acteur.compte ?? null, String(acteur.nom ?? '').slice(0, 100), iso(t), ticket.id]);
     const { general, messages } = await contexte();
-    await annonceSalon(ticket, general, messages, 'prise_en_charge', { staff: acteur.discordId ? `<@${acteur.discordId}>` : sur(acteur.nom, 80) });
+    await annonceSalon(ticket, general, messages, 'prise_en_charge', { staff: acteur.discordId ? `<@${acteur.discordId}>` : sur(acteur.nom, 80) }, { acteur });
     return apres(ticket, 'ticket.pris', acteur);
   }
 
@@ -264,7 +302,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     ouvert(ticket);
     await base.executer("UPDATE tickets SET responsable_discord_id = NULL, responsable_compte_id = NULL, responsable_nom = NULL, statut = 'ouvert' WHERE id = ?", [ticket.id]);
     const { general, messages } = await contexte();
-    await annonceSalon(ticket, general, messages, 'liberation', {});
+    await annonceSalon(ticket, general, messages, 'liberation', {}, { acteur });
     return apres(ticket, 'ticket.libere', acteur);
   }
 
@@ -282,7 +320,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     await base.executer('UPDATE tickets SET priorite = ? WHERE id = ?', [niveau, ticket.id]);
     const { general } = await contexte();
     const texte = bilingue(l => tx(l, 'priorite_changee', { priorite: nomPriorite(l, niveau) }), optsLangue(general, ticket));
-    await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
+    await annonceFixe(ticket, general, 'priorite', texte, 0x5865f2, { acteur });
     return apres(ticket, 'ticket.priorite', acteur, { priorite: niveau });
   }
 
@@ -290,7 +328,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     ouvert(ticket);
     await base.executer("UPDATE tickets SET statut = 'en_attente' WHERE id = ?", [ticket.id]);
     const { general, messages } = await contexte();
-    await annonceSalon(ticket, general, messages, 'attente', {});
+    await annonceSalon(ticket, general, messages, 'attente', {}, { acteur });
     return apres(ticket, 'ticket.statut', acteur, { statut: 'en_attente' });
   }
 
@@ -307,11 +345,11 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     if (!idDiscord(id)) throw refusTk('erreur');
     if (id === ticket.auteur_discord_id) return ticket;
     const general = await lireGeneral(base);
-    const r = await appelDroits('PUT', `/channels/${ticket.salon_id}/permissions/${id}`, async minimal => ({ type: 1, ...droitsParticipant(general, { minimal }) }), general);
+    const r = await appel('PUT', `/channels/${ticket.salon_id}/permissions/${id}`, { type: 1, ...DROITS_PERSONNE });
     if (!r.ok) throw refusTk('erreur', {}, 502);
     await base.executer('INSERT INTO tickets_membres (ticket_id, discord_user_id, nom, ajoute_par, ajoute_le) VALUES (?, ?, ?, ?, ?) ON CONFLICT (ticket_id, discord_user_id) DO NOTHING', [ticket.id, id, String(nom ?? '').slice(0, 100), acteur.compte ?? acteur.discordId ?? null, iso(maintenant())]);
     const texte = bilingue(l => tx(l, 'ajoute', { membre: `<@${id}>` }), optsLangue(general, ticket));
-    await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x4caf7a }] }, texte);
+    await annonceFixe(ticket, general, 'ajoute', texte, 0x4caf7a, { acteur });
     return apres(ticket, 'ticket.membre', acteur, { ajout: true });
   }
 
@@ -322,7 +360,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     await base.executer('DELETE FROM tickets_membres WHERE ticket_id = ? AND discord_user_id = ?', [ticket.id, id]);
     const { general } = await contexte();
     const texte = bilingue(l => tx(l, 'retire', { membre: `<@${id}>` }), optsLangue(general, ticket));
-    await posterSysteme(ticket, { embeds: [{ description: texte, color: 0xe8a23a }] }, texte);
+    await annonceFixe(ticket, general, 'retire', texte, 0xe8a23a, { acteur });
     return apres(ticket, 'ticket.membre', acteur, { ajout: false });
   }
 
@@ -347,7 +385,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const maj = await appelDroits('PATCH', `/channels/${ticket.salon_id}`, async minimal => ({ permission_overwrites: await surcharges(nouveau, cat, general, { minimal }) }), general);
     if (!maj.ok) console.error(`[esport] tickets : droits du salon du ticket ${ticket.numero} non mis à jour au transfert (${maj.motif ?? `HTTP ${maj.statut}`})`);
     const texte = bilingue(l => tx(l, 'transfere', { categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) }), optsLangue(general, ticket));
-    await posterSysteme(nouveau, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
+    await annonceFixe(nouveau, general, 'transfere', texte, 0x5865f2, { acteur });
     return apres(nouveau, 'ticket.categorie', acteur, { de: ticket.categorie_id });
   }
 
@@ -364,71 +402,70 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     if (ticket.statut !== 'ferme') {
       const { general } = await contexte();
       const texte = bilingue(l => tx(l, voulu ? 'permanent_actif' : 'permanent_inactif'), optsLangue(general, ticket));
-      await posterSysteme(ticket, { embeds: [{ description: texte, color: 0x5865f2 }] }, texte);
+      await annonceFixe(ticket, general, 'permanent', texte, 0x5865f2, { acteur });
     }
     return apres(ticket, 'ticket.permanent', acteur, { permanent: voulu });
   }
 
-  // ---------------------------------------------------------------- Réponses par le bot (salon en lecture seule)
+  // ---------------------------------------------------------------- Mentions (« Mentionner » de l'app, /ticket ping)
 
   /**
-   * Message de l'auteur (ou d'une personne ajoutée) écrit dans la fenêtre « Répondre » : le bot le poste dans le salon
-   * (embed : pseudo, texte ; bouton « Répondre » dessous) et il est enregistré dans la conversation EXACTEMENT comme un
-   * message tapé sur Discord (genre `discord`, pas du staff) : activité, retour « ouvert » d'un ticket en attente,
-   * notification du responsable. Pas de pièce jointe possible (fenêtre Discord) : un lien dans le texte. Rend la ligne.
+   * Le bot mentionne dans le salon EXACTEMENT les personnes et rôles choisis (`allowed_mentions` limité à eux ; un texte
+   * facultatif, mentions neutralisées). Rôles : seulement ceux de la catégorie (jamais @everyone). 3 mentions par minute
+   * et par ticket au plus (`tickets_ping`). Gardé dans la conversation (message du bot) avec les noms lisibles.
+   * `cibles` : `[{ type: 'membre' | 'role', id, nom }]`. Rend la ligne du ticket.
    */
-  async function messageAuteur(ticket, acteur, brut) {
+  async function mentionner(ticket, acteur, { cibles = [], message = '' } = {}) {
     ouvert(ticket);
-    const texte = String(brut ?? '').replace(/\r\n?/g, '\n').trim().slice(0, 4000);
-    if (!texte) throw refusTk('reponse_vide');
     if (!ticket.salon_id || ticket.salon_supprime_le) throw refusTk('erreur', {}, 409);
-    try {
-      await limiter(base, 'tickets_reponse_discord', acteur.discordId, maintenant());
-    } catch {
-      throw refusTk('trop_vite', {}, 429);
+    const cat = await categorie(ticket.categorie_id);
+    const general = await lireGeneral(base);
+    const liste = (Array.isArray(cibles) ? cibles : []).slice(0, 30);
+    const membres = [];
+    const roles = [];
+    const noms = [];
+    for (const c of liste) {
+      const id = idDiscord(String(c?.id ?? ''));
+      if (!id) continue;
+      if (c?.type === 'role') {
+        if (id === general.guildId || !(cat?.rolesDiscord ?? []).includes(id)) throw refusTk('ping_role_interdit', {}, 400);
+        if (!roles.includes(id) && roles.length < 5) {
+          roles.push(id);
+          noms.push(`@${sur(c?.nom, 60) || id}`);
+        }
+      } else if (!membres.includes(id) && membres.length < 10) {
+        membres.push(id);
+        noms.push(sur(c?.nom, 60) || id);
+      }
     }
-    const { general } = await contexte();
-    const nom = sur(acteur.nom, 80) || '—';
-    const charge = { embeds: [{ author: { name: nom }, description: surLong(texte, 4000), color: 0x99aab5 }], components: rangeeRepondre(ticket.id, optsLangue(general, ticket), reponsesAppSeules(general)), allowed_mentions: { parse: [] } };
-    const r = await appel('POST', `/channels/${ticket.salon_id}/messages`, charge);
-    if (!r.ok) throw refusTk('erreur', {}, 502);
+    if (!membres.length && !roles.length) throw refusTk('ping_vide');
+    const texteLibre = String(message ?? '').replace(/\r\n?/g, '\n').trim().slice(0, 500);
+    try {
+      await limiter(base, 'tickets_ping', ticket.id, maintenant());
+    } catch {
+      throw refusTk('ping_trop_vite', {}, 429);
+    }
+    const staff = acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Staff', 80);
+    const mentions = [...membres.map(id => `<@${id}>`), ...roles.map(id => `<@&${id}>`)].join(' ');
+    const corps = texteLibre ? `**${tx('fr', 'staff_prefixe', { pseudo: sur(acteur?.nom ?? 'Staff', 60) })}** : ${surLong(texteLibre, 500)}` : bilingue(l => tx(l, 'ping_defaut', { staff }), optsLangue(general, ticket));
+    const contenu = `${mentions}\n${corps}`.slice(0, 2000);
+    const trace = `${tx('fr', 'ping_trace', { qui: noms.join(', ') })}${texteLibre ? ` · ${texteLibre}` : ''}`;
+    const r = await posterSysteme(ticket, { content: contenu, allowed_mentions: { parse: [], users: membres, roles } }, trace, { acteur: { discordId: acteur?.discordId ?? null, compte: acteur?.compte ?? null, nom: String(acteur?.nom ?? 'Staff') } });
+    if (!r?.ok) throw refusTk('erreur', {}, 502);
     const t = maintenant();
-    const discordId = idDiscord(r.corps?.id);
-    const lie = await base.premier('SELECT compte_id FROM discord_comptes WHERE discord_user_id = ?', [acteur.discordId]);
-    const id = nouvelId();
-    const actuel = (await ticketPar(ticket.id)) ?? ticket;
-    const auteurRepond = acteur.discordId === actuel.auteur_discord_id;
-    const statut = auteurRepond && actuel.statut === 'en_attente' ? (actuel.responsable_compte_id || actuel.responsable_discord_id ? 'pris_en_charge' : 'ouvert') : actuel.statut;
-    await base.lot([
-      {
-        sql: `INSERT INTO tickets_messages (id, ticket_id, discord_message_id, genre, auteur_discord_id, auteur_compte_id, auteur_nom, staff, contenu, envoi, cree_le)
-              VALUES (?, ?, ?, 'discord', ?, ?, ?, 0, ?, 'ok', ?)`,
-        params: [id, ticket.id, discordId, acteur.discordId, lie?.compte_id ?? null, String(acteur.nom ?? '').slice(0, 100), texte, iso(t)],
-      },
-      {
-        sql: 'UPDATE tickets SET derniere_activite_le = ?, maj_le = ?, avertissement_le = NULL, statut = ?, dernier_message_id = ? WHERE id = ?',
-        params: [iso(t), iso(t), statut, discordId ? plusRecent(actuel.dernier_message_id, discordId) : actuel.dernier_message_id, ticket.id],
-      },
-    ]);
-    await annoncer(base, ticket.id, t);
-    await surNouveau(actuel, { id, staff: false, auteurDiscordId: acteur.discordId, auteurNom: String(acteur.nom ?? ''), auteurCompte: lie?.compte_id ?? null }).catch(e => console.error('[esport] tickets : suite d’un message', e?.message ?? e));
+    await base.lot([{ sql: 'UPDATE tickets SET maj_le = ?, derniere_activite_le = ?, avertissement_le = NULL WHERE id = ?', params: [iso(t), iso(t), ticket.id] }, ev('ticket.mention', ticket, acteur, { membres: membres.length, roles: roles.length })]);
+    await annoncer(base, ticket.id, t, { acteur: acteur?.compte });
     return ticketPar(ticket.id);
   }
 
-  /** L'utilisateur Discord est-il l'auteur du ticket ou une personne ajoutée ? */
-  async function participant(ticket, discordId) {
-    if (!discordId) return false;
-    if (discordId === ticket.auteur_discord_id) return true;
-    return Boolean(await base.premier('SELECT discord_user_id FROM tickets_membres WHERE ticket_id = ? AND discord_user_id = ?', [ticket.id, discordId]));
-  }
-
   /**
-   * Réglage « Répondre uniquement depuis l'AppDashboard » changé : les droits des salons des tickets OUVERTS sont remis
-   * à jour (au mieux ; un échec est journalisé, sans contenu ; arrêt sur limite de débit). Rend `{ ok, echecs, total }`.
+   * Droits des salons des tickets OUVERTS remis à jour : réglage « Le staff répond uniquement depuis l'AppDashboard »
+   * changé, ou mise à niveau (migrerDroits). Au mieux ; un échec est journalisé, sans contenu ; arrêt sur limite de
+   * débit (`limite`). Rend `{ ok, echecs, total, limite }`.
    */
   async function reappliquerDroits() {
     const general = await lireGeneral(base);
-    const bilan = { ok: 0, echecs: 0, total: 0 };
+    const bilan = { ok: 0, echecs: 0, total: 0, limite: false };
     if (!jetonBot || !general.guildId) return bilan;
     const ouverts = await base.tous("SELECT * FROM tickets WHERE statut <> 'ferme' AND salon_id IS NOT NULL AND salon_supprime_le IS NULL ORDER BY ouvert_le LIMIT 200", []);
     bilan.total = ouverts.length;
@@ -441,9 +478,48 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
       }
       bilan.echecs++;
       console.error(`[esport] tickets : droits du salon du ticket ${tk.numero} non mis à jour (${r.motif ?? `HTTP ${r.statut}`})`);
-      if (r.statut === 429) break;
+      if (r.statut === 429) {
+        bilan.limite = true;
+        break;
+      }
     }
     return bilan;
+  }
+
+  /**
+   * Mise à niveau, une seule fois (clé `migration_droits_v3`), au premier passage du cron après le déploiement :
+   *  - salons des tickets ouverts : l'auteur et les personnes ajoutées peuvent de nouveau écrire et envoyer des
+   *    fichiers (l'ancien réglage les mettait en lecture seule, avec un bouton « Répondre ») ; le staff garde le
+   *    réglage « Le staff répond uniquement depuis l'AppDashboard » ;
+   *  - textes des panneaux enregistrés : l'ancienne consigne (« utilisez le bouton Répondre ») remplacée par la
+   *    nouvelle (à republier sur Discord).
+   * Au mieux, journalisé ; refaite au passage suivant si Discord a imposé d'attendre (limite de débit). Rend le bilan,
+   * ou null si déjà faite.
+   */
+  async function migrerDroits() {
+    if (await base.premier("SELECT cle FROM tickets_reglages WHERE cle = 'migration_droits_v3'", [])) return null;
+    const bilan = await reappliquerDroits();
+    if (bilan.limite) {
+      console.error(`[esport] tickets : mise à niveau des droits interrompue par Discord (limite de débit) : ${bilan.ok}/${bilan.total}, reprise au prochain passage`);
+      return bilan;
+    }
+    let panneaux = 0;
+    for (const p of await base.tous('SELECT id, texte FROM tickets_panneaux', [])) {
+      const texte = jsonOu(p.texte, null);
+      if (!texte || typeof texte !== 'object') continue;
+      let change = false;
+      for (const l of ['fr', 'en']) {
+        if (typeof texte[l] !== 'string' || !texte[l].includes(REPONSES_ANCIENNES[l])) continue;
+        texte[l] = texte[l].split(REPONSES_ANCIENNES[l]).join(REPONSE_SALON[l]);
+        change = true;
+      }
+      if (!change) continue;
+      await base.executer('UPDATE tickets_panneaux SET texte = ?, maj_le = ? WHERE id = ?', [JSON.stringify(texte), iso(maintenant()), p.id]);
+      panneaux++;
+    }
+    await base.lot([instructionReglage('migration_droits_v3', { ...bilan, panneaux, le: iso(maintenant()) }, null, maintenant())]);
+    console.log(`[esport] tickets : mise à niveau faite (droits de ${bilan.ok}/${bilan.total} salon(s) ouvert(s) remis à jour, ${bilan.echecs} échec(s) ; ${panneaux} texte(s) de panneau mis à jour, à republier)`);
+    return { ...bilan, panneaux };
   }
 
   // ---------------------------------------------------------------- Fermeture, réouverture, note
@@ -483,7 +559,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     if (!sansDiscord && ticket.salon_id) {
       const staff = acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Esport HQ', 80);
       const texte = messageBilingue(messages, 'fermeture', l => ({ staff, raison: texteRaison(l) }), opts);
-      await posterSysteme(ferme, { embeds: [{ description: texte.slice(0, 4000), color: 0xd9534f }], components: [{ type: 1, components: [{ type: 2, style: 2, custom_id: `tk:r:${ticket.id}`, label: [...new Set(['en', 'fr'].map(l => tx(l, 'b_rouvrir')))].join(' · ') }] }] }, texte);
+      await evenementSalon(ferme, general, 'fermeture', { embeds: [{ description: texte.slice(0, 4000), color: 0xd9534f }], components: [{ type: 1, components: [{ type: 2, style: 2, custom_id: `tk:r:${ticket.id}`, label: [...new Set(['en', 'fr'].map(l => tx(l, 'b_rouvrir')))].join(' · ') }] }] }, texte, { acteur });
       // Salon verrouillé (l'auteur lit seulement), déplacé dans les archives.
       const maj = await appelDroits('PATCH', `/channels/${ticket.salon_id}`, async minimal => ({ ...(general.categorieArchives ? { parent_id: general.categorieArchives } : {}), permission_overwrites: await surcharges(ferme, cat, general, { verrouille: true, minimal }) }), general, { raison: `Ticket ${ticket.numero} fermé` });
       if (maj.ok) await base.executer('UPDATE tickets SET archive_le = ? WHERE id = ?', [iso(t), ticket.id]);
@@ -493,10 +569,12 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const recap = messageBilingue(messages, 'mp_recap', vars, opts);
     const note = cat?.satisfaction !== false && !sansDiscord;
     const demande = note ? messageBilingue(messages, 'demande_note', vars, opts) : '';
-    await envoyerMp(ticket.auteur_discord_id, {
-      embeds: [{ title: titreTicket(ticket.numero, opts), description: [recap, demande].filter(Boolean).join('\n\n').slice(0, 4000), color: 0x5865f2 }],
-      ...(note ? { components: [{ type: 1, components: [1, 2, 3, 4, 5].map(n => ({ type: 2, style: n >= 4 ? 3 : n <= 2 ? 4 : 2, custom_id: `tk:n:${ticket.id}:${n}`, label: `${n}/5` })) }] } : {}),
-    });
+    if (annonceActive(general, 'mp_fermeture')) {
+      await envoyerMp(ticket.auteur_discord_id, {
+        embeds: [{ title: titreTicket(ticket.numero, opts), description: [recap, demande].filter(Boolean).join('\n\n').slice(0, 4000), color: 0x5865f2 }],
+        ...(note ? { components: [{ type: 1, components: [1, 2, 3, 4, 5].map(n => ({ type: 2, style: n >= 4 ? 3 : n <= 2 ? 4 : 2, custom_id: `tk:n:${ticket.id}:${n}`, label: `${n}/5` })) }] } : {}),
+      });
+    }
     await base.lot([ev('ticket.ferme', ferme, acteur, { auto })]);
     await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_ferme', { numero: ticket.numero, staff: acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Esport HQ', 80), raison: texteRaison(l) }), { mode: general.langue === 'auteur' ? 'en_fr' : general.langue }), color: 0xd9534f });
     await annoncer(base, ticket.id, t, { acteur: acteur?.compte });
@@ -533,7 +611,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     }
     rouvert = await ticketPar(ticket.id);
     const texte = messageBilingue(messages, 'reouverture', { staff: acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? '', 80) }, optsLangue(general, rouvert));
-    await posterSysteme(rouvert, { content: `<@${rouvert.auteur_discord_id}>`, embeds: [{ description: texte, color: 0x4caf7a }], components: boutonsTicket(rouvert.id, optsLangue(general, rouvert), { repondre: reponsesAppSeules(general) }), allowed_mentions: { users: [rouvert.auteur_discord_id] } }, texte);
+    await evenementSalon(rouvert, general, 'reouverture', { content: `<@${rouvert.auteur_discord_id}>`, embeds: [{ description: texte, color: 0x4caf7a }], components: boutonsTicket(rouvert.id, optsLangue(general, rouvert)), allowed_mentions: { users: [rouvert.auteur_discord_id] } }, texte, { acteur });
     return apres(rouvert, 'ticket.rouvert', acteur);
   }
 
@@ -644,6 +722,9 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const { general, messages } = await contexte();
     const bilan = { avertis: 0, fermes: 0, salonsSupprimes: 0, purges: 0 };
     if (!general.actif || !jetonBot) return bilan;
+    // Mise à niveau des droits des salons ouverts (une seule fois, au mieux : jamais bloquante).
+    const migration = await migrerDroits().catch(e => (console.error('[esport] tickets : mise à niveau des droits', e?.message ?? e), null));
+    if (migration) bilan.migration = migration;
     const t = maintenant();
     const cats = new Map((await base.tous('SELECT * FROM tickets_categories', [])).map(l => [l.id, categoriePublique(l)]));
     // Tickets permanents et catégories « Jamais » écartés d'emblée (ils ne prennent pas la place des autres) ; un
@@ -778,9 +859,9 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     renommer,
     transferer,
     permanent,
-    messageAuteur,
-    participant,
+    mentionner,
     reappliquerDroits,
+    migrerDroits,
     surcharges,
     fermer,
     rouvrir,

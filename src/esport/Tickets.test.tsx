@@ -4,7 +4,7 @@
  * publication), navigation (entrée « Tickets », barre du bas du téléphone : cinq entrées au plus, le reste dans
  * « Plus ») ; Avis (moyenne, répartition, filtres, avis qui ouvre son ticket) et suppression d'un ticket fermé
  * (confirmation, avis gardé anonyme ou non, suppression groupée) ; catégories par défaut (choix à cocher, doublons
- * grisés, « À configurer : qui traite ? ») ; réglage « Répondre uniquement depuis l'AppDashboard ».
+ * grisés, « À configurer : qui traite ? ») ; réglage « Le staff répond uniquement depuis l'AppDashboard ».
  */
 
 import React from 'react';
@@ -601,7 +601,7 @@ test('catégories par défaut : choix à cocher, nom déjà pris grisé, ajout d
   expect(screen.getByTestId('esport-tk-modeles-ajouter')).toHaveTextContent('Ajouter la sélection (0)');
 });
 
-test('Général : « Répondre uniquement depuis l’AppDashboard » activé par défaut, limite Administrateur expliquée ; le désactiver met à jour les salons', async () => {
+test('Général : « Le staff répond uniquement depuis l’AppDashboard » activé par défaut, limite Administrateur expliquée ; le désactiver met à jour les salons', async () => {
   const { client, appels } = clientGeneral();
   const base = client as unknown as { requete(chemin: string, methode?: string, corps?: unknown): Promise<unknown> };
   const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
@@ -610,7 +610,7 @@ test('Général : « Répondre uniquement depuis l’AppDashboard » activé par
   };
   await render(<ConfigTickets theme={theme} client={{ requete } as unknown as ClientEsport} large />);
   await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-general'));
-  expect(screen.getByText('Répondre uniquement depuis l’AppDashboard')).toBeTruthy();
+  expect(screen.getByText('Le staff répond uniquement depuis l’AppDashboard')).toBeTruthy();
   expect(screen.getByTestId('esport-tk-general-app-seule').props.value).toBe(true);
   expect(screen.getByTestId('esport-tk-general-app-seule-admin')).toHaveTextContent(/Administrateur/);
   await fireEvent(screen.getByTestId('esport-tk-general-app-seule'), 'valueChange', false);
@@ -618,6 +618,7 @@ test('Général : « Répondre uniquement depuis l’AppDashboard » activé par
   await fireEvent.press(screen.getByTestId('esport-tk-general-enregistrer'));
   await screen.findByText(/Droits mis à jour dans 2 salon\(s\) sur 3 ; 1 échec/);
   expect((appels.find(a => a.methode === 'PUT')!.corps as Record<string, unknown>).reponsesAppSeules).toBe(false);
+  expect(appels.find(a => a.methode === 'PUT')!.corps).not.toHaveProperty('annonces');
 });
 
 const MODELES_PANNEAUX: ModelePanneau[] = [

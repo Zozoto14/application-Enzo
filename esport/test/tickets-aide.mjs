@@ -142,7 +142,7 @@ export async function attendre(condition, { delai = 3000, pas = 10, message = 'c
 export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '424242424242424242' } = {}) {
   const appels = [];
   const programme = [];
-  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0 };
+  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0, membres: [{ user: { id: '800000000000000077', username: 'zoe', global_name: 'Zoé' }, nick: null }, { user: { id: '800000000000000078', username: 'zorro', global_name: null }, nick: 'Zorro le Grand' }, { user: { id: '424242424242424243', username: 'zbot', bot: true }, nick: null }] };
   const id = () => `9${String(++etat.n).padStart(17, '0')}`;
   const rep = (corps, statut = 200, entetes = {}) => new Response(corps === undefined ? null : JSON.stringify(corps), { status: statut, headers: { 'Content-Type': 'application/json', ...entetes } });
   etat.salons.set('710000000000000010', { id: '710000000000000010', type: 4, name: 'Tickets', guild_id: guild, permission_overwrites: [] });
@@ -174,6 +174,10 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
     }
     if (chemin === `/guilds/${guild}/roles`) return rep([{ id: guild, name: '@everyone', permissions: '1024' }, { id: '720000000000000001', name: 'Staff', permissions: '0', position: 2 }, { id: '720000000000000002', name: 'Esport HQ', permissions: String((1n << 4n) | (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 15n) | (1n << 16n) | (1n << 28n)), managed: true, position: 3 }]);
     if (chemin === `/guilds/${guild}/members/${bot}`) return rep({ user: { id: bot }, roles: ['720000000000000002'] });
+    if (chemin === `/guilds/${guild}/members/search`) {
+      const q = String(u.searchParams.get('query') ?? '').toLowerCase();
+      return rep(etat.membres.filter(m => [m.user.username, m.user.global_name, m.nick].some(v => v && v.toLowerCase().startsWith(q))).slice(0, Number(u.searchParams.get('limit') ?? 1)));
+    }
     const salon = /^\/channels\/(\d+)$/.exec(chemin);
     if (salon) {
       const s = etat.salons.get(salon[1]);

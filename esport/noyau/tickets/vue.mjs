@@ -2,7 +2,8 @@
  * Tickets dans l'app (docs/esport/tickets.md, « Tickets dans l'app ») : liste filtrée, non lus, conversation, réponse
  * depuis l'app (le bot poste « Staff · pseudo : … », pièces jointes de l'appareil ou du Drive), notes internes (JAMAIS
  * envoyées sur Discord), actions (prendre, statut, priorité, assigner, catégorie, personnes, ticket permanent, fermer,
- * rouvrir),
+ * rouvrir), mentions (« Mentionner » : auteur, personnes ajoutées, rôles de la catégorie, staff lié, membre du serveur
+ * cherché par son nom),
  * transcript, liaisons (prospect Sponsors, carte CM, fiche), statistiques, préférences de MP.
  *
  * Chaque route vérifie les droits du moment (acces.mjs) : un ticket d'une catégorie que l'acteur ne voit pas rend 404,
@@ -17,9 +18,8 @@ import { accesAvis, comptesDeCategorie, contexteTickets, gereAvis, voitCategorie
 import { annoncer, instructionPiece } from './conversation.mjs';
 import { estRefus } from './cycle.mjs';
 import { idDiscord, rest } from './discord.mjs';
-import { rangeeRepondre } from './panneaux.mjs';
-import { PRIORITES, STATUTS, categoriePublique, delaiFermeture, instructionReglage, lireGeneral, lireReglage, reponsesAppSeules } from './reglages.mjs';
-import { surLong, t as tx } from './textes.mjs';
+import { PRIORITES, STATUTS, categoriePublique, delaiFermeture, instructionReglage, lireGeneral, lireReglage } from './reglages.mjs';
+import { sur, surLong, t as tx } from './textes.mjs';
 import { transcriptHtml } from './transcript.mjs';
 
 const MOTIF_ID = /^[0-9a-f-]{36}$/;
@@ -207,6 +207,8 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
         staff: Number(m.staff) === 1,
         contenu: m.contenu,
         envoi: m.envoi,
+        // Événement noté sans être posté dans le salon (« Messages automatiques dans le salon » coupé pour lui).
+        nonPublie: m.genre === 'systeme' && !m.discord_message_id && m.envoi === 'ok',
         le: m.cree_le,
         modifieLe: m.modifie_le ?? null,
         supprimeLe: m.supprime_le ?? null,
@@ -270,10 +272,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const pseudo = (await pseudoDe(acteur.compte)) ?? (acteur.superAdmin ? 'Fondateur' : 'Staff');
     // « Staff · pseudo » est le même dans les deux langues ; le texte du staff part tel quel (mentions neutralisées).
     const contenu = `**${tx('fr', 'staff_prefixe', { pseudo: surLong(pseudo, 60) })}** : ${surLong(texte, TEXTE_MAX)}`.slice(0, 2000);
-    // Salon en lecture seule : bouton « Répondre » sous la réponse du staff (l'auteur répond par une fenêtre du bot).
-    const general = await lireGeneral(base);
-    const boutons = rangeeRepondre(ticket.id, { mode: general.langue, langue: ticket.langue ?? 'en' }, reponsesAppSeules(general));
-    const r = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${ticket.salon_id}/messages`, { content: contenu, allowed_mentions: { parse: [] }, ...(boutons.length ? { components: boutons } : {}) }, { fichiers: pieces.length ? pieces.map(p => ({ nom: p.nom, type: p.type, octets: p.octets })) : undefined });
+    const r = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${ticket.salon_id}/messages`, { content: contenu, allowed_mentions: { parse: [] } }, { fichiers: pieces.length ? pieces.map(p => ({ nom: p.nom, type: p.type, octets: p.octets })) : undefined });
     if (!r.ok) throw echec(502, 'discord', r.statut === 429 ? 'Discord demande d’attendre : réessayez dans un instant.' : 'Discord a refusé le message (permissions du bot ?).');
     const t = maintenant();
     const messageId = nouvelId();
@@ -355,6 +354,75 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const { ticket } = await ticketVisible(acteur, id, { exiger: def.droit });
     try {
       await def.faire(ticket, acteur, corps, await nomActeur(acteur));
+    } catch (e) {
+      if (estRefus(e)) throw echec(e.statut ?? 400, `ticket-${e.cle}`, tx('fr', e.cle, e.vars));
+      throw e;
+    }
+    return detail(acteur, id);
+  }
+
+  // ---------------------------------------------------------------- Mentions
+
+  /**
+   * Qui mentionner dans ce ticket : l'auteur, les personnes ajoutées, les rôles Discord de la catégorie (noms lus sur
+   * Discord, au mieux), les comptes du staff de la catégorie qui ont lié leur Discord ; `q` (2 caractères au moins) :
+   * membres du serveur cherchés par leur nom (API Discord « Search Guild Members », 10 au plus).
+   */
+  async function mentionnables(acteur, id, { q } = {}) {
+    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const general = await lireGeneral(base);
+    const cat = await base.premier('SELECT * FROM tickets_categories WHERE id = ?', [ticket.categorie_id]);
+    const rolesCat = cat ? categoriePublique(cat).rolesDiscord.filter(r => r !== general.guildId) : [];
+    const membres = await base.tous('SELECT discord_user_id, nom FROM tickets_membres WHERE ticket_id = ? ORDER BY ajoute_le', [id]);
+    const comptes = [...(await comptesDeCategorie(base, ticket.categorie_id, { repondre: true }))];
+    const lies = comptes.length ? await base.tous(`SELECT dc.discord_user_id, dc.compte_id, c.pseudo FROM discord_comptes dc LEFT JOIN comptes c ON c.id = dc.compte_id WHERE dc.compte_id IN (${comptes.map(() => '?').join(', ')})`, comptes) : [];
+    let noms = new Map();
+    const requete = String(q ?? '').trim().slice(0, 32);
+    let recherche = null;
+    let rechercheErreur = null;
+    if (jetonBot && general.guildId) {
+      if (rolesCat.length) {
+        const r = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${general.guildId}/roles`);
+        if (r.ok && Array.isArray(r.corps)) noms = new Map(r.corps.map(x => [String(x.id), String(x.name ?? '')]));
+      }
+      if (requete.length >= 2) {
+        const r = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${general.guildId}/members/search?query=${encodeURIComponent(requete)}&limit=10`);
+        if (r.ok && Array.isArray(r.corps)) {
+          recherche = r.corps
+            .filter(m => idDiscord(m?.user?.id) && !m.user.bot)
+            .map(m => ({ discordId: m.user.id, nom: String(m.nick || m.user.global_name || m.user.username || m.user.id).slice(0, 100), pseudo: String(m.user.username ?? '').slice(0, 100) }));
+        } else {
+          recherche = [];
+          rechercheErreur = r.statut === 429 ? 'limite' : `discord-${r.statut}`;
+        }
+      }
+    }
+    return {
+      auteur: { discordId: ticket.auteur_discord_id, nom: ticket.auteur_nom || ticket.auteur_discord_id },
+      membres: membres.map(m => ({ discordId: m.discord_user_id, nom: m.nom || m.discord_user_id })),
+      roles: rolesCat.map(r => ({ id: r, nom: noms.get(r) || r })),
+      staff: lies.filter(l => idDiscord(l.discord_user_id)).map(l => ({ discordId: l.discord_user_id, nom: l.pseudo ?? l.compte_id })).sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr')),
+      recherche,
+      ...(rechercheErreur ? { rechercheErreur } : {}),
+    };
+  }
+
+  /**
+   * Mention postée par le bot (cycle.mjs : mentionner) ; `ajouter` : les personnes choisies qui ne sont ni l'auteur ni
+   * déjà ajoutées sont d'abord ajoutées au ticket (sinon elles ne voient pas le salon, et la mention ne leur parvient pas).
+   */
+  async function mentionner(acteur, id, corps) {
+    const { ticket, droits } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const ac = await nomActeur(acteur);
+    const cibles = (Array.isArray(corps?.cibles) ? corps.cibles : []).slice(0, 30).map(c => ({ type: c?.type === 'role' ? 'role' : 'membre', id: String(c?.id ?? ''), nom: sur(c?.nom, 60), ajouter: c?.ajouter === true }));
+    try {
+      const aAjouter = cibles.filter(c => c.type === 'membre' && c.ajouter && idDiscord(c.id) && c.id !== ticket.auteur_discord_id);
+      if (aAjouter.length) {
+        if (!droits.gerer) throw echec(403, 'permission', 'Ajouter quelqu’un au ticket demande la permission de gérer les tickets.');
+        const deja = new Set((await base.tous('SELECT discord_user_id FROM tickets_membres WHERE ticket_id = ?', [id])).map(m => m.discord_user_id));
+        for (const c of aAjouter.slice(0, 5)) if (!deja.has(c.id)) await cycle.ajouterMembre(await base.premier('SELECT * FROM tickets WHERE id = ?', [id]), ac, { id: c.id, nom: c.nom });
+      }
+      await cycle.mentionner(await base.premier('SELECT * FROM tickets WHERE id = ?', [id]), ac, { cibles, message: String(corps?.message ?? '') });
     } catch (e) {
       if (estRefus(e)) throw echec(e.statut ?? 400, `ticket-${e.cle}`, tx('fr', e.cle, e.vars));
       throw e;
@@ -602,5 +670,5 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     return v;
   }
 
-  return { liste, compteur, detail, marquerLu, repondre, noter, action, assignables, transcript, lienPiece, servirPiece, lier, stats, avis, supprimer, supprimerPlusieurs, preferences, changerPreferences };
+  return { liste, compteur, detail, marquerLu, repondre, noter, action, mentionnables, mentionner, assignables, transcript, lienPiece, servirPiece, lier, stats, avis, supprimer, supprimerPlusieurs, preferences, changerPreferences };
 }

@@ -1,10 +1,10 @@
 /**
  * Tickets : catégories par défaut (modèles bilingues, formulaires dans les limites des fenêtres Discord ; semées
  * seulement sur une base sans catégorie ; bouton « Catégories par défaut » qui ignore les noms déjà pris) et réglage
- * « Répondre uniquement depuis l'AppDashboard » (activé par défaut) : personne n'écrit dans le salon (auteur, rôle de
- * la catégorie, personne ajoutée) ; le bot garde ses droits ; accueil avec la consigne et le bouton « Répondre » ;
- * l'auteur répond par une fenêtre du bot (message posté par le bot, enregistré comme un message Discord) ; le staff
- * répond depuis l'app ; changer le réglage remet à jour les salons ouverts (au mieux, échecs comptés).
+ * « Le staff répond uniquement depuis l'AppDashboard » (activé par défaut) : les rôles de la catégorie lisent sans
+ * écrire ; l'auteur et les personnes ajoutées écrivent et envoient leurs fichiers ; le bot garde ses droits ; plus
+ * aucun bouton « Répondre » (un ancien bouton répond en éphémère, sans rien poster) ; changer le réglage remet à jour
+ * les salons ouverts (au mieux, échecs comptés) ; mise à niveau des salons ouverts au premier passage du cron.
  */
 
 import { test } from 'node:test';
@@ -25,6 +25,8 @@ const FILS = 1n << 38n;
 const CREER_FILS = 1n << 35n;
 const VOIR = 1n << 10n;
 const HISTORIQUE = 1n << 16n;
+const JOINDRE = 1n << 15n;
+const LIENS = 1n << 14n;
 
 test('catégories par défaut : bilingues, icônes monochromes, formulaires dans les limites de Discord', () => {
   assert.ok(CATEGORIES_DEFAUT.length >= 9 && CATEGORIES_DEFAUT.length <= LIMITES.categories);
@@ -142,102 +144,80 @@ async function preparer({ general = {} } = {}) {
   return { k, support, cat, clic, fenetre, ouvrir, droits };
 }
 
-test('réglage par défaut : personne n’écrit (auteur, rôle de la catégorie, personne ajoutée), le bot oui ; accueil avec consigne et « Répondre »', async () => {
+/** Aucun composant « Répondre » (tk:rp / tk:rm) dans aucun message posté par le bot. */
+function sansRepondre(k) {
+  for (const a of k.discord.appels.filter(x => x.methode === 'POST' && /\/messages$/.test(x.chemin))) assert.doesNotMatch(JSON.stringify(a.corps ?? {}), /tk:r[pm]:/, `bouton « Répondre » dans ${a.chemin}`);
+}
+
+test('réglage par défaut : l’auteur et les personnes ajoutées écrivent et joignent des fichiers, le staff lit seulement, le bot tout ; pas de « Répondre »', async () => {
   const p = await preparer();
   const conf = await p.k.api('/tickets/config');
   assert.equal(conf.corps.general.reponsesAppSeules, true, 'activé par défaut');
   const tk = await p.ouvrir();
-  for (const id of [LEA, STAFF]) {
-    const d = p.droits(tk, id);
-    assert.ok(d.allow & VOIR && d.allow & HISTORIQUE, `${id} lit le salon`);
-    assert.equal(d.allow & ENVOYER, 0n, `${id} n’a pas « Envoyer »`);
-    assert.ok(d.deny & ENVOYER && d.deny & FILS && d.deny & CREER_FILS, `${id} : écrire, fils refusés`);
-  }
+  const lea = p.droits(tk, LEA);
+  assert.ok(lea.allow & VOIR && lea.allow & HISTORIQUE && lea.allow & ENVOYER && lea.allow & JOINDRE && lea.allow & LIENS, 'l’auteur écrit et joint des fichiers');
+  assert.equal(lea.deny, 0n);
+  const staff = p.droits(tk, STAFF);
+  assert.ok(staff.allow & VOIR && staff.allow & HISTORIQUE, 'le staff lit le salon');
+  assert.equal(staff.allow & ENVOYER, 0n);
+  assert.ok(staff.deny & ENVOYER && staff.deny & FILS && staff.deny & CREER_FILS, 'le staff n’écrit pas sur Discord');
   const bot = p.droits(tk, p.k.APP);
   assert.ok(bot.allow & ENVOYER && bot.allow & (1n << 4n), 'le bot garde ses droits');
   assert.equal(bot.deny, 0n);
   const accueil = p.k.discord.etat.messages.get(tk.salon_id)[0];
-  assert.match(accueil.embeds[0].description, /lecture seule.*« Répondre ».*lien/s, 'consigne en français');
-  assert.match(accueil.embeds[0].description, /read-only.*“Reply”/s, 'et en anglais');
-  assert.doesNotMatch(accueil.embeds[0].description, /joindre des fichiers/);
+  assert.match(accueil.embeds[0].description, /écrire et envoyer vos fichiers.*directement dans ce salon/s, 'consigne en français');
+  assert.match(accueil.embeds[0].description, /write and send your files.*directly in this channel/s, 'et en anglais');
+  assert.doesNotMatch(accueil.embeds[0].description, /Répondre|Reply|lecture seule|read-only/);
   const boutons = accueil.components[0].components;
-  assert.equal(boutons.length, 5, 'cinq boutons au plus par rangée');
-  assert.equal(boutons[0].custom_id, `tk:rp:${tk.id}`);
-  assert.equal(boutons[0].label, 'Répondre · Reply');
-  // Personne ajoutée : lit seulement.
+  assert.deepEqual(boutons.map(b => b.custom_id.split(':')[1]), ['c', 'a', 'p', 'x'], 'quatre boutons, sans « Répondre »');
+  // Personne ajoutée : écrit aussi.
   await p.clic(`tk:as:${tk.id}`, { qui: KAI, roles: [STAFF], valeurs: [BOB], resolved: { users: { [BOB]: { id: BOB, username: 'bob' } } }, salon: tk.salon_id });
   const bob = p.droits(tk, BOB);
-  assert.ok(bob.allow & VOIR);
-  assert.ok(bob.deny & ENVOYER);
-  // Réponse du staff depuis l'app : bouton « Répondre » dessous.
+  assert.ok(bob.allow & VOIR && bob.allow & ENVOYER && bob.allow & JOINDRE);
+  assert.equal(bob.deny, 0n);
+  // Réponse du staff depuis l'app : sans bouton.
   const r = await p.k.api(`/tickets/${tk.id}/messages`, p.support.jeton, { methode: 'POST', corps: { texte: 'Bonjour, de quoi avez-vous besoin ?' } });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   const post = p.k.discord.etat.messages.get(tk.salon_id).at(-1);
   assert.match(post.content, /^\*\*Staff · Support\*\* : Bonjour/);
-  assert.equal(post.components[0].components[0].custom_id, `tk:rp:${tk.id}`);
-  // Fermeture puis réouverture : toujours en lecture seule.
+  assert.equal(post.components, undefined);
+  // Fermeture : l'auteur et la personne ajoutée lisent seulement ; réouverture : ils écrivent de nouveau.
   await p.k.api(`/tickets/${tk.id}/fermer`, undefined, { methode: 'POST', corps: {} });
-  assert.ok(p.droits(tk, LEA).deny & ENVOYER);
+  assert.ok(p.droits(tk, LEA).deny & ENVOYER && p.droits(tk, BOB).deny & ENVOYER);
   await p.k.api(`/tickets/${tk.id}/rouvrir`, undefined, { methode: 'POST', corps: {} });
-  assert.ok(p.droits(tk, LEA).deny & ENVOYER && p.droits(tk, STAFF).deny & ENVOYER, 'réouverture : lecture seule');
-  const reouv = p.k.discord.etat.messages.get(tk.salon_id).at(-1);
-  assert.equal(reouv.components[0].components[0].custom_id, `tk:rp:${tk.id}`);
+  assert.ok(p.droits(tk, LEA).allow & ENVOYER && p.droits(tk, BOB).allow & ENVOYER, 'réouverture : ils écrivent');
+  assert.ok(p.droits(tk, STAFF).deny & ENVOYER, 'réouverture : le staff lit seulement');
+  sansRepondre(p.k);
 });
 
-test('réglage désactivé : comportement historique (chacun écrit, pas de bouton « Répondre ») ; consigne des fichiers', async () => {
+test('réglage désactivé : le staff écrit aussi sur Discord ; mêmes droits pour l’auteur ; consigne des fichiers', async () => {
   const p = await preparer({ general: { reponsesAppSeules: false } });
   const tk = await p.ouvrir();
   assert.ok(p.droits(tk, LEA).allow & ENVOYER);
   assert.equal(p.droits(tk, LEA).deny, 0n);
   assert.ok(p.droits(tk, STAFF).allow & ENVOYER);
+  assert.equal(p.droits(tk, STAFF).deny, 0n);
   const accueil = p.k.discord.etat.messages.get(tk.salon_id)[0];
-  assert.ok(!accueil.components[0].components.some(b => b.custom_id.startsWith('tk:rp:')));
-  assert.match(accueil.embeds[0].description, /joindre des fichiers directement/);
+  assert.match(accueil.embeds[0].description, /envoyer vos fichiers/);
+  sansRepondre(p.k);
 });
 
-test('fenêtre « Répondre » : l’auteur écrit, le bot poste et la conversation l’enregistre ; le staff est renvoyé vers l’app', async () => {
+test('ancien bouton « Répondre » (messages d’avant la mise à jour) : réponse éphémère, rien n’est posté', async () => {
   const p = await preparer();
   const tk = await p.ouvrir();
   const dans = { salon: tk.salon_id };
-  await p.k.api(`/tickets/${tk.id}/attente`, p.support.jeton, { methode: 'POST', corps: {} });
-  assert.equal((await p.k.b.base.premier('SELECT statut FROM tickets WHERE id = ?', [tk.id])).statut, 'en_attente');
-  const f = await p.clic(`tk:rp:${tk.id}`, dans);
-  assert.equal(f.corps.type, 9, 'fenêtre');
-  assert.equal(f.corps.data.custom_id, `tk:rm:${tk.id}`);
-  const champ = f.corps.data.components[0].components[0];
-  assert.deepEqual([champ.custom_id, champ.style, champ.required, champ.max_length], ['message', 2, true, 4000]);
-  assert.ok(champ.label.length <= 45 && champ.placeholder.length <= 100);
-  p.k.b.horloge.t += 60_000;
-  const r = await p.fenetre(`tk:rm:${tk.id}`, { message: 'Voici ma capture : https://exemple.org/capture.png @everyone' }, dans);
-  assert.equal(r.corps.data.content, 'Message envoyé dans le ticket.');
-  const post = p.k.discord.etat.messages.get(tk.salon_id).at(-1);
-  assert.equal(post.embeds[0].author.name, 'Léa');
-  assert.match(post.embeds[0].description, /^Voici ma capture : https:\/\/exemple\.org\/capture\.png @​everyone$/, 'mentions neutralisées');
-  assert.deepEqual(post.allowed_mentions, { parse: [] });
-  assert.equal(post.components[0].components[0].custom_id, `tk:rp:${tk.id}`, 'bouton « Répondre » sous le message');
-  const m = await p.k.b.base.premier("SELECT * FROM tickets_messages WHERE ticket_id = ? AND genre = 'discord' ORDER BY cree_le DESC LIMIT 1", [tk.id]);
-  assert.equal(m.auteur_discord_id, LEA);
-  assert.equal(Number(m.staff), 0);
-  assert.equal(m.contenu, 'Voici ma capture : https://exemple.org/capture.png @everyone');
-  assert.equal(m.discord_message_id, post.id);
-  const l = await p.k.b.base.premier('SELECT * FROM tickets WHERE id = ?', [tk.id]);
-  assert.equal(l.statut, 'ouvert', 'l’auteur a répondu : plus en attente');
-  assert.equal(l.dernier_message_id, post.id);
-  // Visible dans l'app comme un message de l'auteur.
-  const d = await p.k.api(`/tickets/${tk.id}`, p.support.jeton);
-  assert.ok(d.corps.messages.some(x => x.genre === 'discord' && !x.staff && x.contenu.startsWith('Voici ma capture')));
-  // Message vide : refusé.
-  assert.match((await p.fenetre(`tk:rm:${tk.id}`, { message: '   ' }, dans)).corps.data.content, /Message vide/);
-  // Le staff (rôle Discord de la catégorie) : renvoyé vers l'app ; un inconnu : refusé.
+  const avant = p.k.discord.etat.messages.get(tk.salon_id).length;
+  const a = await p.clic(`tk:rp:${tk.id}`, dans);
+  assert.equal(a.corps.type, 4);
+  assert.equal(a.corps.data.flags, 64);
+  assert.match(a.corps.data.content, /écrivez et envoyez vos fichiers directement dans ce salon/);
+  // Fenêtre ouverte avant la mise à jour : rien n'est posté non plus.
+  assert.match((await p.fenetre(`tk:rm:${tk.id}`, { message: 'bonjour' }, dans)).corps.data.content, /directement dans ce salon/);
+  // Le staff : renvoyé vers l'app.
   assert.match((await p.clic(`tk:rp:${tk.id}`, { qui: KAI, roles: [STAFF], ...dans })).corps.data.content, /AppDashboard/);
-  assert.match((await p.clic(`tk:rp:${tk.id}`, { qui: BOB, ...dans })).corps.data.content, /Seuls l’auteur/);
-  assert.match((await p.fenetre(`tk:rm:${tk.id}`, { message: 'intrus' }, { qui: BOB, ...dans })).corps.data.content, /Seuls l’auteur/);
-  // Une personne ajoutée peut répondre.
-  await p.clic(`tk:as:${tk.id}`, { qui: KAI, roles: [STAFF], valeurs: [BOB], resolved: { users: { [BOB]: { id: BOB, username: 'bob' } } }, ...dans });
-  assert.equal((await p.clic(`tk:rp:${tk.id}`, { qui: BOB, ...dans })).corps.type, 9);
-  // Bouton d'un autre salon : sans effet.
+  assert.equal(p.k.discord.etat.messages.get(tk.salon_id).length, avant, 'rien posté');
+  // Bouton d'un autre salon : sans effet ; ticket fermé : refusé.
   assert.match((await p.clic(`tk:rp:${tk.id}`, { salon: '710000000000000013' })).corps.data.content, /salon d’un ticket/);
-  // Ticket fermé : plus de réponse.
   await p.k.api(`/tickets/${tk.id}/fermer`, undefined, { methode: 'POST', corps: {} });
   assert.match((await p.clic(`tk:rp:${tk.id}`, dans)).corps.data.content, /déjà fermé/);
 });
@@ -268,10 +248,63 @@ test('changer le réglage remet à jour les salons des tickets ouverts (échec c
   }
   assert.deepEqual(on.corps.reapplication, { ok: 1, echecs: 1, total: 2 });
   assert.ok(erreurs.some(e => e.includes(`ticket ${t1.numero}`)), 'échec journalisé (sans contenu)');
-  assert.ok(p.droits(t2, BOB).deny & ENVOYER);
+  assert.ok(p.droits(t2, STAFF).deny & ENVOYER, 'le staff lit seulement');
+  assert.ok(p.droits(t2, BOB).allow & ENVOYER && !(p.droits(t2, BOB).deny & ENVOYER), 'l’auteur écrit toujours');
 });
 
-test('repli : Discord refuse les surcharges complètes (403) → « Envoyer des messages » refusé seul', async () => {
+test('mise à niveau au premier passage du cron : salons ouverts en lecture seule rouverts à l’auteur, panneaux réécrits, une seule fois', async () => {
+  const p = await preparer();
+  const t1 = await p.ouvrir();
+  const r1 = await p.clic(`tk:o:${p.cat.id}`, { qui: BOB });
+  assert.match(r1.corps.data.content, /Ticket créé/);
+  const t2 = await p.k.b.base.premier('SELECT * FROM tickets ORDER BY numero DESC LIMIT 1', []);
+  // Salons d'avant la mise à jour : l'auteur en lecture seule.
+  for (const [tk, qui] of [[t1, LEA], [t2, BOB]]) {
+    const s = p.k.discord.etat.salons.get(tk.salon_id);
+    s.permission_overwrites = s.permission_overwrites.map(o => (o.id === qui ? { ...o, allow: String(VOIR | HISTORIQUE), deny: String(ENVOYER | FILS) } : o));
+    assert.ok(p.droits(tk, qui).deny & ENVOYER);
+  }
+  // Panneau enregistré avec l'ancienne consigne.
+  const ancien = { fr: 'Ouvrez un ticket. Pour écrire dans votre ticket, utilisez le bouton **Répondre** du bot : le staff vous répond dans le même salon.', en: 'Open a ticket. To write in your ticket, use the bot’s **Reply** button: the staff answers you in the same channel.' };
+  const pan = await p.k.api('/tickets/config/panneaux', undefined, { methode: 'POST', corps: { titre: { fr: 'Aide', en: 'Help' }, texte: ancien, categories: [p.cat.id] } });
+  assert.equal(pan.statut, 200, JSON.stringify(pan.corps));
+  // Simule une installation d'avant : la mise à niveau n'a pas encore eu lieu.
+  await p.k.b.base.executer("DELETE FROM tickets_reglages WHERE cle = 'migration_droits_v3'", []);
+  const cycle = p.k.b.traiter.ticketsCycle;
+  // Premier passage : Discord impose d'attendre sur le premier salon → refaite au passage suivant.
+  p.k.discord.programme.push({ si: (m, c) => m === 'PATCH' && c === `/channels/${t1.salon_id}`, statut: 429, corps: { retry_after: 120 } });
+  const origineErr = console.error;
+  const origineLog = console.log;
+  const journal = [];
+  console.error = (...a) => journal.push(a.join(' '));
+  console.log = (...a) => journal.push(a.join(' '));
+  let b2;
+  let b3;
+  try {
+    const b1 = await cycle.tachesCycle();
+    assert.equal(b1.migration.limite, true, 'interrompue par la limite de débit');
+    assert.ok(p.droits(t1, LEA).deny & ENVOYER, 'pas encore remis');
+    b2 = await cycle.tachesCycle();
+    b3 = await cycle.tachesCycle();
+  } finally {
+    console.error = origineErr;
+    console.log = origineLog;
+  }
+  assert.deepEqual([b2.migration.ok, b2.migration.echecs, b2.migration.total, b2.migration.panneaux], [2, 0, 2, 1]);
+  assert.equal(b3.migration, undefined, 'une seule fois');
+  for (const [tk, qui] of [[t1, LEA], [t2, BOB]]) {
+    assert.ok(p.droits(tk, qui).allow & ENVOYER && p.droits(tk, qui).allow & JOINDRE, 'l’auteur écrit de nouveau');
+    assert.equal(p.droits(tk, qui).deny, 0n);
+    assert.ok(p.droits(tk, STAFF).deny & ENVOYER, 'le staff reste en lecture seule');
+  }
+  assert.ok(journal.some(l => l.includes('mise à niveau faite')), 'journalisé');
+  const lu = (await p.k.api('/tickets/config')).corps.panneaux.find(x => x.id === pan.corps.id);
+  assert.match(lu.texte.fr, /^Ouvrez un ticket\. Écrivez et envoyez vos fichiers directement dans votre ticket/);
+  assert.match(lu.texte.en, /Write and send your files directly/);
+  assert.doesNotMatch(lu.texte.fr + lu.texte.en, /Répondre|Reply/);
+});
+
+test('repli : Discord refuse les surcharges complètes (403) → « Envoyer des messages » refusé seul au staff ; l’auteur écrit', async () => {
   const p = await preparer();
   p.k.discord.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${p.k.GUILD}/channels`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
   const origine = console.error;
@@ -282,7 +315,8 @@ test('repli : Discord refuse les surcharges complètes (403) → « Envoyer des 
   } finally {
     console.error = origine;
   }
-  const d = p.droits(tk, LEA);
+  const d = p.droits(tk, STAFF);
   assert.equal(d.deny, ENVOYER);
   assert.equal(d.allow & ENVOYER, 0n);
+  assert.ok(p.droits(tk, LEA).allow & ENVOYER);
 });

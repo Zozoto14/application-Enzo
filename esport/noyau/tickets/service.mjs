@@ -12,6 +12,7 @@ import { evenement } from '../evenements.mjs';
 import { contexteTickets } from './acces.mjs';
 import { MESSAGES_DEFAUT, MODES_LANGUE } from './textes.mjs';
 import {
+  ANNONCES_DEFAUT,
   COMMANDES_STAFF,
   COMMANDES_TICKETS,
   ICONES,
@@ -91,6 +92,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
       general: await lireGeneral(base),
       messages: await lireMessages(base),
       messagesDefaut: MESSAGES_DEFAUT,
+      annoncesDefaut: ANNONCES_DEFAUT,
       horaires: await lireHoraires(base),
       commandes: await lireCommandes(base),
       bienvenue: await lireBienvenue(base),
@@ -116,15 +118,19 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
   }
 
   /**
-   * Réglages généraux. « Répondre uniquement depuis l'AppDashboard » changé : les droits des salons des tickets
-   * ouverts sont remis à jour tout de suite (au mieux ; bilan rendu dans `reapplication`).
+   * Réglages généraux. « Le staff répond uniquement depuis l'AppDashboard » changé : les droits des salons des tickets
+   * ouverts sont remis à jour tout de suite (au mieux ; bilan rendu dans `reapplication`). Messages automatiques dans
+   * le salon (`annonces`) : par événement (reglages.mjs : ANNONCES_DEFAUT).
    */
   async function changerGeneral(acteur, corps) {
     await contexteTickets(base, acteur, { exiger: 'configurer' });
     const avant = await lireGeneral(base);
     const apres = validerGeneral(corps ?? {}, avant);
     const sortie = await changerReglage(acteur, 'general', apres);
-    if (cycle && reponsesAppSeules(apres) !== reponsesAppSeules(avant)) return { ...sortie, reapplication: await cycle.reappliquerDroits() };
+    if (cycle && reponsesAppSeules(apres) !== reponsesAppSeules(avant)) {
+      const { limite, ...reapplication } = await cycle.reappliquerDroits();
+      return { ...sortie, reapplication };
+    }
     return sortie;
   }
   async function changerMessages(acteur, corps) {
@@ -335,8 +341,7 @@ export function servicesConfigTickets({ base, maintenant = () => Date.now(), sto
     const apres = await categories();
     const ids = choisie ? [choisie.id] : m.categories === 'toutes' ? apres.filter(c => c.actif).map(c => c.id) : refs.map(cle => trouver(apres, cle)?.id).filter(Boolean);
     const liste = ids.slice(0, 25);
-    const general = await lireGeneral(base);
-    const textes = textesPanneauModele(m, { evenement, appSeule: reponsesAppSeules(general), horaires: await lireHoraires(base) });
+    const textes = textesPanneauModele(m, { evenement, horaires: await lireHoraires(base) });
     // Titre déjà pris (français ou anglais) : « (2) », « (3) »…
     const pris = new Set();
     for (const l of await base.tous('SELECT titre FROM tickets_panneaux', [])) {

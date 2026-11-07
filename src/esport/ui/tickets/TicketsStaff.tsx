@@ -1,7 +1,8 @@
 /**
  * Tickets dans l'app (docs/esport/tickets.md) : liste filtrée (catégorie, statut, priorité, responsable, dates,
  * recherche) avec les non lus, vue d'un ticket (conversation en direct, réponse depuis l'app — le bot poste « Staff ·
- * pseudo : … » —, pièces jointes de l'appareil ou du Drive, notes internes jamais envoyées sur Discord, actions,
+ * pseudo : … » —, grande zone de réponse (Ctrl/Cmd+Entrée pour envoyer), pièces jointes de l'appareil ou du Drive,
+ * notes internes jamais envoyées sur Discord, « Mentionner » (le bot mentionne les personnes ou rôles choisis), actions,
  * transcript, liaisons), statistiques et préférences de MP. Le serveur décide de tout ; l'écran n'affiche que ce que la
  * réponse permet.
  */
@@ -24,6 +25,8 @@ import { Badge, ChiffreCle, ESP, EtatVide, Grille, Pliable, Squelette, Volet, at
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Etoiles } from './AvisTickets';
+import { ComposeurTicket } from './ComposeurTicket';
+import { DialogueMention } from './MentionTicket';
 
 const nomCat = (c: { nom: { fr: string; en: string } }) => (langueCourante() === 'en' ? c.nom.en || c.nom.fr : c.nom.fr || c.nom.en);
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -161,6 +164,7 @@ export function ListeTickets({
         <Volet theme={theme} visible titre={trTk('vue.titre', { numero: donnees?.tickets.find(x => x.id === ouvert)?.numero ?? (ouvrir?.id === ouvert ? ouvrir.numero : '') })} onFermer={() => (setOuvert(undefined), relire())} largeur={large ? 820 : 560} testID="esport-tk-volet">
           <VueTicket
             theme={theme}
+            large={large}
             client={client}
             api={api}
             id={ouvert}
@@ -235,8 +239,10 @@ export function VueTicket({
   onExporter,
   categories,
   onSupprime,
+  large = false,
 }: {
   theme: ThemeHub;
+  large?: boolean;
   client: ClientEsport;
   api: ApiTickets;
   id: string;
@@ -256,6 +262,7 @@ export function VueTicket({
   const [discordId, setDiscordId] = useState('');
   const [assignables, setAssignables] = useState<Array<{ compte: string; pseudo: string | null }>>([]);
   const [suppression, setSuppression] = useState(false);
+  const [mention, setMention] = useState(false);
   const { erreur, avis, agir: agirBrut, enCours, setErreur } = useAgir();
   const agir = useCallback(
     (libelle: string, action: () => Promise<string | void>) =>
@@ -298,7 +305,8 @@ export function VueTicket({
       if (f.taille > 5 * 1024 * 1024) throw new Error(trTk('erreur.trop_gros'));
       setPieces([...pieces, { nom: f.nom, type: f.type || 'application/octet-stream', base64: enBase64(await f.lire(0, f.taille)) }]);
     });
-  const envoyer = () =>
+  const envoyer = () => {
+    if (enCours === 'envoyer' || (!texteMsg.trim() && !pieces.length && !drive.length)) return;
     void agir('envoyer', async () => {
       setD(note ? await api.noter(id, texteMsg) : await api.repondre(id, { texte: texteMsg, pieces, drive: drive.map(x => x.id) }));
       setTexteMsg('');
@@ -307,6 +315,7 @@ export function VueTicket({
       setErreur(undefined);
       onChange?.();
     });
+  };
   const supprimer = (garderAvis: boolean) =>
     void agir('supprimer', async () => {
       const r = await api.supprimer(id, garderAvis);
@@ -369,6 +378,7 @@ export function VueTicket({
           {ouvert && d.responsable ? <BoutonHub theme={theme} titre={trTk('vue.liberer')} onPress={() => faire('liberer')} testID="esport-tk-liberer" /> : null}
           {ouvert && d.statut !== 'en_attente' ? <BoutonHub theme={theme} titre={trTk('vue.attente')} onPress={() => faire('attente')} testID="esport-tk-attente" /> : null}
           {ouvert && d.statut !== 'resolu' ? <BoutonHub theme={theme} titre={trTk('vue.resolu')} onPress={() => faire('statut', { statut: 'resolu' })} testID="esport-tk-resolu" /> : null}
+          {ouvert && d.salon && !d.salon.supprime ? <BoutonHub theme={theme} titre={trTk('vue.mentionner')} icone="megaphone" onPress={() => setMention(true)} testID="esport-tk-mentionner" /> : null}
           {!ouvert && !d.purge ? <BoutonHub theme={theme} titre={trTk('vue.rouvrir')} onPress={() => faire('rouvrir')} testID="esport-tk-rouvrir" /> : null}
           {d.droits.gerer && onExporter ? <BoutonHub theme={theme} titre={trTk('vue.transcript')} onPress={() => void agir('transcript', async () => {
                 const tr = await api.transcript(id);
@@ -378,6 +388,24 @@ export function VueTicket({
       ) : (
         <Text style={attenue(theme)}>{trTk('vue.lecture_seule')}</Text>
       )}
+      {mention && ouvert ? (
+        <DialogueMention
+          theme={theme}
+          api={api}
+          ticketId={id}
+          gerer={d.droits.gerer}
+          large={large}
+          onFermer={() => setMention(false)}
+          onFait={nouveau =>
+            void agir('mention', async () => {
+              setD(nouveau);
+              setMention(false);
+              onChange?.();
+              return trTk('vue.mentionner_ok');
+            })
+          }
+        />
+      ) : null}
       {!ouvert && d.droits.supprimer && !suppression ? (
         <View style={styles.ligne}>
           <BoutonHub theme={theme} variante="danger" icone="corbeille" titre={trTk('suppr.bouton')} onPress={() => setSuppression(true)} testID="esport-tk-supprimer" />
@@ -416,7 +444,7 @@ export function VueTicket({
             <Interrupteur theme={theme} libelle={trTk('vue.mode_note')} valeur={note} onChanger={setNote} testID="esport-tk-mode-note" />
           </View>
           {!note ? <Text style={attenue(theme)}>{trTk('vue.repondre_aide', { pseudo: '…' })}</Text> : <Text style={attenue(theme)}>{trTk('vue.note_interne_aide')}</Text>}
-          <Champ theme={theme} libelle={trTk('vue.message')} valeur={texteMsg} onChanger={setTexteMsg} multiligne maxLength={note ? 4000 : 1800} testID="esport-tk-message" />
+          <ComposeurTicket theme={theme} libelle={note ? trTk('vue.note_interne') : trTk('vue.message')} valeur={texteMsg} onChanger={setTexteMsg} onEnvoyer={envoyer} maxLength={note ? 4000 : 1800} testID="esport-tk-message" />
           {!note ? (
             <View style={styles.ligne}>
               {choixFichierDisponible ? <BoutonHub theme={theme} titre={trTk('vue.joindre')} icone="trombone" onPress={joindre} desactive={pieces.length + drive.length >= 3} testID="esport-tk-joindre" /> : null}
@@ -522,6 +550,7 @@ function Bulle({ theme, m, api, ticketId }: { theme: ThemeHub; m: MessageTicket;
         </Text>
         {m.genre === 'note' ? <Badge theme={theme} ton="alerte" texte={trTk('vue.note_interne')} testID={`esport-tk-msg-${m.id}-note`} /> : null}
         {m.genre === 'systeme' ? <Badge theme={theme} texte={trTk('vue.bot')} /> : null}
+        {m.nonPublie ? <Badge theme={theme} texte={trTk('vue.non_publie')} testID={`esport-tk-msg-${m.id}-non-publie`} /> : null}
         {m.genre === 'app' ? <Badge theme={theme} ton="accent" texte={trTk('vue.app')} /> : null}
         <Text style={attenue(theme, 12)}>
           {quand(m.le)}

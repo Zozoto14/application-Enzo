@@ -26,7 +26,7 @@ const H = 3_600_000;
 
 async function preparer({ formulaire = true, extra = {}, appSeule = false } = {}) {
   const k = await bancTickets({ banc });
-  // Comportement historique (chacun écrit dans le salon) ; « Répondre uniquement depuis l'AppDashboard » : tickets-reponses-app.test.mjs.
+  // Le staff écrit aussi dans le salon ; « Le staff répond uniquement depuis l'AppDashboard » : tickets-reponses-app.test.mjs.
   await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD, guildNom: 'Club', categorieOuverts: OUVERTS, categorieArchives: ARCHIVES, salonJournaux: JOURNAUX, actif: true, reponsesAppSeules: appSeule } });
   const support = await k.compteAvec('supp1234', 'Support', ['tickets.repondre']);
   const cat = await k.api('/tickets/config/categories', undefined, {

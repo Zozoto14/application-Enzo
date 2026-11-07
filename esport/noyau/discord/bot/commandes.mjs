@@ -7,7 +7,7 @@
  * /delier et /aide, aussi permises en message privé avec le bot.
  */
 
-const T = { SOUS_COMMANDE: 1, CHAINE: 3, ENTIER: 4, UTILISATEUR: 6, SALON: 7 };
+const T = { SOUS_COMMANDE: 1, CHAINE: 3, ENTIER: 4, UTILISATEUR: 6, SALON: 7, MENTIONNABLE: 9 };
 const SERVEUR = [0];
 const PARTOUT = [0, 1];
 
@@ -145,6 +145,15 @@ export const SOUS_COMMANDES_TICKET = [
     name: 'supprimer',
     ...desc('Staff : supprimer définitivement ce ticket fermé', 'Staff: permanently delete this closed ticket'),
     options: [{ type: T.CHAINE, name: 'avis', ...desc('L’avis de l’auteur (gardé anonyme par défaut)', 'The author’s rating (kept anonymously by default)'), required: false, choices: [choix('Garder l’avis, anonyme, pour les statistiques', 'Keep the rating, anonymously, for the statistics', 'garder'), choix('Supprimer aussi l’avis', 'Delete the rating too', 'supprimer')] }],
+  },
+  {
+    type: T.SOUS_COMMANDE,
+    name: 'ping',
+    ...desc('Staff : mentionner quelqu’un (ou un rôle de la catégorie) dans ce ticket', 'Staff: mention someone (or a category role) in this ticket'),
+    options: [
+      { type: T.MENTIONNABLE, name: 'qui', ...desc('La personne ou le rôle à mentionner', 'The person or role to mention'), required: true },
+      { type: T.CHAINE, name: 'message', ...desc('Message (facultatif)', 'Message (optional)'), required: false, max_length: 500 },
+    ],
   },
   { type: T.SOUS_COMMANDE, name: 'panneau', ...desc('Admin : republier un panneau des tickets', 'Admin: republish a ticket panel'), options: [{ type: T.CHAINE, name: 'panneau', ...desc('Le panneau', 'The panel'), required: false, autocomplete: true }] },
 ];

@@ -222,8 +222,8 @@ export const CLES_SEMEES = Object.freeze(CATEGORIES_DEFAUT.filter(m => !m.evenem
  *  - `evenement` : le nom de l'événement est demandé (variable {evenement} du titre et du texte) et la catégorie peut
  *    être choisie parmi celles qui existent ; `evenementFixe` : nom déjà connu (panneau prêt d'un tournoi) ;
  *  - `libelleBouton` : libellé du bouton à la place du nom de la catégorie (panneau à une catégorie) ;
- *  - variables du texte remplies à la création : {reponse} (consigne selon « Répondre uniquement depuis
- *    l'AppDashboard ») et {horaires} (ligne retirée quand les horaires du support ne sont pas actifs).
+ *  - variables du texte remplies à la création : {reponse} (consigne : écrire et envoyer ses fichiers directement dans
+ *    le ticket) et {horaires} (ligne retirée quand les horaires du support ne sont pas actifs).
  *
  * Limites vérifiées par les tests : titre ≤ 256 (une fois {evenement} rempli, 100 caractères au plus), texte ≤ 1800 par
  * langue (validerPanneau ; l'embed Discord en accepte 4096), libellé de bouton ≤ 80.
@@ -398,10 +398,10 @@ export const PANNEAUX_DEFAUT = Object.freeze([
   },
 ]);
 
-const REPONSE = {
-  app: { fr: 'Pour écrire dans votre ticket, utilisez le bouton **Répondre** du bot : le staff vous répond dans le même salon.', en: 'To write in your ticket, use the bot’s **Reply** button: the staff answers you in the same channel.' },
-  salon: { fr: 'Écrivez directement dans votre ticket : le staff vous répond dans le même salon.', en: 'Write directly in your ticket: the staff answers you in the same channel.' },
-};
+/** Consigne {reponse} des panneaux : l'auteur écrit et envoie ses fichiers directement dans son ticket. */
+export const REPONSE_SALON = Object.freeze({ fr: 'Écrivez et envoyez vos fichiers directement dans votre ticket : le staff vous répond dans le même salon.', en: 'Write and send your files directly in your ticket: the staff answers you in the same channel.' });
+/** Anciennes consignes (bouton « Répondre », retiré) : remplacées dans les panneaux enregistrés (cycle.mjs : migrerDroits). */
+export const REPONSES_ANCIENNES = Object.freeze({ fr: 'Pour écrire dans votre ticket, utilisez le bouton **Répondre** du bot : le staff vous répond dans le même salon.', en: 'To write in your ticket, use the bot’s **Reply** button: the staff answers you in the same channel.' });
 const JOURS = { fr: ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'], en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] };
 
 /** Horaires du support lisibles (« lundi 18:00-23:00, … (Europe/Paris) »), ou '' s'ils ne sont pas actifs. */
@@ -415,14 +415,14 @@ export function texteHoraires(horaires, langue) {
 
 /**
  * Titre et texte d'un panneau par défaut, variables remplies. `evenement` : nom de l'événement (100 caractères au
- * plus) ; `appSeule` : réglage « Répondre uniquement depuis l'AppDashboard » ; `horaires` : réglage des horaires.
+ * plus) ; `horaires` : réglage des horaires.
  */
-export function textesPanneauModele(m, { evenement = '', appSeule = true, horaires = null } = {}) {
+export function textesPanneauModele(m, { evenement = '', horaires = null } = {}) {
   const nomEv = String(m.evenementFixe ?? evenement ?? '').trim();
   const remplir = (v, l) =>
     v
       .replace(/\{evenement\}/g, nomEv)
-      .replace(/\{reponse\}/g, REPONSE[appSeule ? 'app' : 'salon'][l])
+      .replace(/\{reponse\}/g, REPONSE_SALON[l])
       .replace(/\n?\{horaires\}/g, texteHoraires(horaires, l))
       .trim();
   return {

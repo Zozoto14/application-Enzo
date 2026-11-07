@@ -38,14 +38,15 @@ export const PERMISSIONS_REQUISES = Object.freeze([
   ['integrer', P.INTEGRER_LIENS],
 ]);
 
-/** Droits donnés dans un salon de ticket à l'auteur, aux rôles de la catégorie et aux personnes ajoutées. */
+/** Droits donnés dans un salon de ticket ouvert à l'auteur et aux personnes ajoutées (et au staff, réglage désactivé). */
 export const DROITS_PARTICIPANT = (P.VOIR_SALON | P.ENVOYER | P.HISTORIQUE | P.JOINDRE_FICHIERS | P.INTEGRER_LIENS).toString();
 /**
- * « Répondre uniquement depuis l'AppDashboard » (Configuration › Général, activé par défaut) : l'auteur, les rôles de
- * la catégorie et les personnes ajoutées LISENT le salon (voir, historique ; les boutons et les commandes slash
- * restent utilisables, « Utiliser les commandes de l'application » n'est pas refusé) mais n'y écrivent pas : envoyer
- * des messages, écrire dans les fils, créer des fils, ajouter des réactions sont refusés. `REFUS_ECRITURE_MINIMAL` :
- * repli si Discord refuse les surcharges complètes (le bot ne peut refuser que des permissions qu'il a lui-même).
+ * « Le staff répond uniquement depuis l'AppDashboard » (Configuration › Général, activé par défaut) : les rôles Discord
+ * de la catégorie LISENT le salon (voir, historique ; les boutons et les commandes slash restent utilisables,
+ * « Utiliser les commandes de l'application » n'est pas refusé) mais n'y écrivent pas : envoyer des messages, écrire
+ * dans les fils, créer des fils, ajouter des réactions sont refusés. L'auteur et les personnes ajoutées écrivent
+ * toujours (DROITS_PARTICIPANT). `REFUS_ECRITURE_MINIMAL` : repli si Discord refuse les surcharges complètes (le bot ne
+ * peut refuser que des permissions qu'il a lui-même).
  */
 export const DROITS_LECTURE = (P.VOIR_SALON | P.HISTORIQUE).toString();
 export const REFUS_ECRITURE = (P.ENVOYER | P.ENVOYER_FILS | P.CREER_FILS_PUBLICS | P.CREER_FILS_PRIVES | P.REACTIONS).toString();

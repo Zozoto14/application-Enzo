@@ -13,7 +13,7 @@ import type { ClientEsport } from '../../client';
 import { formaterDate } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
 import { heuresPourMode, joursDeHeures, modeFermeture, texteDelai, type ModeFermeture } from '../../tickets/fermeture';
-import { apiTickets, type ApiTickets, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type ModeleCategorie, type ModelePanneau, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
+import { CLES_ANNONCES, apiTickets, type ApiTickets, type CleAnnonce, type Categorie, type ChampFormulaire, type ChargeDiscord, type ConfigTickets as Config, type Connexion, type DeuxLangues, type DiagnosticTickets, type EtatTickets, type General, type Horaires, type ModeLangue, type ModeleCategorie, type ModelePanneau, type Panneau, type Priorite, type ServeurDiscord, type TypeLiaison } from '../../tickets/api';
 import { Glyphe } from '../../../ui/icones';
 import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
@@ -407,7 +407,10 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
         onPress={() =>
           void local.agir('general', async () => {
             const active = g.actif && !enregistre.actif;
-            const { reapplication, ...nouvelle } = await api.changerGeneral(g);
+            // Les messages automatiques se règlent dans l'onglet Messages : jamais renvoyés d'ici (valeur peut-être ancienne).
+            const reglages: Partial<General> = { ...g };
+            delete reglages.annonces;
+            const { reapplication, ...nouvelle } = await api.changerGeneral(reglages);
             setConf(nouvelle);
             if (duServeur && lu) onServeur(lu);
             else void lire(nouvelle.general.guildId);
@@ -883,10 +886,37 @@ function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, o
 
 const CLES_MESSAGES = ['accueil', 'prise_en_charge', 'liberation', 'attente', 'fermeture', 'reouverture', 'avertissement', 'demande_note', 'merci_note', 'mp_recap', 'hors_horaires'] as const;
 
-function SectionMessages({ theme, api, conf, setConf, agir }: PropsSection) {
+/**
+ * Messages automatiques dans le salon : un interrupteur par événement (le défaut est indiqué) ; un événement coupé
+ * reste noté dans la conversation de l'app et dans le salon des journaux.
+ */
+function MessagesAutomatiques({ theme, api, conf, setConf, agir }: PropsSection) {
+  const defaut = conf.annoncesDefaut ?? {};
+  const [a, setA] = useState<Partial<Record<CleAnnonce, boolean>>>(() => Object.fromEntries(CLES_ANNONCES.map(k => [k, conf.general.annonces?.[k] ?? defaut[k] !== false])));
+  return (
+    <View style={{ gap: ESP.xs, paddingBottom: ESP.s, borderBottomWidth: 1, borderBottomColor: theme.ligne }} testID="esport-tk-msg-annonces">
+      <Intertitre theme={theme}>{trTk('msg.annonces_titre')}</Intertitre>
+      <Text style={attenue(theme)}>{trTk('msg.annonces_aide')}</Text>
+      {CLES_ANNONCES.map(k => (
+        <View key={k} style={[styles.ligne, { justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }]} testID={`esport-tk-annonce-${k}`}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={texte(theme)}>{trTk(`annonce.${k}` as CleTk)}</Text>
+            <Text style={attenue(theme, 12)}>{trTk(defaut[k] === false ? 'annonce.defaut_non' : 'annonce.defaut_oui')}</Text>
+          </View>
+          <Interrupteur theme={theme} libelle={trTk(`annonce.${k}` as CleTk)} valeur={a[k] !== false} onChanger={v => setA({ ...a, [k]: v })} testID={`esport-tk-annonce-${k}-actif`} />
+        </View>
+      ))}
+      <BoutonHub theme={theme} variante="plein" titre={trTk('msg.annonces_enregistrer')} onPress={() => void agir('annonces', async () => (setConf(await api.changerGeneral({ annonces: a })), trTk('enregistre')))} testID="esport-tk-annonces-enregistrer" />
+    </View>
+  );
+}
+
+function SectionMessages(props: PropsSection) {
+  const { theme, api, conf, setConf, agir } = props;
   const [m, setM] = useState<Record<string, DeuxLangues>>(() => Object.fromEntries(CLES_MESSAGES.map(k => [k, { ...VIDE, ...(conf.messages[k] ?? {}) }])));
   return (
     <Bloc theme={theme} testID="esport-tk-conf-messages">
+      <MessagesAutomatiques {...props} />
       <Text style={attenue(theme)}>{trTk('msg.aide')}</Text>
       {CLES_MESSAGES.map(k => (
         <View key={k} style={{ gap: ESP.xs }}>

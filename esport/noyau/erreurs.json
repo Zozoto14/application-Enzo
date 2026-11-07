@@ -824,6 +824,8 @@
   "Langue des messages inconnue.": "Unknown message language.",
   "Choisissez le serveur et la catégorie Discord des tickets ouverts avant d’activer.": "Pick the server and the Discord category of open tickets before enabling.",
   "Messages illisibles.": "Unreadable messages.",
+  "Messages automatiques illisibles.": "Unreadable automatic messages.",
+  "Ajouter quelqu’un au ticket demande la permission de gérer les tickets.": "Adding someone to the ticket requires the permission to manage tickets.",
   "Fuseau horaire inconnu.": "Unknown time zone.",
   "Plage horaire : HH:MM, début avant fin.": "Time slot: HH:MM, start before end.",
   "Deux champs ont le même identifiant.": "Two fields have the same identifier.",

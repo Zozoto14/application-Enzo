@@ -20,9 +20,9 @@ export const ICONES = Object.freeze(['billets', 'question', 'membres', 'manette'
 /** Liaisons facultatives d'une catégorie. */
 export const LIAISONS = Object.freeze(['aucune', 'sponsors', 'cm', 'fiche']);
 /** Commandes slash des tickets (sous-commandes de /ticket, et /tickets). */
-export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer', 'tickets']);
+export const COMMANDES_TICKETS = Object.freeze(['ouvrir', 'fermer', 'prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer', 'ping', 'tickets']);
 /** Commandes réservées au staff (rôles de la catégorie ou compte lié autorisé), en plus des rôles réglés. */
-export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer']);
+export const COMMANDES_STAFF = Object.freeze(['prendre', 'liberer', 'ajouter', 'retirer', 'renommer', 'priorite', 'transferer', 'rouvrir', 'transcript', 'note', 'attente', 'stats', 'panneau', 'permanent', 'supprimer', 'ping']);
 
 export const LIMITES = Object.freeze({ categories: 25, champs: 5, panneaux: 20, listeNoire: 1000, roles: 20, mentions: 5, plages: 21 });
 
@@ -40,12 +40,44 @@ export const GENERAL_DEFAUT = Object.freeze({
   retentionJours: 365,
   copierPieces: true,
   pieceMaxMo: 8,
-  // Personne n'écrit dans les salons des tickets : le staff répond depuis l'AppDashboard, l'auteur avec le bouton
-  // « Répondre » du bot (discord.mjs : DROITS_LECTURE, REFUS_ECRITURE). Activé par défaut.
+  // « Le staff répond uniquement depuis l'AppDashboard » : les rôles Discord des catégories lisent les salons des
+  // tickets sans y écrire (discord.mjs : DROITS_LECTURE, REFUS_ECRITURE) ; l'auteur et les personnes ajoutées écrivent
+  // et envoient leurs fichiers directement dans le salon. Activé par défaut.
   reponsesAppSeules: true,
+  // Messages automatiques postés dans le salon du ticket (ANNONCES_DEFAUT) ; un événement coupé reste noté dans l'app
+  // (conversation) et dans le salon des journaux du staff.
+  annonces: {},
 });
-/** Le réglage « Répondre uniquement depuis l'AppDashboard » est-il actif ? (absent : oui, c'est le défaut) */
+/** Le réglage « Le staff répond uniquement depuis l'AppDashboard » est-il actif ? (absent : oui, c'est le défaut) */
 export const reponsesAppSeules = general => general?.reponsesAppSeules !== false;
+
+/**
+ * Messages automatiques dans le salon d'un ticket (Configuration › Messages, « Messages automatiques dans le salon »),
+ * par événement. Par défaut, seul ce qui compte pour l'auteur est posté : prise en charge, personne ajoutée (elle sait
+ * ainsi pourquoi elle voit le salon), réponse hors horaires, avertissement avant la fermeture automatique, fermeture,
+ * réouverture, et le MP récapitulatif à la fermeture. L'accueil, les réponses du staff et les mentions (« Mentionner »)
+ * sont toujours postés.
+ */
+export const ANNONCES_DEFAUT = Object.freeze({
+  prise_en_charge: true,
+  liberation: false,
+  attente: false,
+  priorite: false,
+  ajoute: true,
+  retire: false,
+  transfere: false,
+  permanent: false,
+  hors_horaires: true,
+  avertissement: true,
+  fermeture: true,
+  reouverture: true,
+  mp_fermeture: true,
+});
+export const CLES_ANNONCES = Object.freeze(Object.keys(ANNONCES_DEFAUT));
+/** Réglage complet des messages automatiques (défauts complétés). */
+export const annoncesDe = general => Object.fromEntries(CLES_ANNONCES.map(c => [c, typeof general?.annonces?.[c] === 'boolean' ? general.annonces[c] : ANNONCES_DEFAUT[c]]));
+/** Cet événement est-il posté dans le salon (ou envoyé en MP pour `mp_fermeture`) ? */
+export const annonceActive = (general, cle) => annoncesDe(general)[cle] !== false;
 export const HORAIRES_DEFAUT = Object.freeze({ actif: false, fuseau: 'Europe/Paris', plages: [] });
 
 const ID = /^\d{5,25}$/;
@@ -91,7 +123,10 @@ export async function lireReglage(base, cle, defaut) {
   return v && typeof v === 'object' && !Array.isArray(v) ? { ...defaut, ...v } : { ...defaut };
 }
 
-export const lireGeneral = base => lireReglage(base, 'general', GENERAL_DEFAUT);
+export const lireGeneral = async base => {
+  const g = await lireReglage(base, 'general', GENERAL_DEFAUT);
+  return { ...g, annonces: annoncesDe(g) };
+};
 export const lireMessages = base => lireReglage(base, 'messages', {});
 export const lireHoraires = base => lireReglage(base, 'horaires', HORAIRES_DEFAUT);
 export async function lireCommandes(base) {
@@ -125,6 +160,12 @@ export function validerGeneral(c, actuel) {
   s.retentionJours = entier(c.retentionJours, 7, 3650, 'retention', s.retentionJours);
   if (c.copierPieces !== undefined) s.copierPieces = c.copierPieces === true;
   if (c.reponsesAppSeules !== undefined) s.reponsesAppSeules = c.reponsesAppSeules !== false;
+  if (c.annonces !== undefined) {
+    if (!c.annonces || typeof c.annonces !== 'object' || Array.isArray(c.annonces)) throw echec(400, 'annonces', 'Messages automatiques illisibles.');
+    const a = annoncesDe(s);
+    for (const cle of CLES_ANNONCES) if (c.annonces[cle] !== undefined) a[cle] = c.annonces[cle] === true;
+    s.annonces = a;
+  }
   s.pieceMaxMo = entier(c.pieceMaxMo, 1, 25, 'piece', s.pieceMaxMo);
   if (s.actif && (!s.guildId || !s.categorieOuverts)) throw echec(400, 'incomplet', 'Choisissez le serveur et la catégorie Discord des tickets ouverts avant d’activer.');
   return s;

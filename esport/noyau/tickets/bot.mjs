@@ -11,10 +11,10 @@
  * Identifiants (`custom_id`) : voir panneaux.mjs ; en plus, `tk:f:<catégorie>` (fenêtre du formulaire), `tk:as:` et
  * `tk:ps:` (choix d'une personne, d'une priorité), `tk:xc:` / `tk:xr:` / `tk:xm:` (confirmation, raison, fenêtre de la
  * raison), `tk:n:<ticket>:<note>` et `tk:nc:<ticket>:<note>` (note dans le MP, puis commentaire), `tk:dc:<ticket>:<g|s>`
- * (suppression confirmée d'un ticket fermé, avis gardé anonyme ou supprimé), `tk:rp:<ticket>` puis `tk:rm:<ticket>`
- * (bouton « Répondre » d'un salon en lecture seule, puis fenêtre du message : l'auteur ou une personne ajoutée ; le
- * staff répond depuis l'AppDashboard). Boutons et fenêtres ne s'enregistrent pas auprès de Discord (seules les
- * commandes slash le sont).
+ * (suppression confirmée d'un ticket fermé, avis gardé anonyme ou supprimé). `tk:rp:<ticket>` / `tk:rm:<ticket>` :
+ * ancien bouton « Répondre » (retiré : l'auteur et les personnes ajoutées écrivent directement dans le salon) ; un
+ * ancien message qui le montre encore reçoit une réponse éphémère, sans rien poster. Boutons et fenêtres ne
+ * s'enregistrent pas auprès de Discord (seules les commandes slash le sont).
  *
  * `interaction(i)` rend la réponse à donner à Discord, ou `undefined` si l'interaction n'est pas pour les tickets. Une
  * réponse peut porter `apres` (fonction) : travail lancé par interactions.mjs une fois la réponse partie (JSON.stringify
@@ -29,7 +29,7 @@ import { transcriptHtml } from './transcript.mjs';
 import { estRefus } from './cycle.mjs';
 import { nomDiscord } from './conversation.mjs';
 import { nomPriorite } from './panneaux.mjs';
-import { lireCommandes, lireGeneral } from './reglages.mjs';
+import { lireCommandes, lireGeneral, reponsesAppSeules } from './reglages.mjs';
 import { t } from './textes.mjs';
 
 const EPHEMERE = 64;
@@ -235,11 +235,9 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       case 'xr':
         await exigerFermeture(i, ticket, acteur);
         return fenetre(`tk:xm:${ticket.id}`, t(langue, 'b_fermer'), [{ type: 4, custom_id: 'raison', style: 2, label: t(langue, 'raison').slice(0, 45), placeholder: t(langue, 'raison_placeholder').slice(0, 100), required: false, max_length: 300 }]);
-      // « Répondre » (salon en lecture seule) : fenêtre du message pour l'auteur et les personnes ajoutées.
+      // Ancien bouton « Répondre » (retiré) : rien n'est posté ; l'auteur écrit directement dans le salon.
       case 'rp':
-        if (ticket.statut === 'ferme') throw new RefusLocal('deja_ferme');
-        if (!(await cycle.participant(ticket, acteur.discordId))) throw new RefusLocal((await estStaff(i, ticket, acteur)) ? 'repondre_staff' : 'repondre_pas_auteur', { lien: cycle.lienApp ? ` ${cycle.lienApp}` : '' });
-        return fenetre(`tk:rm:${ticket.id}`, t(langue, 'repondre_titre'), [{ type: 4, custom_id: 'message', style: 2, label: t(langue, 'repondre_libelle').slice(0, 45), placeholder: t(langue, 'repondre_placeholder').slice(0, 100), required: true, max_length: 4000 }]);
+        return ancienRepondre(i, ticket, acteur, langue);
       case 'r': {
         await exigerStaff(i, ticket, acteur);
         const r = await cycle.rouvrir(ticket, acteur);
@@ -248,6 +246,13 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       default:
         return avis(t(langue, 'erreur'));
     }
+  }
+
+  /** Ancien bouton « Répondre » : le staff (réglage actif) est renvoyé vers l'app, les autres écrivent dans le salon. */
+  async function ancienRepondre(i, ticket, acteur, langue) {
+    if (ticket.statut === 'ferme') throw new RefusLocal('deja_ferme');
+    if (reponsesAppSeules(await lireGeneral(base)) && (await estStaff(i, ticket, acteur))) return avis(t(langue, 'repondre_staff', { lien: cycle.lienApp ? ` ${cycle.lienApp}` : '' }));
+    return avis(t(langue, 'ecrire_direct'));
   }
 
   // ---------------------------------------------------------------- Fenêtres
@@ -265,13 +270,9 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       await cycle.fermer(ticket, acteur, { raison: v.raison ?? '' });
       return avis(t(langue, 'ferme_ok'));
     }
+    // Fenêtre de l'ancien bouton « Répondre », ouverte avant la mise à jour : rien n'est posté.
     m = /^tk:rm:([0-9a-f-]{36})$/.exec(id);
-    if (m) {
-      const ticket = await ticketDuBouton(i, m[1]);
-      if (!(await cycle.participant(ticket, acteur.discordId))) throw new RefusLocal('repondre_pas_auteur');
-      await cycle.messageAuteur(ticket, acteur, v.message ?? '');
-      return avis(t(langue, 'reponse_ok'));
-    }
+    if (m) return ancienRepondre(i, await ticketDuBouton(i, m[1]), acteur, langue);
     m = /^tk:nc:([0-9a-f-]{36}):([1-5])$/.exec(id);
     if (m) {
       await cycle.commenterNote(m[1], acteur.discordId, v.commentaire ?? '');
@@ -398,6 +399,20 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
           components: [{ type: 1, components: [{ type: 2, style: 4, custom_id: `tk:dc:${tk.id}:${garder ? 'g' : 's'}`, label: t(langue, 'b_supprimer') }] }],
         },
       };
+    },
+    /**
+     * Mentionner une personne ou un rôle de la catégorie dans ce ticket (`qui` : utilisateur ou rôle ; `message`
+     * facultatif) : le bot poste la mention, limitée exactement à cette cible (3 par minute et par ticket).
+     */
+    async ping(i, o, langue, acteur) {
+      const tk = await ticketIci(i, acteur);
+      const id = String(o.qui ?? '');
+      const role = i.data?.resolved?.roles?.[id];
+      const u = i.data?.resolved?.users?.[id];
+      const membre = i.data?.resolved?.members?.[id];
+      const cible = role ? { type: 'role', id, nom: role.name } : { type: 'membre', id, nom: membre?.nick || nomDiscord(u ?? { id }) };
+      await cycle.mentionner(tk, acteur, { cibles: [cible], message: String(o.message ?? '') });
+      return avis(t(langue, 'ping_ok'));
     },
     /** Ticket permanent (`etat` : on / off) : jamais fermé automatiquement ; avertissement en attente annulé. */
     async permanent(i, o, langue, acteur) {
