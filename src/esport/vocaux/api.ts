@@ -90,3 +90,78 @@ export function apiVocaux(client: ClientEsport) {
 }
 
 export type ApiVocaux = ReturnType<typeof apiVocaux>;
+
+// ------------------------------------------------------------------ Équipes d'un tournoi et rôles Discord (migration 0063)
+
+export type Poste = 'joueur' | 'coach' | 'remplacant';
+export const POSTES: readonly Poste[] = ['joueur', 'coach', 'remplacant'];
+
+export interface MembreEquipe {
+  id?: string;
+  poste: Poste;
+  discordId: string | null;
+  nom: string;
+  embarkId: string;
+  roleStatut?: 'attribue' | 'absent' | 'refus' | null;
+}
+
+export interface EquipeTournoi {
+  id: string;
+  nom: string;
+  tag: string;
+  roleId: string | null;
+  ticketId: string | null;
+  membres: MembreEquipe[];
+}
+
+export interface DiscordTournoi {
+  tournoi: { id: string; nom: string; statut: string; fin: string | null };
+  reglages: { modeleRole: string; couleur: string | null; suppressionH: number; categorieTicketId: string | null; rolesCreesLe: string | null; rolesSupprimesLe: string | null };
+  equipes: EquipeTournoi[];
+  categoriesTickets: Array<{ id: string; nom: { fr: string; en: string } }>;
+  serveur: { id: string; nom: string } | null;
+  hubs: Array<{ id: string; nom: string }>;
+  droits: { gerer: boolean; discord: boolean; importer: boolean };
+  bot: boolean;
+  limites: { equipes: number; membres: number };
+  modeleDefaut: string;
+}
+
+export interface PropositionEquipe {
+  ticketId: string;
+  numero: number;
+  statut: string;
+  auteur: string;
+  nom: string;
+  tag: string;
+  membres: Array<MembreEquipe & { brut?: string; present: boolean | null; trouveParNom?: boolean }>;
+  problemes: string[];
+  deja: boolean;
+}
+
+export interface BilanRoles {
+  creees: number;
+  attribues: number;
+  absents: Array<{ equipe: string; nom: string; discordId: string }>;
+  sansId: Array<{ equipe: string; nom: string }>;
+  refus: Array<{ equipe: string; quoi: string; nom?: string; statut: number; code: number | null }>;
+  limite: boolean;
+  hierarchie: { positionBot: number; ok: boolean } | null;
+}
+
+export type SaisieEquipe = { nom: string; tag: string; ticketId?: string | null; membres: MembreEquipe[] };
+
+export function apiEquipes(client: ClientEsport) {
+  const r = <T>(chemin: string, methode?: string, corps?: unknown) => client.requete<T>(chemin, methode, corps);
+  const base = (teamId: string, tournoiId: string) => `/teams/${encodeURIComponent(teamId)}/tournois/${encodeURIComponent(tournoiId)}/discord`;
+  return {
+    lire: (t: string, id: string) => r<DiscordTournoi>(base(t, id)),
+    reglages: (t: string, id: string, c: Partial<DiscordTournoi['reglages']>) => r<DiscordTournoi>(base(t, id), 'PUT', c),
+    ajouter: (t: string, id: string, equipes: SaisieEquipe[]) => r<DiscordTournoi>(`${base(t, id)}/equipes`, 'POST', { equipes }),
+    modifier: (t: string, id: string, equipeId: string, c: Partial<SaisieEquipe>) => r<DiscordTournoi>(`${base(t, id)}/equipes/${encodeURIComponent(equipeId)}`, 'PATCH', c),
+    supprimer: (t: string, id: string, equipeId: string) => r<DiscordTournoi>(`${base(t, id)}/equipes/${encodeURIComponent(equipeId)}`, 'DELETE'),
+    importer: (t: string, id: string, categorieId: string | null) => r<{ categorieId: string; propositions: PropositionEquipe[] }>(`${base(t, id)}/import`, 'POST', { categorieId }),
+    creerRoles: (t: string, id: string) => r<DiscordTournoi & { bilan: BilanRoles }>(`${base(t, id)}/roles`, 'POST', {}),
+    supprimerRoles: (t: string, id: string) => r<DiscordTournoi & { nettoyage: { roles: number; salons: number; echecs: unknown[] } }>(`${base(t, id)}/roles/supprimer`, 'POST', {}),
+  };
+}

@@ -103,7 +103,35 @@ node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.f
 
 (avec le chemin de Node de votre compte, [bot-discord.md](bot-discord.md#6-enregistrer-les-commandes)).
 
+## Tournois : rôles des équipes
+
+Pour un tournoi organisé par le club (ex. **The Nuke End**, The Finals 3v3v3v3), la fiche du tournoi (module
+**Tournois**, [tournois-resultats.md](tournois-resultats.md)) a une carte **Équipes et rôles Discord**
+(`tournois.gerer` ; créer ou supprimer les rôles demande en plus `vocaux.configurer`). Migration :
+`esport/migrations/0063_tournoi_equipes_discord.sql`. Code : `esport/noyau/vocaux/tournoi.mjs`.
+
+1. **Équipes participantes** : nom, TAG (lettres et chiffres, 6 au plus, unique dans le tournoi) et membres (joueur,
+   coach, remplaçant ; Discord ID, nom, Embark ID), 64 équipes et 10 membres au plus.
+2. **Importer depuis les tickets** (catégorie choisie dans les réglages, ex. « Inscription The Nuke End » ; il faut
+   voir ses tickets) : chaque ticket donne une proposition lue dans les réponses du formulaire — nom, TAG, une ligne
+   par membre « Discord ID — Embark ID » (mention `<@…>`, identifiant seul, `@pseudo` ou Embark ID `nom#1234`, dans
+   n'importe quel ordre). Un `@pseudo` sans identifiant est cherché parmi les membres du serveur (nom **exact**) ; sinon
+   la ligne est signalée « sans Discord ID », à corriger. Les membres absents du serveur et les équipes déjà importées
+   (même ticket ou même TAG) sont signalés ; on coche celles à ajouter. Les réponses sont lues **dans l'app**, jamais
+   envoyées à une IA.
+3. **Créer les rôles Discord** : un rôle par équipe, nommé d'après le modèle (`{tag} {nom}` par défaut), **non
+   mentionnable**, sans permission, couleur facultative ; donné aux membres présents. Bilan : rôles créés,
+   attributions, **pas trouvés sur le serveur**, **sans Discord ID**, refus. Rejouable : seuls les rôles et
+   attributions manquants sont faits (un rôle supprimé à la main est recréé).
+4. **Fin du tournoi** : bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par
+   le cron (5 min) dès que le tournoi est **Terminé** ou **Annulé**, ou **N heures après sa date de fin** (réglage, 24
+   par défaut, 0 : jamais par la date).
+
+**Hiérarchie Discord** : les rôles créés naissent tout en bas ; le rôle « Esport HQ » doit être **au-dessus** d'eux
+(Paramètres du serveur › Rôles). Si Discord refuse (code 50013), l'écran explique quoi faire.
+
 ## Données
 
-`vocaux_salons` suit l'export de la base (Administration) ; RGPD (effacement par Discord ID) : le nom affiché du
-propriétaire est effacé. Aucun contenu de conversation n'est lu ni gardé.
+`vocaux_salons`, `tournoi_discord`, `tournoi_equipes` et `tournoi_equipe_membres` suivent l'export de la base
+(Administration) ; RGPD (effacement par Discord ID) : le nom affiché du propriétaire d'un salon est effacé, la personne
+est retirée des équipes des tournois. Aucun contenu de conversation n'est lu ni gardé.

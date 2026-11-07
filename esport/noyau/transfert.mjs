@@ -247,6 +247,10 @@ export const TABLES = [
   // Salons vocaux temporaires (migration 0060) : salons ouverts sur Discord (un serveur repris les retrouve et les
   // nettoie une fois vides).
   ['vocaux_salons', 'salon_id'],
+  // Équipes des tournois et rôles Discord (migration 0063).
+  ['tournoi_discord', 'tournoi_id'],
+  ['tournoi_equipes', 'id'],
+  ['tournoi_equipe_membres', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

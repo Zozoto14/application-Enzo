@@ -142,7 +142,8 @@ export async function attendre(condition, { delai = 3000, pas = 10, message = 'c
 export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '424242424242424242' } = {}) {
   const appels = [];
   const programme = [];
-  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0, membres: [{ user: { id: '800000000000000077', username: 'zoe', global_name: 'Zoé' }, nick: null }, { user: { id: '800000000000000078', username: 'zorro', global_name: null }, nick: 'Zorro le Grand' }, { user: { id: '424242424242424243', username: 'zbot', bot: true }, nick: null }] };
+  // `roles`, `absents`, `attributions` : rôles créés, membres absents du serveur, attributions (vocaux/tournoi.mjs).
+  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0, roles: new Map(), absents: new Set(), attributions: [], membres: [{ user: { id: '800000000000000077', username: 'zoe', global_name: 'Zoé' }, nick: null }, { user: { id: '800000000000000078', username: 'zorro', global_name: null }, nick: 'Zorro le Grand' }, { user: { id: '424242424242424243', username: 'zbot', bot: true }, nick: null }] };
   const id = () => `9${String(++etat.n).padStart(17, '0')}`;
   const rep = (corps, statut = 200, entetes = {}) => new Response(corps === undefined ? null : JSON.stringify(corps), { status: statut, headers: { 'Content-Type': 'application/json', ...entetes } });
   etat.salons.set('710000000000000010', { id: '710000000000000010', type: 4, name: 'Tickets', guild_id: guild, permission_overwrites: [] });
@@ -172,11 +173,34 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
       etat.salons.set(s.id, s);
       return rep(s, 201);
     }
+    if (chemin === `/guilds/${guild}/roles` && methode === 'POST') {
+      const r = { id: id(), position: 1, ...corps };
+      etat.roles.set(r.id, r);
+      return rep(r);
+    }
+    const role = /^\/guilds\/\d+\/roles\/(\d+)$/.exec(chemin);
+    if (role && methode === 'DELETE') {
+      if (!etat.roles.has(role[1])) return rep({ code: 10011, message: 'Unknown Role' }, 404);
+      etat.roles.delete(role[1]);
+      return rep(undefined, 204);
+    }
+    const attribution = /^\/guilds\/\d+\/members\/(\d+)\/roles\/(\d+)$/.exec(chemin);
+    if (attribution) {
+      if (etat.absents.has(attribution[1])) return rep({ code: 10007, message: 'Unknown Member' }, 404);
+      if (!etat.roles.has(attribution[2])) return rep({ code: 10011, message: 'Unknown Role' }, 404);
+      etat.attributions.push({ methode, membre: attribution[1], role: attribution[2] });
+      return rep(undefined, 204);
+    }
     if (chemin === `/guilds/${guild}/roles`) return rep([{ id: guild, name: '@everyone', permissions: '1024' }, { id: '720000000000000001', name: 'Staff', permissions: '0', position: 2 }, { id: '720000000000000002', name: 'Esport HQ', permissions: String((1n << 4n) | (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 15n) | (1n << 16n) | (1n << 28n)), managed: true, position: 3 }]);
     if (chemin === `/guilds/${guild}/members/${bot}`) return rep({ user: { id: bot }, roles: ['720000000000000002'] });
     if (chemin === `/guilds/${guild}/members/search`) {
       const q = String(u.searchParams.get('query') ?? '').toLowerCase();
       return rep(etat.membres.filter(m => [m.user.username, m.user.global_name, m.nick].some(v => v && v.toLowerCase().startsWith(q))).slice(0, Number(u.searchParams.get('limit') ?? 1)));
+    }
+    const membre = /^\/guilds\/\d+\/members\/(\d+)$/.exec(chemin);
+    if (membre && methode === 'GET') {
+      if (etat.absents.has(membre[1])) return rep({ code: 10007, message: 'Unknown Member' }, 404);
+      return rep({ user: { id: membre[1], username: `u${membre[1].slice(-3)}` }, roles: [] });
     }
     const salon = /^\/channels\/(\d+)$/.exec(chemin);
     if (salon) {

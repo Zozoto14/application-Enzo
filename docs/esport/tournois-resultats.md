@@ -59,6 +59,10 @@ annulé ou supprimé retire ses matchs à venir du planning.
 **Classement final et gains** : place finale (pas plus loin que le nombre d'équipes), participants, gains et leur
 détail ; **marquer « terminé »** publie le classement final (Discord, notifications au roster).
 
+**Équipes et rôles Discord** (tournoi organisé par le club, ex. The Nuke End) : équipes participantes importées des
+tickets d'inscription, un rôle Discord par équipe créé et donné à ses membres, supprimé à la fin du tournoi ; hub vocal
+du tournoi qui crée le salon de chaque équipe, verrouillé sur son rôle. Voir [vocaux.md](vocaux.md#tournois--rôles-des-équipes).
+
 ## Résultats
 
 Un résultat se saisit pour tout match : **match de tournoi** (lié à un match du parcours), **match officiel** ou

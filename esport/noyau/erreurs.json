@@ -848,6 +848,14 @@
   "Choisissez le rôle qui déclenche la bienvenue.": "Choose the role that triggers the welcome message.",
   "Choisissez le salon où publier la bienvenue.": "Choose the channel where the welcome message is posted.",
   "Hub illisible.": "Unreadable hub.",
+  "Équipe illisible.": "Unreadable team.",
+  "TAG : lettres et chiffres, 6 au plus.": "TAG: letters and digits, 6 at most.",
+  "Membres : 10 au plus.": "Members: 10 at most.",
+  "Discord ID invalide (17 à 20 chiffres).": "Invalid Discord ID (17 to 20 digits).",
+  "Le modèle du nom des rôles doit contenir {tag} ou {nom}.": "The role name template must contain {tag} or {nom}.",
+  "Délai de suppression des rôles : de 0 à 720 heures.": "Role deletion delay: from 0 to 720 hours.",
+  "64 équipes au plus par tournoi.": "64 teams at most per tournament.",
+  "Équipe introuvable.": "Team not found.",
   "10 hubs au plus.": "10 hubs at most.",
   "Modèle du nom : 90 caractères au plus.": "Name template: 90 characters at most.",
   "Choisissez le salon vocal de chaque hub.": "Choose the voice channel of each hub.",
@@ -893,6 +901,10 @@
   "Copier : « modele » ou « precedente ».": "Copy: “modele” or “precedente”."
  },
  "motifs": [
+  [
+   "^TAG déjà pris dans ce tournoi : (.+)\\.$",
+   "TAG already taken in this tournament: $1."
+  ],
   [
    "^(\\d+) teams au plus\\.$",
    "$1 teams at most."
