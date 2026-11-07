@@ -18,6 +18,8 @@
  * IA locale seulement, sauf levée par le Fondateur tâche par tâche (../ia/confidentialite.mjs) :
  *  - « api » / « api2 » : moteurs d'API principal et secondaire (IA_API_*, IA_API2_*), plafond mensuel d'appels
  *    PAR MOTEUR ; un moteur en panne, limité (429) ou au plafond passe la main au suivant ;
+ *  - « claude » : API Anthropic (ANTHROPIC_API_KEY, IA_CLAUDE_*), plafond mensuel propre ; jamais pour une tâche
+ *    confidentielle, même levée ;
  *  - « local » : IA LOCALE (llama.cpp sur le serveur, `ia.local`), sans plafond mensuel mais une requête à
  *    la fois, durée bornée ; ses travaux longs tournent dans un processus de fond (lancé tout de suite, et
  *    par le cron en secours), pas dans l'app Passenger qui peut être endormie à tout moment.
@@ -29,7 +31,7 @@ import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils
 import { pseudosDe } from '../requetes.mjs';
 import { servicesFileTranscription } from '../medias/fileTranscription.mjs';
 import { aGlobale } from '../roles/globales.mjs';
-import { MOTEURS_IA, TACHES_IA, creerConnecteur, creerRepartiteurIa, lireOrdreIa, ordresIaEnv, peutReplier, tacheIa } from '../ia/connecteur.mjs';
+import { MOTEURS_IA, TACHES_IA, creerConnecteur, creerConnecteurClaude, creerRepartiteurIa, lireOrdreIa, ordresIaEnv, peutReplier, tacheIa } from '../ia/connecteur.mjs';
 import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assistant.mjs';
 import { TACHES_CONFIDENTIELLES, TACHES_EXTERNES_OK, autorisationsDepuisBase, cleExterne, lireAutorisationsExternes } from '../ia/confidentialite.mjs';
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
@@ -38,7 +40,7 @@ import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libel
 
 export const PERMISSION_JEUX = 'jeux.gerer';
 export const PERMISSIONS_GLOBALES = [PERMISSION_JEUX];
-export const REGLAGES_IA_DEFAUT = { quotaAppels: 30, quotaAppelsApi2: 200, quotaVerifications: 8, autoActif: true };
+export const REGLAGES_IA_DEFAUT = { quotaAppels: 30, quotaAppelsApi2: 200, quotaAppelsClaude: 100, quotaVerifications: 8, autoActif: true };
 /** Ancien réglage « mode » (avant les ordres de repli par tâche) : il reste accepté et fixe l'ordre des profils de jeu. */
 export const MODES_IA = ['local', 'api', 'local-api'];
 const ORDRE_MODE = { local: ['local'], api: ['api', 'api2'], 'local-api': ['local', 'api', 'api2'] };
@@ -100,9 +102,13 @@ export async function aPermissionJeux(base, acteur) {
 export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
   const config = ia.config ?? null;
   // Moteurs d'API : principal (IA_API_*) et secondaire (IA_API2_*, porté par la config du principal).
-  const configs = { api: config, api2: ia.config2 ?? config?.secondaire ?? null };
+  const configs = { api: config, api2: ia.config2 ?? config?.secondaire ?? null, claude: ia.configClaude ?? config?.claude ?? null };
   const optionsConnecteur = { ...(ia.fetch ? { fetch: ia.fetch } : {}), ...(ia.attendre ? { attendre: ia.attendre } : {}), maintenant, journal: texte => journal.warn?.(texte) };
-  const connecteurs = { api: creerConnecteur(configs.api, optionsConnecteur), api2: creerConnecteur(configs.api2, optionsConnecteur) };
+  const connecteurs = {
+    api: creerConnecteur(configs.api, optionsConnecteur),
+    api2: creerConnecteur(configs.api2, optionsConnecteur),
+    claude: creerConnecteurClaude(configs.claude ?? { actif: false }, { ...(ia.fetch ? { fetch: ia.fetch } : {}), ...(ia.Anthropic ? { Anthropic: ia.Anthropic } : {}), maintenant, journal: texte => journal.warn?.(texte) }),
+  };
   const ordresEnv = ia.ordres ?? config?.ordres ?? ordresIaEnv({});
   const local = ia.local ?? null;
   const localPret = () => Boolean(local?.disponible?.() && local.connecteur);
@@ -403,6 +409,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     for (const l of lignes) {
       if (l.cle === 'quota_appels') r.quotaAppels = Number(l.valeur);
       if (l.cle === 'quota_appels_api2') r.quotaAppelsApi2 = Number(l.valeur);
+      if (l.cle === 'quota_appels_claude') r.quotaAppelsClaude = Number(l.valeur);
       if (l.cle === 'quota_verifications') r.quotaVerifications = Number(l.valeur);
       if (l.cle === 'auto_actif') r.autoActif = l.valeur === '1';
       if (l.cle === 'mode' && MODES_IA.includes(l.valeur)) mode = l.valeur;
@@ -438,13 +445,13 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
 
   // Appels d'un moteur : `MOTEUR = ?`. Les lignes d'avant la colonne `moteur` (migration 0034) : 'local' ou l'API
   // principale. (Expression écrite en toutes lettres dans chaque requête : aucune interpolation dans le SQL.)
-  const plafondDe = (m, reglages) => (m === 'api' ? reglages.quotaAppels : m === 'api2' ? reglages.quotaAppelsApi2 : null);
+  const plafondDe = (m, reglages) => ({ api: reglages.quotaAppels, api2: reglages.quotaAppelsApi2, claude: reglages.quotaAppelsClaude })[m] ?? null;
 
   async function usageMois(t = maintenant()) {
     const depuis = debutMois(t);
     const compter = async m => Number((await base.premier("SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ? AND COALESCE(moteur, CASE WHEN fournisseur = 'local' THEN 'local' ELSE 'api' END) = ?", [depuis, m]))?.n ?? 0);
     const verifs = await base.premier("SELECT COUNT(*) AS n FROM ia_travaux WHERE genre = 'verification' AND cree_le >= ?", [depuis]);
-    return { mois: depuis.slice(0, 7), appels: await compter('api'), appelsApi2: await compter('api2'), appelsLocaux: await compter('local'), verifications: Number(verifs?.n ?? 0) };
+    return { mois: depuis.slice(0, 7), appels: await compter('api'), appelsApi2: await compter('api2'), appelsClaude: await compter('claude'), appelsLocaux: await compter('local'), verifications: Number(verifs?.n ?? 0) };
   }
 
   /**
@@ -518,6 +525,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
         : c
           ? { ...c.moteurPublic(), externe: true }
           : { id: m, configure: false, raison: 'cle-absente', fournisseur: null, modele: null, hote: null, cle: 'absente', externe: true, raisonnement: false, effort: null, images: false };
+    // Claude : dernière erreur et dernière latence vues par ce processus (jamais la clé).
+    const vu = m === 'claude' ? (connecteurs.claude.etat?.() ?? {}) : null;
     const mois = await base.premier(
       "SELECT COUNT(*) AS n, SUM(CASE WHEN statut = 'echec' THEN 1 ELSE 0 END) AS erreurs, AVG(CASE WHEN statut = 'ok' THEN duree_ms END) AS latence FROM ia_appels WHERE cree_le >= ? AND COALESCE(moteur, CASE WHEN fournisseur = 'local' THEN 'local' ELSE 'api' END) = ?",
       [debutMois(t), m],
@@ -532,6 +541,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       plafond: plafondDe(m, reglages),
       latenceMoyenneMs: Number.isFinite(latence) && mois?.latence !== null ? Math.round(latence) : null,
       dernierAppel: dernier ? { le: dernier.cree_le, genre: dernier.genre, statut: dernier.statut, dureeMs: dernier.duree_ms === null ? null : Number(dernier.duree_ms), erreur: dernier.erreur ?? null } : null,
+      ...(vu ? { derniereErreur: vu.derniereErreur ?? (dernier?.statut === 'echec' ? { code: dernier.erreur ?? 'erreur', le: dernier.cree_le } : null), derniereLatenceMs: vu.derniereLatenceMs ?? (dernier?.statut === 'ok' && dernier.duree_ms !== null ? Number(dernier.duree_ms) : null) } : {}),
     };
   }
 
@@ -541,7 +551,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const usage = await usageMois();
     const dernier = await base.premier("SELECT * FROM ia_appels WHERE statut <> 'en_cours' ORDER BY cree_le DESC LIMIT 1", []);
     const travaux = await base.tous("SELECT id, genre, jeu_cle, statut, declenchement, erreur, cree_le, fini_le FROM ia_travaux WHERE genre = 'verification' ORDER BY cree_le DESC LIMIT 10", []);
-    const apiPret = pret('api') || pret('api2');
+    const apiPret = pret('api') || pret('api2') || pret('claude');
     const moteurs = [];
     for (const m of MOTEURS_IA) moteurs.push(await etatMoteur(m, reglages));
     return {
@@ -558,19 +568,19 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       lectureWeb: typeof ia.telecharger === 'function',
       fondateur: Boolean(acteur.superAdmin),
       reglages,
-      usage: { ...usage, plafondAppels: reglages.quotaAppels, plafondAppelsApi2: reglages.quotaAppelsApi2, plafondVerifications: reglages.quotaVerifications },
+      usage: { ...usage, plafondAppels: reglages.quotaAppels, plafondAppelsApi2: reglages.quotaAppelsApi2, plafondAppelsClaude: reglages.quotaAppelsClaude, plafondVerifications: reglages.quotaVerifications },
       dernierAppel: dernier ? { le: dernier.cree_le, genre: dernier.genre, statut: dernier.statut, moteur: dernier.moteur ?? (dernier.fournisseur === 'local' ? 'local' : 'api'), fournisseur: dernier.fournisseur ?? null, modele: dernier.modele ?? null, dureeMs: dernier.duree_ms === null ? null : Number(dernier.duree_ms), erreur: dernier.erreur ?? null, jeu: dernier.jeu_cle ?? null } : null,
       verifications: travaux.map(x => ({ id: x.id, jeu: x.jeu_cle, statut: x.statut, declenchement: x.declenchement, erreur: jsonOu(x.erreur, null), le: x.cree_le, finiLe: x.fini_le ?? null })),
     };
   }
 
-  /** Ordre de repli envoyé par l'Administration IA : 1 à 3 moteurs connus, sans doublon (null : celui par défaut). */
+  /** Ordre de repli envoyé par l'Administration IA : 1 à 4 moteurs connus, sans doublon (null : celui par défaut). */
   function ordreRecu(v) {
     if (v === null) return null;
     const liste = Array.isArray(v) ? v : typeof v === 'string' ? v.split(',') : null;
     const propre = liste?.map(x => String(x).trim());
     if (!propre || propre.length < 1 || propre.length > MOTEURS_IA.length || propre.some(m => !MOTEURS_IA.includes(m)) || new Set(propre).size !== propre.length) {
-      throw echec(400, 'ordre-ia', 'Ordre de repli : 1 à 3 moteurs parmi api, api2 et local, sans doublon.');
+      throw echec(400, 'ordre-ia', 'Ordre de repli : 1 à 4 moteurs parmi api, api2, claude et local, sans doublon.');
     }
     return propre;
   }
@@ -589,6 +599,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     };
     plafond('quotaAppels', 'quota_appels');
     plafond('quotaAppelsApi2', 'quota_appels_api2');
+    plafond('quotaAppelsClaude', 'quota_appels_claude');
     plafond('quotaVerifications', 'quota_verifications');
     if (corps?.autoActif !== undefined) poser('auto_actif', corps.autoActif ? '1' : '0');
     if (corps?.mode !== undefined) {
@@ -638,7 +649,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   }
 
   /**
-   * Appel à une API EXTERNE (« api » ou « api2 »), compté et plafonné PAR MOTEUR : la ligne `ia_appels` est
+   * Appel à une API EXTERNE (« api », « api2 » ou « claude »), compté et plafonné PAR MOTEUR : la ligne `ia_appels` est
    * écrite AVANT l'appel, puis on compte les appels du mois de ce moteur (elle comprise) ; au-delà du plafond,
    * elle est retirée et l'appel refusé (429 `quota-ia` : le répartiteur passe au moteur suivant).
    */
@@ -646,12 +657,12 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const t = maintenant();
     const id = nouvelId();
     const c = configs[m];
-    await base.executer("INSERT INTO ia_appels (id, genre, jeu_cle, statut, fournisseur, modele, moteur, cree_le) VALUES (?, ?, ?, 'en_cours', ?, ?, ?, ?)", [id, genre, jeuCle ?? null, c.fournisseur, c.modele, m, iso(t)]);
+    await base.executer("INSERT INTO ia_appels (id, genre, jeu_cle, statut, fournisseur, modele, moteur, cree_le) VALUES (?, ?, ?, 'en_cours', ?, ?, ?, ?)", [id, genre, jeuCle ?? null, c.fournisseur, m === 'claude' && tacheIa(genre) === 'leger' ? c.modeleLeger : c.modele, m, iso(t)]);
     const plafond = plafondDe(m, await reglagesIa());
     const n = await base.premier("SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ? AND COALESCE(moteur, CASE WHEN fournisseur = 'local' THEN 'local' ELSE 'api' END) = ?", [debutMois(t), m]);
     if (Number(n?.n ?? 0) > plafond) {
       await base.executer('DELETE FROM ia_appels WHERE id = ?', [id]);
-      throw echec(429, 'quota-ia', `Plafond mensuel d’appels à l’IA atteint (moteur ${m === 'api2' ? 'secondaire' : 'principal'} ; réglable dans Administration › IA).`);
+      throw echec(429, 'quota-ia', `Plafond mensuel d’appels à l’IA atteint (moteur ${m === 'api2' ? 'secondaire' : m === 'claude' ? 'Claude' : 'principal'} ; réglable dans Administration › IA).`);
     }
     return suivre(id, t, () => connecteurs[m].discuter(messages, options));
   }
@@ -683,7 +694,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
    * modules (traductions, section CM…) ; `options.jeu` : profil de jeu concerné (statistiques).
    */
   const repartiteur = creerRepartiteurIa({
-    moteurs: { api: connecteurs.api, api2: connecteurs.api2, local: { disponible: localPret, images: false } },
+    moteurs: { api: connecteurs.api, api2: connecteurs.api2, claude: connecteurs.claude, local: { disponible: localPret, images: false } },
     ordrePour: async tache => (await reglagesIa()).ordres[tache],
     executer: (m, tache, messages, { jeu, ...options }) => (m === 'local' ? appelLocal(genreAppel(tache), jeu, messages, options) : appelApi(m, genreAppel(tache), jeu, messages, options)),
     journal: texte => journal.warn?.(texte),

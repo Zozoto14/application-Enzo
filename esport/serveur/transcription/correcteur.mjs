@@ -25,7 +25,7 @@ import { MESSAGE_RELECTURE_DESACTIVEE } from '../../noyau/ia/confidentialite.mjs
 /** Tâche de la post-correction pour le répartiteur IA (alias de la catégorie « légère »). */
 export const TACHE_CORRECTION = 'correction';
 
-const NOMS_MOTEURS = { api: 'API principale', api2: 'API secondaire', local: 'IA locale' };
+const NOMS_MOTEURS = { api: 'API principale', api2: 'API secondaire', claude: 'Claude (Anthropic)', local: 'IA locale' };
 
 /** Connecteur de l'IA locale pour la transcription (rôle « transcription »), ou null si elle n'est pas installée. */
 export function connecteurIaLocaleTranscription(reglages, { fetch = fetchLocal, journal = console } = {}) {

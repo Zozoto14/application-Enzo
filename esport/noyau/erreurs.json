@@ -726,7 +726,7 @@
   "Le service d’IA limite les appels (quota ou débit du fournisseur atteint) : réessayez plus tard.": "The AI service is limiting calls (provider quota or rate limit reached): try again later.",
   "Réponse du service d’IA incomplète (limite de jetons atteinte, raisonnement compris).": "Incomplete answer from the AI service (token limit reached, reasoning included).",
   "Le service d’IA refuse la requête : modèle ou paramètres non acceptés.": "The AI service rejects the request: model or parameters not accepted.",
-  "Ordre de repli : 1 à 3 moteurs parmi api, api2 et local, sans doublon.": "Fallback order: 1 to 3 engines among api, api2 and local, without duplicates.",
+  "Ordre de repli : 1 à 4 moteurs parmi api, api2, claude et local, sans doublon.": "Fallback order: 1 to 4 engines among api, api2, claude and local, without duplicates.",
   "Le service d’IA refuse la clé d’API (vérifiez IA_API2_CLE).": "The AI service rejects the API key (check IA_API2_CLE).",
   "Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE2 et IA_API2_URL).": "Model or address unknown to the AI service (check IA_MODELE2 and IA_API2_URL).",
   "Réponse du service d’IA interrompue (flux coupé avant la fin).": "Answer from the AI service interrupted (stream cut before the end).",
@@ -898,7 +898,23 @@
   "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total.",
   "Seul le staff qui gère le planning modifie les disponibilités d’un autre membre.": "Only staff who manage the schedule can change another member’s availability.",
   "Cette semaine a été modifiée entre-temps (autre appareil ou membre du staff) : rechargez-la.": "This week was changed in the meantime (another device or a staff member): reload it.",
-  "Copier : « modele » ou « precedente ».": "Copy: “modele” or “precedente”."
+  "Copier : « modele » ou « precedente ».": "Copy: “modele” or “precedente”.",
+  "Clé Anthropic invalide : vérifiez ANTHROPIC_API_KEY dans ~/.appdashboard/esport.env (Claude Console › API Keys).": "Invalid Anthropic key: check ANTHROPIC_API_KEY in ~/.appdashboard/esport.env (Claude Console › API Keys).",
+  "Clé Anthropic sans accès à ce modèle ou à cette opération (Claude Console : organisation, espace de travail).": "Anthropic key without access to this model or operation (Claude Console: organization, workspace).",
+  "Modèle Claude inconnu ou non disponible pour ce compte (vérifiez IA_CLAUDE_MODELE et IA_CLAUDE_MODELE_LEGER).": "Unknown Claude model, or not available for this account (check IA_CLAUDE_MODELE and IA_CLAUDE_MODELE_LEGER).",
+  "Claude limite les appels (débit ou quota du compte Anthropic atteint) : moteur suivant.": "Claude is rate limiting calls (Anthropic account rate or quota reached): next engine.",
+  "Claude refuse la requête (HTTP 400) : modèle ou paramètres non acceptés.": "Claude rejects the request (HTTP 400): model or parameters not accepted.",
+  "Compte Anthropic sans crédit ou facturation à régler (Claude Console › Billing).": "Anthropic account out of credit or billing to settle (Claude Console › Billing).",
+  "SDK Anthropic absent du serveur (npm install dans esport/ : le déploiement le fait).": "Anthropic SDK missing on the server (npm install in esport/: the deployment does it).",
+  "Claude non configuré (ANTHROPIC_API_KEY absente de esport.env).": "Claude not configured (ANTHROPIC_API_KEY missing from esport.env).",
+  "Tâche confidentielle : envoi à Claude refusé (rien n’a été envoyé).": "Confidential task: sending to Claude refused (nothing was sent).",
+  "Tâche confidentielle : envoi à Claude refusé.": "Confidential task: sending to Claude refused.",
+  "Aucun message à envoyer à Claude.": "No message to send to Claude.",
+  "Réponse de Claude incomplète (limite de jetons atteinte, réflexion comprise).": "Incomplete Claude answer (token limit reached, thinking included).",
+  "Réponse de Claude illisible.": "Unreadable Claude answer.",
+  "Claude refuse la requête : modèle ou paramètres non acceptés.": "Claude rejects the request: model or parameters not accepted.",
+  "API Anthropic injoignable.": "Anthropic API unreachable.",
+  "Claude a refusé de répondre : moteur suivant.": "Claude declined to answer: next engine."
  },
  "motifs": [
   [
@@ -1360,6 +1376,30 @@
   [
    "^Nombre de semaines : 1 à (\\d+)\\.$",
    "Number of weeks: 1 to $1."
+  ],
+  [
+   "^Plafond mensuel d’appels à l’IA atteint \\(moteur Claude ; réglable dans Administration › IA\\)\\.$",
+   "Monthly AI call limit reached (Claude engine; adjustable in Administration › AI)."
+  ],
+  [
+   "^Claude met trop de temps à répondre \\(plus de (\\d+) s ; IA_CLAUDE_DELAI_S pour allonger\\)\\.$",
+   "Claude is taking too long to answer (more than $1 s; IA_CLAUDE_DELAI_S to extend)."
+  ],
+  [
+   "^API Anthropic injoignable \\((.+)\\)\\.$",
+   "Anthropic API unreachable ($1)."
+  ],
+  [
+   "^API Anthropic surchargée ou en panne \\(HTTP (\\d+)\\) : moteur suivant\\.$",
+   "Anthropic API overloaded or down (HTTP $1): next engine."
+  ],
+  [
+   "^API Anthropic : HTTP (\\d+)\\.$",
+   "Anthropic API: HTTP $1."
+  ],
+  [
+   "^Claude a refusé de répondre \\(catégorie ([a-z_]+)\\) : moteur suivant\\.$",
+   "Claude declined to answer (category $1): next engine."
   ]
  ]
 }

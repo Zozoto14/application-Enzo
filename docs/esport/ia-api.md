@@ -1,17 +1,18 @@
-# IA de l'Esport : moteurs d'API (NVIDIA…), ordre de repli, tâches
+# IA de l'Esport : moteurs d'API (NVIDIA, Claude…), ordre de repli, tâches
 
-L'Esport peut utiliser **trois moteurs d'IA**, essayés dans un **ordre de repli** propre à chaque tâche :
+L'Esport peut utiliser **quatre moteurs d'IA**, essayés dans un **ordre de repli** propre à chaque tâche :
 
 | Moteur | Réglage | Exemple conseillé |
 | --- | --- | --- |
 | `api` — **API principale** | `IA_API_URL`, `IA_API_CLE`, `IA_MODELE` | NVIDIA `mistralai/mistral-large-4-1t-a52b` (gros modèle, raisonnement, lit les images) |
 | `api2` — **API secondaire** | `IA_API2_URL`, `IA_API2_CLE`, `IA_MODELE2` | NVIDIA `openai/gpt-oss-20b` (rapide, pour les tâches légères) |
+| `claude` — **Claude (Anthropic)** | `ANTHROPIC_API_KEY`, `IA_CLAUDE_MODELE`, `IA_CLAUDE_MODELE_LEGER` (voir [partie 2 ter](#2-ter-claude-api-anthropic)) | Claude Sonnet 5.5 (`claude-sonnet-5-5`), payant à l'usage, lit les images ; **jamais les tâches confidentielles** |
 | `local` — **IA locale** | `IA_LOCALE_*` (voir [ia-locale.md](ia-locale.md)) | Qwen2.5-7B sur le serveur (gratuite, lente, rien ne sort du serveur) |
 
 Tout service « chat completions » compatible OpenAI convient (NVIDIA build.nvidia.com, OpenAI, Mistral, Gemini,
 DeepSeek, Groq…). Code : `esport/noyau/ia/connecteur.mjs` ; Administration : **Esport › Administration › Jeux › Administration IA**.
 
-> **Confidentialité** : les données envoyées à un service externe (API principale ou secondaire) **quittent le
+> **Confidentialité** : les données envoyées à un service externe (API principale, secondaire ou Claude) **quittent le
 > serveur** (noms de jeux, profils, pages lues, textes à traduire ou à corriger). Seule l'IA locale garde tout sur le
 > serveur. L'Administration IA l'affiche.
 
@@ -119,7 +120,88 @@ et confirmation). Stocké en base (`ia_reglages`, ligne `externe_<tâche>` = `1`
 une base illisible, vaut **refus**. API : `PUT /jeux/ia/reglages` `{ "externes": { "correction": true } }` (403 pour
 tout autre compte que le Fondateur).
 
-Tests : `esport/test/ia-confidentialite.test.mjs` (échoue si une tâche confidentielle peut atteindre `api` / `api2`).
+**Claude n'est jamais concerné par la levée** : même autorisée par le Fondateur, une tâche confidentielle ne part que
+vers `api` / `api2`, jamais vers `claude` (règle `MOTEURS_JAMAIS_CONFIDENTIELS` du répartiteur, et garde-fou dans le
+connecteur Claude lui-même : refus `503 ia-confidentielle-externe`, rien n'est envoyé).
+
+Tests : `esport/test/ia-confidentialite.test.mjs` (échoue si une tâche confidentielle peut atteindre `api` / `api2`) et
+`esport/test/ia-claude.test.mjs` (échoue si une tâche confidentielle peut atteindre Claude, même levée).
+
+## 2 ter. Claude (API Anthropic)
+
+Moteur `claude` : l'API d'Anthropic par le **SDK officiel** `@anthropic-ai/sdk` (dépendance de `esport/package.json`,
+installée par le déploiement : `npm install --omit=dev` dans `esport/` quand `package.json` change). Le SDK passe par
+le même transport Node que NVIDIA (`fetchIaNode`, option `fetch` du client). Code : `configClaude` et
+`creerConnecteurClaude` dans `esport/noyau/ia/connecteur.mjs`.
+
+### Mise en route (Fondateur)
+
+1. **Clé d'API** : [console.anthropic.com](https://console.anthropic.com) › **API Keys** › **Create Key** (un nom, par
+   ex. « esport-hq ») ; copiez la clé (`sk-ant-…`), elle ne s'affiche qu'une fois. **Ne la collez jamais dans un chat,
+   un ticket ou le dépôt.**
+2. **Facturation** : Console › **Billing** : Claude est **payé à l'usage** (crédits prépayés ou carte). Sans crédit,
+   les appels échouent (`ia-credit`) et l'ordre de repli passe au moteur suivant. Le **plafond mensuel** de
+   l'Administration IA (défaut 100 appels) limite la dépense côté app ; une limite de dépense peut aussi se régler
+   dans la Console.
+3. **Fichier `~/.appdashboard/esport.env`** : cPanel › **Gestionnaire de fichiers** › dossier `.appdashboard` (cochez
+   « Afficher les fichiers cachés » dans Paramètres) › `esport.env` › **Modifier**, ajoutez :
+
+   ```ini
+   # Claude (Anthropic) : docs/esport/ia-api.md, partie 2 ter. Jamais dans le dépôt.
+   ANTHROPIC_API_KEY=sk-ant-REMPLACER-par-votre-cle
+   # Claude d'abord, NVIDIA (gpt-oss) en secours, pour les profils de jeu et les tâches légères
+   IA_ORDRE=claude,api2
+   IA_ORDRE_LEGER=claude,api2
+   ```
+
+   (Pour garder NVIDIA en premier : `IA_ORDRE=api,api2,claude` / `IA_ORDRE_LEGER=api2,claude`.)
+4. **Redémarrer** l'app Esport : cPanel › **Setup Node.js App** › **Restart**.
+5. **Vérifier** : Administration IA › moteur **Claude (Anthropic)** › **Tester Claude (Anthropic)**. Si un ordre de
+   repli a déjà été réglé dans l'Administration IA, il l'emporte sur `IA_ORDRE` : ajoutez-y Claude (bouton
+   « Ajouter Claude (Anthropic) », puis la flèche pour le monter) ou cliquez « Ordre par défaut ».
+
+### Lignes facultatives
+
+| Ligne | Effet |
+| --- | --- |
+| `IA_CLAUDE_MODELE` | Modèle des tâches normales (profils de jeu). Défaut **`claude-sonnet-5-5`**. |
+| `IA_CLAUDE_MODELE_LEGER` | Modèle des tâches légères (traductions, posts CM, devblog). Défaut **`claude-sonnet-5-5`**. |
+| `IA_CLAUDE_EFFORT` | Effort (`output_config.effort`) des tâches normales : `low`, `medium` (défaut), `high`, `xhigh`, `max`. |
+| `IA_CLAUDE_EFFORT_LEGER` | Effort des tâches légères : défaut `low` (ou `IA_CLAUDE_EFFORT` s'il est réglé). |
+| `IA_CLAUDE_DELAI_S` | Durée maximale d'une réponse (défaut 120 s, de 30 à 600). |
+| `IA_CLAUDE_ESSAIS` | Nouveaux essais du SDK après 429, 529, 5xx ou coupure (défaut 2, de 0 à 5), avant de passer au moteur suivant. |
+| `IA_CLAUDE_REPLI_SERVEUR` | `non` : pas de repli côté Anthropic après un refus du modèle (défaut : actif sur Sonnet 5.5 et Opus 5.5). |
+
+**Choix du modèle et prix** (par million de jetons, entrée / sortie ; la réflexion du modèle compte en sortie) :
+
+| Modèle | `IA_CLAUDE_MODELE…` | Prix | Pour |
+| --- | --- | --- | --- |
+| Claude Sonnet 5.5 (défaut) | `claude-sonnet-5-5` | 2 $ / 10 $ | bon équilibre qualité / prix, tout usage |
+| Claude Opus 5.5 | `claude-opus-5-5` | 4 $ / 20 $ | profils de jeu les plus difficiles (`IA_CLAUDE_MODELE=claude-opus-5-5`) |
+| Claude Haiku 5.5 | `claude-haiku-5-5` | 0,10 $ / 0,50 $ (requêtes de 100 000 jetons au plus) | tâches légères au moindre coût (`IA_CLAUDE_MODELE_LEGER=claude-haiku-5-5`) |
+
+Pour baisser le coût sans changer de modèle, baissez l'effort (`IA_CLAUDE_EFFORT=low`) : c'est le réglage qui fait le
+plus varier la réflexion, donc le temps et le prix.
+
+### Requêtes envoyées (règles des modèles Claude 5.5)
+
+- `model` (normal ou léger selon la tâche), `max_tokens` **16 000** au moins (la réflexion compte dedans ; au-delà de
+  16 000 demandés, réponse **en flux** puis `finalMessage()`), `output_config.effort`, `system` à part.
+- **Jamais** `thinking` (`{type: "disabled"}` ou un budget = HTTP 400 sur ces modèles : la réflexion adaptative est
+  active par défaut, l'effort la règle), **jamais** `temperature`, `top_p`, `top_k` (refusés par la version actuelle de
+  l'API ; retirés même si l'appelant en donne), **jamais** de `tool_choice` forcé, **aucun pré-remplissage** (un dernier
+  message « assistant » est retiré).
+- Sortie JSON : avec un schéma (`options.schema`), `output_config.format` (sortie structurée) ; sinon une ligne de
+  consigne « Réponds uniquement par un objet JSON valide ». Un 400 avec le format le retire (et s'en souvient).
+- **Repli côté Anthropic** après un refus du modèle (Sonnet 5.5 et Opus 5.5) : `fallbacks: "default"` avec l'en-tête
+  bêta `server-side-fallback-2026-07-01`. Un 400 (bêta non ouverte au compte) le retire et s'en souvient.
+- Réponse : **seuls les blocs `text`** sont lus (les blocs de réflexion sont ignorés, jamais journalisés).
+  `stop_reason: "max_tokens"` sans texte ou avec un JSON coupé → `ia-reponse-tronquee` ; `stop_reason: "refusal"` →
+  `ia-refus` et **moteur suivant**.
+- Erreurs (classes typées du SDK) : 401 → `ia-cle-refusee` « Clé Anthropic invalide… » ; 403 → `ia-cle-refusee` ;
+  402 → `ia-credit` ; 404 → `ia-modele` ; 429 → essais du SDK puis `ia-limite-fournisseur` ; 529 / 5xx / réseau →
+  `ia-injoignable` ; délai → `ia-delai`. Toutes passent au moteur suivant de l'ordre. Le SDK envoie la clé dans
+  l'en-tête `Authorization` ; elle n'est jamais renvoyée par l'API de l'app ni journalisée.
 
 ## 3. Spécificités NVIDIA et modèles à raisonnement
 
@@ -202,7 +284,9 @@ const { texte, moteur } = await ia.discuterPour('correction', messages, { json: 
 
 - **Moteurs de l'IA** : pour chacun, fournisseur, modèle, clé **présente ou absente** (jamais sa valeur), modèle à
   raisonnement (effort), lecture d'images, appels et erreurs du mois, plafond, temps de réponse moyen, dernier appel,
-  bouton **Tester** (un tout petit échange avec ce moteur seul), et l'avertissement de confidentialité. Le test se fait
+  bouton **Tester** (un tout petit échange avec ce moteur seul), et l'avertissement de confidentialité. Claude
+  affiche en plus le modèle et l'effort des tâches légères, sa **dernière latence** et sa **dernière erreur**
+  (ex. `ia-cle-refusee`). Le test se fait
   **en tâche de fond** : la requête répond au plus après 10 s (`{ enCours, test: { id } }` s'il continue) et la page
   interroge `GET /jeux/ia/test/:id` toutes les 3 s ; avant, un modèle à raisonnement ou l'IA locale dépassait le délai
   de 15 s de l'app (« Le serveur Esport ne répond pas ») ;
@@ -211,15 +295,15 @@ const { texte, moteur } = await ia.discuterPour('correction', messages, { json: 
 - **Confidentialité : ce qui quitte le serveur** : la liste des tâches qui **restent sur le serveur** (réunions,
   transcription, relecture, résumés, suivi, strats : IA locale seulement) et de celles qui **peuvent partir chez le
   fournisseur** (profils de jeu, traductions, posts CM) ; l'interrupteur du Fondateur (partie 2 bis) ;
-- **Plafonds mensuels** : appels de l'API principale (défaut 30), de l'API secondaire (défaut 200), vérifications
-  (défaut 8). Au plafond, le moteur est sauté (le suivant prend le relais). L'IA locale n'a pas de plafond.
+- **Plafonds mensuels** : appels de l'API principale (défaut 30), de l'API secondaire (défaut 200), de Claude
+  (défaut 100), vérifications (défaut 8). Au plafond, le moteur est sauté (le suivant prend le relais). L'IA locale n'a pas de plafond.
 
-Base : `ia_appels.moteur` (migration 0034) ; réglages `ordre_profils`, `ordre_leger`, `quota_appels_api2`,
+Base : `ia_appels.moteur` (migration 0034) ; réglages `ordre_profils`, `ordre_leger`, `quota_appels_api2`, `quota_appels_claude`,
 `externe_<tâche>` (levée de la confidentialité) dans `ia_reglages`.
 
 ## 7. Tester sans appel réel
 
-`node --test esport/test/ia-moteurs.test.mjs esport/test/ia-transport.test.mjs` (faux serveurs : détection NVIDIA, `reasoning_effort`,
+`node --test esport/test/ia-moteurs.test.mjs esport/test/ia-transport.test.mjs esport/test/ia-claude.test.mjs` (faux serveurs : détection NVIDIA, `reasoning_effort`,
 `reasoning_content` ignoré, 429 → attente puis moteur suivant, ordre par tâche, plafond par moteur, images, clés
 absentes de tout message et de tout journal). Sur le serveur, après avoir mis les clés : **Administration IA ›
 Tester** sur chaque moteur.
@@ -258,5 +342,10 @@ chaque essai (défaut 90 s). Code de sortie 0 si tout va bien.
 | `ia-delai-connexion` / `ia-delai-tls` / `ia-tls` | Réseau de l'hébergeur : `IA_IPV4=oui`, puis l'outil (`--ipv4`) pour comparer. |
 | `ia-delai-premier-octet` « n'a pas commencé à répondre » | Connexion faite, le modèle calcule encore : `IA_API2_EFFORT=low`, `IA_API2_FLUX=oui`, ou `IA_API2_DELAI_S` plus grand. |
 | `ia-delai-lecture` | Réponse commencée puis bloquée : `IA_API2_FLUX=oui`, ou relancer. |
+| « Clé Anthropic invalide… » (`ia-cle-refusee`, Claude) | Recopiez `ANTHROPIC_API_KEY` depuis la Console (clé non révoquée), **Restart**. |
+| `ia-credit` (Claude) | Crédit épuisé : Console Anthropic › **Billing**. |
+| `ia-modele` (Claude) | `IA_CLAUDE_MODELE` / `IA_CLAUDE_MODELE_LEGER` mal écrit (ex. `claude-sonnet-5-5`). |
+| `ia-refus` (Claude) | Le modèle a refusé la demande : l'ordre de repli passe au moteur suivant (rien à faire). |
+| `ia-sdk-absent` (Claude) | Le paquet `@anthropic-ai/sdk` manque : le prochain déploiement l'installe (ou `npm install --omit=dev` dans `esport/`). |
 | `ia-test-sans-resultat` | Le processus de l'app a été redémarré pendant le test : relancez-le. |
 | « Le service d'IA met trop de temps à répondre » (`ia-delai`) | `IA_API_DELAI_S=600`, ou `IA_API_FLUX=oui`. |

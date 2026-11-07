@@ -612,12 +612,12 @@ function Propositions({ theme, api, large, propositions, onDecide }: { theme: Th
 
 // ------------------------------------------------------------------ Administration de l'IA (Fondateur)
 
-/** Nom court d'un moteur (« API principale », « API secondaire », « IA locale »). */
+/** Nom court d'un moteur (« API principale », « API secondaire », « Claude (Anthropic) », « IA locale »). */
 const nomMoteur = (m: MoteurIa) => trJeux(`jeux.moteur.${m}`);
 const TACHES: TacheIa[] = ['profils', 'leger'];
 
 /**
- * Les moteurs de l'IA (API principale, API secondaire, IA locale) : fournisseur, modèle, clé présente ou
+ * Les moteurs de l'IA (API principale, API secondaire, Claude, IA locale) : fournisseur, modèle, clé présente ou
  * absente (JAMAIS sa valeur), appels et erreurs du mois, latence, dernier appel, et un test par moteur.
  * Avertissement de confidentialité : ce qui part vers une API externe quitte le serveur.
  */
@@ -646,12 +646,17 @@ function CarteMoteursIa({ theme, etat, enCours, ligne, onTester, tests }: {
             </View>
             {ligne(trJeux('jeux.fournisseur'), fournisseur)}
             {ligne(trJeux('jeux.modele'), m.modele ?? '—', `esport-jeux-admin-moteur-${m.id}-modele`)}
+            {m.modeleLeger && m.modeleLeger !== m.modele ? ligne(trJeux('jeux.modele_leger'), m.modeleLeger, `esport-jeux-admin-moteur-${m.id}-modele-leger`) : null}
             {m.externe ? ligne(trJeux('jeux.cle_api'), m.cle === 'presente' ? trJeux('jeux.cle_presente') : trJeux('jeux.cle_absente'), `esport-jeux-admin-moteur-${m.id}-cle`) : null}
             {m.raisonnement ? ligne(trJeux('jeux.raisonnement'), m.effort ? trJeux('jeux.raisonnement_effort', { effort: m.effort }) : trJeux('jeux.oui')) : null}
+            {m.effortLeger ? ligne(trJeux('jeux.effort_leger'), m.effortLeger, `esport-jeux-admin-moteur-${m.id}-effort-leger`) : null}
             {m.images ? ligne(trJeux('jeux.images'), trJeux('jeux.oui')) : null}
             {ligne(trJeux('jeux.appels_mois_moteur'), m.plafond !== null ? `${m.appelsMois} / ${m.plafond}` : String(m.appelsMois), `esport-jeux-admin-moteur-${m.id}-appels`)}
             {m.erreursMois ? ligne(trJeux('jeux.erreurs_mois'), String(m.erreursMois), `esport-jeux-admin-moteur-${m.id}-erreurs`) : null}
             {m.latenceMoyenneMs !== null ? ligne(trJeux('jeux.latence'), `${Math.round(m.latenceMoyenneMs / 100) / 10} s`) : null}
+            {m.derniereLatenceMs !== undefined && m.derniereLatenceMs !== null ? ligne(trJeux('jeux.derniere_latence'), `${Math.round(m.derniereLatenceMs / 100) / 10} s`, `esport-jeux-admin-moteur-${m.id}-derniere-latence`) : null}
+            {m.derniereErreur ? ligne(trJeux('jeux.derniere_erreur'), `${dateCourte(m.derniereErreur.le)} · ${m.derniereErreur.code}`, `esport-jeux-admin-moteur-${m.id}-derniere-erreur`) : null}
+            {m.id === 'claude' ? <Text style={attenue(theme, 12)} testID="esport-jeux-admin-moteur-claude-aide">{trJeux(m.configure ? 'jeux.claude_confidentialite' : 'jeux.claude_cle_aide')}</Text> : null}
             {d ? ligne(trJeux('jeux.dernier_appel'), `${dateCourte(d.le)} · ${d.statut === 'ok' ? trJeux('jeux.reussi') : (d.erreur ?? trJeux('jeux.echec'))}${d.dureeMs !== null ? ` · ${Math.round(d.dureeMs / 100) / 10} s` : ''}`, `esport-jeux-admin-moteur-${m.id}-dernier`) : null}
             <View style={{ alignSelf: 'flex-start' }}>
               <BoutonHub
@@ -680,7 +685,7 @@ function EditeurOrdre({ theme, tache, ordre, moteurs, desactive, onChanger }: {
   onChanger: (o: MoteurIa[] | null) => void;
 }) {
   const modele = (m: MoteurIa) => moteurs.find(x => x.id === m);
-  const absents = (['api', 'api2', 'local'] as const).filter(m => !ordre.includes(m));
+  const absents = (['api', 'api2', 'claude', 'local'] as const).filter(m => !ordre.includes(m));
   return (
     <View style={{ gap: 6 }} testID={`esport-jeux-admin-ordre-${tache}`}>
       <Text style={{ ...texte(theme, 14), fontWeight: '600' }}>{trJeux(`jeux.tache.${tache}`)}</Text>
@@ -748,7 +753,7 @@ function CarteConfidentialite({ theme, etat, desactive, onChanger }: { theme: Th
   );
 }
 
-const FOURNISSEURS_CONNUS = ['openai', 'mistral', 'gemini', 'deepseek', 'groq', 'nvidia'] as const;
+const FOURNISSEURS_CONNUS = ['openai', 'mistral', 'gemini', 'deepseek', 'groq', 'nvidia', 'anthropic'] as const;
 const RAISONS_CONNUES = ['cle-absente', 'modele-absent', 'url-invalide'] as const;
 
 /** État de l'IA locale installée sur le serveur (son rang dans l'ordre de repli se règle à part). */
@@ -834,6 +839,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
   const [testLocal, setTestLocal] = useState<string | undefined>();
   const [tests, setTests] = useState<Partial<Record<MoteurIa, string>>>({});
   const [quotaApi2, setQuotaApi2] = useState('');
+  const [quotaClaude, setQuotaClaude] = useState('');
   const [gestionnaires, setGestionnaires] = useState<Gestionnaire[] | undefined>();
   const [comptes, setComptes] = useState<CompteEsport[] | undefined>();
   const [ajout, setAjout] = useState('');
@@ -843,6 +849,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
     setQuotaAppels(String(e.reglages.quotaAppels));
     setQuotaVerifs(String(e.reglages.quotaVerifications));
     setQuotaApi2(String(e.reglages.quotaAppelsApi2 ?? ''));
+    setQuotaClaude(String(e.reglages.quotaAppelsClaude ?? ''));
   };
   useEffect(() => {
     void agir('', async () => {
@@ -929,11 +936,13 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
           <TitreCarte theme={theme} titre={trJeux('jeux.quota')} sous={trJeux('jeux.quota_aide', { mois: etat.usage.mois })} />
           {ligne(trJeux('jeux.appels_mois'), `${etat.usage.appels} / ${etat.usage.plafondAppels}`, 'esport-jeux-admin-usage-appels')}
           {etat.moteurs?.find(m => m.id === 'api2')?.configure ? ligne(trJeux('jeux.appels_mois_api2'), `${etat.usage.appelsApi2 ?? 0} / ${etat.usage.plafondAppelsApi2 ?? '—'}`, 'esport-jeux-admin-usage-api2') : null}
+          {etat.moteurs?.find(m => m.id === 'claude')?.configure ? ligne(trJeux('jeux.appels_mois_claude'), `${etat.usage.appelsClaude ?? 0} / ${etat.usage.plafondAppelsClaude ?? '—'}`, 'esport-jeux-admin-usage-claude') : null}
           {etat.usage.appelsLocaux ? ligne(trJeux('jeux.appels_locaux_mois'), String(etat.usage.appelsLocaux), 'esport-jeux-admin-usage-locaux') : null}
           {ligne(trJeux('jeux.verifications_mois'), `${etat.usage.verifications} / ${etat.usage.plafondVerifications}`, 'esport-jeux-admin-usage-verifications')}
           <View style={[styles.ligne, { gap: ESP.s, alignItems: 'flex-end' }]}>
             <Champ theme={theme} libelle={trJeux('jeux.plafond_appels')} valeur={quotaAppels} onChanger={v => setQuotaAppels(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-appels" style={{ width: 150 }} />
             {etat.reglages.quotaAppelsApi2 !== undefined ? <Champ theme={theme} libelle={trJeux('jeux.plafond_appels_api2')} valeur={quotaApi2} onChanger={v => setQuotaApi2(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-api2" style={{ width: 150 }} /> : null}
+            {etat.reglages.quotaAppelsClaude !== undefined ? <Champ theme={theme} libelle={trJeux('jeux.plafond_appels_claude')} valeur={quotaClaude} onChanger={v => setQuotaClaude(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-claude" style={{ width: 150 }} /> : null}
             <Champ theme={theme} libelle={trJeux('jeux.plafond_verifications')} valeur={quotaVerifs} onChanger={v => setQuotaVerifs(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-verifications" style={{ width: 150 }} />
           </View>
           <Segments<'oui' | 'non'>
@@ -950,7 +959,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
               titre={trJeux('jeux.enregistrer')}
               variante="plein"
               desactive={Boolean(enCours) || quotaAppels === '' || quotaVerifs === ''}
-              onPress={() => void agir('quota', async () => { appliquer(await api.reglerIa({ quotaAppels: Number(quotaAppels), quotaVerifications: Number(quotaVerifs), ...(quotaApi2 !== '' ? { quotaAppelsApi2: Number(quotaApi2) } : {}) })); return trJeux('jeux.quota_enregistre'); })}
+              onPress={() => void agir('quota', async () => { appliquer(await api.reglerIa({ quotaAppels: Number(quotaAppels), quotaVerifications: Number(quotaVerifs), ...(quotaApi2 !== '' ? { quotaAppelsApi2: Number(quotaApi2) } : {}), ...(quotaClaude !== '' ? { quotaAppelsClaude: Number(quotaClaude) } : {}) })); return trJeux('jeux.quota_enregistre'); })}
               testID="esport-jeux-admin-quota-enregistrer"
             />
           </View>

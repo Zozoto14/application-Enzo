@@ -195,8 +195,8 @@ export interface PropositionJeu {
   creeLe: string;
 }
 export type ModeIa = 'local' | 'api' | 'local-api';
-/** Moteurs de l'IA : API principale, API secondaire, IA locale (docs/esport/ia-api.md). */
-export type MoteurIa = 'api' | 'api2' | 'local';
+/** Moteurs de l'IA : API principale, API secondaire, Claude (API Anthropic), IA locale (docs/esport/ia-api.md). */
+export type MoteurIa = 'api' | 'api2' | 'claude' | 'local';
 /** Tâches qui ont chacune leur ordre de repli : profils de jeu, tâches légères (traductions, posts CM). */
 export type TacheIa = 'profils' | 'leger';
 export type OrdresIa = Record<TacheIa, MoteurIa[]>;
@@ -219,6 +219,11 @@ export interface EtatMoteurIa {
   plafond: number | null;
   latenceMoyenneMs: number | null;
   dernierAppel: { le: string; genre: string; statut: string; dureeMs: number | null; erreur: string | null } | null;
+  /** Claude : modèle et effort des tâches légères, dernière erreur et dernière latence (jamais la clé). */
+  modeleLeger?: string | null;
+  effortLeger?: string | null;
+  derniereErreur?: { code: string; le: string } | null;
+  derniereLatenceMs?: number | null;
 }
 /** IA locale (llama.cpp sur le serveur) : installation, moteur en marche ou non, mesures. */
 export interface EtatIaLocale {
@@ -279,15 +284,15 @@ export interface EtatIa {
   modesPossibles?: ModeIa[];
   local?: EtatIaLocale;
   transcription?: EtatTranscriptionAdmin | null;
-  /** Les trois moteurs (API principale, secondaire, IA locale) et leurs statistiques du mois. */
+  /** Les moteurs (API principale, secondaire, Claude, IA locale) et leurs statistiques du mois. */
   moteurs?: EtatMoteurIa[];
   /** Ordre de repli de chaque tâche (réglé ici, sinon IA_ORDRE / IA_ORDRE_LEGER). */
   ordres?: OrdresIa;
   ordresDefaut?: OrdresIa;
   /** Tâches qui restent sur le serveur (IA locale seulement) et celles qui peuvent partir chez le fournisseur. */
   confidentialite?: ConfidentialiteIa;
-  reglages: { quotaAppels: number; quotaAppelsApi2?: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa; ordres?: OrdresIa };
-  usage: { mois: string; appels: number; appelsApi2?: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondAppelsApi2?: number; plafondVerifications: number };
+  reglages: { quotaAppels: number; quotaAppelsApi2?: number; quotaAppelsClaude?: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa; ordres?: OrdresIa };
+  usage: { mois: string; appels: number; appelsApi2?: number; appelsClaude?: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondAppelsApi2?: number; plafondAppelsClaude?: number; plafondVerifications: number };
   dernierAppel: { le: string; genre: string; statut: string; fournisseur?: string | null; modele: string | null; dureeMs: number | null; erreur: string | null; jeu: string | null } | null;
   verifications: Array<{ id: string; jeu: string; statut: string; declenchement: string; erreur: { code: string; message: string } | null; le: string; finiLe: string | null }>;
 }

@@ -4,7 +4,7 @@
 #
 #   1. le code (dépôt cloné par « Git Version Control » avec une deploy key en lecture seule) :
 #      git fetch ; s'il y a du nouveau sur main : git reset --hard origin/main ;
-#   2. les dépendances du serveur (esport/package.json : le paquet pg seulement), si elles ont changé ;
+#   2. les dépendances du serveur (esport/package.json : pg, nodemailer, @anthropic-ai/sdk), si elles ont changé ;
 #   3. les migrations de la base PostgreSQL (Esport + table de la boîte du relais) ;
 #   4. le redémarrage des deux apps Node (Passenger : touch tmp/restart.txt) ;
 #   5. le site : branche deploiement-o2switch (construite par GitHub Actions), copiée dans public_html
@@ -137,7 +137,7 @@ if [ "$SANS_CODE" = 0 ]; then
   if [ "$DEJA" != "$APRES" ] || [ "$FORCER" = 1 ]; then CODE_CHANGE=1; fi
 
   if [ "$CODE_CHANGE" = 1 ]; then
-    # 2. Dépendances du serveur (esport/package.json : pg). L'app Node de cPanel range node_modules dans son
+    # 2. Dépendances du serveur (esport/package.json : pg, nodemailer, @anthropic-ai/sdk). L'app Node de cPanel range node_modules dans son
     #    environnement virtuel (lien esport/node_modules) : « npm install » (et non « npm ci », qui effacerait ce lien).
     EMPREINTE="$(cat esport/package.json esport/package-lock.json 2>/dev/null | sha256sum | cut -d' ' -f1)"
     if [ "$FORCER" = 1 ] || [ "$EMPREINTE" != "$(cat "$ETAT/deps-empreinte" 2>/dev/null)" ] || [ ! -e esport/node_modules/pg/package.json ]; then

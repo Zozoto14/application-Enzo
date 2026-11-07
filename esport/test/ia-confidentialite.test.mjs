@@ -181,7 +181,7 @@ test('service : Administration IA affiche local/externe ; seul le Fondateur lèv
   // Valeur bricolée en base (autre que '1') : refus.
   await base.executer("INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES ('externe_suivi', 'oui', ?)", [new Date(horloge.t).toISOString()]);
   assert.equal(await externeAutorise(base, 'suivi'), false);
-  assert.deepEqual(MOTEURS_IA, ['api', 'api2', 'local']);
+  assert.deepEqual(MOTEURS_IA, ['api', 'api2', 'claude', 'local']);
 });
 
 // ------------------------------------------------------------------ Relecture des transcriptions

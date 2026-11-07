@@ -327,6 +327,7 @@ test('Administration IA : moteurs listés (clé présente/absente, jamais la val
   assert.deepEqual(e.moteurs.map(x => [x.id, x.fournisseur, x.modele, x.cle, x.pret]), [
     ['api', 'nvidia', MISTRAL, 'presente', true],
     ['api2', 'nvidia', GPTOSS, 'presente', true],
+    ['claude', 'anthropic', 'claude-sonnet-5-5', 'absente', false],
     ['local', 'local', null, null, false],
   ]);
   assert.equal(e.moteurs[0].raisonnement, true);
@@ -436,7 +437,7 @@ test('service : discuterPour (tâche légère, comptée par moteur) ; brouillon 
   assert.equal(locaux[0].response_format.type, 'json_schema', 'consignes compactes (schéma)');
   e = await app.etatIa(fondateur);
   assert.ok(e.moteurs[0].erreursMois >= 1);
-  assert.ok(e.moteurs[2].appelsMois >= 2);
+  assert.ok(e.moteurs.find(x => x.id === 'local').appelsMois >= 2);
   sansCle(j.lignes.join('\n'), 'journal');
   sansCle(e, 'état');
   assert.ok(j.lignes.some(l => /repli sur local/.test(l)));

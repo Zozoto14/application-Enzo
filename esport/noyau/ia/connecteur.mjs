@@ -3,7 +3,7 @@
  * textes de la section CM, post-correction des transcriptions…). Les clés d'API et les modèles se règlent dans
  * ~/.appdashboard/esport.env (jamais dans le dépôt) ; mode d'emploi : docs/esport/ia-api.md.
  *
- * TROIS MOTEURS, essayés dans un ORDRE DE REPLI propre à chaque tâche :
+ * QUATRE MOTEURS, essayés dans un ORDRE DE REPLI propre à chaque tâche :
  *  - « api »   moteur d'API PRINCIPAL :
  *     IA_API_URL      adresse de l'API « chat completions » compatible OpenAI (https seulement) ; l'adresse
  *                     de base suffit (…/v1), « /chat/completions » est ajouté s'il manque
@@ -14,6 +14,10 @@
  *                     passe en tête de l'ordre de repli par défaut des profils de jeu
  *  - « api2 »  moteur d'API SECONDAIRE (facultatif ; tâches légères par défaut) : IA_API2_URL (même adresse
  *     que IA_API_URL si vide), IA_API2_CLE, IA_MODELE2, IA_FOURNISSEUR2 ;
+ *  - « claude » API ANTHROPIC (Claude), par le SDK officiel @anthropic-ai/sdk (voir `configClaude` et
+ *     `creerConnecteurClaude`) : ANTHROPIC_API_KEY (obligatoire), IA_CLAUDE_MODELE / IA_CLAUDE_MODELE_LEGER
+ *     (défaut claude-sonnet-5-5), IA_CLAUDE_EFFORT / IA_CLAUDE_EFFORT_LEGER (medium / low). JAMAIS pour une
+ *     tâche confidentielle, même levée par le Fondateur ;
  *  - « local » IA LOCALE (llama.cpp sur le serveur, voir `configIaLocale` et docs/esport/ia-locale.md).
  *
  *   Réglages fins d'un moteur d'API (facultatifs ; « API2 » pour le secondaire) :
@@ -125,7 +129,12 @@ export function adresseCompletions(url) {
 
 // ------------------------------------------------------------------ Moteurs, tâches, ordres de repli
 
-export const MOTEURS_IA = ['api', 'api2', 'local'];
+export const MOTEURS_IA = ['api', 'api2', 'claude', 'local'];
+/**
+ * Moteurs qui ne reçoivent JAMAIS une tâche confidentielle, même quand le Fondateur a levé la règle pour cette
+ * tâche (la levée vaut pour les API déjà configurées, pas pour Claude).
+ */
+export const MOTEURS_JAMAIS_CONFIDENTIELS = ['claude'];
 /**
  * Tâches : « profils » (brouillons, vérifications de profils de jeu) et « leger » (traductions, posts CM). Les noms
  * « transcription » et « correction » restent rattachés à « leger » pour l'ordre, mais ce sont des tâches
@@ -240,6 +249,7 @@ export function configIa(env = process.env, { suffixe = '' } = {}) {
   };
   if (!s) {
     Object.defineProperty(config, 'secondaire', { value: configIa(env, { suffixe: '2' }), enumerable: false });
+    Object.defineProperty(config, 'claude', { value: configClaude(env), enumerable: false });
     Object.defineProperty(config, 'ordres', { value: ordresIaEnv(env), enumerable: false });
   }
   return config;
@@ -660,6 +670,301 @@ export function creerConnecteur(config, { fetch: fetchIa = (...a) => globalThis.
   };
 }
 
+// ------------------------------------------------------------------ Claude (API Anthropic, SDK officiel)
+
+/** Modèle Claude par défaut (tâches normales et légères) ; claude-opus-5-5 ou claude-haiku-5-5 se règlent dans esport.env. */
+export const MODELE_CLAUDE_DEFAUT = 'claude-sonnet-5-5';
+export const EFFORTS_CLAUDE = ['low', 'medium', 'high', 'xhigh', 'max'];
+export const ADRESSE_ANTHROPIC = 'https://api.anthropic.com';
+/** `max_tokens` d'une requête Claude sans flux (la réflexion du modèle compte dedans) ; au-delà : flux + finalMessage. */
+export const JETONS_CLAUDE = 16_000;
+const JETONS_CLAUDE_MAX = 64_000;
+export const DELAI_CLAUDE_MS = 120_000;
+const MOTIF_MODELE_CLAUDE = /^claude-[a-z0-9][a-z0-9.-]{1,80}$/;
+/** Repli côté serveur d'Anthropic après un refus (`fallbacks: "default"`) : Claude Opus 5.5 et Claude Sonnet 5.5 seulement. */
+const MOTIF_REPLI_SERVEUR = /^claude-(opus|sonnet)-5-5(?:$|-)/;
+const BETA_REPLI_SERVEUR = 'server-side-fallback-2026-07-01';
+
+/**
+ * Configuration du moteur « claude » (API Anthropic) lue dans l'environnement :
+ *
+ *   ANTHROPIC_API_KEY        clé d'API (Claude Console › API Keys) ; secret : jamais renvoyée, jamais journalisée
+ *   IA_CLAUDE_MODELE         modèle des tâches normales (profils de jeu) : défaut claude-sonnet-5-5
+ *   IA_CLAUDE_MODELE_LEGER   modèle des tâches légères (traductions, posts CM, devblog) : défaut claude-sonnet-5-5
+ *   IA_CLAUDE_EFFORT         effort (output_config.effort) des tâches normales : low, medium (défaut), high, xhigh, max
+ *   IA_CLAUDE_EFFORT_LEGER   effort des tâches légères : défaut IA_CLAUDE_EFFORT s'il est réglé, sinon low
+ *   IA_CLAUDE_DELAI_S        durée maximale d'une réponse (défaut 120 s, de 30 à 600)
+ *   IA_CLAUDE_ESSAIS         nouveaux essais du SDK après 429 / 529 / 5xx / coupure (défaut 2, de 0 à 5)
+ *   IA_CLAUDE_REPLI_SERVEUR  « non » : pas de repli côté Anthropic après un refus (défaut oui, Opus/Sonnet 5.5)
+ *
+ * Pas de réflexion désactivée ni de budget (400 sur ces modèles) : la profondeur se règle par l'effort.
+ */
+export function configClaude(env = process.env) {
+  const lire = nom => String(env[nom] ?? '').trim();
+  const cle = lire('ANTHROPIC_API_KEY');
+  const modeleDe = (nom, defaut) => {
+    const v = lire(nom).toLowerCase();
+    return MOTIF_MODELE_CLAUDE.test(v) ? v : defaut;
+  };
+  const modele = modeleDe('IA_CLAUDE_MODELE', MODELE_CLAUDE_DEFAUT);
+  const modeleLeger = modeleDe('IA_CLAUDE_MODELE_LEGER', MODELE_CLAUDE_DEFAUT);
+  const effortEnv = lire('IA_CLAUDE_EFFORT').toLowerCase();
+  const effortLegerEnv = lire('IA_CLAUDE_EFFORT_LEGER').toLowerCase();
+  const effort = EFFORTS_CLAUDE.includes(effortEnv) ? effortEnv : 'medium';
+  const effortLeger = EFFORTS_CLAUDE.includes(effortLegerEnv) ? effortLegerEnv : EFFORTS_CLAUDE.includes(effortEnv) ? effortEnv : 'low';
+  const raison = cle ? null : 'cle-absente';
+  return {
+    moteur: 'claude',
+    actif: !raison,
+    raison,
+    fournisseur: 'anthropic',
+    format: 'anthropic-messages',
+    url: ADRESSE_ANTHROPIC,
+    modele,
+    modeleLeger,
+    effort,
+    effortLeger,
+    raisonnement: true,
+    images: true,
+    flux: false,
+    delaiMs: entier(env.IA_CLAUDE_DELAI_S, DELAI_CLAUDE_MS / 1000, 30, 600) * 1000,
+    essais: entier(env.IA_CLAUDE_ESSAIS, 2, 0, 5),
+    repliServeur: !non(lire('IA_CLAUDE_REPLI_SERVEUR')),
+    // La clé reste dans une fermeture : jamais dans JSON.stringify ni dans une réponse de l'API.
+    lireCle: () => cle,
+    etatPublic() {
+      return { configure: !raison, raison, fournisseur: 'anthropic', modele, hote: 'api.anthropic.com', format: 'anthropic-messages', recherche: 'serveur', cle: cle ? 'presente' : 'absente' };
+    },
+    moteurPublic() {
+      return { id: 'claude', ...this.etatPublic(), modeleLeger, raisonnement: true, effort, effortLeger, images: true, flux: false, delaiS: Math.round(this.delaiMs / 1000) };
+    },
+    toJSON() {
+      return this.etatPublic();
+    },
+  };
+}
+
+const MOTIF_DATA_IMAGE = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
+
+/** Partie de message au format OpenAI (texte, image_url) → bloc de contenu de l'API Anthropic. */
+function blocClaude(p) {
+  if (typeof p === 'string') return p ? { type: 'text', text: p } : null;
+  if (p?.type === 'text') return p.text ? { type: 'text', text: String(p.text) } : null;
+  if (p?.type === 'image_url') {
+    const url = String(p.image_url?.url ?? '');
+    const d = MOTIF_DATA_IMAGE.exec(url);
+    if (d) return { type: 'image', source: { type: 'base64', media_type: d[1], data: d[2] } };
+    if (/^https:\/\//i.test(url)) return { type: 'image', source: { type: 'url', url } };
+  }
+  return null;
+}
+
+/**
+ * Messages du connecteur (format OpenAI : system / user / assistant, contenu texte ou parties) → requête de l'API
+ * Anthropic : `system` à part, contenu en blocs. Pas de pré-remplissage (« prefill ») : un dernier message
+ * « assistant » est retiré (refusé par les modèles récents), et la conversation commence par « user ».
+ */
+export function messagesClaude(messages) {
+  const systeme = [];
+  const sortie = [];
+  for (const m of Array.isArray(messages) ? messages : []) {
+    const parties = Array.isArray(m?.content) ? m.content : [m?.content ?? ''];
+    if (m?.role === 'system') {
+      for (const p of parties) {
+        const b = blocClaude(p);
+        if (b?.type === 'text') systeme.push(b.text);
+      }
+      continue;
+    }
+    if (m?.role !== 'user' && m?.role !== 'assistant') continue;
+    const blocs = parties.map(blocClaude).filter(Boolean);
+    if (!blocs.length) continue;
+    const contenu = blocs.length === 1 && blocs[0].type === 'text' ? blocs[0].text : blocs;
+    sortie.push({ role: m.role, content: contenu });
+  }
+  while (sortie.length && sortie[0].role === 'assistant') sortie.shift();
+  while (sortie.length && sortie.at(-1).role === 'assistant') sortie.pop();
+  return { system: systeme.join('\n\n'), messages: sortie };
+}
+
+/** En-têtes d'une requête du SDK (objet Headers, tableau ou objet) → objet simple (transport Node `fetchIaNode`). */
+function entetesObjet(h) {
+  if (!h) return {};
+  if (Array.isArray(h)) return Object.fromEntries(h);
+  if (typeof h.forEach === 'function') {
+    const o = {};
+    h.forEach((v, k) => {
+      o[k] = v;
+    });
+    return o;
+  }
+  return { ...h };
+}
+
+let sdkAnthropic = null;
+/** SDK chargé à la demande : un serveur sans le paquet (npm install pas encore passé) démarre quand même. */
+const chargerSdkAnthropic = () => {
+  sdkAnthropic ??= import('@anthropic-ai/sdk').then(
+    m => m.default ?? m.Anthropic,
+    e => {
+      sdkAnthropic = null;
+      throw e;
+    },
+  );
+  return sdkAnthropic;
+};
+
+const MOTIF_CATEGORIE = /^[a-z_]{1,40}$/;
+
+/** Erreur du SDK (classes typées) → ErreurEsport au code stable ; jamais la clé ni le corps de la réponse. */
+function erreurClaude(A, e, config) {
+  if (e instanceof ErreurEsport) return e;
+  let err;
+  if (A && e instanceof A.APIConnectionTimeoutError) err = echec(504, 'ia-delai', `Claude met trop de temps à répondre (plus de ${Math.round(config.delaiMs / 1000)} s ; IA_CLAUDE_DELAI_S pour allonger).`);
+  else if (A && e instanceof A.APIConnectionError) err = echec(502, 'ia-injoignable', `API Anthropic injoignable${causeEchec(e) !== 'inconnue' ? ` (${causeEchec(e)})` : ''}.`);
+  else if (A && e instanceof A.AuthenticationError) err = echec(502, 'ia-cle-refusee', 'Clé Anthropic invalide : vérifiez ANTHROPIC_API_KEY dans ~/.appdashboard/esport.env (Claude Console › API Keys).');
+  else if (A && e instanceof A.PermissionDeniedError) err = echec(502, 'ia-cle-refusee', 'Clé Anthropic sans accès à ce modèle ou à cette opération (Claude Console : organisation, espace de travail).');
+  else if (A && e instanceof A.NotFoundError) err = echec(502, 'ia-modele', 'Modèle Claude inconnu ou non disponible pour ce compte (vérifiez IA_CLAUDE_MODELE et IA_CLAUDE_MODELE_LEGER).');
+  else if (A && e instanceof A.RateLimitError) err = echec(502, 'ia-limite-fournisseur', 'Claude limite les appels (débit ou quota du compte Anthropic atteint) : moteur suivant.');
+  else if (A && e instanceof A.InternalServerError) err = echec(502, 'ia-injoignable', `API Anthropic surchargée ou en panne (HTTP ${Number(e.status) || 500}) : moteur suivant.`);
+  else if (A && e instanceof A.BadRequestError) err = echec(502, 'ia-requete-refusee', 'Claude refuse la requête (HTTP 400) : modèle ou paramètres non acceptés.');
+  else if (A && e instanceof A.APIError && Number(e.status) === 402) err = echec(502, 'ia-credit', 'Compte Anthropic sans crédit ou facturation à régler (Claude Console › Billing).');
+  else if (A && e instanceof A.APIError && Number.isInteger(e.status)) err = echec(502, 'ia-injoignable', `API Anthropic : HTTP ${e.status}.`);
+  else err = echec(502, 'ia-injoignable', `API Anthropic injoignable${causeEchec(e) !== 'inconnue' ? ` (${causeEchec(e)})` : ''}.`);
+  err.cause = Number.isInteger(e?.status) ? `HTTP_${e.status}` : causeEchec(e);
+  return err;
+}
+
+/**
+ * Connecteur du moteur « claude » (même contrat que `creerConnecteur`) par le SDK officiel @anthropic-ai/sdk.
+ * `fetch` : transport injecté au SDK (option `fetch` du client ; serveur : `fetchIaNode`, tests : faux serveur).
+ * `Anthropic` : classe du SDK injectable (tests), sinon chargée à la demande.
+ *
+ * Requête (Claude Sonnet 5.5, Opus 5.5, Haiku 5.5) : `model` (IA_CLAUDE_MODELE, ou IA_CLAUDE_MODELE_LEGER pour une
+ * tâche légère), `max_tokens` 16 000 au moins (la réflexion compte dedans ; au-delà de 16 000 : flux puis
+ * `finalMessage`), `output_config.effort` (medium / low pour une tâche légère ; `options.effort` pour un test),
+ * `output_config.format` (sortie JSON structurée) quand un schéma est fourni. JAMAIS `thinking` (désactiver ou
+ * budgéter la réflexion = HTTP 400 ; adaptative par défaut), `temperature`, `top_p`, `top_k` (refusés), ni de
+ * pré-remplissage. Repli côté Anthropic après un refus (`fallbacks: "default"`, Opus/Sonnet 5.5) ; un 400 avec
+ * le repli ou le format les retire et s'en souvient.
+ * Réponse : texte des seuls blocs « text » (réflexion ignorée) ; `stop_reason` « refusal » → `ia-refus` (moteur
+ * suivant) ; « max_tokens » avec un JSON coupé ou sans texte → `ia-reponse-tronquee`.
+ * Erreurs : ia-non-configuree, ia-confidentielle-externe, ia-cle-refusee (clé Anthropic invalide), ia-credit,
+ * ia-modele, ia-limite-fournisseur (429 après les essais du SDK), ia-injoignable (529, 5xx, réseau), ia-delai,
+ * ia-requete-refusee, ia-refus, ia-reponse, ia-reponse-tronquee, ia-sdk-absent.
+ * `etat()` : dernière erreur (code, date), dernière latence, dernier modèle : jamais la clé.
+ */
+export function creerConnecteurClaude(config, { fetch: fetchIa = null, Anthropic = null, maintenant = () => Date.now(), journal = null } = {}) {
+  const etat = { sansRepliServeur: false, sansFormat: false, derniereErreur: null, derniereLatenceMs: null, dernierSucces: null, dernierModele: null };
+  const noter = (texte, code) => {
+    try {
+      journal?.(`[ia claude] ${texte}`, code);
+    } catch {
+      // Journal indisponible.
+    }
+  };
+  let client = null;
+  let classe = Anthropic;
+  async function preparer() {
+    if (!classe) {
+      try {
+        classe = await chargerSdkAnthropic();
+      } catch {
+        throw echec(503, 'ia-sdk-absent', 'SDK Anthropic absent du serveur (npm install dans esport/ : le déploiement le fait).');
+      }
+    }
+    client ??= new classe({
+      apiKey: config.lireCle(),
+      authToken: null,
+      baseURL: config.url ?? ADRESSE_ANTHROPIC,
+      maxRetries: config.essais ?? 2,
+      timeout: config.delaiMs ?? DELAI_CLAUDE_MS,
+      ...(fetchIa ? { fetch: (url, init = {}) => fetchIa(String(url), { ...init, headers: entetesObjet(init.headers) }) } : {}),
+    });
+    return { A: classe, client };
+  }
+  return {
+    config,
+    moteur: 'claude',
+    images: true,
+    disponible: () => Boolean(config?.actif),
+    etat: () => ({ derniereErreur: etat.derniereErreur, derniereLatenceMs: etat.derniereLatenceMs, dernierSucces: etat.dernierSucces, dernierModele: etat.dernierModele }),
+    async discuter(messages, options = {}) {
+      if (!config?.actif) throw echec(503, 'ia-non-configuree', 'Claude non configuré (ANTHROPIC_API_KEY absente de esport.env).');
+      // Garde-fou propre au moteur : une tâche confidentielle ne part jamais chez Anthropic.
+      if (options.tache && tacheConfidentielle(options.tache)) throw echec(503, 'ia-confidentielle-externe', 'Tâche confidentielle : envoi à Claude refusé (rien n’a été envoyé).');
+      const debut = maintenant();
+      const leger = tacheIa(options.tache) === 'leger' && Boolean(options.tache);
+      const modele = leger ? config.modeleLeger : config.modele;
+      const effort = EFFORTS_CLAUDE.includes(options.effort) ? options.effort : leger ? config.effortLeger : config.effort;
+      const json = options.json !== false;
+      const { system, messages: msgs } = messagesClaude(messages);
+      if (!msgs.length) throw echec(400, 'ia-messages', 'Aucun message à envoyer à Claude.');
+      const consigneJson = json && !options.schema ? 'Réponds uniquement par un objet JSON valide, sans texte autour.' : '';
+      const systeme = [system, consigneJson].filter(Boolean).join('\n\n');
+      const maxTokens = Math.min(JETONS_CLAUDE_MAX, Math.max(JETONS_CLAUDE, Number.isInteger(options.maxJetons) ? options.maxJetons : 0));
+      const duree0 = options.delai > 0 ? options.delai : (config.delaiMs ?? DELAI_CLAUDE_MS);
+      const duree = options.delaiMax > 0 ? Math.min(duree0, options.delaiMax) : duree0;
+      let A = null;
+      try {
+        const p = await preparer();
+        A = p.A;
+        for (let tour = 0; tour < 3; tour++) {
+          const format = json && options.schema && options.formatJson !== false && !etat.sansFormat ? { format: { type: 'json_schema', schema: options.schema } } : {};
+          const corps = { model: modele, max_tokens: maxTokens, messages: msgs, ...(systeme ? { system: systeme } : {}), output_config: { effort, ...format } };
+          const repli = config.repliServeur !== false && !etat.sansRepliServeur && MOTIF_REPLI_SERVEUR.test(modele);
+          const api = repli ? p.client.beta.messages : p.client.messages;
+          const requete = repli ? { ...corps, betas: [BETA_REPLI_SERVEUR], fallbacks: 'default' } : corps;
+          const reglages = { timeout: duree, maxRetries: config.essais ?? 2 };
+          let rep;
+          try {
+            rep = maxTokens > JETONS_CLAUDE ? await api.stream(requete, reglages).finalMessage() : await api.create(requete, reglages);
+          } catch (e) {
+            // Paramètre refusé (HTTP 400) : repli côté serveur puis format JSON retirés, et retenus pour la suite.
+            if (e instanceof A.BadRequestError && repli) {
+              etat.sansRepliServeur = true;
+              noter('repli côté serveur refusé (HTTP 400) : renvoyé sans', 'ia-parametre');
+              continue;
+            }
+            if (e instanceof A.BadRequestError && format.format) {
+              etat.sansFormat = true;
+              noter('format JSON structuré refusé (HTTP 400) : renvoyé sans (consigne JSON seulement)', 'ia-parametre');
+              continue;
+            }
+            throw e;
+          }
+          const secondes = Math.round((maintenant() - debut) / 1000);
+          if (rep?.stop_reason === 'refusal') {
+            const cat = MOTIF_CATEGORIE.test(String(rep.stop_details?.category ?? '')) ? rep.stop_details.category : null;
+            noter(`refus du modèle après ${secondes} s${cat ? ` (catégorie ${cat})` : ''} : moteur suivant`, 'ia-refus');
+            throw Object.assign(echec(502, 'ia-refus', `Claude a refusé de répondre${cat ? ` (catégorie ${cat})` : ''} : moteur suivant.`), { cause: 'REFUS' });
+          }
+          // Seuls les blocs « text » sont la réponse : la réflexion (« thinking ») est ignorée, jamais journalisée.
+          const texte = sansPensees((Array.isArray(rep?.content) ? rep.content : []).filter(b => b?.type === 'text' && typeof b.text === 'string').map(b => b.text).join(''));
+          if (rep?.stop_reason === 'max_tokens' && (!texte || (json && !extraireJson(texte)))) {
+            noter(`réponse tronquée après ${secondes} s (limite de ${maxTokens} jetons atteinte, ${texte.length} caractères reçus)`, 'ia-reponse-tronquee');
+            throw echec(502, 'ia-reponse-tronquee', 'Réponse de Claude incomplète (limite de jetons atteinte, réflexion comprise).');
+          }
+          if (!texte) {
+            noter(`réponse sans texte après ${secondes} s`, 'ia-reponse');
+            throw echec(502, 'ia-reponse', 'Réponse de Claude illisible.');
+          }
+          const u = rep.usage ?? {};
+          const dureeMs = maintenant() - debut;
+          Object.assign(etat, { derniereLatenceMs: dureeMs, dernierSucces: new Date(maintenant()).toISOString(), dernierModele: typeof rep.model === 'string' ? rep.model.slice(0, 100) : modele });
+          return { texte, jetons: { entree: Number.isFinite(u.input_tokens) ? u.input_tokens : null, sortie: Number.isFinite(u.output_tokens) ? u.output_tokens : null }, dureeMs, modele: etat.dernierModele };
+        }
+        throw echec(502, 'ia-requete-refusee', 'Claude refuse la requête : modèle ou paramètres non acceptés.');
+      } catch (e) {
+        const err = erreurClaude(A, e, config);
+        etat.derniereErreur = { code: err.code, le: new Date(maintenant()).toISOString() };
+        if (!['ia-refus', 'ia-reponse-tronquee', 'ia-reponse', 'ia-parametre'].includes(err.code)) noter(`requête échouée après ${Math.round((maintenant() - debut) / 1000)} s : ${err.code} (cause ${err.cause ?? 'inconnue'})`, err.code);
+        throw err;
+      }
+    },
+  };
+}
+
 // ------------------------------------------------------------------ Répartiteur (ordre de repli par tâche)
 
 /** Erreurs après lesquelles on essaie le moteur suivant : moteur en panne ou saturé, plafond, image non lue… */
@@ -711,8 +1016,10 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     const { cible, moteurs: impose, ...reste } = options;
     const voulu = cible ? [String(cible)].filter(m => MOTEURS_IA.includes(m)) : impose ? lireOrdreIa(impose, []) : await ordreDe(tache);
     const confidentiel = await localSeul(tache);
-    // Tâche confidentielle : l'IA locale seule, même si l'ordre (ou l'appelant) demande une API.
-    const ordre = confidentiel ? ['local'] : voulu;
+    // Tâche confidentielle : l'IA locale seule, même si l'ordre (ou l'appelant) demande une API. Levée par le
+    // Fondateur : les API configurées, mais JAMAIS Claude (MOTEURS_JAMAIS_CONFIDENTIELS).
+    const sensible = Boolean(tacheConfidentielle(tache));
+    const ordre = confidentiel ? ['local'] : sensible ? voulu.filter(m => !MOTEURS_JAMAIS_CONFIDENTIELS.includes(m)) : voulu;
     if (confidentiel && !pret('local')) {
       throw echec(503, 'ia-confidentielle-sans-local', `Tâche confidentielle (${TACHES_CONFIDENTIELLES[tacheConfidentielle(tache)]}) : seule l’IA locale du serveur peut la faire, et elle est indisponible. Rien n’a été envoyé à un service externe.`);
     }
@@ -731,8 +1038,11 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     for (const [i, m] of candidats.entries()) {
       // Garde-fou : jamais une API pour une tâche confidentielle (même si le code ci-dessus changeait).
       if (confidentiel && m !== 'local') throw echec(503, 'ia-confidentielle-sans-local', 'Tâche confidentielle : envoi à un service externe refusé.');
+      if (sensible && MOTEURS_JAMAIS_CONFIDENTIELS.includes(m)) throw echec(503, 'ia-confidentielle-externe', 'Tâche confidentielle : envoi à Claude refusé.');
+      // Claude reçoit le nom de la tâche (modèle et effort des tâches légères, et son propre garde-fou de confidentialité).
+      const opts = m === 'claude' ? { ...reste, tache: String(tache ?? '') } : reste;
       try {
-        const r = executer ? await executer(m, tache, messages, reste) : await moteurs[m].discuter(messages, reste);
+        const r = executer ? await executer(m, tache, messages, opts) : await moteurs[m].discuter(messages, opts);
         return { ...r, moteur: m };
       } catch (e) {
         if (i === candidats.length - 1 || !peutReplier(e)) throw e;
@@ -745,7 +1055,12 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
     }
     throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
   }
-  return { discuterPour, ordrePour: ordreDe, disponibles: async tache => ((await localSeul(tache)) ? ['local'] : await ordreDe(tache)).filter(pret), pret, localSeul };
+  const disponibles = async tache => {
+    if (await localSeul(tache)) return ['local'].filter(pret);
+    const ordre = await ordreDe(tache);
+    return (tacheConfidentielle(tache) ? ordre.filter(m => !MOTEURS_JAMAIS_CONFIDENTIELS.includes(m)) : ordre).filter(pret);
+  };
+  return { discuterPour, ordrePour: ordreDe, disponibles, pret, localSeul };
 }
 
 /**
@@ -758,7 +1073,7 @@ export function creerRepartiteurIa({ moteurs = {}, ordres = ORDRES_IA_DEFAUT, or
 export function creerIaDepuisEnv(env = process.env, { local = null, fetch, journal = null, ordrePour = null, maintenant, externeAutorise = null } = {}) {
   const c = configIa(env);
   const opts = { ...(fetch ? { fetch } : {}), ...(maintenant ? { maintenant } : {}), ...(journal ? { journal } : {}) };
-  const moteurs = { api: creerConnecteur(c, opts), api2: creerConnecteur(c.secondaire, opts), ...(local ? { local } : {}) };
+  const moteurs = { api: creerConnecteur(c, opts), api2: creerConnecteur(c.secondaire, opts), claude: creerConnecteurClaude(c.claude, opts), ...(local ? { local } : {}) };
   return creerRepartiteurIa({ moteurs, ordres: c.ordres, ordrePour, journal, externeAutorise });
 }
 

@@ -358,6 +358,7 @@ test('quota : plafond mensuel d’appels (compteur d’usage), test de connexion
   assert.deepEqual(etat.reglages, {
     quotaAppels: 30,
     quotaAppelsApi2: 200,
+    quotaAppelsClaude: 100,
     quotaVerifications: 8,
     autoActif: true,
     mode: 'api',
