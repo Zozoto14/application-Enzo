@@ -5,6 +5,8 @@
  *  - Événements Gateway GUILD_MEMBER_ADD et GUILD_MEMBER_UPDATE (intent GUILD_MEMBERS, PRIVILÉGIÉ : « Server Members
  *    Intent » à activer sur le portail Discord) : demandé seulement quand la bienvenue est activée ;
  *  - une personne n'est accueillie qu'UNE fois par rôle (table discord_bienvenues) ;
+ *  - le message peut s'effacer après quelques secondes (`supprimerApresS`, 10 par défaut ; 0 : gardé) : la personne
+ *    reçoit la notification, le salon reste propre. Effacement rejoué par le superviseur si le processus s'arrête ;
  *  - à l'activation (ou au changement de rôle), les titulaires actuels du rôle sont notés sans message ; si Discord
  *    refuse la liste des membres, seules les personnes arrivées sur le serveur après l'activation sont accueillies.
  *
@@ -21,6 +23,8 @@ export const INTENT_MEMBRES = 1 << 1;
 
 export const MESSAGE_DEFAUT = 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥';
 export const MESSAGE_MAX = 1800;
+/** Délai d'effacement du message (secondes) : 0 = gardé ; 1 heure au plus. */
+export const SUPPRESSION_MAX_S = 3600;
 
 export const BIENVENUE_DEFAUT = Object.freeze({
   actif: false,
@@ -28,6 +32,7 @@ export const BIENVENUE_DEFAUT = Object.freeze({
   roleNom: '',
   salonId: null,
   message: MESSAGE_DEFAUT,
+  supprimerApresS: 10,
   // Posé à l'activation : sert si la liste des titulaires actuels n'a pas pu être lue.
   depuis: null,
   existantsNotes: false,
@@ -64,6 +69,11 @@ export function validerBienvenue(c, actuel, t) {
     const m = c.message.replace(/\r\n?/g, '\n').trim();
     if (m.length > MESSAGE_MAX) throw echec(400, 'bienvenue-message', `${MESSAGE_MAX} caractères au plus.`);
     s.message = m || MESSAGE_DEFAUT;
+  }
+  if (c.supprimerApresS !== undefined) {
+    const n = Number(c.supprimerApresS);
+    if (!Number.isInteger(n) || n < 0 || n > SUPPRESSION_MAX_S) throw echec(400, 'bienvenue-suppression', 'Délai d’effacement : de 0 à 3600 secondes.');
+    s.supprimerApresS = n;
   }
   if (s.actif && !s.roleId) throw echec(400, 'bienvenue-role', 'Choisissez le rôle qui déclenche la bienvenue.');
   if (s.actif && !s.salonId) throw echec(400, 'bienvenue-salon', 'Choisissez le salon où publier la bienvenue.');
@@ -127,7 +137,43 @@ export async function accueillirMembre(ctx, d) {
     ctx.journal?.error?.('[esport] bienvenue : message refusé par Discord', r.statut, r.code ?? '');
     return 'echec';
   }
+  // Effacement programmé : noté en base (rejoué par le superviseur), puis tenté à l'heure dite par ce processus.
+  const delai = Number(b.supprimerApresS ?? 0);
+  if (delai > 0 && r.corps?.id) {
+    await base.executer('UPDATE discord_bienvenues SET message_id = ?, supprimer_le = ? WHERE guild_id = ? AND discord_user_id = ? AND role_id = ?', [String(r.corps.id), iso(t + delai * 1000), guildId, userId, b.roleId]);
+    const minuterie = setTimeout(() => {
+      effacerBienvenues(ctx).catch(e => ctx.journal?.error?.('[esport] bienvenue : effacement', e?.message ?? e));
+    }, delai * 1000 + 50);
+    minuterie.unref?.();
+  }
   return 'accueilli';
+}
+
+/**
+ * Efface les messages de bienvenue arrivés à échéance (appelé à l'heure dite et à chaque passage du superviseur).
+ * Message déjà effacé (404) : considéré comme fait. Rend le nombre de messages effacés.
+ */
+export async function effacerBienvenues(ctx, { max = 20 } = {}) {
+  const { base } = ctx;
+  const t = ctx.maintenant();
+  const dus = await base.tous(
+    'SELECT guild_id, discord_user_id, role_id, message_id, supprimer_le FROM discord_bienvenues WHERE message_id IS NOT NULL AND supprimer_le <= ? ORDER BY supprimer_le LIMIT ?',
+    [iso(t), max],
+  );
+  let effaces = 0;
+  for (const l of dus) {
+    const salon = ctx.bienvenue?.salonId;
+    if (!salon) break;
+    const r = await rest(ctx.fetch, ctx.jetonBot, 'DELETE', `/channels/${salon}/messages/${l.message_id}`);
+    if (r.statut === 429) break;
+    // Fait (204), déjà effacé (404) ou refusé (403 : droit « Gérer les messages » inutile pour ses propres messages,
+    // mais salon devenu invisible) : on n'insiste pas.
+    if (r.ok || r.statut === 404 || r.statut === 403) {
+      await base.executer('UPDATE discord_bienvenues SET message_id = NULL, supprimer_le = NULL WHERE guild_id = ? AND discord_user_id = ? AND role_id = ?', [l.guild_id, l.discord_user_id, l.role_id]);
+      if (r.ok) effaces++;
+    }
+  }
+  return effaces;
 }
 
 /**

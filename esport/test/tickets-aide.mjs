@@ -208,6 +208,10 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
       const m = (etat.messages.get(msg[1]) ?? []).find(x => x.id === msg[2]);
       if (!m) return rep({ code: 10008 }, 404);
       if (methode === 'PATCH') Object.assign(m, corps);
+      if (methode === 'DELETE') {
+        etat.messages.set(msg[1], etat.messages.get(msg[1]).filter(x => x.id !== msg[2]));
+        return rep(undefined, 204);
+      }
       return rep(m);
     }
     if (chemin === '/users/@me/channels' && methode === 'POST') return rep({ id: `96${corps.recipient_id.slice(2)}`, type: 1 });

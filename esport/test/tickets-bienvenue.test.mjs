@@ -35,6 +35,9 @@ test('réglages : rôle et salon obligatoires pour activer ; activation = nouvea
   // Message seul modifié : pas de nouveau départ ; rôle changé : nouveau départ.
   assert.equal(validerBienvenue({ message: 'Salut {membre}' }, a.reglages, t + 1).recommencer, false);
   assert.equal(validerBienvenue({ roleId: '720000000000000008' }, a.reglages, t + 1).recommencer, true);
+  assert.equal(a.reglages.supprimerApresS, 10, 'effacé après 10 s par défaut');
+  assert.equal(validerBienvenue({ supprimerApresS: 0 }, a.reglages, t).reglages.supprimerApresS, 0);
+  assert.throws(() => validerBienvenue({ supprimerApresS: 99999 }, a.reglages, t), /Délai/);
   assert.equal(texteBienvenue('Bienvenue {membre} dans {role} sur {serveur} !', { membreId: '81', role: 'The Nuke End', serveur: 'LZ' }), 'Bienvenue <@81> dans The Nuke End sur LZ !');
 });
 
@@ -79,10 +82,10 @@ test('configuration dans l’app : serveur requis, titulaires actuels notés san
   assert.ok(effacementParDiscord(['810000000000000001']).some(i => i.sql.includes('discord_bienvenues')));
 });
 
-async function activerBienvenue(base, { ticketsActifs = false, existantsNotes = true, depuis = '2026-01-01T00:00:00.000Z' } = {}) {
+async function activerBienvenue(base, { ticketsActifs = false, existantsNotes = true, depuis = '2026-01-01T00:00:00.000Z', supprimerApresS = 0 } = {}) {
   const t = new Date().toISOString();
   await base.executer('INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', ['general', JSON.stringify({ actif: ticketsActifs, guildId: GUILD, guildNom: 'Ligne Zéro', categorieOuverts: '710000000000000010' }), t]);
-  await base.executer('INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', ['bienvenue', JSON.stringify({ actif: true, roleId: ROLE, roleNom: 'The Nuke End', salonId: SALON, message: 'Bienvenue {membre} dans {role} !', depuis, existantsNotes }), t]);
+  await base.executer('INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES (?, ?, ?)', ['bienvenue', JSON.stringify({ actif: true, roleId: ROLE, roleNom: 'The Nuke End', salonId: SALON, message: 'Bienvenue {membre} dans {role} !', depuis, existantsNotes, supprimerApresS }), t]);
 }
 
 const membre = (id, roles, extra = {}) => ({ guild_id: GUILD, user: { id, username: `u${id.slice(-2)}` }, roles, joined_at: '2026-11-21T12:00:00.000Z', ...extra });
@@ -165,6 +168,33 @@ test('intent « Server Members » refusé (4014) : la connexion repart sans lui,
     assert.equal(gw.recus.filter(m => m.op === 2)[1].d.intents, INTENTS_TICKETS, 'nouvel IDENTIFY sans GUILD_MEMBERS');
     await attendre(() => sup.etat().gateway?.etat === 'pret');
     assert.equal((await lireEtatBienvenue(base)).membresRefuses, true);
+  } finally {
+    await sup.arreter();
+    await gw.arreter();
+  }
+});
+
+test('message effacé après le délai (la personne a sa notification, le salon reste propre) ; rattrapage par le superviseur', async () => {
+  const base = await baseMigree();
+  await activerBienvenue(base, { supprimerApresS: 1 });
+  const gw = await fauxGateway({ intervalle: 1000 });
+  const rest = fauxDiscordRest({ gateway: gw });
+  const sup = creerSuperviseurTickets({ base, jetonBot: JETON, fetch: rest.fetch, identifiant: 'p', intervalle: 1_000_000, gateway: RAPIDE, journal: silencieux });
+  try {
+    await sup.passage();
+    await attendre(() => sup.etat().gateway?.etat === 'pret');
+    gw.connexions[0].dispatch('GUILD_MEMBER_ADD', membre('810000000000000020', [ROLE]));
+    await attendre(() => (rest.etat.messages.get(SALON) ?? []).length === 1);
+    const id = rest.etat.messages.get(SALON)[0].id;
+    // Une seconde plus tard : effacé par ce processus.
+    await attendre(() => rest.appels.some(a => a.methode === 'DELETE' && a.chemin === `/channels/${SALON}/messages/${id}`), { delai: 4000 });
+    await attendre(() => (rest.etat.messages.get(SALON) ?? []).length === 0);
+    await attendre(async () => !(await base.premier('SELECT message_id FROM discord_bienvenues WHERE discord_user_id = ?', ['810000000000000020']))?.message_id);
+    // Processus arrêté avant l'heure : l'effacement est rejoué au passage suivant du superviseur.
+    await base.executer("INSERT INTO discord_bienvenues (guild_id, discord_user_id, role_id, issue, accueilli_le, message_id, supprimer_le) VALUES (?, '810000000000000021', ?, 'message', '2026-01-01T00:00:00.000Z', '123456789012345678', '2026-01-01T00:00:10.000Z')", [GUILD, ROLE]);
+    await sup.passage();
+    assert.ok(rest.appels.some(a => a.methode === 'DELETE' && a.chemin === `/channels/${SALON}/messages/123456789012345678`));
+    assert.equal((await base.premier('SELECT message_id FROM discord_bienvenues WHERE discord_user_id = ?', ['810000000000000021'])).message_id, null, 'déjà effacé (404) : considéré comme fait');
   } finally {
     await sup.arreter();
     await gw.arreter();

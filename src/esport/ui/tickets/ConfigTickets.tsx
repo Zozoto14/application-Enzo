@@ -993,7 +993,7 @@ function SectionBienvenue({ theme, api, conf, setConf, agir, roles, salons }: Pr
   const enregistrer = () =>
     void agir('bienvenue', async () => {
       const roleNom = roles.find(x => x.id === b.roleId)?.nom ?? b.roleNom;
-      const r = await api.changerBienvenue({ actif: b.actif, roleId: b.roleId, roleNom, salonId: b.salonId, message: b.message });
+      const r = await api.changerBienvenue({ actif: b.actif, roleId: b.roleId, roleNom, salonId: b.salonId, message: b.message, supprimerApresS: b.supprimerApresS ?? 0 });
       setConf(r);
       setB(r.bienvenue);
       if (r.titulaires) return r.titulaires.ok ? trTk('bv.titulaires_ok', { n: r.titulaires.notes ?? 0 }) : trTk('bv.titulaires_echec');
@@ -1018,6 +1018,8 @@ function SectionBienvenue({ theme, api, conf, setConf, agir, roles, salons }: Pr
       <Choix theme={theme} libelle={trTk('bv.salon')} valeur={b.salonId ?? undefined} options={textes} onChoisir={id => setB({ ...b, salonId: id })} testID="esport-tk-bv-salon" />
       <Champ theme={theme} libelle={trTk('bv.message')} valeur={b.message} onChanger={message => setB({ ...b, message })} multiligne maxLength={1800} testID="esport-tk-bv-message" />
       <Text style={attenue(theme)}>{trTk('bv.variables')}</Text>
+      <Champ theme={theme} libelle={trTk('bv.suppression')} valeur={String(b.supprimerApresS ?? 0)} onChanger={v => setB({ ...b, supprimerApresS: entier(v) })} maxLength={4} testID="esport-tk-bv-suppression" />
+      <Text style={attenue(theme)}>{trTk('bv.suppression_aide')}</Text>
       {etat.dernier ? (
         <Text style={attenue(theme)} testID="esport-tk-bv-dernier">
           {etat.dernier.ok ? trTk('bv.dernier_ok', { le: quand(etat.dernier.le) }) : trTk('bv.dernier_echec', { le: quand(etat.dernier.le), statut: etat.dernier.statut ?? 0 })}

@@ -33,7 +33,7 @@ import { creerGateway } from './gateway.mjs';
 import { ingererMessage, modifierMessage, plusRecent, supprimerMessage, telechargeurCdn } from './conversation.mjs';
 import { lireGeneral } from './reglages.mjs';
 import { rest } from './discord.mjs';
-import { INTENT_MEMBRES, accueillirMembre, ecrireEtatBienvenue, intentsVoulus, lireBienvenue } from './bienvenue.mjs';
+import { INTENT_MEMBRES, accueillirMembre, ecrireEtatBienvenue, effacerBienvenues, intentsVoulus, lireBienvenue } from './bienvenue.mjs';
 
 export const BAIL = 'gateway';
 export const DUREE_BAIL_MS = 60_000;
@@ -266,6 +266,8 @@ export function creerSuperviseurTickets({
         await demarrerGateway(intentsCourants ?? voulus);
         e = gw.etat();
       }
+      // Messages de bienvenue à effacer (rattrapage si un processus s'est arrêté avant l'heure).
+      if (bienvenue.actif) await effacerBienvenues(ctxBienvenue()).catch(err => journal.error?.('[esport] bienvenue : effacement', err?.message ?? err));
       const vivant = e.etat === 'pret' && (!e.dernierAck || t - e.dernierAck < Math.max(120_000, intervalle * 4));
       let mode = vivant ? 'direct' : 'secours';
       let releve = null;

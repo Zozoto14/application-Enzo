@@ -28,7 +28,7 @@ function configDe(): Config {
     messagesDefaut: { accueil: { fr: 'Bonjour {utilisateur}', en: 'Hi {utilisateur}' } },
     horaires: { actif: false, fuseau: 'Europe/Paris', plages: [] },
     commandes: { ouvrir: { actif: true, roles: [] } },
-    bienvenue: { actif: false, roleId: null, roleNom: '', salonId: null, message: 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥', depuis: null, existantsNotes: false },
+    bienvenue: { actif: false, roleId: null, roleNom: '', salonId: null, message: 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥', supprimerApresS: 10, depuis: null, existantsNotes: false },
     bienvenueEtat: {},
     bienvenueMessageDefaut: 'Bienvenue {membre} ! Tu fais maintenant partie de **{role}** 💥',
     categories: [],
@@ -682,10 +682,12 @@ test('Bienvenue : rôle, salon et message choisis, activation enregistrée ; tit
   await fireEvent.press(await screen.findByTestId('esport-tk-bv-role-720'));
   await fireEvent.press(screen.getByTestId('esport-tk-bv-salon-713'));
   await fireEvent.changeText(screen.getByTestId('esport-tk-bv-message'), 'Bienvenue {membre} dans {role} 💥');
+  expect(screen.getByTestId('esport-tk-bv-suppression').props.value).toBe('10');
+  await fireEvent.changeText(screen.getByTestId('esport-tk-bv-suppression'), '5');
   await fireEvent.press(screen.getByTestId('esport-tk-bv-enregistrer'));
   await screen.findByText(/3 membre\(s\) qui avaient déjà le rôle/);
   const put = appels.find(a => a.chemin === '/tickets/config/bienvenue' && a.methode === 'PUT')!.corps as Record<string, unknown>;
-  expect(put).toMatchObject({ actif: true, roleId: '720', roleNom: 'Staff', salonId: '713', message: 'Bienvenue {membre} dans {role} 💥' });
+  expect(put).toMatchObject({ actif: true, roleId: '720', roleNom: 'Staff', salonId: '713', message: 'Bienvenue {membre} dans {role} 💥', supprimerApresS: 5 });
   await fireEvent.press(screen.getByTestId('esport-tk-bv-tester'));
   await screen.findByText('Message d’essai publié dans le salon.');
 });

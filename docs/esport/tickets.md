@@ -386,6 +386,9 @@ Discord qu'on peut configurer », avec Esport HQ. Réglage : **Tickets › Confi
   personne est notifiée (jamais @everyone ni un rôle écrit dans le message).
 - **Une seule fois par personne et par rôle** (table `discord_bienvenues`, migration `0058`) : un changement de pseudo
   ou d'un autre rôle ne la mentionne pas à nouveau.
+- **Message effacé après quelques secondes** (réglage « Effacer le message après », **10 s** par défaut, 0 pour le
+  garder ; migration `0059`) : la personne reçoit sa notification, mais le salon ne se remplit pas de mentions.
+  L'effacement est noté en base et rejoué par le superviseur si le processus s'arrête avant l'heure.
 - À l'**activation** (ou quand le rôle change), les membres qui ont **déjà** le rôle sont notés sans message (aucune
   vague de mentions). Si Discord refuse la liste des membres, l'écran le dit : seules les personnes qui **arrivent sur
   le serveur** après l'activation sont alors accueillies.

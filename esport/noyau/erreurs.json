@@ -846,6 +846,7 @@
   "Choisissez le rôle qui déclenche la bienvenue.": "Choose the role that triggers the welcome message.",
   "Choisissez le salon où publier la bienvenue.": "Choose the channel where the welcome message is posted.",
   "Choisissez d’abord le serveur Discord (onglet Général).": "Choose the Discord server first (General tab).",
+  "Délai d’effacement : de 0 à 3600 secondes.": "Deletion delay: 0 to 3600 seconds.",
   "Ordre illisible.": "Unreadable order.",
   "Panneau introuvable.": "Panel not found.",
   "Drive indisponible.": "Drive unavailable.",

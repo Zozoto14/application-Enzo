@@ -181,6 +181,8 @@ export interface Bienvenue {
   roleNom: string;
   salonId: string | null;
   message: string;
+  /** Effacement du message après N secondes (0 : gardé). */
+  supprimerApresS: number;
   depuis: string | null;
   existantsNotes: boolean;
 }
