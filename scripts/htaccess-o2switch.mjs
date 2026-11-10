@@ -11,7 +11,9 @@
  *
  * Comportements assurés : HTTPS obligatoire, en-têtes de _headers,
  * repli « application d'une page » (une adresse inconnue sert index.html),
- * index.html / manifeste / maj revalidés à chaque visite.
+ * index.html / manifeste / maj revalidés à chaque visite, textes compressés
+ * (brotli si le module est là, sinon gzip : JS, CSS, HTML, JSON, SVG, wasm ;
+ * jamais les polices woff2 ni les images, déjà compressées).
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -53,12 +55,22 @@ export function lireRedirects(texte) {
 
 const echapperRegex = s => s.replace(/[.+?^${}()|[\]\\#]/g, '\\$&');
 /** Motif de _headers / _redirects (`/assets/*`, `/:nom`) → expression régulière Apache. */
+/** Types compressés à la volée par Apache (le JS du site pèse 3 à 4 fois moins une fois compressé). */
+export const TYPES_COMPRESSES = ['text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/json', 'application/manifest+json', 'image/svg+xml', 'application/wasm'];
+
 export const motifVersRegex = motif => `^${echapperRegex(motif).replace(/\*/g, '.*').replace(/:[a-z]+/gi, '[^/]+')}$`;
 const guillemets = v => `"${String(v).replace(/"/g, '\\"')}"`;
 
 export function genererBloc({ headers = '', redirects = '' } = {}) {
   const l = [DEBUT];
-  l.push('Options -Indexes', 'DirectoryIndex index.html', 'AddType application/manifest+json .webmanifest', 'AddType application/javascript .jsbundle', '');
+  l.push('Options -Indexes', 'DirectoryIndex index.html', 'AddType application/manifest+json .webmanifest', 'AddType application/javascript .jsbundle', 'AddType application/wasm .wasm', '');
+  // AddOutputFilterByType vient de mod_filter (Apache 2.4) : sans lui, la directive serait inconnue et Apache
+  // refuserait tout le .htaccess (erreur 500 sur le site entier). D'où les gardes IfModule.
+  l.push('# Compression des textes : brotli si disponible, sinon gzip (mod_deflate). Sans module : fichiers servis tels quels.');
+  l.push('<IfModule mod_filter.c>');
+  l.push('  <IfModule mod_brotli.c>', `    AddOutputFilterByType BROTLI_COMPRESS ${TYPES_COMPRESSES.join(' ')}`, '  </IfModule>');
+  l.push('  <IfModule !mod_brotli.c>', '    <IfModule mod_deflate.c>', `      AddOutputFilterByType DEFLATE ${TYPES_COMPRESSES.join(' ')}`, '    </IfModule>', '  </IfModule>');
+  l.push('</IfModule>', '');
   l.push('<IfModule mod_rewrite.c>', 'RewriteEngine On');
   l.push('# HTTPS obligatoire (sauf la validation Let’s Encrypt).', 'RewriteCond %{HTTPS} !=on', 'RewriteCond %{REQUEST_URI} !^/\\.well-known/', 'RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]');
   for (const r of lireRedirects(redirects)) {

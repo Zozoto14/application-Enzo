@@ -31,7 +31,7 @@ import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, evalue
 import type { EvenementAudit } from './admin/journal';
 import { apresVerification, confianceValide, doitVerrouiller, etatInitial, noterActivite, verrouiller, type EtatVerrouPanel } from './admin/verrouillage';
 import { Applications } from './admin/ui/Applications';
-import { Avis, BoutonHub, Champ, Panneau, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
+import { Avis, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
 import { Messagerie } from './admin/ui/Messagerie';
 import { SupportAdmin } from './admin/ui/Support';
 import { Journal } from './admin/ui/Journal';
@@ -40,10 +40,11 @@ import { Reglages } from './admin/ui/Reglages';
 import { Securite } from './admin/ui/Securite';
 import { Tableau } from './admin/ui/Tableau';
 import { Utilisateurs } from './admin/ui/Utilisateurs';
-import { police, teinteTransparente, type ThemeHub } from './themes';
+import { police } from './themes';
 import type { PropsRacineApp } from './types';
 import { ecouterActivite } from './web';
 import { useInfoOnglet } from './multi/contexte';
+import { FormulaireIdentite } from './FormulaireIdentite';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
@@ -414,49 +415,8 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   );
 }
 
-/** Redemande mot de passe + code TOTP de l'administrateur. */
-export function FormulaireIdentite({
-  theme,
-  raison,
-  enCours,
-  onValider,
-  onAnnuler,
-}: {
-  theme: ThemeHub;
-  raison: string;
-  enCours: boolean;
-  onValider(motDePasse: string, code: string): void;
-  onAnnuler?(): void;
-}) {
-  const [motDePasse, setMotDePasse] = useState('');
-  const [code, setCode] = useState('');
-  return (
-    <Panneau theme={theme} testID="admin-identite" style={{ borderColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.06), marginVertical: 8 }}>
-      <Text style={[styleTitre(theme), { fontSize: 18 }]}>Vérification d’identité</Text>
-      <Text style={{ color: theme.attenue, fontSize: 13 }}>
-        {raison} : saisissez votre mot de passe et le code de votre application d’authentification (mêmes vérifications qu’au déverrouillage).
-      </Text>
-      <Champ theme={theme} libelle="Mot de passe" valeur={motDePasse} onChanger={setMotDePasse} secret testID="admin-identite-mdp" />
-      <Champ theme={theme} libelle="Code à 6 chiffres" valeur={code} onChanger={v => setCode(v.replace(/[^\d]/g, ''))} clavier="number-pad" maxLength={6} testID="admin-identite-code" />
-      <View style={styles.actions}>
-        <BoutonHub
-          theme={theme}
-          variante="plein"
-          couleur={theme.teintes.admin}
-          titre={enCours ? 'Vérification…' : 'Confirmer'}
-          desactive={enCours || !motDePasse || code.length !== 6}
-          onPress={() => {
-            onValider(motDePasse, code);
-            setMotDePasse('');
-            setCode('');
-          }}
-          testID="admin-identite-valider"
-        />
-        {onAnnuler ? <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="admin-identite-annuler" /> : null}
-      </View>
-    </Panneau>
-  );
-}
+// Déplacé dans son propre fichier (chargé par les Paramètres sans le reste de l'Administration).
+export { FormulaireIdentite };
 
 const styles = StyleSheet.create({
   racine: { flex: 1 },

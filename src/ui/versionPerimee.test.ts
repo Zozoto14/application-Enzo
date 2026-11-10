@@ -6,6 +6,7 @@ import {
   etatVersion,
   installerEcouteursChunks,
   reinitialiserVersion,
+  sansRechargement,
   traiterErreurChunk,
   type EnvRechargement,
 } from './versionPerimee';
@@ -97,6 +98,23 @@ describe('installerEcouteursChunks', () => {
     expect(e.recharger).toHaveBeenCalledTimes(1);
     rappels.get('unhandledrejection')!({ reason: new TypeError('Failed to fetch dynamically imported module: x') });
     rappels.get('error')!({ error: new Error('error loading dynamically imported module: y') });
+    expect(e.recharger).toHaveBeenCalledTimes(1);
+  });
+
+  it('un préchargement en arrière-plan qui échoue ne recharge jamais la page (hors ligne, morceau absent)', async () => {
+    const { e } = env();
+    const rappels = new Map<string, (ev: unknown) => void>();
+    installerEcouteursChunks({ addEventListener: (t, r) => void rappels.set(t, r) }, e);
+    await expect(
+      sansRechargement(async () => {
+        rappels.get('vite:preloadError')!({ payload: new TypeError('Failed to fetch dynamically imported module: x') });
+        throw new TypeError('Failed to fetch dynamically imported module: x');
+      }),
+    ).rejects.toThrow();
+    expect(e.recharger).not.toHaveBeenCalled();
+    expect(etatVersion()).toBe('ok');
+    // Hors préchargement : le mécanisme habituel reprend (rechargement unique).
+    rappels.get('vite:preloadError')!({ payload: new TypeError('Failed to fetch dynamically imported module: x') });
     expect(e.recharger).toHaveBeenCalledTimes(1);
   });
 });

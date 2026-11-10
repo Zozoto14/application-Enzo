@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Alerte, Bouton, Champ } from '../ui/composants';
-import { QrCode } from '../ui/ecrans/CarteSynchro';
+import { QrCode } from '../ui/ecrans/qrDiffere';
 import type { ThemeHub } from './themes';
 
 export interface ServicesA2f {

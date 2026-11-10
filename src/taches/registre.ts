@@ -10,7 +10,8 @@
 import type { AppHub } from '../hub/types';
 import { accesTaches, ID_TACHES } from './acces';
 import { infoTaches } from './resume';
-import { Taches } from './ui/RacineTaches';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { Taches } from '../hub/racinesDifferees';
 
 export { ID_TACHES };
 

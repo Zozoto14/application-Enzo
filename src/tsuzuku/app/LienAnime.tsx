@@ -16,11 +16,11 @@ import {
   definirAssociation,
   deduireMotif,
   deviner,
-  extraireLiensEpisodes,
   lireAssociation,
   retirerAssociation,
   type Association,
 } from '../moteur/liensManuels';
+import { extraireLiensEpisodes } from '../moteur/liensEpisodesPage';
 import { useCharger, useTsuzuku } from './contexte';
 import { useAgir } from './FicheCommune';
 import { Avis, Bouton, Champ, styleAttenue, styleTitre } from './ui';

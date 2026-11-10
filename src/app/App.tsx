@@ -38,6 +38,30 @@ import {
   PARAMETRES,
 } from '../db/depots';
 import { FOURNISSEURS, fournisseurParId } from '../cours/fournisseurs';
+// Écrans du Portefeuille : chargés à la demande sur le web (ui/ecrans/differes.web.tsx).
+import {
+  Carnet,
+  Comparateur,
+  ComparateurFinancier,
+  CreationCompte,
+  CreationTitre,
+  Diagnostic,
+  FicheValeur,
+  ImportPositions,
+  Journal,
+  Notifications,
+  Objectifs,
+  Podcast,
+  Portefeuille,
+  Projection,
+  Recherche,
+  ReglageSauvegardeAuto,
+  SaisieOperation,
+  Sauvegarde,
+  Screener,
+  Symboles,
+  Watchlist,
+} from '../ui/ecrans/differes';
 import { rafraichirCours, resumeRafraichissement } from '../cours/rafraichir';
 import { ErreurDeverrouillage } from '../securite/coffre';
 import { ErreurBaseIllisible, ErreurCoffreDifferent, ErreurTemporisation, Session } from '../session/session';
@@ -62,33 +86,20 @@ import { intervalleActualisation, seanceEnCours } from '../cours/marche';
 import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
-import { FicheValeur } from '../ui/ecrans/FicheValeur';
 import { definirDiscretion } from '../ui/discretion';
 import { Coque, type Destination } from '../ui/Navigation';
 import type { OngletPortefeuille } from '../ui/ecrans/Portefeuille';
-import { ComparateurFinancier } from '../ui/ecrans/ComparateurFinancier';
 import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
-import { Comparateur } from '../ui/ecrans/Comparateur';
-import { Podcast } from '../ui/ecrans/Podcast';
 import { LecteurFlottant } from '../ui/lecturePodcast';
 import { lecturePartagee } from '../podcast/lecture';
-import { Objectifs } from '../ui/ecrans/Objectifs';
 import { objectifDepuisJson } from '../ui/vues/objectifs';
 import { preparerEpisode } from '../podcast/donnees';
 import type { Episode } from '../podcast/episode';
 import { chargerActualites } from '../fondamentaux/actualites';
 import { construireComparateur } from '../ui/vues/comparateur';
-import { Projection } from '../ui/ecrans/Projection';
-import { Symboles } from '../ui/ecrans/Symboles';
-import { Watchlist } from '../ui/ecrans/Watchlist';
 import { Recuperation } from '../ui/ecrans/Recuperation';
 import { ACCUEIL_BAGGR } from '../ui/vues/liens';
-import { Recherche } from '../ui/ecrans/Recherche';
-import { Screener } from '../ui/ecrans/Screener';
-import { Carnet } from '../ui/ecrans/Carnet';
-import { Diagnostic } from '../ui/ecrans/Diagnostic';
-import { Journal } from '../ui/ecrans/Journal';
 import { construireJournal } from '../ui/vues/journal';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { convertisseur, installerConvertisseur } from '../cours/change';
@@ -140,7 +151,6 @@ import { actionOnglet, type ToucheOnglet } from '../hub/multi/raccourcis';
 import { adresseProfonde, decisionLienProfond, effacerLienProfond, fragmentCourant, lireLienProfond } from '../hub/multi/liensProfonds';
 import { fenetresDisponibles, hoteFenetres, ouvrirFenetreAnnexe, type ContexteAnnexe } from '../hub/multi/fenetres';
 import { categorieDe } from '../hub/pages';
-import { PageSupport } from '../hub/PageSupport';
 import { AcceptationJuridique, LiensJuridiques, PageJuridique } from '../hub/PageJuridique';
 import { LigneSynchroDemarrage } from '../hub/SynchroDemarrage';
 import { ReglageJuridique, ReglageSupport } from '../hub/ReglagesSupportJuridique';
@@ -185,16 +195,23 @@ import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { definirThemeAppareil, lireThemeAppareil, themeEffectif } from '../hub/themeAppareil';
-import { Devblog } from '../hub/devblog/Devblog';
 import { useRappelsTaches } from '../taches/resume';
-import { ReglagesTachesFondateur, ReglagesTachesPerso } from '../taches/ui/ParametresTaches';
 import { roleTaches } from '../taches/acces';
 import { useLiensOffice } from '../taches/integrations/officeHook';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
-import { ReglageLectureTsuzuku } from '../tsuzuku/app/ParametresTsuzuku';
-import { ReglageAvancesTsuzuku, ReglageSourcesPartagees, ReglageSourcesTsuzuku } from '../tsuzuku/app/AdminTsuzuku';
+// Cartes de Paramètres propres à une app et Devblog : chargées à la demande sur le web (hub/reglagesDifferes.web.tsx).
+import {
+  Devblog,
+  PageSupport,
+  ReglageAvancesTsuzuku,
+  ReglageLectureTsuzuku,
+  ReglageSourcesPartagees,
+  ReglageSourcesTsuzuku,
+  ReglagesTachesFondateur,
+  ReglagesTachesPerso,
+} from '../hub/reglagesDifferes';
 import { comptesPourPartage, peutGererSources } from '../tsuzuku/app/gestion';
 import { rangDe } from '../hub/admin/roles';
 import { resumerBibliotheque } from '../tsuzuku/app/resume';
@@ -225,11 +242,8 @@ import {
   construirePerformance,
 } from '../ui/vues/onglets';
 import { serieValorisation } from '../core/performance/serie';
-import { AUCUN_INDICE, Portefeuille, TOUS_LES_COMPTES } from '../ui/ecrans/Portefeuille';
-import { CreationCompte } from '../ui/ecrans/CreationCompte';
-import { CreationTitre } from '../ui/ecrans/CreationTitre';
+import { AUCUN_INDICE, TOUS_LES_COMPTES } from '../ui/ecrans/constantesPortefeuille';
 import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
-import { ImportPositions } from '../ui/ecrans/ImportPositions';
 import {
   ReglageCodes,
   ReglageDiscretion,
@@ -241,8 +255,7 @@ import {
   ReglageSymboles,
   ReglageVisite,
 } from '../ui/ecrans/CartesReglages';
-import { ReglageSauvegardeAuto, Sauvegarde } from '../ui/ecrans/Sauvegarde';
-import { Notifications, type SeuilAffiche } from '../ui/ecrans/Notifications';
+import type { SeuilAffiche } from '../ui/ecrans/Notifications';
 import {
   planningDepuisJson,
   planningVersJson,
@@ -260,7 +273,6 @@ import {
 import { chargerModule } from '../natif/modules';
 import { gestionnaireDepuisFs } from '../maj/application';
 import { supprimerSauvegarde } from '../sauvegarde/fichiers';
-import { SaisieOperation } from '../ui/ecrans/SaisieOperation';
 import {
   PremierLancement,
   type SecretsInitiaux,
@@ -2364,6 +2376,32 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     setOnglets(etat => filtrerOnglets(etat, id => appsPermises.has(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seule la liste des apps permises compte.
   }, [hubAffiche, annexe, signaturePermises]);
+  // Site et app PC : le code des apps est chargé à la demande (hub/racinesDifferees.web.tsx). Une fois le hub affiché
+  // et la page au repos, celui des apps permises est préchargé, une app après l'autre : l'ouverture d'une tuile est
+  // ensuite immédiate. Sans effet ailleurs (écrans déjà dans le paquet de l'app).
+  useEffect(() => {
+    if (!hubAffiche) return;
+    const ids = signaturePermises ? signaturePermises.split(',') : [];
+    const racines: unknown[] = REGISTRE.filter(app => ids.includes(app.id)).map(app => (app.id === ID_PORTEFEUILLE ? Portefeuille : app.Racine));
+    const aPrecharger = racines.map(r => (r as { precharger?: () => Promise<unknown> } | undefined)?.precharger).filter(
+      (f): f is () => Promise<unknown> => typeof f === 'function',
+    );
+    if (aPrecharger.length === 0) return;
+    let annule = false;
+    const g = globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
+    const auRepos = (f: () => void) => (g.requestIdleCallback ? g.requestIdleCallback(f, { timeout: 5_000 }) : setTimeout(f, 0));
+    const suivant = (i: number) => {
+      if (annule || i >= aPrecharger.length) return;
+      auRepos(() => {
+        if (!annule) void aPrecharger[i]().then(() => suivant(i + 1));
+      });
+    };
+    const minuterie = setTimeout(() => suivant(0), 4_000);
+    return () => {
+      annule = true;
+      clearTimeout(minuterie);
+    };
+  }, [hubAffiche, signaturePermises]);
   // Mémoire de l'appareil (jamais synchronisée), propre à chaque compte : la liste des onglets.
   // Déclarée AVANT la restauration : au premier passage, rien n'est encore à écrire.
   const ongletsRestaures = useRef(false);

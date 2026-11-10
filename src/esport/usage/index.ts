@@ -4,6 +4,7 @@
  * JS et aux appels réussis de l'API (actions clés). Voir collecteur.ts.
  */
 
+import { definirSignaleur } from '../../ui/signalementErreurs';
 import { AppState, Dimensions, Platform } from 'react-native';
 import { ecouterAppels, type ClientEsport } from '../client';
 import { langueCourante } from '../i18n';
@@ -48,6 +49,9 @@ export function demarrerUsage(client: ClientEsport): () => void {
   });
   actuel = c;
   const arrets: Array<() => void> = [];
+  // Erreurs attrapées par une GardeErreur (hub ou Esport) : comptées comme les erreurs JS de la page.
+  definirSignaleur(m => c.erreur(m));
+  arrets.push(() => definirSignaleur(undefined));
   arrets.push(ecouterAppels((methode, chemin) => {
     const a = actionDAppel(methode, chemin);
     if (a) c.action(a.action, a.team);

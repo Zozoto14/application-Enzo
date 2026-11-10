@@ -18,7 +18,8 @@ import { attenteNulle, fauxReseau, html, json } from '../moteur/outilsTest';
 import { importerSources } from '../moteur/sources';
 import { CLES } from '../plateforme/stockage';
 import { ReglageSourcesTsuzuku } from './AdminTsuzuku';
-import { exporterSources, importerExportSources } from './gestion';
+import { exporterSources } from './gestion';
+import { importerExportSources } from './importSources';
 import { TsuzukuEcrans } from './Racine';
 import { creerServices } from './services';
 

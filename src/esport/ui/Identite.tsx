@@ -8,7 +8,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { FormulaireIdentite } from '../../hub/Administration';
+import { FormulaireIdentite } from '../../hub/FormulaireIdentite';
 import { Avis } from '../../hub/admin/ui/commun';
 import { chargerDonnees } from '../../hub/admin/donnees';
 import type { ThemeHub } from '../../hub/themes';

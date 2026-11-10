@@ -9,7 +9,8 @@
 
 import type { AppHub } from '../hub/types';
 import { accesProspects, infoProspects } from './acces';
-import { Prospects } from './RacineProspects';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { Prospects } from '../hub/racinesDifferees';
 
 export const ID_PROSPECTS = 'prospects';
 

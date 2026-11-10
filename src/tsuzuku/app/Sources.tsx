@@ -26,7 +26,8 @@ import { LANGUES, ajouterSource, modifierSource, supprimerSource, type Definitio
 import { AideConfiguration } from './AideSources';
 import { AssistantSource, ChoixPartage, LIBELLE_LANGUE, typeDe, type CompteTsuzuku, type SourceAssistant } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
-import { exporterSources, importerExportSources, partageDe, quiRecoitQuoi, type Partages, type TestsSources } from './gestion';
+import { exporterSources, partageDe, quiRecoitQuoi, type Partages, type TestsSources } from './gestion';
+import { importerExportSources } from './importSources';
 import { Avis, Bouton, Champ, Etat, Puce, Titre, styleAttenue, styleTexte, styleTitre } from './ui';
 
 export type { CompteTsuzuku } from './AssistantSource';

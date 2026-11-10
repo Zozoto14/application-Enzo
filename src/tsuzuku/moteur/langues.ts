@@ -12,10 +12,9 @@
 import type { AnyNode, Element } from 'domhandler';
 import { texteVisible, type Noeud, type Page } from './lecteurPage';
 
-export type LangueVersion = 'vf' | 'vostfr';
-export const LANGUES_VERSION: readonly LangueVersion[] = ['vf', 'vostfr'];
-export const LIBELLE_LANGUE_VERSION: Record<LangueVersion, string> = { vf: 'VF', vostfr: 'VOSTFR' };
-export const autreLangue = (l: LangueVersion): LangueVersion => (l === 'vf' ? 'vostfr' : 'vf');
+import type { LangueVersion } from './languesVersion';
+// Constantes à part (languesVersion.ts) : la synchro les lit au démarrage sans charger l'analyseur HTML.
+export { autreLangue, LANGUES_VERSION, LIBELLE_LANGUE_VERSION, type LangueVersion } from './languesVersion';
 
 /** Une langue lue, et ce qui l'a montrée. */
 export interface LangueLue {

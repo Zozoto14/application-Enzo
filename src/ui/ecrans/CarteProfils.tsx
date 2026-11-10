@@ -15,7 +15,7 @@ import type { IdentifiantsAmi, InvitationAffichee } from '../../profils/identifi
 import type { OptionsLier } from './LierCompte';
 import type { DocsJuridiques } from '../../juridique/modele';
 import { rangDe, texteTransparence } from '../../hub/admin/roles';
-import { QrCode } from './CarteSynchro';
+import { QrCode } from './qrDiffere';
 import { Icone } from '../icones';
 
 /** Options d'une invitation, réglées dans l'Administration (Fondateur). */

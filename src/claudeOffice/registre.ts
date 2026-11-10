@@ -11,7 +11,8 @@
 
 import { rangDe } from '../hub/admin/roles';
 import type { AppHub } from '../hub/types';
-import { ClaudeOffice } from './Racine';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { ClaudeOffice } from '../hub/racinesDifferees';
 import { infoClaudeOffice } from './resumeHub';
 
 export const ID_CLAUDE_OFFICE = 'claude-office';

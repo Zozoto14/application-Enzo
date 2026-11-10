@@ -6,16 +6,27 @@
  * serveur sont couverts.
  */
 
-import table from '../../../esport/noyau/erreurs.json';
+import { tableErreursAnglais, type TableErreurs } from './anglais';
 import { langueCourante, type Langue } from './index';
 
-const MESSAGES = table.messages as Record<string, string>;
-const MOTIFS = (table.motifs as Array<[string, string]>).map(([motif, modele]) => [new RegExp(motif, 's'), modele] as const);
+// Table chargée d'office (iPhone, tests) ou à la demande avec le dictionnaire anglais (web : anglais.web.ts).
+let lue: TableErreurs | undefined;
+let MOTIFS: ReadonlyArray<readonly [RegExp, string]> = [];
+function table(): TableErreurs | undefined {
+  const t = tableErreursAnglais();
+  if (t && t !== lue) {
+    lue = t;
+    MOTIFS = t.motifs.map(([motif, modele]) => [new RegExp(motif, 's'), modele] as const);
+  }
+  return lue;
+}
 
 export function traduireServeur(message: string | undefined | null, langue: Langue = langueCourante()): string {
   const m = String(message ?? '');
   if (langue !== 'en' || !m) return m;
-  const exact = MESSAGES[m];
+  const t = table();
+  if (!t) return m;
+  const exact = t.messages[m];
   if (exact) return exact;
   for (const [motif, modele] of MOTIFS) {
     const r = motif.exec(m);

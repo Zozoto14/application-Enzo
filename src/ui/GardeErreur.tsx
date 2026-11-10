@@ -10,6 +10,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { Bouton, SousTitre, Titre } from './composants';
 import { ESPACEMENT, palettePour, stylesPartages } from './theme';
 import { abonnerVersion, estErreurChunk, etatVersion, traiterErreurChunk, rechargerMaintenant } from './versionPerimee';
+import { signalerErreur } from './signalementErreurs';
 
 export interface GardeErreurProps {
   children: React.ReactNode;
@@ -42,6 +43,8 @@ export class GardeErreur extends React.Component<GardeErreurProps, Etat> {
   componentDidCatch(erreur: unknown, info: { componentStack?: string | null }): void {
     // Morceau JS périmé (déploiement pendant que l'onglet restait ouvert) : rechargement unique.
     traiterErreurChunk(erreur);
+    // Signalée au serveur Esport (statistiques, ~/logs/esport.log) : les bugs passagers deviennent visibles.
+    signalerErreur(erreur, this.props.quoi ?? 'écran');
     console.error(`Affichage impossible (${this.props.quoi ?? 'écran'}) :`, erreur, info.componentStack ?? '');
   }
 

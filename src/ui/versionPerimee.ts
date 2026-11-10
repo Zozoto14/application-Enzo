@@ -106,12 +106,30 @@ interface CibleEvenements {
   addEventListener(type: string, rappel: (e: any) => void): void;
 }
 
+/**
+ * Préchargements en arrière-plan en cours (code des apps préchargé au repos, src/ui/differe.tsx). Leur échec
+ * (hors ligne, morceau absent) ne doit JAMAIS recharger la page sous les doigts de l'utilisateur : Vite signale
+ * pourtant chaque échec par `vite:preloadError`, ignoré tant qu'un préchargement est en cours. L'ouverture réelle
+ * de l'app redemande le module ; si l'échec persiste, la GardeErreur s'en charge (rechargement unique).
+ */
+let prechargements = 0;
+export async function sansRechargement<T>(f: () => Promise<T>): Promise<T> {
+  prechargements++;
+  try {
+    return await f();
+  } finally {
+    prechargements--;
+  }
+}
+export const prechargementEnCours = (): boolean => prechargements > 0;
+
 /** Écoute vite:preloadError, les rejets de promesses et les erreurs globales (à appeler une fois au démarrage). */
 export function installerEcouteursChunks(cible: CibleEvenements | undefined = g.window, env?: EnvRechargement): void {
   if (!cible) {
     return;
   }
   cible.addEventListener('vite:preloadError', e => {
+    if (prechargementEnCours()) return;
     traiterErreurChunk(e?.payload, env);
   });
   cible.addEventListener('unhandledrejection', e => {

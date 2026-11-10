@@ -100,6 +100,20 @@ export default defineConfig({
     ],
     extensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.jsx', '.js', '.json'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Bibliothèques de base (React, react-native-web, cryptographie) dans un fichier à part : il ne change
+        // presque jamais, le navigateur le garde en cache d'un déploiement à l'autre (docs/performance.md).
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-native-web|inline-style-prefixer|css-in-js-utils|hyphenate-style-name|styleq|postcss-value-parser|nullthrows|memoize-one|@noble)[\\/]/.test(id)) {
+            return 'socle';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   optimizeDeps: {
     esbuildOptions: { resolveExtensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.js'] },
   },

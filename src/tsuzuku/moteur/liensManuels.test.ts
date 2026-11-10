@@ -1,4 +1,5 @@
-import { adresseEpisode, apercuEpisodes, associerParTitre, corrigerEpisode, definirAssociation, definirLienFilm, deduireMotif, deviner, extraireLiensEpisodes, liensVides, lireAssociation, normaliserAssociation, remplirMotif, retirerAssociation, retirerLienFilm } from './liensManuels';
+import { adresseEpisode, apercuEpisodes, associerParTitre, corrigerEpisode, definirAssociation, definirLienFilm, deduireMotif, deviner, liensVides, lireAssociation, normaliserAssociation, remplirMotif, retirerAssociation, retirerLienFilm } from './liensManuels';
+import { extraireLiensEpisodes } from './liensEpisodesPage';
 
 const horloge = { maintenant: () => Date.UTC(2026, 8, 30, 12) };
 

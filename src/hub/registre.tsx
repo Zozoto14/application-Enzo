@@ -12,7 +12,8 @@
  * changez pas une fois l'app livrée.
  */
 
-import { Administration } from './Administration';
+// Écrans des apps chargés à la demande sur le web (racinesDifferees.web.tsx).
+import { Administration } from './racinesDifferees';
 import { infoAdministration, infoPortefeuille } from './infos';
 import { APP_TSUZUKU } from '../tsuzuku/registre';
 import { APP_ABONNEMENTS } from './abonnements/registre';

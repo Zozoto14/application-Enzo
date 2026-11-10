@@ -9,7 +9,8 @@
 
 import type { AppHub, ContexteHub, InfoLive } from '../types';
 import { resumeAdminDuContexte } from './BandeauAbonnement';
-import { AppAbonnements } from './AppAbonnements';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { AppAbonnements } from '../racinesDifferees';
 import { ID_ABONNEMENTS } from './actionsAbo';
 
 export { ID_ABONNEMENTS };

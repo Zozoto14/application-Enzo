@@ -14,7 +14,8 @@ import { jourDe } from './dates';
 import { libelleProchaine } from './echeance';
 import { joursEcrits } from './moteur';
 import { lirePage, lireResume, lireReglages } from './modele';
-import { AppJournal } from './AppJournal';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { AppJournal } from '../hub/racinesDifferees';
 
 export { ID_JOURNAL };
 
@@ -55,5 +56,8 @@ export const APP_JOURNAL: AppHub = {
   teinte: 'quatre',
   disponible: accesJournal,
   info: infoJournal,
-  Racine: AppJournal,
+  // Lu à l'ouverture, pas au chargement : journal/automatique importe ce registre pendant que l'écran se charge.
+  get Racine() {
+    return AppJournal;
+  },
 };

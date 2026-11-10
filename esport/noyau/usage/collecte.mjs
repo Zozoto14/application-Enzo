@@ -110,6 +110,46 @@ export function empreinte(texte) {
 
 const borne = (n, min, max) => Math.min(max, Math.max(min, Math.round(Number(n) || 0)));
 
+// ------------------------------------------------------------------ Journal du serveur
+
+export const JOURNAL_ERREURS_PAR_MINUTE = 30;
+export const JOURNAL_ERREUR_REPETEE_MS = 10 * 60_000;
+
+/**
+ * Erreurs JS des apps recopiées dans le journal du serveur (~/logs/esport.log, docs/performance.md) : un bug
+ * passager (« des fois il bug ») y laisse une trace lisible sans ouvrir les statistiques. Message déjà nettoyé
+ * (`nettoyerMessage`), ni compte ni adresse IP. Sobre : une même erreur (empreinte) au plus une fois par
+ * 10 minutes, 30 lignes par minute en tout ; au-delà, un seul résumé « N erreurs non recopiées ».
+ */
+export function creerJournalErreursClient({ ecrire = ligne => console.warn(ligne), maintenant = () => Date.now() } = {}) {
+  const vues = new Map();
+  let minute = -1;
+  let ecrites = 0;
+  let tues = 0;
+  return function journaliser({ message, page, appareil }) {
+    const t = maintenant();
+    const m = Math.floor(t / 60_000);
+    if (m !== minute) {
+      if (tues > 0) ecrire(`erreur client : ${tues} erreur(s) non recopiée(s) la minute précédente (plafond ${JOURNAL_ERREURS_PAR_MINUTE}/min)`);
+      minute = m;
+      ecrites = 0;
+      tues = 0;
+    }
+    const emp = empreinte(message);
+    const vu = vues.get(emp);
+    if (vu !== undefined && t - vu < JOURNAL_ERREUR_REPETEE_MS) return false;
+    if (ecrites >= JOURNAL_ERREURS_PAR_MINUTE) {
+      tues++;
+      return false;
+    }
+    if (vues.size > 500) vues.clear();
+    vues.set(emp, t);
+    ecrites++;
+    ecrire(`erreur client [${emp}] ${appareil ?? '?'} ${page ?? '-'} : ${message}`);
+    return true;
+  };
+}
+
 // ------------------------------------------------------------------ Ingestion
 
 /**
@@ -119,7 +159,7 @@ const borne = (n, min, max) => Math.min(max, Math.max(min, Math.round(Number(n) 
  *  - `il` : âge de l'événement à l'envoi (ms, 10 minutes au plus) : l'heure reste juste.
  * Un événement illisible est ignoré (pas d'erreur pour tout le lot) ; un lot illisible : 400.
  */
-export function servicesCollecte({ base, maintenant = () => Date.now() }) {
+export function servicesCollecte({ base, maintenant = () => Date.now(), journalErreurs = creerJournalErreursClient() }) {
   async function ingerer(acteur, corps) {
     if (!(await collecteActive(base))) return { actif: false, recus: 0 };
     const session = String(corps?.session ?? '');
@@ -148,6 +188,7 @@ export function servicesCollecte({ base, maintenant = () => Date.now() }) {
       const team = typeof e.t === 'string' && MOTIF_UUID.test(e.t) && (acteur.superAdmin || sesTeams.has(e.t)) ? e.t : null;
       const duree = genre === 'page' ? borne(e.d, 0, DUREE_MAX_MS) : 0;
       const date = t - borne(e.il, 0, AGE_MAX_MS);
+      if (genre === 'erreur') journalErreurs({ message, page, appareil });
       lot.push({
         sql: 'INSERT INTO usage_evenements (id, compte_id, session_id, genre, page, team_id, action, duree_ms, appareil, langue, message, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         params: [nouvelId(), acteur.compte, session, genre, page, team, action, duree, appareil, langue, message, iso(date)],

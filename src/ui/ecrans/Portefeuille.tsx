@@ -80,10 +80,8 @@ const ONGLETS: Array<{ cle: OngletPortefeuille; libelle: string }> = [
   { cle: 'impots', libelle: 'Impôts' },
 ];
 
-/** Valeur du sélecteur de compte qui désigne l'ensemble des comptes. */
-export const TOUS_LES_COMPTES = 'tous';
-/** Valeur du sélecteur de référence qui retire toute comparaison. */
-export const AUCUN_INDICE = 'aucun';
+import { AUCUN_INDICE, TOUS_LES_COMPTES } from './constantesPortefeuille';
+export { AUCUN_INDICE, TOUS_LES_COMPTES };
 
 export interface PortefeuilleProps {
   dashboard: VueDashboard;

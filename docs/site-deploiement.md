@@ -33,6 +33,8 @@ Voir [o2switch.md](o2switch.md).
   `scripts/htaccess-o2switch.mjs`) : les fichiers de `assets/`, dont le nom porte une empreinte, sont gardés un an
   par le navigateur ; `index.html`, le manifeste et `/maj` sont revalidés à chaque visite, donc une nouvelle version
   est vue au chargement suivant.
+- Les textes (HTML, JS, CSS, JSON, SVG, wasm) sont compressés par Apache (brotli, sinon gzip) ; le code de chaque
+  app est chargé à la demande. Mesures et diagnostic : [performance.md](performance.md).
 - Couleur de la barre du navigateur (`theme-color`) et polices : celles du thème affiché, posées dès l'écran
   d'accueil, même sans thème jamais choisi.
 - Contrôle : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rendu-site.mjs`

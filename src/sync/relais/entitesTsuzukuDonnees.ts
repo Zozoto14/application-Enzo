@@ -33,7 +33,7 @@ import { fiabiliteValide, LECTEURS_PAR_SOURCE_MAX, type FiabiliteLecteur } from 
 import { migrerBibliotheque, STATUTS, type Bibliotheque, type Entree, type EvenementHistorique, type Genre } from '../../tsuzuku/moteur/bibliotheque';
 import { estampille, fusionnerEntrees, fusionnerHistoriques, jsonStable } from '../../tsuzuku/moteur/fusionBibliotheque';
 import { assurerLiens } from '../../tsuzuku/moteur/liensManuels';
-import { LANGUES_VERSION, type LangueVersion } from '../../tsuzuku/moteur/langues';
+import { LANGUES_VERSION, type LangueVersion } from '../../tsuzuku/moteur/languesVersion';
 import { CLES } from '../../tsuzuku/plateforme/stockage';
 
 export interface Acces {

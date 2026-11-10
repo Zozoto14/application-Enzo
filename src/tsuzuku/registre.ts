@@ -8,7 +8,8 @@
  */
 
 import type { AppHub } from '../hub/types';
-import { Tsuzuku } from './app/Racine';
+// Chargé à la demande sur le web (hub/racinesDifferees.web.tsx).
+import { Tsuzuku } from '../hub/racinesDifferees';
 import { infoTsuzuku } from './app/resume';
 
 export const ID_TSUZUKU = 'tsuzuku';

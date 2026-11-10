@@ -30,6 +30,7 @@ import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { BandeauNouvelleVersion } from './NouvelleVersion';
 import { installerEcouteursChunks } from '../src/ui/versionPerimee';
+import { preparerLangue } from '../src/esport/i18n';
 import { noterSessionOuverte, surveillanceSite } from '../src/hub/maj/version';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCachesBureau, stockageCourant, type NomFichier, type Stockage } from './stockage';
@@ -2335,6 +2336,10 @@ installerEcouteursChunks();
 // Nouvelle version du site : vérifiée au démarrage, au retour au premier plan et toutes les 3 minutes (fenêtre principale).
 if (!contexteAnnexe) surveillanceSite();
 
-createRoot(document.getElementById('racine')!).render(
-  <SafeAreaProvider>{contexteAnnexe ? <RacineAnnexe contexte={contexteAnnexe} /> : <Racine />}</SafeAreaProvider>,
-);
+// Appareil en anglais : le dictionnaire anglais (chargé à la demande sur le web) est attendu avant le premier
+// affichage, 4 s au plus (sans réseau, l'app démarre en français et passe à l'anglais dès qu'il arrive).
+void Promise.race([preparerLangue(), new Promise<void>(ok => setTimeout(ok, 4_000))]).then(() => {
+  createRoot(document.getElementById('racine')!).render(
+    <SafeAreaProvider>{contexteAnnexe ? <RacineAnnexe contexte={contexteAnnexe} /> : <Racine />}</SafeAreaProvider>,
+  );
+});

@@ -14,7 +14,7 @@ import { DetailMiseAJour, type MiseAJour } from './ParametresHub';
 import { avecEvenement, chargerDonnees, enregistrerDonnees, BORNES_REGLAGES, REGLAGES_DEFAUT, type ReglagesAdmin } from './admin/donnees';
 import { avecReglagesPar } from './admin/actions';
 import { Champ as ChampAdmin } from './admin/ui/commun';
-import { FormulaireIdentite } from './Administration';
+import { FormulaireIdentite } from './FormulaireIdentite';
 import type { PrefsHub } from './personnalisation';
 import { definirDensite, definirDisposition, reinitialiser, sontParDefaut } from './personnalisation';
 import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub } from './themes';

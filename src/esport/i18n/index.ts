@@ -16,7 +16,8 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { en } from './en';
+// Anglais : chargé d'office sur l'iPhone et dans les tests, à la demande sur le web (anglais.web.ts).
+import { chargerAnglais, dictionnaireAnglais } from './anglais';
 import { fr, type Cle } from './fr';
 
 export type { Cle } from './fr';
@@ -24,7 +25,7 @@ export type Langue = 'fr' | 'en';
 export const LANGUES: readonly Langue[] = ['fr', 'en'];
 export const NOM_LANGUE: Record<Langue, string> = { fr: 'Français', en: 'English' };
 
-const DICTIONNAIRES: Record<Langue, Record<Cle, string>> = { fr, en };
+const dictionnaire = (l: Langue): Record<Cle, string> | undefined => (l === 'en' ? dictionnaireAnglais() : fr);
 const LOCALES: Record<Langue, string> = { fr: 'fr-FR', en: 'en-GB' };
 
 export const estLangue = (v: unknown): v is Langue => v === 'fr' || v === 'en';
@@ -50,11 +51,38 @@ export const langueCourante = (): Langue => courante;
 export const localeCourante = (): string => LOCALES[courante];
 export const localeDe = (l: Langue): string => LOCALES[l];
 
-/** Change la langue et prévient les abonnés (rendu instantané). */
+const prevenir = () => {
+  for (const f of [...abonnes]) f();
+};
+
+/**
+ * Textes de la langue prêts (web : l'anglais est téléchargé à la demande). Résolue tout de suite en français ou
+ * quand le dictionnaire est déjà là ; ne rejette jamais (sans réseau, les textes restent en français).
+ */
+let preparation: Promise<void> | undefined;
+export function preparerLangue(l: Langue = courante): Promise<void> {
+  if (l !== 'en' || dictionnaireAnglais()) return Promise.resolve();
+  if (!preparation) {
+    preparation = chargerAnglais().then(
+      () => {
+        // Arrivé après un premier rendu : les écrans abonnés se re-rendent avec les bons textes.
+        if (courante === 'en') prevenir();
+      },
+      () => {
+        // Sans réseau : textes en français, nouvel essai au prochain appel.
+        preparation = undefined;
+      },
+    );
+  }
+  return preparation;
+}
+
+/** Change la langue et prévient les abonnés (rendu instantané ; en anglais sur le web, encore une fois quand le dictionnaire arrive). */
 export function definirLangue(l: Langue): void {
   if (l === courante) return;
   courante = l;
-  for (const f of [...abonnes]) f();
+  prevenir();
+  void preparerLangue(l);
 }
 export function abonnerLangue(f: () => void): () => void {
   abonnes.add(f);
@@ -72,7 +100,7 @@ export function interpoler(modele: string, vars?: Variables): string {
 
 /** Traduit une clé dans une langue donnée (secours : français, puis la clé). */
 export function traduire(langue: Langue, cle: Cle, vars?: Variables): string {
-  return interpoler(DICTIONNAIRES[langue][cle] ?? fr[cle] ?? cle, vars);
+  return interpoler(dictionnaire(langue)?.[cle] ?? fr[cle] ?? cle, vars);
 }
 
 /** La clé existe-t-elle dans le dictionnaire français (donc dans les deux) ? */

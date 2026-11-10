@@ -1,8 +1,12 @@
-/** Chargement à la demande d'un écran (React.lazy + Suspense), avec un indicateur accessible. */
+/**
+ * Chargement à la demande d'un écran (React.lazy + Suspense), avec un indicateur accessible traduit. Le mécanisme
+ * (une seconde tentative si l'import échoue, réseau instable) est celui du hub : src/ui/differe.tsx.
+ */
 
-import React, { Suspense } from 'react';
+import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { tr } from '../i18n';
+import { differe as differeHub } from '../../ui/differe';
 
 function Attente() {
   return (
@@ -13,12 +17,5 @@ function Attente() {
 }
 
 export function differe<P extends object>(charger: () => Promise<React.ComponentType<P>>): (props: P) => React.ReactElement {
-  const Ecran = React.lazy(async () => ({ default: await charger() }));
-  return function EcranDiffere(props: P) {
-    return (
-      <Suspense fallback={<Attente />}>
-        <Ecran {...props} />
-      </Suspense>
-    );
-  };
+  return differeHub(charger, { attente: <Attente /> });
 }

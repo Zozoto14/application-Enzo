@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Glyphe, Icone } from '../../ui/icones';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Profil } from '../../profils/profils';
-import { FormulaireIdentite } from '../Administration';
+import { FormulaireIdentite } from '../FormulaireIdentite';
 import { RetourHub } from '../Hub';
 import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, type DonneesAdmin } from '../admin/donnees';
 import type { EvenementAudit } from '../admin/journal';
