@@ -3,8 +3,10 @@
  * les événements et tournois organisés PAR le club (ex. The Nuke End). Liste, création, et la fiche d'un événement :
  * informations (nom, jeu, dates, statut), inscriptions (catégorie de tickets), rôles Discord (rôles automatiques,
  * modèle du nom, couleur, rôle repère : « placer les nouveaux rôles juste en dessous du rôle… », suppression
- * automatique après la fin, rôle staff : nom, catégories de tickets de l'événement), staff (StaffEvenement.tsx) et
- * équipes participantes (EquipesEvenement.tsx). Le serveur valide tout.
+ * automatique après la fin, rôle staff : nom, catégories de tickets de l'événement), staff (StaffEvenement.tsx),
+ * vocaux de l'événement (VocauxEvenement.tsx : ses hubs vocaux, créés et modifiés seulement ici) et équipes
+ * participantes (EquipesEvenement.tsx). `evenementInitial` : fiche ouverte d'emblée (lien « Ouvrir l'événement » du
+ * Bot Esport HQ). Le serveur valide tout.
  * Les tournois EXTÉRIEURS auxquels une team participe restent dans la team (Compétition › Tournois).
  */
 
@@ -50,6 +52,7 @@ import {
 } from '../design';
 import { EquipesEvenement } from './EquipesEvenement';
 import { StaffEvenement } from './StaffEvenement';
+import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { PositionRoles } from './PositionRoles';
 import { ChampDate } from '../../../ui/dates';
@@ -308,10 +311,13 @@ export function PageEvenements({
   theme,
   client,
   large,
+  evenementInitial,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
   large: boolean;
+  /** Fiche à ouvrir d'emblée (Bot Esport HQ › Salons vocaux › « Ouvrir l'événement »). */
+  evenementInitial?: string;
 }) {
   const api = useMemo(() => apiEvenements(client), [client]);
   const [liste, setListe] = useState<
@@ -333,6 +339,13 @@ export function PageEvenements({
     setFiche(x);
     setF(formulaireDe(x.evenement, x.choix));
   }, []);
+  useEffect(() => {
+    if (!evenementInitial) return;
+    void agir('ouvrir', async () => {
+      recevoir(await api.lire(evenementInitial));
+      setOuvert(evenementInitial);
+    });
+  }, [agir, api, evenementInitial, recevoir]);
   const lireRoles = () =>
     void agir('roles-serveur', async () => {
       setRoles(await api.rolesServeur());
@@ -507,16 +520,6 @@ export function PageEvenements({
               })}
             </Text>
           ) : null}
-          {fiche.hubs.length ? (
-            <Text style={attenue(theme)} testID="esport-ev-hubs">
-              {trEv('hubs', {
-                hubs: fiche.hubs.map(h => h.nom || h.id).join(', '),
-              })}
-            </Text>
-          ) : (
-            <Text style={attenue(theme)}>{trEv('hub_aide')}</Text>
-          )}
-
           <Bloc theme={theme} testID="esport-ev-reglages">
             <Editeur
               theme={theme}
@@ -551,6 +554,8 @@ export function PageEvenements({
           </Bloc>
 
           <StaffEvenement theme={theme} api={api} fiche={fiche} onFiche={setFiche} />
+
+          <VocauxEvenement theme={theme} api={api} client={client} fiche={fiche} />
 
           <EquipesEvenement
             theme={theme}

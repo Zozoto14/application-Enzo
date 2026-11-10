@@ -35,7 +35,7 @@ export interface NavigationBot {
   ouvrirTickets?(section?: string): void;
   ouvrirTeam?(teamId: string, section?: string): void;
   /** Administration › Événements (hub vocal d'un événement : créer l'événement d'abord). */
-  ouvrirEvenements?(): void;
+  ouvrirEvenements?(evenementId?: string): void;
 }
 
 const nomFonctionnalite = (id: string) => trBotOu(`fct.${id}`, id);

@@ -17,7 +17,11 @@ Permission du club **`evenements.gerer`** (« Événements : gérer », catégor
 d'office ; la migration la donne au **Second CEO** et à un rôle du club nommé **« CEO »** s'il existe (Administration ›
 Rôles et permissions pour la donner ou la retirer). Elle suffit pour tout, actions Discord comprises (création,
 attribution, déplacement et suppression des rôles des équipes). Seule exception : **Importer depuis les tickets**
-demande en plus de voir les tickets de la catégorie choisie (permissions des Tickets).
+demande en plus de voir les tickets de la catégorie choisie (permissions des Tickets), et **modifier les vocaux de
+l'événement** (créer, modifier, retirer un hub) demande en plus **`vocaux.configurer`** (« Salons vocaux :
+configurer », les mêmes droits qu'aujourd'hui pour les réglages des salons vocaux) : sans elle, la section s'affiche en
+lecture seule. Le Second CEO a les deux ; le rôle « CEO » n'a que la première (à compléter dans Rôles et permissions
+s'il doit régler les vocaux).
 
 ## Un événement
 
@@ -74,9 +78,13 @@ placé avec le même réglage « juste en dessous du rôle… » (au-dessus des 
 - **Tickets** : le rôle est ajouté aux **rôles du staff** des catégories de tickets de l'événement (Tickets ›
   Configuration › Catégories : les nouveaux tickets lui sont ouverts) et ouvert sur les salons des tickets déjà
   ouverts de ces catégories. Une catégorie retirée de la liste lui est retirée.
-- **Vocal** : il voit et rejoint **tous les salons vocaux des équipes** de l'événement (ajouté à leurs surcharges, avec
-  le rôle de l'équipe, les rôles du staff et les rôles autorisés du hub ; ajouté aussi aux salons déjà ouverts quand il
-  est créé).
+- **Vocal** : il voit et rejoint **tous les salons vocaux des équipes** de l'événement **sans rien régler** : il est
+  dans les surcharges de chaque salon créé par un hub de l'événement (avec le rôle de l'équipe, les rôles du staff et
+  les rôles autorisés du hub) et y reste quand le salon est reverrouillé (recalcul). À chaque synchronisation du rôle
+  (créé ou recréé, staff ajouté ou retiré, événement renommé, catégories changées, « Resynchroniser les rôles »), il est
+  **réappliqué** aux salons d'équipe déjà ouverts (un `PUT` de surcharge « voir, se connecter » par salon, sans effet
+  s'il y est déjà). Inutile donc de l'ajouter aux « Rôles autorisés en plus » d'un hub : la fiche et le Bot Esport HQ
+  l'affichent comme une puce **« inclus automatiquement »**.
 - **Fin** : supprimé avec les rôles des équipes (bouton, cron) et retiré des rôles du staff des catégories de tickets.
 - Données : `club_evenement_staff` (Discord ID, nom, compte lié) suit l'export ; RGPD : retiré du staff.
 
@@ -94,14 +102,31 @@ une IA.
 Bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par le cron (5 min) dès que
 l'événement passe à **Terminé** ou **Annulé**, ou **N heures après sa date de fin**. Ensuite, plus aucun rôle n'est
 créé automatiquement pour cet événement (« Resynchroniser » reste possible tant qu'il n'est ni terminé ni annulé).
-Supprimer un événement supprime aussi ses rôles et ses équipes ; c'est refusé tant qu'un hub vocal y est lié.
+Supprimer un événement supprime aussi ses rôles et ses équipes ; c'est refusé tant qu'un hub vocal y est lié (le retirer
+dans « Vocaux de l'événement »).
 
-## Hub vocal de l'événement
+## Vocaux de l'événement
 
-Administration › Bot Esport HQ › Fonctionnalités › Salons vocaux temporaires : chaque hub a l'option **Hub
-d'événement** ; activée, on choisit l'événement (s'il n'y en a aucun, un bouton mène ici pour le créer). Seuls les
-membres qui ont le rôle d'une équipe de l'événement s'en servent ; le salon de l'équipe reste verrouillé sur son rôle.
-Détails : [vocaux.md](vocaux.md#hub-vocal-dun-événement).
+Section **« Vocaux de l'événement »** de la fiche : les hubs vocaux de l'événement se **créent, se modifient et se
+retirent ici, et seulement ici**. Un membre qui a le rôle d'une équipe rejoint le hub ; Esport HQ crée le salon de son
+équipe (un par équipe), verrouillé sur son rôle ; les autres sont déconnectés et prévenus en MP.
+
+- Par hub : **salon vocal** (sélecteur repliable, salons rangés par catégorie ; les salons déjà pris par un autre hub ne
+  sont pas proposés), **catégorie des salons créés** (celle du hub par défaut), **modèle du nom** (`{tag} — {nom}` par
+  défaut), **places par défaut** (0 : illimité), **rôles autorisés en plus** (casters, admins). Le verrouillage est
+  implicite (toujours verrouillé).
+- Lignes en lecture seule : « Le rôle staff de l'événement « … » a accès automatiquement à tous les vocaux d'équipe »
+  (ou qu'il l'aura dès sa création), et chaque salon est verrouillé sur le rôle de son équipe ; sous les rôles
+  autorisés, la puce du rôle staff « inclus automatiquement ».
+- **Même stockage** que les salons vocaux temporaires (réglage `vocaux`, hubs dont `tournoiId` est l'événement) :
+  aucune deuxième source. Les salons vocaux doivent être activés dans le Bot Esport HQ (la section le rappelle) ; retirer
+  le dernier hub du serveur les désactive.
+- Dans Administration › Bot Esport HQ › Fonctionnalités › Salons vocaux temporaires, ces hubs apparaissent en **ligne
+  compacte en lecture seule** « Hub de l'événement X — configuré dans Événements », avec un bouton **Ouvrir
+  l'événement** (qui ouvre cette fiche). Il n'y a plus d'option « Hub d'événement » là-bas.
+- Droits : lire avec `evenements.gerer` ; modifier avec en plus `vocaux.configurer` (voir « Droits »).
+
+Détails du fonctionnement des salons : [vocaux.md](vocaux.md#hub-vocal-dun-événement).
 
 ## Reprise de l'étape précédente (migration 0063)
 
@@ -124,6 +149,8 @@ Routes (`evenements.gerer`, 403 sinon) :
 | `PATCH`, `DELETE /evenements/:id/equipes/:e` | Modifier ; retirer (rôle et salon supprimés) |
 | `GET /evenements/staff-candidats?q=` | Personnes proposées pour le staff (app avec Discord lié, puis serveur) |
 | `POST /evenements/:id/staff`, `DELETE /evenements/:id/staff/:s` | Ajouter au staff (rôle donné) ; retirer (rôle retiré) |
+| `GET`, `POST /evenements/:id/vocaux` | Hubs vocaux de l'événement (`staffRole`, `peutModifier`, `autresHubs`) ; ajouter un hub (+ `vocaux.configurer`) |
+| `PATCH`, `DELETE /evenements/:id/vocaux/:hub` | Modifier ; retirer un hub de l'événement (+ `vocaux.configurer` ; 404 si le hub n'est pas lié à l'événement) |
 | `POST /evenements/:id/import` | Propositions lues dans les tickets `{ categorieId }` |
 | `POST /evenements/:id/roles` | Resynchroniser les rôles (bilan) |
 | `POST /evenements/:id/roles/supprimer` | Supprimer les rôles et les salons des équipes |

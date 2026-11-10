@@ -70,6 +70,8 @@ export function PageAdministration({
 }) {
   const permis = sousOngletsAdmin(droits);
   const [choix, setChoix] = useState<SousOngletAdmin | undefined>(ongletInitial);
+  // Fiche d'événement à ouvrir (Bot Esport HQ › Salons vocaux › « Ouvrir l'événement » d'un hub d'événement).
+  const [evenementOuvert, setEvenementOuvert] = useState<string | undefined>();
   const onglet: SousOngletAdmin | undefined = choix && permis.includes(choix) ? choix : permis[0];
   return (
     <View style={{ flex: 1 }} testID="esport-administration">
@@ -99,9 +101,22 @@ export function PageAdministration({
         ) : onglet === 'roles' ? (
           <RolesPermissions theme={theme} client={client} large={large} />
         ) : onglet === 'bot' ? (
-          <PageBot theme={theme} client={client} large={large} navigation={{ ...navigationBot, ouvrirEvenements: droits.evenements ? () => setChoix('evenements') : undefined }} />
+          <PageBot
+            theme={theme}
+            client={client}
+            large={large}
+            navigation={{
+              ...navigationBot,
+              ouvrirEvenements: droits.evenements
+                ? (evenementId?: string) => {
+                    setEvenementOuvert(evenementId);
+                    setChoix('evenements');
+                  }
+                : undefined,
+            }}
+          />
         ) : onglet === 'evenements' ? (
-          <PageEvenements theme={theme} client={client} large={large} />
+          <PageEvenements theme={theme} client={client} large={large} evenementInitial={evenementOuvert} />
         ) : onglet === 'devblog' ? (
           <PageDevblog theme={theme} client={client} large={large} />
         ) : null}

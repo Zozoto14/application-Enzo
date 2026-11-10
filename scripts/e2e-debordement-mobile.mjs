@@ -146,7 +146,16 @@ async function parcourir(page, taille) {
         if (sous === 'evenements' && (await present(page, 'esport-ev-nouveau', 2000))) {
           await page.getByTestId('esport-ev-nouveau').first().click();
           await controler(page, 'esport-administration-evenements-creation', taille);
-          await page.getByTestId('esport-ev-annuler').first().click();
+          // Fiche d'un événement créé pour l'occasion (staff, vocaux de l'événement, équipes), puis supprimé.
+          await page.getByTestId('esport-ev-nom').first().fill('Controle mobile');
+          await page.getByTestId('esport-ev-creer').first().click();
+          if (await present(page, 'esport-ev-fiche-nom', 10_000)) {
+            await page.getByTestId('esport-ev-vocaux').first().waitFor({ timeout: 10_000 });
+            await controler(page, 'esport-administration-evenements-fiche', taille);
+            await page.getByTestId('esport-ev-supprimer').first().click();
+            await page.getByTestId('esport-ev-supprimer-confirmer').first().click();
+            await page.getByTestId('esport-ev-nouveau').first().waitFor({ timeout: 10_000 });
+          } else await page.getByTestId('esport-ev-annuler').first().click();
         }
         // Bot Esport HQ : chaque section.
         if (sous === 'bot') {

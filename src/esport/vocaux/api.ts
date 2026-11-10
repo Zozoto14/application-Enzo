@@ -59,7 +59,7 @@ export interface ConfigVocaux {
   bot: boolean;
   lienInvitation: string | null;
   /** Événements du club proposés pour un hub d'équipe (Administration › Événements) ; clé `tournoiId` du hub. */
-  evenements?: Array<{ id: string; nom: string; statut: string; debut: string | null; equipes: number }>;
+  evenements?: Array<{ id: string; nom: string; statut: string; debut: string | null; equipes: number; /** Rôle staff de l'événement (entre d'office dans les salons d'équipe). */ staffRole?: { id: string; nom: string } | null }>;
   /** Le compte peut créer un événement (lien vers Administration › Événements). */
   peutGererEvenements?: boolean;
 }

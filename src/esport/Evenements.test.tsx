@@ -17,7 +17,9 @@ import type {
   Evenement,
   FicheEvenement,
   PropositionEquipe,
+  VocauxEvenement,
 } from './evenements/api';
+import type { Hub } from './vocaux/api';
 import { choisirDans, deplier } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
@@ -159,9 +161,21 @@ const bilan = {
   position: { ok: true, deplaces: 2 },
 };
 
+function vocauxDe(peutModifier = true): VocauxEvenement {
+  return {
+    hubs: [{ id: '751', nom: 'Vocal équipe The Nuke End', categorieId: null, modeleNom: '{tag} — {nom}', limite: 0, verrouille: true, tournoiId: 'ev1', rolesAutorises: ['720000000000000060'] }],
+    autresHubs: ['753'],
+    actif: true,
+    staffRole: { id: '990', nom: 'Staff The Nuke End' },
+    peutModifier,
+    choix: { limites: { hubs: 10, roles: 20, places: 99, modele: 90 }, modeleDefaut: '{tag} — {nom}' },
+  };
+}
+
 function fauxClient(
   fiche: FicheEvenement,
   liste: Evenement[] = [{ ...fiche.evenement, equipes: 1 }],
+  vocaux: VocauxEvenement = vocauxDe(),
 ) {
   const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> =
     [];
@@ -307,6 +321,36 @@ function fauxClient(
       };
     if (chemin === '/evenements/ev1/roles/supprimer')
       return { ...fiche, nettoyage: { roles: 2, salons: 1, echecs: [] } };
+    // Vocaux de l'événement (hubs) et salons / rôles du serveur.
+    if (/^\/evenements\/[^/]+\/vocaux$/.test(chemin) && !methode) return { ...vocaux };
+    if (/^\/evenements\/[^/]+\/vocaux$/.test(chemin) && methode === 'POST') {
+      const c = corps as Partial<Hub>;
+      vocaux.hubs = [...vocaux.hubs, { id: '', nom: '', categorieId: null, modeleNom: '{tag} — {nom}', limite: 0, rolesAutorises: [], ...c, verrouille: true, tournoiId: 'ev1' }];
+      return { ...vocaux };
+    }
+    const unHub = /^\/evenements\/[^/]+\/vocaux\/(\d+)$/.exec(chemin);
+    if (unHub && methode === 'PATCH') {
+      vocaux.hubs = vocaux.hubs.map(h => (h.id === unHub[1] ? { ...h, ...(corps as Partial<Hub>) } : h));
+      return { ...vocaux };
+    }
+    if (unHub && methode === 'DELETE') {
+      vocaux.hubs = vocaux.hubs.filter(h => h.id !== unHub[1]);
+      return { ...vocaux };
+    }
+    if (chemin === '/vocaux/discord')
+      return {
+        bot: true,
+        salons: [
+          { id: '700000000000000050', nom: 'The Nuke End', type: 'categorie', parent: null, position: 1 },
+          { id: '751', nom: 'Vocal équipe The Nuke End', type: 'vocal', parent: '700000000000000050', position: 2 },
+          { id: '752', nom: 'Vocal casters', type: 'vocal', parent: '700000000000000050', position: 3 },
+          { id: '753', nom: 'Créer un salon', type: 'vocal', parent: null, position: 0 },
+        ],
+        roles: [
+          { id: '720000000000000060', nom: 'Caster', couleur: null, position: 4 },
+          { id: '990', nom: 'Staff The Nuke End', couleur: null, position: 3 },
+        ],
+      };
     throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
   };
   return { client: { requete } as unknown as ClientEsport, appels };
@@ -354,7 +398,7 @@ test('rôle repère : hiérarchie du serveur, rôle du bot grisé ; « juste en 
   const { client, appels } = fauxClient(ficheDe());
   await render(<PageEvenements theme={theme} client={client} large />);
   await fireEvent.press(await screen.findByTestId('esport-ev-ev1'));
-  expect(await screen.findByTestId('esport-ev-hubs')).toBeTruthy();
+  expect(await screen.findByTestId('esport-ev-vocaux')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-ev-position-lire'));
   await deplier('esport-ev-position');
   const bot = await screen.findByTestId(
@@ -478,4 +522,52 @@ test('staff de l’événement : catégories de tickets de l’événement et no
   await fireEvent.press(screen.getByTestId('esport-ev-staff-810000000000000301-retirer'));
   expect(await screen.findByText('Retiré du staff.')).toBeTruthy();
   expect(screen.queryByTestId('esport-ev-staff-810000000000000301')).toBeNull();
+});
+
+test('vocaux de l’événement : rôle staff automatique (ligne et puce), rôles des équipes ; ajout d’un hub (salons par catégorie, salons pris exclus), modification, retrait', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect((await screen.findByTestId('esport-ev-voc-staff')).props.children).toBe('Le rôle staff de l’événement « Staff The Nuke End » a accès automatiquement à tous les vocaux d’équipe.');
+  expect(screen.getByTestId('esport-ev-voc-equipes')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-voc-hub-751-resume').props.children).toBe('Vocal équipe The Nuke End · {tag} — {nom} · places illimitées');
+  expect(screen.getByTestId('esport-ev-voc-hub-751-roles').props.children).toBe('Rôles autorisés en plus : Caster');
+  expect(screen.getByText('Rôle staff « Staff The Nuke End » · inclus automatiquement')).toBeTruthy();
+  // Ajout : salon choisi parmi les vocaux libres (le hub existant et celui d'un autre hub sont exclus).
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-ajouter'));
+  await deplier('esport-ev-voc-salon');
+  expect(screen.queryByTestId('esport-ev-voc-salon-751')).toBeNull();
+  expect(screen.queryByTestId('esport-ev-voc-salon-753')).toBeNull();
+  await choisirDans('esport-ev-voc-salon', '752');
+  await fireEvent.changeText(screen.getByTestId('esport-ev-voc-limite'), '5');
+  // Le rôle staff de l'événement n'est pas proposé (il est déjà inclus).
+  await deplier('esport-ev-voc-roles');
+  expect(screen.queryByTestId('esport-ev-voc-roles-990')).toBeNull();
+  expect(screen.getByTestId('esport-ev-voc-staff-puce')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
+  expect(await screen.findByTestId('esport-ev-voc-hub-752')).toBeTruthy();
+  const post = appels.find(a => a.chemin === '/evenements/ev1/vocaux' && a.methode === 'POST')!.corps;
+  expect(post).toMatchObject({ id: '752', nom: 'Vocal casters', limite: 5, modeleNom: '{tag} — {nom}', rolesAutorises: [] });
+  // Modifier : modèle du nom.
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-hub-751-modifier'));
+  await fireEvent.changeText(screen.getByTestId('esport-ev-voc-modele'), 'Équipe {tag}');
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
+  expect(await screen.findByText('Hub enregistré.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/vocaux/751' && a.methode === 'PATCH')!.corps).toMatchObject({ id: '751', modeleNom: 'Équipe {tag}', rolesAutorises: ['720000000000000060'] });
+  // Retirer (confirmé).
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-hub-752-retirer'));
+  await fireEvent.press(await screen.findByTestId('esport-ev-voc-hub-752-retirer-confirmer'));
+  expect(await screen.findByText('Hub retiré.')).toBeTruthy();
+  expect(appels.some(a => a.chemin === '/evenements/ev1/vocaux/752' && a.methode === 'DELETE')).toBe(true);
+  expect(screen.queryByTestId('esport-ev-voc-hub-752')).toBeNull();
+});
+
+test('vocaux de l’événement : lecture seule sans vocaux.configurer (pas d’ajout ni de retrait, salons du serveur non lus)', async () => {
+  const { client, appels } = fauxClient(ficheDe(), undefined, { ...vocauxDe(false), staffRole: null });
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-voc-sans-droit')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-voc-staff').props.children).toMatch(/aura accès automatiquement/);
+  expect(screen.getByText('Rôle staff de l’événement · inclus automatiquement')).toBeTruthy();
+  expect(screen.queryByTestId('esport-ev-voc-ajouter')).toBeNull();
+  expect(screen.queryByTestId('esport-ev-voc-hub-751-retirer')).toBeNull();
+  expect(appels.some(a => a.chemin === '/vocaux/discord')).toBe(false);
 });

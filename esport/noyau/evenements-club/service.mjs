@@ -146,6 +146,7 @@ const resume = l => ({
     rolesSupprimesLe: l.roles_supprimes_le ?? null,
     staffModele: l.staff_modele || STAFF_MODELE_DEFAUT,
     staffRoleId: l.staff_role_id ?? null,
+    staffRoleNom: l.staff_role_nom ?? null,
   },
   categoriesTickets: jsonOu(l.categories_tickets, []),
   creeLe: l.cree_le,
@@ -603,7 +604,7 @@ export function servicesEvenements({
       throw echec(
         409,
         'evenement-hub',
-        'Un hub vocal est lié à cet événement : retirez-le d’abord (Administration › Bot Esport HQ › Salons vocaux temporaires).',
+        'Un hub vocal est lié à cet événement : retirez-le d’abord (section « Vocaux de l’événement » de sa fiche).',
       );
     const aDesRoles =
       (await base.premier('SELECT id FROM club_evenement_equipes WHERE evenement_id = ? AND role_id IS NOT NULL LIMIT 1', [id])) ||
@@ -1006,12 +1007,15 @@ export function servicesEvenements({
  *   PATCH|DELETE        /evenements/:id/equipes/:e       modifier ; retirer (rôle et salon supprimés)
  *   GET                 /evenements/staff-candidats?q=   comptes de l'app (Discord lié) et membres du serveur
  *   POST|DELETE         /evenements/:id/staff[/:s]       staff de l'événement (rôle staff donné / retiré)
+ *   GET|POST            /evenements/:id/vocaux           hubs vocaux de l'événement ; ajouter (+ vocaux.configurer)
+ *   PATCH|DELETE        /evenements/:id/vocaux/:hub      modifier ; retirer un hub (+ vocaux.configurer)
  *   POST                /evenements/:id/import           { categorieId } propositions lues dans les tickets
  *   POST                /evenements/:id/roles            resynchroniser les rôles (bilan)
  *   POST                /evenements/:id/roles/supprimer  supprimer les rôles et les salons des équipes
  */
 export async function routesEvenements({
   ev,
+  vc,
   acteur,
   chemin,
   methode: m,
@@ -1061,6 +1065,13 @@ export async function routesEvenements({
   if (quoi === 'staff') {
     if (p.length === 2 && m === 'POST') return ev.ajouterStaff(acteur, id, await lireCorps());
     if (p.length === 3 && m === 'DELETE') return ev.retirerStaff(acteur, id, x);
+  }
+  // Vocaux de l'événement : ses hubs, dans les réglages des salons vocaux (vocaux/service.mjs).
+  if (quoi === 'vocaux' && vc) {
+    if (p.length === 2 && m === 'GET') return vc.hubsEvenement(acteur, id);
+    if (p.length === 2 && m === 'POST') return vc.ajouterHubEvenement(acteur, id, await lireCorps());
+    if (p.length === 3 && m === 'PATCH') return vc.modifierHubEvenement(acteur, id, x, await lireCorps());
+    if (p.length === 3 && m === 'DELETE') return vc.retirerHubEvenement(acteur, id, x);
   }
   if (p.length === 2 && quoi === 'import' && m === 'POST') {
     await limite('tickets_discord', acteur.compte);

@@ -4,6 +4,7 @@
  */
 
 import type { ClientEsport } from '../client';
+import type { Hub } from '../vocaux/api';
 
 export type StatutEvenement = 'a_venir' | 'en_cours' | 'termine' | 'annule';
 export type Poste = 'joueur' | 'coach' | 'remplacant';
@@ -21,6 +22,8 @@ export interface DiscordEvenement {
   /** Rôle staff de l'événement : modèle du nom ({evenement}) et rôle créé. */
   staffModele: string;
   staffRoleId: string | null;
+  /** Nom du rôle staff créé (tel que le bot l'a nommé). */
+  staffRoleNom?: string | null;
 }
 
 export interface Evenement {
@@ -202,6 +205,23 @@ export type SaisieEvenement = Partial<
   >;
 };
 
+/** Vocaux de l'événement (GET /evenements/:id/vocaux) : ses hubs, dans les réglages des salons vocaux. */
+export interface VocauxEvenement {
+  hubs: Hub[];
+  /** Salons déjà pris par un autre hub (ordinaire ou d'un autre événement). */
+  autresHubs: string[];
+  /** Salons vocaux temporaires activés (Bot Esport HQ). */
+  actif: boolean;
+  /** Rôle staff de l'événement : entre d'office dans tous les salons d'équipe. */
+  staffRole: { id: string; nom: string } | null;
+  /** Créer, modifier, retirer : permission vocaux.configurer en plus d'evenements.gerer. */
+  peutModifier: boolean;
+  choix: { limites: { hubs: number; roles: number; places: number; modele: number }; modeleDefaut: string };
+}
+
+/** Champs d'un hub d'événement saisis dans la fiche (l'événement et le verrouillage sont imposés par le serveur). */
+export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises'>>;
+
 export function apiEvenements(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) =>
     client.requete<T>(chemin, methode, corps);
@@ -243,5 +263,9 @@ export function apiEvenements(client: ClientEsport) {
     candidatsStaff: (q: string) => r<{ candidats: CandidatStaff[] }>(`/evenements/staff-candidats?q=${encodeURIComponent(q)}`),
     ajouterStaff: (id: string, c: { discordId: string; nom?: string }) => r<FicheEvenement>(`${un(id)}/staff`, 'POST', c),
     retirerStaff: (id: string, staffId: string) => r<FicheEvenement>(`${un(id)}/staff/${encodeURIComponent(staffId)}`, 'DELETE'),
+    vocaux: (id: string) => r<VocauxEvenement>(`${un(id)}/vocaux`),
+    ajouterHub: (id: string, c: SaisieHubEvenement) => r<VocauxEvenement>(`${un(id)}/vocaux`, 'POST', c),
+    modifierHub: (id: string, hubId: string, c: SaisieHubEvenement) => r<VocauxEvenement>(`${un(id)}/vocaux/${encodeURIComponent(hubId)}`, 'PATCH', c),
+    retirerHub: (id: string, hubId: string) => r<VocauxEvenement>(`${un(id)}/vocaux/${encodeURIComponent(hubId)}`, 'DELETE'),
   };
 }

@@ -29,8 +29,8 @@ export interface ContexteBot {
   ouvrirTickets?(section?: string): void;
   /** Page d'une team, à une section (« module:discord »…). */
   ouvrirTeam?(teamId: string, section?: string): void;
-  /** Administration › Événements (absent sans la permission evenements.gerer). */
-  ouvrirEvenements?(): void;
+  /** Administration › Événements, à la fiche d'un événement si `evenementId` (absent sans la permission evenements.gerer). */
+  ouvrirEvenements?(evenementId?: string): void;
   /** Autre section de l'onglet Bot Esport HQ. */
   ouvrirSection(section: string): void;
 }

@@ -636,11 +636,11 @@ export async function synchroniserStaff(ctx, evtLigne, { retirer = [] } = {}) {
     await base.executer('UPDATE club_evenement_staff SET role_statut = ? WHERE id = ?', [statut, m.id]);
   }
   b.categories = await accesTickets(ctx, roleId, categories);
-  // Salons d'équipe déjà ouverts : le rôle tout juste créé y est ajouté (les suivants l'ont dès leur création).
-  if (b.cree) {
-    b.vocaux = await accesVocaux(ctx, evt.id, roleId);
-    if (evt.role_ancre_id) b.position = await placerRoles(ctx, evt);
-  }
+  // Salons d'équipe déjà ouverts : le rôle staff y est (ré)appliqué à chaque synchronisation (créé, recréé, staff ou
+  // événement modifié, resynchronisation) ; un PUT par salon ouvert de l'événement, sans effet s'il y est déjà. Les
+  // salons créés ensuite l'ont dès leur création (vocaux/tournoi.mjs, `rolesEquipe`).
+  b.vocaux = await accesVocaux(ctx, evt.id, roleId);
+  if (b.cree && evt.role_ancre_id) b.position = await placerRoles(ctx, evt);
   return b;
 }
 

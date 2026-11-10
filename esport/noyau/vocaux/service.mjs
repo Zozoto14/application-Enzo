@@ -20,6 +20,7 @@ import { lireEtatVocaux } from './moteur.mjs';
 import { salonsDuServeur } from './salons.mjs';
 
 export const PERMISSION_VOCAUX = 'vocaux.configurer';
+const PERMISSION_EVENEMENTS = 'evenements.gerer';
 /** Permissions du bot nécessaires aux salons vocaux temporaires : celles de la liste centrale (discord/permissions-bot.mjs). */
 export const PERMISSIONS_VOCAUX = Object.freeze(FONCTIONNALITES_PERMISSIONS.find(f => f.id === 'vocaux').permissions);
 const manquantesVocaux = p => PERMISSIONS_VOCAUX.filter(cle => (p & entierPermissions([cle])) === 0n);
@@ -52,12 +53,12 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       // l'écran propose d'aller créer un événement (Administration › Événements).
       evenements: (
         await base.tous(
-          `SELECT id, nom, statut, debut, (SELECT COUNT(*) FROM club_evenement_equipes e WHERE e.evenement_id = club_evenements.id) AS equipes FROM club_evenements
+          `SELECT id, nom, statut, debut, staff_role_id, staff_role_nom, (SELECT COUNT(*) FROM club_evenement_equipes e WHERE e.evenement_id = club_evenements.id) AS equipes FROM club_evenements
             WHERE statut NOT IN ('termine', 'annule')${reglages.hubs.some(h => h.tournoiId) ? ` OR id IN (${reglages.hubs.filter(h => h.tournoiId).map(() => '?').join(', ')})` : ''}
             ORDER BY COALESCE(debut, cree_le) DESC, nom LIMIT 50`,
           reglages.hubs.filter(h => h.tournoiId).map(h => h.tournoiId),
         )
-      ).map(e => ({ id: e.id, nom: e.nom, statut: e.statut, debut: e.debut ?? null, equipes: Number(e.equipes ?? 0) })),
+      ).map(e => ({ id: e.id, nom: e.nom, statut: e.statut, debut: e.debut ?? null, equipes: Number(e.equipes ?? 0), staffRole: e.staff_role_id ? { id: e.staff_role_id, nom: e.staff_role_nom ?? '' } : null })),
       peutGererEvenements: await aGlobale(base, acteur, 'evenements.gerer'),
     };
   }
@@ -65,7 +66,19 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
   async function changer(acteur, corps) {
     await exiger(acteur);
     const general = await lireGeneral(base);
-    const reglages = validerVocaux(corps ?? {}, await lireVocaux(base));
+    const actuel = await lireVocaux(base);
+    // Hubs d'événement : créés et modifiés SEULEMENT dans Administration › Événements › (événement) › « Vocaux de
+    // l'événement ». Cet écran ne gère que les hubs ordinaires : ceux des événements sont gardés tels qu'enregistrés
+    // (même absents du corps, ou renvoyés par une copie ancienne), et un hub d'événement inconnu est refusé.
+    const hubsEvt = actuel.hubs.filter(h => h.tournoiId);
+    let c = corps ?? {};
+    if (Array.isArray(c.hubs)) {
+      if (c.hubs.some(h => h && h.tournoiId && !hubsEvt.some(x => x.id === h.id && x.tournoiId === h.tournoiId))) throw echec(400, 'vocaux-hub-evenement', 'Les hubs d’événement se créent dans Administration › Événements (section « Vocaux de l’événement » de l’événement).');
+      const ordinaires = c.hubs.filter(h => !(h && h.tournoiId));
+      if (ordinaires.length + hubsEvt.length > LIMITES_VOCAUX.hubs) throw echec(400, 'vocaux-hub', '10 hubs au plus.');
+      c = { ...c, hubs: [...ordinaires, ...hubsEvt] };
+    }
+    const reglages = validerVocaux(c, actuel);
     if (reglages.actif && !general.guildId) throw echec(400, 'vocaux-serveur', 'Choisissez d’abord le serveur Discord (Tickets › Configuration › Général).');
     for (const h of reglages.hubs) {
       if (h.tournoiId && !(await base.premier('SELECT id FROM club_evenements WHERE id = ?', [h.tournoiId]))) throw echec(400, 'vocaux-tournoi', 'Événement introuvable (Administration › Événements).');
@@ -80,6 +93,93 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     const t = maintenant();
     await base.lot([instructionReglage('vocaux_commandes', { ...(await lireCommandesVocaux(base)), ...validerCommandesVocaux(corps) }, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux_commandes', charge: { cle: 'vocaux_commandes' }, maintenant: t })]);
     return config(acteur);
+  }
+
+  // ---------------------------------------------------------------- Vocaux d'un événement (Administration › Événements)
+  //
+  // La fiche d'un événement édite directement SES hubs (ceux dont `tournoiId` est l'événement), dans les mêmes réglages
+  // (`tickets_reglages`, clé `vocaux`) : aucune deuxième source. Lire : `evenements.gerer` (la page) ; créer, modifier,
+  // retirer : en plus `vocaux.configurer` (mêmes droits qu'aujourd'hui pour les réglages des salons vocaux). Un hub
+  // d'événement est toujours verrouillé (sur le rôle de l'équipe) ; le rôle staff de l'événement y entre d'office.
+
+  async function evenementDe(acteur, evenementId) {
+    if (!(await aGlobale(base, acteur, PERMISSION_EVENEMENTS))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const evt = typeof evenementId === 'string' && /^[0-9a-f-]{36}$/.test(evenementId) ? await base.premier('SELECT id, nom, staff_role_id, staff_role_nom FROM club_evenements WHERE id = ?', [evenementId]) : null;
+    if (!evt) throw echec(404, 'evenement-introuvable', 'Événement introuvable.');
+    return evt;
+  }
+
+  async function hubsEvenement(acteur, evenementId) {
+    const evt = await evenementDe(acteur, evenementId);
+    const reglages = await lireVocaux(base);
+    return {
+      hubs: reglages.hubs.filter(h => h.tournoiId === evt.id),
+      // Salons déjà pris par un autre hub (ordinaire ou d'un autre événement) : l'écran ne les propose pas.
+      autresHubs: reglages.hubs.filter(h => h.tournoiId !== evt.id).map(h => h.id),
+      actif: reglages.actif,
+      staffRole: evt.staff_role_id ? { id: evt.staff_role_id, nom: evt.staff_role_nom ?? '' } : null,
+      peutModifier: await aGlobale(base, acteur, PERMISSION_VOCAUX),
+      choix: { limites: LIMITES_VOCAUX, modeleDefaut: MODELE_TOURNOI_DEFAUT },
+    };
+  }
+
+  /** Enregistre les hubs (validation commune), journal `tickets.config_modifiee` comme l'écran des salons vocaux. */
+  async function ecrireHubs(acteur, actuel, hubs) {
+    // Le dernier hub retiré : les salons vocaux se désactivent (un réglage actif exige au moins un hub).
+    const reglages = validerVocaux({ hubs, ...(hubs.length ? {} : { actif: false }) }, actuel);
+    const t = maintenant();
+    await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux', evenement: hubs.find(h => h.tournoiId)?.tournoiId ?? null }, maintenant: t })]);
+  }
+
+  /** Champs d'un hub saisis dans la fiche de l'événement (l'événement et le verrouillage sont imposés). */
+  const hubSaisi = (c, evtId, avant = {}) => {
+    if (!c || typeof c !== 'object') throw echec(400, 'vocaux-hub', 'Hub illisible.');
+    const champ = (k, defaut) => (c[k] !== undefined ? c[k] : defaut);
+    return {
+      id: champ('id', avant.id),
+      nom: champ('nom', avant.nom ?? ''),
+      categorieId: champ('categorieId', avant.categorieId ?? null),
+      modeleNom: champ('modeleNom', avant.modeleNom ?? MODELE_TOURNOI_DEFAUT),
+      limite: champ('limite', avant.limite ?? 0),
+      rolesAutorises: champ('rolesAutorises', avant.rolesAutorises ?? []),
+      verrouille: true,
+      tournoiId: evtId,
+    };
+  };
+
+  async function exigerModifier(acteur, evenementId) {
+    const evt = await evenementDe(acteur, evenementId);
+    await exiger(acteur);
+    return evt;
+  }
+
+  async function ajouterHubEvenement(acteur, evenementId, corps) {
+    const evt = await exigerModifier(acteur, evenementId);
+    const actuel = await lireVocaux(base);
+    await ecrireHubs(acteur, actuel, [...actuel.hubs, hubSaisi(corps, evt.id)]);
+    return hubsEvenement(acteur, evt.id);
+  }
+
+  async function hubDe(actuel, evtId, hubId) {
+    const i = actuel.hubs.findIndex(h => h.id === hubId && h.tournoiId === evtId);
+    if (i < 0) throw echec(404, 'vocaux-hub-introuvable', 'Ce hub n’est pas lié à cet événement.');
+    return i;
+  }
+
+  async function modifierHubEvenement(acteur, evenementId, hubId, corps) {
+    const evt = await exigerModifier(acteur, evenementId);
+    const actuel = await lireVocaux(base);
+    const i = await hubDe(actuel, evt.id, hubId);
+    await ecrireHubs(acteur, actuel, actuel.hubs.map((h, j) => (j === i ? hubSaisi(corps, evt.id, h) : h)));
+    return hubsEvenement(acteur, evt.id);
+  }
+
+  async function retirerHubEvenement(acteur, evenementId, hubId) {
+    const evt = await exigerModifier(acteur, evenementId);
+    const actuel = await lireVocaux(base);
+    const i = await hubDe(actuel, evt.id, hubId);
+    await ecrireHubs(acteur, actuel, actuel.hubs.filter((_, j) => j !== i));
+    return hubsEvenement(acteur, evt.id);
   }
 
   /**
@@ -125,5 +225,5 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     };
   }
 
-  return { config, changer, changerCommandes, discord, exiger };
+  return { config, changer, changerCommandes, discord, exiger, hubsEvenement, ajouterHubEvenement, modifierHubEvenement, retirerHubEvenement };
 }

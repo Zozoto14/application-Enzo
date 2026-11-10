@@ -523,7 +523,7 @@ export function creerApi({
     if (administrationBot !== undefined) return administrationBot;
     const tickets = await routesTickets({ tk, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
     if (tickets !== undefined) return tickets;
-    const evenementsClub = await routesEvenements({ ev, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    const evenementsClub = await routesEvenements({ ev, vc, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (evenementsClub !== undefined) return evenementsClub;
     const vocaux = await routesVocaux({ vc, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (vocaux !== undefined) return vocaux;

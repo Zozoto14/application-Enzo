@@ -34,9 +34,9 @@ suivent le réglage **Langue des messages** des tickets (deux langues, ou une se
 Permission du club **`vocaux.configurer`** (le Fondateur l'a d'office ; le Second CEO la reçoit par la migration).
 
 - **Activer** (au moins un hub) ;
-- **Hubs** (10 au plus), chacun : salon vocal, catégorie des salons créés (celle du hub par défaut), modèle du nom
-  (`{pseudo}`), places par défaut, salons verrouillés à la création ; ou **hub de tournoi** (tournoi lié, rôles
-  autorisés en plus : voir « Hub vocal du tournoi ») ;
+- **Hubs** (10 au plus, hubs d'événement compris), chacun : salon vocal, catégorie des salons créés (celle du hub par
+  défaut), modèle du nom (`{pseudo}`), places par défaut, salons verrouillés à la création. Les **hubs d'événement** ne
+  se créent pas ici : ils sont listés en ligne compacte en lecture seule (voir « Hub vocal d'un événement ») ;
 - **Rôles du staff** : entrent partout, utilisent les contrôles de tout salon ;
 - **Suppression d'un salon vide après** (secondes), **salons par membre**, **départ du propriétaire**, **salon des
   journaux** (facultatif : création, suppression, refus de Discord) ;
@@ -141,19 +141,27 @@ Tournois sert aux tournois extérieurs).
 
 ### Hub vocal d'un événement
 
-Dans les réglages des salons vocaux, **chaque hub** a l'option **Hub d'événement** (toujours visible). Activée, on
-choisit l'**événement** lié (ex. « Vocal équipe The Nuke End » lié à The Nuke End) ; s'il n'existe encore aucun
-événement, un message l'explique avec un bouton **Créer un événement** qui mène à Administration › Événements (pour qui
-a `evenements.gerer`). Les événements proposés sont ceux qui ne sont ni terminés ni annulés (plus ceux déjà liés). Un
-hub d'événement sans événement choisi n'est pas enregistré. Les hubs sont **repliables** : une ligne de résumé (salon,
-type normal / événement, verrouillé), un clic pour déplier ses réglages. Clé `tournoiId` du hub et colonne
-`vocaux_salons.tournoi_id` : l'identifiant de l'événement. Code : `esport/noyau/vocaux/tournoi.mjs`.
+Les hubs d'un événement se **créent, se modifient et se retirent uniquement** dans **Administration › Événements ›
+(événement) › Vocaux de l'événement** ([evenements.md](evenements.md#vocaux-de-lévénement)) : salon vocal, catégorie
+des salons créés, modèle du nom (`{tag} — {nom}` par défaut), places par défaut, rôles autorisés en plus (casters,
+admins) ; toujours verrouillé. Lire : `evenements.gerer` ; modifier : en plus `vocaux.configurer`.
+
+Dans les réglages ci-dessus (Bot Esport HQ), il n'y a **plus d'option « Hub d'événement »** : un hub ajouté là est
+toujours ordinaire. Les hubs d'événement existants y sont affichés en **ligne compacte en lecture seule** : « Hub de
+l'événement X — configuré dans Événements », salon, rôles autorisés en plus suivis de la puce **« Rôle staff « … » ·
+inclus automatiquement »**, et un bouton **Ouvrir l'événement** (pour qui a `evenements.gerer`). Côté serveur,
+`PUT /vocaux/config` ne gère que les hubs ordinaires : les hubs d'événement enregistrés sont gardés tels quels (même
+absents du corps ou renvoyés par une copie ancienne de l'écran), et un hub d'événement inconnu y est refusé
+(`vocaux-hub-evenement`). Aucune migration : même stockage (clé `tournoiId` du hub et colonne
+`vocaux_salons.tournoi_id` : l'identifiant de l'événement). Code : `esport/noyau/vocaux/tournoi.mjs` (salons),
+`esport/noyau/vocaux/service.mjs` (`hubsEvenement`, `ajouterHubEvenement`…, routes `/evenements/:id/vocaux`).
 
 - Seuls les membres qui ont le **rôle d'une équipe** de l'événement peuvent s'en servir : les autres sont
   **déconnectés** du hub et reçoivent un **MP** qui explique pourquoi.
 - Le salon créé porte le nom de l'équipe (`{tag} — {nom}` par défaut) et reste **verrouillé sur son rôle** :
-  « Se connecter » refusé à @everyone, accordé au rôle de l'équipe, aux rôles du staff et aux **rôles autorisés** du hub
-  (casters, admins). Les joueurs peuvent expulser, limiter les places, transférer ; ils ne peuvent **ni renommer ni
+  « Se connecter » refusé à @everyone, accordé au rôle de l'équipe, au **rôle staff de l'événement** (d'office, sans le
+  régler : [evenements.md](evenements.md#rôle-staff-de-lévénement) ; réappliqué aux salons déjà ouverts à chaque
+  synchronisation du rôle), aux rôles du staff et aux **rôles autorisés** du hub (casters, admins). Les joueurs peuvent expulser, limiter les places, transférer ; ils ne peuvent **ni renommer ni
   déverrouiller** (boutons grisés, refus de `/voc`), et il n'y a pas de liste d'amis.
 - **Un salon par équipe** à la fois : un coéquipier qui passe par le hub est déplacé dans le salon existant.
 - Le salon est supprimé une fois vide (comme les autres), quand l'équipe est retirée de l'événement, et à la **fin de
