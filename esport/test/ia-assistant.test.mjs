@@ -488,7 +488,7 @@ test('vérification : différences proposées (notifiées), jamais appliquées s
   const statuts = Object.fromEntries((await b.appel('/jeux/propositions?jeu=valorant&statut=tous', { jeton: f })).corps.propositions.map(p => [p.id, p.statut]));
   assert.deepEqual([statuts[ajout.id], statuts[pool.id], statuts[retrait.id], statuts[roster.id]], ['acceptee', 'acceptee', 'refusee', 'en_attente']);
   // Le profil de la team suit la nouvelle version (modules : maps du profil).
-  const team = (await b.appel('/teams', { jeton: f })).corps.teams[0];
+  const team = (await b.appel('/teams', { jeton: f })).corps.teams.find(t => t.genre !== 'cm');
   assert.ok((await b.appel(`/teams/${team.id}/jeu`, { jeton: sessions.lea12345 })).corps.donnees.cartes.some(c => c.cle === 'nouvelle-map'));
   // Proposition devenue obsolète : le Fondateur a modifié le roster à la main entre-temps → elle s'applique encore (modification) ;
   // un retrait d'un élément qu'il a supprimé, lui, devient obsolète.

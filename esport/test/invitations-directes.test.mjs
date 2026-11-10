@@ -128,7 +128,7 @@ test('dashboard agrégé : une requête, toutes les teams autorisées, blocs sel
 
   // Fondateur : les deux teams, et le bloc global.
   const tout = (await api('/dashboard', await b.session('principal'))).corps;
-  assert.deepEqual(tout.teams.map(t => t.team.nom), ['Team Alpha', 'Team Bravo', 'Team CM']);
+  assert.deepEqual(tout.teams.map(t => t.team.nom), ['CM du club', 'Team Alpha', 'Team Bravo']);
   const alpha = tout.teams.find(t => t.team.id === A.teamId);
   assert.equal(alpha.prochains[0].titre, 'Entraînement Alpha');
   assert.equal(alpha.taches.enRetard, 1);

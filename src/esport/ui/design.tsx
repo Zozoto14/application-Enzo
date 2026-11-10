@@ -96,8 +96,12 @@ export const chiffre = (theme: ThemeHub, taille: number = TYPO.chiffre) => ({ co
 /** Teintes des teams : moyennes, lisibles en clair comme en sombre (bandeaux, monogrammes). */
 export const COULEURS_TEAM = ['#5B8CFF', '#22A879', '#E8893A', '#9B6BF2', '#E25C74', '#1BA6B8', '#C99A1E', '#6C7BEA'] as const;
 
-/** Couleur stable d'une team (tirée de son slug, ou de son id). */
+/** Adresses courtes du CM du club (team de l'espace CM, migrations 0068 et 0069) : couleur et initiales de la tuile CM. */
+export const SLUGS_CM_CLUB: readonly string[] = ['cm-du-club', 'team-cm', 'team-cm-club'];
+
+/** Couleur stable d'une team (tirée de son slug, ou de son id) ; le CM du club garde le rose de sa tuile. */
 export function couleurTeam(cle: string): string {
+  if (SLUGS_CM_CLUB.includes(cle)) return COULEUR_CM_CLUB;
   let h = 0;
   for (let i = 0; i < cle.length; i++) h = (h * 31 + cle.charCodeAt(i)) % 1_000_003;
   return COULEURS_TEAM[h % COULEURS_TEAM.length];
@@ -138,7 +142,7 @@ export function AvatarTeam({ theme, team, taille = 40, testID }: { theme: ThemeH
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={{ width: taille, height: taille, borderRadius: rayon, backgroundColor: couleur, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: encre(couleur), fontSize: Math.round(taille * 0.38), fontWeight: '800', ...police(theme.policeTexte) }}>{initiales(team.nom)}</Text>
+      <Text style={{ color: encre(couleur), fontSize: Math.round(taille * 0.38), fontWeight: '800', ...police(theme.policeTexte) }}>{SLUGS_CM_CLUB.includes(team.slug) ? 'CM' : initiales(team.nom)}</Text>
     </View>
   );
 }

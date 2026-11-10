@@ -72,7 +72,7 @@ permissions que l'on a soi-même (403 `escalade`) ; le nom et la couleur d'un r�
    modifient aussi depuis cette page (section CM, même matrice), et les routes `/cm/roles` / `/cm/affectations`
    s'ouvrent à la permission du club `roles.gerer` ; les affectations se font toujours dans **Équipe CM**.
 
-**Périmètre** : le CM du club n'est membre que de la **Team CM** (et des teams où il joue). Il ne voit que la section CM, les membres (pseudos) et
+**Périmètre** : le CM du club n'est membre que de la **CM du club** (et des teams où il joue). Il ne voit que la section CM, les membres (pseudos) et
 les **résumés publiables** des matchs, tournois et résultats (`competition/resume.mjs`). Jamais les strats, le
 scouting détaillé (un adversaire n'apparaît que par son nom), les notes du staff, le planning ni un résultat
 « staff seulement » ou un scrim non publiable (les routes de la team lui répondent 404).
@@ -80,44 +80,50 @@ scouting détaillé (un adversaire n'apparaît que par son nom), les notes du st
 Contrôles d'une route CM : session → team existante → module `cm` activé (404) → appartenance ou affectation
 (404) → permission (403).
 
-### La Team CM (migration 0068)
+### Le CM du club, une team (migrations 0068 et 0069)
 
-L'équipe CM est une **vraie team**, « **Team CM** », comme Valorant LZ0 ou The Final LZ0 : elle a sa carte dans la page
-**Teams** (rôle, effectif, puce « Espace CM du club »), son accueil (carte **Espace CM du club › Ouvrir l'espace CM**),
-ses membres, son planning, ses disponibilités, sa présence, ses réunions (résumés), ses objectifs, ses ressources, son
-Discord (webhook, rôle temporaire, comme les autres teams) et son journal. Les modules de jeu sont coupés (review,
-scouting, strats, playbook, suivi joueurs, tournois, résultats) ; l'onglet CM d'une team aussi (la Team CM a l'espace
-« CM du club » : tuile **CM du club**, sélecteur, barre latérale — inchangés). Pas de profil de jeu : elle s'affiche
-« Communication ». Elle ne se supprime pas et n'a pas de profil de jeu (409 `team-cm`).
+L'espace « **CM du club** » EST une team : une seule entité, une seule carte dans la page **Teams** — la carte
+« **CM du club** » (pastille rose « CM », « Communication · N membres », puces des sections : Contenus, À valider,
+Drive, Sponsors ; **Ouvrir l'espace CM**). Il n'y a pas de page de team à part : ses pages de team s'ouvrent **dans
+l'espace CM** (barre latérale) — **Équipe** : **Équipe CM** (membres et rôles de la team), Réunions, Planning,
+Disponibilités, Présence, Résumés, Objectifs, **Rôles CM** (affectations) ; **DATA** : Ressources de l'équipe ;
+**Gestion** : **Paramètres de la team** (nom, description, modules), **Discord** (webhook, messages), Journal de la team,
+puis Import Trello, Réglages, Journal du CM. Chaque entrée suit les modules activés et les permissions de team du
+compte. Tout lien vers sa page de team (Dashboard, Membres, notification, ancien lien, « Changer de team ») ouvre
+l'espace CM, sur la même section. Partout ailleurs elle s'appelle « **CM du club** » : création et ajout d'un membre,
+Dashboard, filtres de Membres, Trombinoscope (« CM du club · Responsable CM »), notifications, Discord. Les modules de jeu
+sont coupés (review, scouting, strats, playbook, suivi joueurs, tournois, résultats), comme l'onglet CM d'une team ; pas
+de profil de jeu (« Communication ») ; elle ne se supprime pas (409 `team-cm`).
 
-- **Source unique** : être membre **actif** de la Team CM, c'est être de l'équipe CM du club. Son **rôle** dans la team
+- **Source unique** : être membre **actif** du CM du club, c'est être de l'équipe CM du club. Son **rôle** dans la team
   est un rôle CM : **Responsable CM**, **Correspondant CM** ou un rôle CM créé par le Fondateur (chaque rôle CM a son
-  rôle dans la Team CM, créé, renommé, recoloré et supprimé avec lui ; la team ne crée, ne renomme ni ne supprime de
+  rôle dans le CM du club, créé, renommé, recoloré et supprimé avec lui ; la team ne crée, ne renomme ni ne supprime de
   rôle elle-même : 409 `roles-cm`). Les permissions **CM** (cm.\*, Drive, réunions, Sponsors, trombinoscope) restent
   celles du rôle CM (**Rôles et permissions › CM**) ; ses permissions **de team** (planning, dispos, membres…) se
-  règlent dans **Paramètres › Membres et rôles** de la Team CM (par défaut : le Responsable CM gère les membres, le
+  règlent dans **Équipe CM** de l’espace CM (par défaut : le Responsable CM gère les membres, le
   planning, les réunions, Discord ; le Correspondant voit et participe).
-- **Ajouter quelqu'un au CM** : **Membres › Créer / Ajouter** (la Team CM est dans la liste des teams, avec ses rôles
-  CM ; pas de poste en jeu), ou **Équipe CM** (affectation « tout le club » = ajout à la Team CM avec ce rôle). Un
+- **Ajouter quelqu'un au CM** : **Membres › Créer / Ajouter** (le CM du club est dans la liste des teams, avec ses rôles
+  CM ; pas de poste en jeu), ou **Équipe CM** (affectation « tout le club » = ajout au CM du club avec ce rôle). Un
   membre peut être dans plusieurs teams (un joueur de Valorant LZ0 aussi Correspondant CM). Anti-escalade : attribuer
-  un rôle de la Team CM demande ses permissions de team ET ses permissions CM (403 `escalade`).
-- **Retirer** : retirer de la Team CM (ou l'affectation dans Équipe CM) retire l'accès CM ; **suspendu** dans la Team
-  CM, l'accès est coupé tant qu'il l'est.
-- **Rôle CM supplémentaire** : un compte a un seul rôle dans la Team CM ; un 2e rôle CM « tout le club » (Équipe CM)
-  reste une affectation directe et ajoute ses permissions. S'il quitte la Team CM, ce rôle supplémentaire devient son
+  un rôle du CM du club demande ses permissions de team ET ses permissions CM (403 `escalade`).
+- **Retirer** : retirer du CM du club (ou l'affectation dans Équipe CM) retire l'accès CM ; **suspendu** dans le CM du
+  club, l'accès est coupé tant qu'il l'est.
+- **Rôle CM supplémentaire** : un compte a un seul rôle dans le CM du club ; un 2e rôle CM « tout le club » (Équipe CM)
+  reste une affectation directe et ajoute ses permissions. S'il quitte le CM du club, ce rôle supplémentaire devient son
   rôle dans la team.
 - **Correspondant d'une team** (affectation à une team) : inchangé, il est membre de cette team.
-- **Drive** : le Drive CM « du club » est le Drive de la Team CM (mêmes dossiers, aucun fichier déplacé).
-- **Partout** : Dashboard (carte de la Team CM, membres, événements), Membres (filtres par team et rôle), Trombinoscope
+- **Drive** : le Drive CM « du club » est le Drive du CM du club (mêmes dossiers, aucun fichier déplacé).
+- **Partout** : Dashboard (carte du CM du club, membres, événements), Membres (filtres par team et rôle), Trombinoscope
   (cartes des membres du CM avec leur rôle CM, sans elo ni postes de jeu : [trombinoscope.md](trombinoscope.md)),
   centre de notifications (filtre par team), planning et dispos, Discord, statistiques, export RGPD, export / import.
 
-Migration 0068 (données existantes) : la Team CM est créée (identifiant fixe `00000000-0000-4000-8000-00000000c0de`),
-avec un rôle par rôle CM ; chaque affectation « club » devient un membre de la Team CM (même identifiant, même date) ;
+Migration 0068 (données existantes) : la team est créée (« CM du club », renommée « **CM du club** », adresse
+`cm-du-club`, par la migration 0069 : seuls le nom et l'adresse changent, rejouable, un nom choisi depuis est gardé) (identifiant fixe `00000000-0000-4000-8000-00000000c0de`),
+avec un rôle par rôle CM ; chaque affectation « club » devient un membre du CM du club (même identifiant, même date) ;
 un compte qui avait plusieurs rôles CM du club garde le premier (Responsable, puis Correspondant, puis les autres) et
 les autres restent des rôles supplémentaires ; une affectation d'un compte sans fiche Esport reste telle quelle. La
 table devient `cm_affectations_directes` et `cm_affectations` une **vue** (affectations directes + membres actifs de
-la Team CM en portée « club ») : tous les contrôles (espace CM, tableaux restreints 0046, ressources 0048, réunions,
+le CM du club en portée « club ») : tous les contrôles (espace CM, tableaux restreints 0046, ressources 0048, réunions,
 tickets, badges automatiques) lisent exactement la même chose qu'avant. Rejouable sans effet ; l'import d'un export
 antérieur fait la même reprise (`cm/teamCm.mjs`, `reprendreTeamCm`).
 
@@ -811,17 +817,17 @@ usage « drive » des envois, permissions du Drive sur les rôles système : voi
 fichier CM peuvent servir à plusieurs endroits (pièce jointe prise dans le Drive, visuel rangé…) : ils ne sont effacés
 que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 
-La migration `0068_team_cm.sql` fait de l'équipe CM une team (voir « La Team CM ») : `teams.genre` (`jeu` / `cm`),
-`roles.cm_role_id` (rôle de la Team CM lié à un rôle CM), table `cm_affectations_directes` (correspondants d'une team,
-rôles CM supplémentaires) et vue `cm_affectations` (avec les membres actifs de la Team CM en portée « club »), vue
+La migration `0068_team_cm.sql` fait de l'équipe CM une team (voir « Le CM du club, une team » ; `0069_cm_du_club.sql` la renomme) : `teams.genre` (`jeu` / `cm`),
+`roles.cm_role_id` (rôle du CM du club lié à un rôle CM), table `cm_affectations_directes` (correspondants d'une team,
+rôles CM supplémentaires) et vue `cm_affectations` (avec les membres actifs du CM du club en portée « club »), vue
 `permissions_club` recréée sur elle. Export / import : `cm_affectations_directes` ; un export antérieur (table
-`cm_affectations`) est repris (affectations « club » → membres de la Team CM).
+`cm_affectations`) est repris (affectations « club » → membres du CM du club).
 
 ## Code et tests
 
-- Team CM : `esport/noyau/cm/teamCm.mjs` (identifiants, modules et permissions par défaut, reprise rejouable) ; tests
+- CM du club : `esport/noyau/cm/teamCm.mjs` (identifiants, modules et permissions par défaut, reprise rejouable) ; app : `src/esport/ui/cm/SectionsTeamCm.tsx` (sections de la team dans l'espace), `src/esport/ui/SectionTeamCm.tsx` (leurs écrans), redirection `versEspaceCm` (RacineEsport) ; tests
   `esport/test/team-cm.test.mjs` (SQLite et PostgreSQL : migration depuis une base réaliste — membres, rôles,
-  permissions, Manager d'une autre team refusé, tableau restreint, Drive —, création d'un membre dans la Team CM et
+  permissions, Manager d'une autre team refusé, tableau restreint, Drive —, création d'un membre dans le CM du club et
   Dashboard / Membres / Trombinoscope, rôles CM ↔ rôles de team, garde-fous, export / import ancien et nouveau) et
   `src/esport/TeamCm.test.tsx` (sélecteur de teams, carte de la page Teams, accueil, Trombinoscope).
 - Serveur : `esport/noyau/cm/` — `commun.mjs` (portées, droits), `reseaux.mjs` et `posts.mjs` (règles pures),

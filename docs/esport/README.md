@@ -52,8 +52,7 @@ paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la 
 | **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
 | **Teams** | Vos teams, création d'une team (Fondateur), votre profil Esport (les notifications sont dans le centre : cloche de l'en-tête) ; **Ressources** (Fondateur) : publier une même ressource dans plusieurs teams d'un coup. |
 | **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), **demandes de compte** (badge « Demandes en attente » du Fondateur ; « Proposer un membre » avec la permission « Créer des membres »), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
-| **Teams › Team CM** (membres du CM) | La Team CM est une team comme les autres (planning, dispos, réunions, Discord, membres) ; son accueil a l'entrée **Espace CM du club**. Voir [cm.md](cm.md), « La Team CM ». |
-| **Teams › CM du club** (selon vos droits CM, Drive ou Sponsors) | Carte en tête de la page **Teams** (PC et téléphone ; ce n'est plus une entrée de la navigation principale, l'entrée « Teams » reste surlignée) : section CM du club — tableaux de contenus façon Trello, posts X / Instagram / TikTok en français et en anglais, file « À valider », calendrier éditorial, clips proposés par les joueurs, visuels, réseaux, **Drive** (bouton direct sur la carte), Sponsors ; pour le gestionnaire : équipe et rôles CM, import Trello, réglages. Voir [cm.md](cm.md). |
+| **Teams › CM du club** (selon vos droits CM, Drive ou Sponsors) | Une seule carte en tête de la page **Teams** : le CM du club est aussi une team (« Communication · N membres » ; membres, planning, dispos, réunions, paramètres et Discord de la team dans la barre latérale de l'espace, groupes **Équipe** et **Gestion** ; voir [cm.md](cm.md), « Le CM du club, une team »). Carte (PC et téléphone ; ce n'est plus une entrée de la navigation principale, l'entrée « Teams » reste surlignée) : section CM du club — tableaux de contenus façon Trello, posts X / Instagram / TikTok en français et en anglais, file « À valider », calendrier éditorial, clips proposés par les joueurs, visuels, réseaux, **Drive** (bouton direct sur la carte), Sponsors ; pour le gestionnaire : équipe et rôles CM, import Trello, réglages. Voir [cm.md](cm.md). |
 | **Tickets** (Fondateur, `tickets.voir` ou `tickets.configurer`) | Entrée à part de la navigation (barre latérale et barre du bas), hors de l'Administration : tickets Discord du club en sous-onglets **Tickets** · **Statistiques** · **Avis** · **Configuration**, chacun selon sa permission ([tickets.md](tickets.md)). Pastille rouge sur l'entrée : tickets ouverts avec du nouveau pour vous (catégories que vous voyez), en temps réel. Les anciens liens (Administration › Tickets, notifications comprises) mènent ici. |
 | **Administration** (au moins une des permissions ci-dessous) | Une seule entrée de la navigation (barre latérale et barre du bas) pour l'administration du club, en sous-onglets, chacun selon sa permission (le serveur contrôle chaque requête) : **Statistiques** (Fondateur, `statistiques.voir` : statistiques d'usage, [statistiques.md](statistiques.md)) · **Jeux** (Fondateur, `jeux.gerer` : profils de jeu, assistant IA, Administration de l'IA, [profils-jeu.md](profils-jeu.md)) · **Rôles et permissions** (Fondateur, `roles.gerer`, [roles-permissions.md](roles-permissions.md)) · **Événements** (Fondateur, `evenements.gerer` : événements et tournois organisés par le club, équipes et rôles Discord automatiques, [evenements.md](evenements.md)) · **Devblog** (Fondateur, `devblog.gerer` : brouillons, éditeur, publication automatique ; la lecture reste pour tous via « Nouveautés » du Dashboard, [devblog.md](devblog.md)). Les anciens liens (Statistiques, Jeux, Membres › Rôles et permissions, notifications comprises) mènent au bon sous-onglet. Sur téléphone, les cinq entrées (Dashboard · Teams · Membres · Tickets · Administration) tiennent dans la barre du bas, sans « Plus ». |
 
@@ -188,11 +187,11 @@ voient par défaut, chaque joueur complète sa fiche depuis « Mon profil » ([t
 La migration `0033_roles_globaux.sql` ajoute les **rôles du club** et la page **Administration › Rôles et permissions**
 (Fondateur) : donnez le rôle « Second CEO » à votre adjoint depuis la section Club de cette page
 ([roles-permissions.md](roles-permissions.md)).
-La migration `0068_team_cm.sql` fait de l'équipe CM une **vraie team**, « **Team CM** » : vos membres CM actuels (Lina,
+Les migrations `0068_team_cm.sql` et `0069_cm_du_club.sql` font de l'équipe CM une **vraie team**, « **CM du club** » (la même que l'espace CM, une seule carte) : vos membres CM actuels (Lina,
 les correspondants « tout le club », les rôles CM créés) en deviennent membres avec leur rôle CM, sans rien perdre
 (permissions, tableaux restreints, ressources, Drive). Elle apparaît dans Teams, le Dashboard, Membres (création et
-ajout : choisissez la Team CM et un rôle CM), le Trombinoscope, le planning, Discord… La tuile **CM du club** reste
-l'entrée de l'espace CM ([cm.md](cm.md), « La Team CM »).
+ajout : choisissez le CM du club et un rôle CM), le Trombinoscope, le planning, Discord… Sa carte ouvre l'espace CM, où se
+trouvent aussi ses pages de team ([cm.md](cm.md), « Le CM du club, une team »).
 
 ### Créer une team
 
@@ -207,8 +206,8 @@ l'entrée de l'espace CM ([cm.md](cm.md), « La Team CM »).
 Plus de code à transmettre :
 
 1. **Esport › Membres › Créer un compte** (sur votre appareil, où vous êtes connecté en Fondateur) : nom ou
-   pseudo, adresse e-mail, team(s) et rôle par team (la **Team CM** avec un rôle CM pour un membre du CM), poste en
-   jeu (facultatif ; pas pour la Team CM) ; confirmez votre identité.
+   pseudo, adresse e-mail, team(s) et rôle par team (le **CM du club** avec un rôle CM pour un membre du CM), poste en
+   jeu (facultatif ; pas pour le CM du club) ; confirmez votre identité.
 2. Le compte « Esport seulement » est créé dans l'Administration et le joueur est déjà dans sa team (statut
    **Invité**). **Envoyer l'invitation par e-mail** ouvre votre messagerie, message prêt.
 3. Le joueur ouvre le lien, choisit son mot de passe, et retrouve sa team dans l'Esport (statut **Actif**).

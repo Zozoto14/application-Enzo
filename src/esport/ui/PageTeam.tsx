@@ -255,7 +255,8 @@ export function PageTeam({
     const memo = derniers[g.id];
     aller(memo && g.entrees.some(e => e.id === memo) ? memo : g.entrees[0].id);
   };
-  const autres = (teams ?? []).filter(t => t.id !== detail.team.id && !t.suspendu);
+  // Le CM du club : par l'entrée « CM du club » (son espace), pas comme une team de plus.
+  const autres = (teams ?? []).filter(t => t.id !== detail.team.id && !t.suspendu && !(onOuvrirCm && t.genre === 'cm'));
   const selecteur =
     onChangerTeam && (autres.length || onOuvrirCm) ? (
       <MenuActions
@@ -289,7 +290,7 @@ export function PageTeam({
         <EtatVide theme={theme} glyphe="◔" titre={tr('pageTeam.bientot_disponible', { nom: module ? nomModule(module.cle) : cle })} texte={tr('pageTeam.module_a_venir', { description: module ? descriptionModule(module.cle) : '', phase: module?.phase ?? '?' })} />
       </Carte>
     );
-  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} large={large} onAller={aller} onOuvrirCm={onOuvrirCm} />;
+  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} large={large} onAller={aller} />;
 
   const sousOnglets =
     groupe && groupe.entrees.length > 1 ? (
@@ -404,24 +405,12 @@ export function PageTeam({
   );
 }
 
-/** Team CM (migration 0068) : entrée de l'espace « CM du club » sur l'accueil de la team (mêmes droits que la tuile). */
-export function EntreeEspaceCm({ theme, onOuvrir }: { theme: ThemeHub; onOuvrir(): void }) {
-  return (
-    <Carte theme={theme} accent={COULEUR_CM_CLUB} testID="esport-accueil-espace-cm">
-      <TitreCarte theme={theme} titre={tr('teamCm.espace_titre')} />
-      <Text style={styleAttenue(theme)}>{tr('teamCm.espace_texte')}</Text>
-      <BoutonHub theme={theme} titre={tr('teamCm.espace_ouvrir')} variante="plein" onPress={onOuvrir} testID="esport-accueil-espace-cm-ouvrir" />
-    </Carte>
-  );
-}
-
-function AccueilTeam({ theme, client, detail, large, onAller, onOuvrirCm }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void; onOuvrirCm?(): void }) {
+function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void }) {
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
   const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);
   const couleur = couleurTeam(detail.team.slug);
   const colonneDroite = (
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
-      {detail.team.genre === 'cm' && onOuvrirCm ? <EntreeEspaceCm theme={theme} onOuvrir={onOuvrirCm} /> : null}
       <Carte theme={theme} testID="esport-accueil-equipe">
         <TitreCarte theme={theme} titre={tr('objectifs.l_equipe')} droite={detail.moi.permissions.includes('members.view') ? <BoutonHub theme={theme} titre={tr('pageTeam.voir')} onPress={() => onAller('membres')} testID="esport-accueil-membres" /> : undefined} />
         <View style={{ flexDirection: 'row', gap: ESP.l, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -478,7 +467,7 @@ function AccueilTeam({ theme, client, detail, large, onAller, onOuvrirCm }: { th
   );
 }
 
-function Parametres({
+export function Parametres({
   theme,
   client,
   detail,

@@ -440,7 +440,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       valeurs.push(texteLong(corps.description, 500));
     }
     if (corps?.jeu !== undefined && estTeamCm(ctx.team)) {
-      if (corps.jeu !== ctx.team.jeu) throw echec(409, 'team-cm', 'La Team CM n’a pas de profil de jeu.');
+      if (corps.jeu !== ctx.team.jeu) throw echec(409, 'team-cm', 'Le CM du club n’a pas de profil de jeu.');
     } else if (corps?.jeu !== undefined) {
       champs.push('jeu');
       valeurs.push(await jeuValidePourTeam(base, corps.jeu, { actuel: ctx.team.jeu }));
@@ -467,7 +467,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   async function supprimerTeam(acteur, teamId) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'team.delete');
-    if (estTeamCm(ctx.team)) throw echec(409, 'team-cm', 'La Team CM ne se supprime pas : c’est l’équipe de l’espace CM du club.');
+    if (estTeamCm(ctx.team)) throw echec(409, 'team-cm', 'Le CM du club ne se supprime pas : c’est la team de l’espace CM.');
     const t = maintenant();
     await base.lot([
       { sql: 'UPDATE teams SET supprimee_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), teamId] },
@@ -486,7 +486,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const desactives = [];
     for (const [cle, active] of Object.entries(demandes)) {
       if (!moduleConnu(cle)) throw echec(400, 'module-inconnu', `Module inconnu : ${String(cle).slice(0, 40)}`);
-      if (active && estTeamCm(ctx.team) && MODULES_INTERDITS_TEAM_CM.includes(cle)) throw echec(409, 'team-cm', 'La Team CM a l’espace CM du club : pas d’onglet CM de team.');
+      if (active && estTeamCm(ctx.team) && MODULES_INTERDITS_TEAM_CM.includes(cle)) throw echec(409, 'team-cm', 'Le CM du club a son espace CM : pas d’onglet CM de team.');
       const deja = ctx.modules.has(cle);
       if (active && !deja) actives.push(cle);
       if (!active && deja) desactives.push(cle);
@@ -550,7 +550,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   /** Rôles de la Team CM : créés, renommés et supprimés avec les rôles CM (page Rôles et permissions › CM). */
   function exigerHorsTeamCm(ctx) {
-    if (estTeamCm(ctx.team)) throw echec(409, 'roles-cm', 'Les rôles de la Team CM se créent, se renomment et se suppriment dans Rôles et permissions (rôles CM).');
+    if (estTeamCm(ctx.team)) throw echec(409, 'roles-cm', 'Les rôles du CM du club se créent, se renomment et se suppriment dans Rôles et permissions (rôles CM).');
   }
 
   async function creerRole(acteur, teamId, corps) {

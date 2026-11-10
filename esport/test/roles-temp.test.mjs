@@ -400,8 +400,8 @@ test('app : réglages (rôle choisi sur Discord, nom Unicode gardé, hiérarchie
   assert.equal((await k.api(`/teams/${k.val.teamId}/roles-temporaires`, coach)).statut, 404);
   // Vue d'ensemble de l'Administration › Bot Esport HQ.
   const club = (await k.api('/roles-temp/config', k.fondateur)).corps;
-  // La Team CM (migration 0068) figure aussi, sans rôle temporaire réglé.
-  assert.deepEqual(club.equipes.map(e => [e.nom, e.actif, e.roleNom]), [['Team CM', false, ''], ['The Final LZ0', true, NOM_TF], ['Valorant LZ0', true, NOM_VAL]]);
+  // Le CM du club (migration 0068) figure aussi, sans rôle temporaire réglé.
+  assert.deepEqual(club.equipes.map(e => [e.nom, e.actif, e.roleNom]), [['CM du club', false, ''], ['The Final LZ0', true, NOM_TF], ['Valorant LZ0', true, NOM_VAL]]);
   assert.equal((await k.api('/roles-temp/config', coach)).statut, 404);
   assert.equal((await k.api('/bot-discord', k.fondateur)).corps.rolesTemp.actif, true);
 });

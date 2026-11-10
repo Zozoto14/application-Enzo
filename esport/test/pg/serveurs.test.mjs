@@ -102,8 +102,8 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
     const team = await api(esport.url, '/teams', { methode: 'POST', jeton: f, corps: { nom: 'Team o2switch', jeu: 'valorant', preset: 'valorant_complet' } });
     assert.equal(team.statut, 200, JSON.stringify(team.corps));
     const teamId = team.corps.team.id;
-    // + la Team CM posée par la migration 0068.
-    assert.deepEqual((await api(esport.url, '/teams', { jeton: f })).corps.teams.map(t => t.nom), ['Team CM', 'Team o2switch']);
+    // + le CM du club posée par la migration 0068.
+    assert.deepEqual((await api(esport.url, '/teams', { jeton: f })).corps.teams.map(t => t.nom), ['CM du club', 'Team o2switch']);
 
     // Dépôt d'une réunion puis de son résumé PDF : fichier sur le disque, hors de tout dossier public.
     const depot = await api(esport.url, `/teams/${teamId}/resumes`, { methode: 'POST', jeton: f, corps: { lien: 'https://youtu.be/abc123', typeId: HEBDO, dateReunion: '2026-10-19', titre: 'Réunion du lundi' } });
@@ -242,7 +242,7 @@ test('o2switch : migration d’un ancien serveur (base et fichiers) vers Postgre
     const nouveau = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: cible.base, stockage: await stockageDisque(nouveauDossier), config: configEsport(relais.url, nouveauDossier) });
     try {
       const f2 = await sessionFondateur(nouveau.url);
-      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Ancienne', 'Team CM']);
+      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['CM du club', 'Team Ancienne']);
       // Sans l'option, jamais de clé exportée.
       assert.equal((await api(nouveau.url, '/admin/secrets', { jeton: f2 })).statut, 404);
       // Une session ouverte sur l'ancien serveur reste valable (même CLE_ESPORT).

@@ -15,14 +15,14 @@ directement **Tous les membres**.
 Migrations : `esport/migrations/0030_trombinoscope.sql`, `0032_trombi_badges.sql` (badges). Code : `esport/noyau/trombi/`, `src/esport/trombi/`,
 `src/esport/ui/membres/`, textes `src/esport/i18n/trombi.ts`.
 
-## Les membres de la Team CM (migration 0068)
+## Les membres du CM du club (migrations 0068 et 0069)
 
-La Team CM est une team ([cm.md](cm.md), « La Team CM ») : ses membres (Responsable CM, Correspondants CM, rôles CM
-créés) ont leur carte comme les joueurs. Sur la carte : « Team CM · Responsable CM » (le rôle CM à la place du jeu) et
-une pastille du rôle ; la recherche trouve aussi le rôle (« Responsable »). Pour un membre qui n'est **que** dans la Team
+Le CM du club est une team ([cm.md](cm.md), « Le CM du club, une team ») : ses membres (Responsable CM, Correspondants CM, rôles CM
+créés) ont leur carte comme les joueurs. Sur la carte : « CM du club · Responsable CM » (le rôle CM à la place du jeu) et
+une pastille du rôle ; la recherche trouve aussi le rôle (« Responsable »). Pour un membre qui n'est **que** dans le CM du
 CM (`staff: true` côté serveur), l'**elo** n'est pas affiché sur la carte, et la fiche ne propose ni postes / personnages
 de jeu ni elo à saisir (sauf s'il en a déjà) ; palmarès, anciennes structures, réseaux, photo et badges restent. Un
-joueur qui est aussi dans la Team CM garde tout. Le filtre **Team** propose la Team CM.
+joueur qui est aussi dans le CM du club garde tout. Le filtre **Team** propose le CM du club.
 
 ## La fiche d'un joueur
 
@@ -61,7 +61,7 @@ Deux permissions, `membres.trombi.voir` et `membres.trombi.editer` :
 | Qui | Voit | Modifie |
 | --- | --- | --- |
 | Fondateur | tout le club, tous les champs (privés compris) | tout |
-| Membre de la **Team CM** (rôle CM « tout le club ») avec la permission (par défaut **Responsable CM** : voir + compléter ; **Correspondant CM** : voir) | tout le club | (éditer) toutes les fiches |
+| Membre du **CM du club** (rôle CM « tout le club ») avec la permission (par défaut **Responsable CM** : voir + compléter ; **Correspondant CM** : voir) | tout le club | (éditer) toutes les fiches |
 | Rôle CM affecté **pour une team** (correspondant de la team) | les membres de cette team | (éditer) ces fiches |
 | Rôle de team avec la permission (par défaut **Manager** : voir + compléter ; **Coach**, **Analyste** : voir ; Propriétaire : tout) | les membres de cette team | (éditer) ces fiches |
 | Un membre sans la permission (Joueur, Remplaçant) | les membres de **ses** teams, champs « Membres » seulement | **sa** fiche seulement |

@@ -1,12 +1,12 @@
 /**
- * Team CM (migration 0068, docs/esport/cm.md, « La Team CM ») : la Team CM est une vraie team dont l'appartenance
+ * CM du club (migrations 0068 et 0069, docs/esport/cm.md, « Le CM du club ») : le CM du club est une vraie team dont l'appartenance
  * EST l'appartenance CM du club.
  *
  *  - migration depuis une base de production réaliste (fixture : Valorant LZ0, The Final LZ0, Lina Responsable CM,
  *    un correspondant, un rôle CM créé, un compte à deux rôles CM, un correspondant de team, tableau restreint,
  *    Drive du club) : membres, rôles, permissions, accès CM (Manager d'une autre team toujours refusé), tableaux
  *    et Drive intacts ; reprise rejouable sans effet ;
- *  - membre créé dans la Team CM : Dashboard, Membres, Trombinoscope, espace CM ; rôles CM ↔ rôles de la team ;
+ *  - membre créé dans le CM du club : Dashboard, Membres, Trombinoscope, espace CM ; rôles CM ↔ rôles de la team ;
  *  - export / import (nouveau format et export antérieur à 0068).
  *
  * Tourne sur SQLite (défaut) et sur PostgreSQL (ESPORT_TEST_PG, esport/test/pg/lancer.mjs).
@@ -76,7 +76,7 @@ const permissionsClubDe = async (base, compte) => (await base.tous('SELECT DISTI
 const affectationsVues = async base => (await base.tous('SELECT compte_id, role_id, portee FROM cm_affectations', [])).map(a => `${a.compte_id}|${a.role_id}|${a.portee}`).sort();
 const compter = async (base, table) => Number((await base.premier(`SELECT COUNT(*) AS n FROM ${table}`, [])).n);
 
-test('migration 0068 depuis une base réaliste : membres de la Team CM, rôles liés, permissions et accès CM inchangés, reprise sans effet', async () => {
+test('migration 0068 depuis une base réaliste : membres du CM du club, rôles liés, permissions et accès CM inchangés, reprise sans effet', async () => {
   const base = await fixture();
   const comptes = [...Object.keys(COMPTES), 'fan00001'];
   const avant = Object.fromEntries(await Promise.all(comptes.map(async c => [c, await permissionsClubDe(base, c)])));
@@ -86,9 +86,9 @@ test('migration 0068 depuis une base réaliste : membres de la Team CM, rôles l
 
   await appliquerMigrations(base, lireMigrations());
 
-  // La Team CM : une vraie team, sans profil de jeu, modules de jeu coupés.
+  // Le CM du club : une vraie team, sans profil de jeu, modules de jeu coupés.
   const team = await base.premier('SELECT * FROM teams WHERE id = ?', [TEAM_CM_ID]);
-  assert.deepEqual([team.nom, team.slug, team.genre, team.jeu], ['Team CM', 'team-cm', 'cm', 'communication']);
+  assert.deepEqual([team.nom, team.slug, team.genre, team.jeu], ['CM du club', 'cm-du-club', 'cm', 'communication']);
   const modules = Object.fromEntries((await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [TEAM_CM_ID])).map(m => [m.module, Number(m.active)]));
   for (const m of ['planning', 'availability', 'meeting_summaries', 'discord', 'resources']) assert.equal(modules[m], 1, m);
   for (const m of ['strat_editor', 'tournois', 'resultats', 'scouting', 'playbook', 'cm']) assert.equal(modules[m], 0, m);
@@ -113,9 +113,9 @@ test('migration 0068 depuis une base réaliste : membres de la Team CM, rôles l
   assert.deepEqual(await base.tous('SELECT id, portee, dossier_id, nom FROM cm_drive_fichiers ORDER BY id', []), driveAvant);
 
   // La reprise est la même que celle de la migration, et rejouable sans effet.
-  const migration = readFileSync(new URL('../migrations/0068_team_cm.sql', import.meta.url), 'utf8');
-  const bloc = migration.split('-- Reprise (debut)\n')[1].split('-- Reprise (fin)')[0];
-  assert.deepEqual(bloc.split(';\n').map(s => s.trim()).filter(Boolean), [...SQL_REPRISE_TEAM_CM]);
+  const bloc = nom => readFileSync(new URL(`../migrations/${nom}`, import.meta.url), 'utf8').split('-- Reprise (debut)\n')[1].split('-- Reprise (fin)')[0];
+  const instructions = [bloc('0068_team_cm.sql'), bloc('0069_cm_du_club.sql')].flatMap(b => b.split(';\n').map(x => x.trim().replace(/;$/, '')).filter(Boolean));
+  assert.deepEqual(instructions, [...SQL_REPRISE_TEAM_CM]);
   const tables = ['teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'cm_affectations_directes'];
   const n = Object.fromEntries(await Promise.all(tables.map(async t => [t, await compter(base, t)])));
   await reprendreTeamCm(base);
@@ -124,7 +124,7 @@ test('migration 0068 depuis une base réaliste : membres de la Team CM, rôles l
   assert.deepEqual(await affectationsVues(base), affAvant);
 });
 
-test('après la migration : espace CM par la Team CM (Manager d’une autre team refusé), tableau restreint et Drive, Team CM partout', async () => {
+test('après la migration : espace CM par le CM du club (Manager d’une autre team refusé), tableau restreint et Drive, CM du club partout', async () => {
   const base = await fixture();
   await appliquerMigrations(base, lireMigrations());
   const b = await banc({ base });
@@ -142,19 +142,19 @@ test('après la migration : espace CM par la Team CM (Manager d’une autre team
     assert.equal((await ok('/cm/moi', s[c])).espace, false, c);
     assert.ok([403, 404].includes((await api('/cm/tableaux', s[c])).statut), c);
     assert.ok([403, 404].includes((await api('/cm/drive?portee=club', s[c])).statut), c);
-    assert.equal((await api(`/teams/${TEAM_CM_ID}`, s[c])).statut, 404, `${c} : la Team CM n’existe pas pour lui`);
+    assert.equal((await api(`/teams/${TEAM_CM_ID}`, s[c])).statut, 404, `${c} : le CM du club n’existe pas pour lui`);
   }
   assert.equal((await ok('/cm/moi', s.lina0001)).gerer, true);
-  // Kai, correspondant de Valorant LZ0 : l'onglet CM de sa team, pas la Team CM.
+  // Kai, correspondant de Valorant LZ0 : l'onglet CM de sa team, pas le CM du club.
   assert.equal((await ok(`/cm/teams/${VAL}`, s.kai00001)).team.id, VAL);
   // Tableau restreint : Lina et le rôle Correspondant CM (Corentin) ; pas le Graphiste.
   assert.equal((await api(`/cm/tableaux/${TABLEAU}`, s.lina0001)).statut, 200);
   assert.equal((await api(`/cm/tableaux/${TABLEAU}`, s.cor00001)).statut, 200);
   assert.ok([403, 404].includes((await api(`/cm/tableaux/${TABLEAU}`, s.gra00001)).statut));
-  // Drive du club = Drive de la Team CM : le dossier est là.
+  // Drive du club = Drive du CM du club : le dossier est là.
   const drive = await ok('/cm/drive?portee=club', s.lina0001);
   assert.ok(drive.dossiers.some(d => d.nom === 'Logos 2026'));
-  // Teams, Dashboard : la Team CM avec son rôle ; Membres et Trombinoscope : ses membres.
+  // Teams, Dashboard : le CM du club avec son rôle ; Membres et Trombinoscope : ses membres.
   const teams = (await ok('/teams', s.lina0001)).teams;
   const tcm = teams.find(t => t.id === TEAM_CM_ID);
   assert.deepEqual([tcm.genre, tcm.role.nom, tcm.membres, tcm.jeuNom], ['cm', 'Responsable CM', 4, 'Communication']);
@@ -169,14 +169,14 @@ test('après la migration : espace CM par la Team CM (Manager d’une autre team
   assert.deepEqual([carte.staff, carte.teams[0].genre, carte.teams[0].role.nom], [true, 'cm', 'Responsable CM']);
   assert.equal(trombi.fiches.find(f => f.compte === 'kai00001').staff, false);
   assert.ok(trombi.teams.some(t => t.id === TEAM_CM_ID && t.genre === 'cm'));
-  // Équipe CM (affectations) : les membres de la Team CM en portée « club », le rôle supplémentaire, le correspondant.
+  // Équipe CM (affectations) : les membres du CM du club en portée « club », le rôle supplémentaire, le correspondant.
   const affs = (await ok('/cm/affectations', s.lina0001)).affectations;
   assert.ok(affs.some(a => a.compte === 'dou00001' && a.role.nom === 'Graphiste' && a.portee === 'club'));
   assert.ok(affs.some(a => a.compte === 'dou00001' && a.role.nom === 'Responsable CM' && a.portee === 'club'));
   assert.ok(affs.some(a => a.compte === 'kai00001' && a.portee === VAL));
 });
 
-test('membre créé dans la Team CM : Dashboard, Membres, Trombinoscope, espace CM ; anti-escalade ; plusieurs teams', async () => {
+test('membre créé dans le CM du club : Dashboard, Membres, Trombinoscope, espace CM ; anti-escalade ; plusieurs teams', async () => {
   const b = await banc();
   const A = await teamAvecMembres(b, { nom: 'Valorant LZ0', membres: { man12345: { pseudo: 'Max', role: 'manager' }, lea12345: { pseudo: 'Léa', role: 'joueur' } } });
   const s = { ...A.sessions, lina0001: await b.session('lina0001', 'Lynaoxie'), nou12345: await b.session('nou12345', 'Nouvelle') };
@@ -186,24 +186,24 @@ test('membre créé dans la Team CM : Dashboard, Membres, Trombinoscope, espace 
     assert.equal(r.statut, 200, `${o.methode ?? 'GET'} ${chemin} : ${r.statut} ${JSON.stringify(r.corps)}`);
     return r.corps;
   };
-  // Le sélecteur de teams (Membres › créer / ajouter) propose la Team CM avec ses rôles.
+  // Le sélecteur de teams (Membres › créer / ajouter) propose le CM du club avec ses rôles.
   const annuaire = await ok('/membres', s.fondateur);
   const tcm = annuaire.teams.find(t => t.id === TEAM_CM_ID);
   assert.deepEqual(tcm.roles.map(r => [r.nom, r.attribuable]), [['Responsable CM', true], ['Correspondant CM', true]]);
   // Le Fondateur ajoute Lina (Responsable CM) et Léa, joueuse de Valorant, aussi Correspondante CM.
   await ok(`/teams/${TEAM_CM_ID}/membres`, s.fondateur, { methode: 'POST', corps: { compte: 'lina0001', roleId: ROLES_TEAM_CM_SYSTEME.responsable } });
   await ok(`/teams/${TEAM_CM_ID}/membres`, s.fondateur, { methode: 'POST', corps: { compte: 'lea12345', roleId: ROLES_TEAM_CM_SYSTEME.correspondant } });
-  assert.deepEqual((await ok('/teams', s.lea12345)).teams.map(t => t.nom).sort(), ['Team CM', 'Valorant LZ0']);
-  // Dashboard : la Team CM et ses membres ; Membres : ses membres ; Trombinoscope : une carte (rôle CM).
+  assert.deepEqual((await ok('/teams', s.lea12345)).teams.map(t => t.nom).sort(), ['CM du club', 'Valorant LZ0']);
+  // Dashboard : le CM du club et ses membres ; Membres : ses membres ; Trombinoscope : une carte (rôle CM).
   const dash = await ok('/dashboard', s.lina0001);
   assert.equal(dash.teams.find(t => t.team.id === TEAM_CM_ID).effectif.actifs, 2);
   const comptes = (await ok('/membres', s.fondateur)).comptes;
   assert.deepEqual(comptes.find(c => c.compte === 'lina0001').appartenances.map(a => [a.teamId, a.role.nom]), [[TEAM_CM_ID, 'Responsable CM']]);
-  assert.equal(comptes.find(c => c.compte === 'lea12345').appartenances.length, 2, 'Léa : Valorant LZ0 et Team CM');
+  assert.equal(comptes.find(c => c.compte === 'lea12345').appartenances.length, 2, 'Léa : Valorant LZ0 et CM du club');
   const trombi = await ok('/trombi', s.lina0001);
-  assert.deepEqual(trombi.fiches.find(f => f.compte === 'lina0001').teams.map(t => [t.nom, t.role.nom]), [['Team CM', 'Responsable CM']]);
+  assert.deepEqual(trombi.fiches.find(f => f.compte === 'lina0001').teams.map(t => [t.nom, t.role.nom]), [['CM du club', 'Responsable CM']]);
   assert.ok(trombi.fiches.some(f => f.compte === 'lea12345'), 'le CM voit les fiches du club');
-  // Espace CM : ouvert par la Team CM ; Équipe CM : Lina en portée « club ».
+  // Espace CM : ouvert par le CM du club ; Équipe CM : Lina en portée « club ».
   assert.equal((await ok('/cm/moi', s.lina0001)).gerer, true);
   assert.equal((await ok('/cm/moi', s.lea12345)).espace, true);
   assert.equal((await ok('/cm/moi', s.man12345)).espace, false, 'Manager d’une autre team : jamais');
@@ -219,16 +219,16 @@ test('membre créé dans la Team CM : Dashboard, Membres, Trombinoscope, espace 
   // La Responsable CM la nomme Responsable (rôle de team ET permissions CM : elle les a).
   await ok(`/teams/${TEAM_CM_ID}/membres/${m.id}`, s.lina0001, { methode: 'PATCH', corps: { roleId: ROLES_TEAM_CM_SYSTEME.responsable } });
   assert.equal((await ok('/cm/moi', s.nou12345)).gerer, true);
-  // Suspendue dans la Team CM : plus d'espace CM.
+  // Suspendue dans le CM du club : plus d'espace CM.
   await ok(`/teams/${TEAM_CM_ID}/membres/${m.id}`, s.fondateur, { methode: 'PATCH', corps: { statut: 'suspendu' } });
   assert.equal((await ok('/cm/moi', s.nou12345)).espace, false);
-  // Retirer l'affectation « club » (Équipe CM) retire de la Team CM.
+  // Retirer l'affectation « club » (Équipe CM) retire du CM du club.
   await ok(`/cm/affectations/${lina.id}`, s.fondateur, { methode: 'DELETE' });
   assert.ok(!(await ok('/teams', s.lina0001)).teams.some(t => t.id === TEAM_CM_ID));
   assert.equal((await ok('/cm/moi', s.lina0001)).espace, false);
 });
 
-test('rôles CM ↔ rôles de la Team CM ; affectation « club » = appartenance ; rôle supplémentaire ; garde-fous de la Team CM', async () => {
+test('rôles CM ↔ rôles du CM du club ; affectation « club » = appartenance ; rôle supplémentaire ; garde-fous du CM du club', async () => {
   const b = await banc();
   const f = await b.session('principal', 'Fondateur');
   const s = { lina0001: await b.session('lina0001', 'Lynaoxie') };
@@ -238,7 +238,7 @@ test('rôles CM ↔ rôles de la Team CM ; affectation « club » = appartenance
     assert.equal(r.statut, 200, `${o.methode ?? 'GET'} ${chemin} : ${r.statut} ${JSON.stringify(r.corps)}`);
     return r.corps;
   };
-  // Créer un rôle CM crée son rôle dans la Team CM ; le renommer le renomme.
+  // Créer un rôle CM crée son rôle dans le CM du club ; le renommer le renomme.
   const graphiste = await ok('/cm/roles', { methode: 'POST', corps: { nom: 'Graphiste', couleur: '#22aa88', permissions: ['cm.voir', 'cm.drive.voir'] } });
   let roles = (await ok(`/teams/${TEAM_CM_ID}/roles`)).roles;
   assert.deepEqual(roles.find(r => r.cmRoleId === graphiste.id)?.nom, 'Graphiste');
@@ -257,7 +257,7 @@ test('rôles CM ↔ rôles de la Team CM ; affectation « club » = appartenance
   assert.equal((await api(`/teams/${TEAM_CM_ID}/modules`, { methode: 'PUT', corps: { modules: { cm: true } } })).statut, 409);
   await ok(`/teams/${TEAM_CM_ID}`, { methode: 'PATCH', corps: { description: 'Communication du club' } });
 
-  // Affecter (Équipe CM, portée « club ») ajoute à la Team CM ; un 2e rôle reste un rôle supplémentaire.
+  // Affecter (Équipe CM, portée « club ») ajoute au CM du club ; un 2e rôle reste un rôle supplémentaire.
   await ok('/cm/affectations', { methode: 'POST', corps: { compte: 'lina0001', roleId: 'cm-role-correspondant', portee: 'club' } });
   await ok('/cm/affectations', { methode: 'POST', corps: { compte: 'lina0001', roleId: graphiste.id, portee: 'club' } });
   const membre = (await ok(`/teams/${TEAM_CM_ID}/membres`)).membres.find(m => m.compte === 'lina0001');
@@ -265,12 +265,12 @@ test('rôles CM ↔ rôles de la Team CM ; affectation « club » = appartenance
   let affs = (await ok('/cm/affectations')).affectations.filter(a => a.compte === 'lina0001');
   assert.deepEqual(affs.map(a => a.role.nom).sort(), ['Correspondant CM', 'Graphiste vidéo']);
   assert.ok((await ok('/cm/moi', { jeton: s.lina0001 })).club.includes('cm.drive.voir'), 'permissions des deux rôles');
-  // Retirer l'appartenance : le rôle supplémentaire devient l'appartenance (la Team CM reste la source).
+  // Retirer l'appartenance : le rôle supplémentaire devient l'appartenance (le CM du club reste la source).
   await ok(`/cm/affectations/${affs.find(a => a.role.nom === 'Correspondant CM').id}`, { methode: 'DELETE' });
   const apres = (await ok(`/teams/${TEAM_CM_ID}/membres`)).membres.find(m => m.compte === 'lina0001');
   assert.equal(apres.role.nom, 'Graphiste vidéo');
   assert.ok(!(await b.base.premier('SELECT id FROM cm_affectations_directes WHERE compte_id = ?', ['lina0001'])));
-  // Supprimer le rôle CM : ses membres quittent la Team CM, son rôle de team disparaît.
+  // Supprimer le rôle CM : ses membres quittent le CM du club, son rôle de team disparaît.
   await ok(`/cm/roles/${graphiste.id}`, { methode: 'DELETE' });
   assert.ok(!(await ok(`/teams/${TEAM_CM_ID}/membres`)).membres.some(m => m.compte === 'lina0001'));
   assert.ok(!(await ok(`/teams/${TEAM_CM_ID}/roles`)).roles.some(r => r.cmRoleId === graphiste.id));
@@ -278,7 +278,7 @@ test('rôles CM ↔ rôles de la Team CM ; affectation « club » = appartenance
   assert.deepEqual(affs, []);
 });
 
-test('export / import : la Team CM suit (nouveau format) ; un export antérieur à 0068 est repris (affectations « club » → membres)', async () => {
+test('export / import : le CM du club suit (nouveau format) ; un export antérieur à 0068 est repris (affectations « club » → membres)', async () => {
   const b = await banc();
   const f = await b.session('principal', 'Fondateur');
   await b.session('lina0001', 'Lynaoxie');
@@ -300,7 +300,7 @@ test('export / import : la Team CM suit (nouveau format) ; un export antérieur 
   await importerBase(neuve, exp);
   assert.deepEqual(await exporterBase(neuve, Date.parse(exp.exporteLe)), exp);
 
-  // Export « ancien » : pas de Team CM, table cm_affectations avec les affectations « club ».
+  // Export « ancien » : pas de CM du club, table cm_affectations avec les affectations « club ».
   const ancien = structuredClone(exp);
   const t = ancien.tables;
   const idsRoles = new Set(t.roles.filter(r => r.team_id === TEAM_CM_ID).map(r => r.id));
@@ -320,4 +320,22 @@ test('export / import : la Team CM suit (nouveau format) ; un export antérieur 
   assert.deepEqual(m.map(x => [x.compte_id, x.nom]), [['cor00001', 'Graphiste'], ['lina0001', 'Responsable CM']]);
   assert.deepEqual(await permissionsClubDe(reprise, 'cor00001'), ['cm.voir']);
   assert.equal(await compter(reprise, 'cm_affectations_directes'), 0);
+});
+
+test('migration 0069 : « Team CM » devient « CM du club » (nom et adresse), rien d’autre ne bouge ; un nom choisi depuis est gardé', async () => {
+  const base = await fixture();
+  const toutes = lireMigrations();
+  await appliquerMigrations(base, toutes.filter(m => m.nom < '0069'));
+  const avant = await base.premier('SELECT nom, slug FROM teams WHERE id = ?', [TEAM_CM_ID]);
+  assert.deepEqual([avant.nom, avant.slug], ['Team CM', 'team-cm']);
+  const membres = await base.tous('SELECT id, compte_id, role_id FROM membres WHERE team_id = ? ORDER BY id', [TEAM_CM_ID]);
+  await appliquerMigrations(base, toutes);
+  const apres = await base.premier('SELECT nom, slug FROM teams WHERE id = ?', [TEAM_CM_ID]);
+  assert.deepEqual([apres.nom, apres.slug], ['CM du club', 'cm-du-club']);
+  assert.deepEqual(await base.tous('SELECT id, compte_id, role_id FROM membres WHERE team_id = ? ORDER BY id', [TEAM_CM_ID]), membres);
+  assert.equal(await compter(base, 'cm_drive_fichiers'), 1);
+  // Rejouée : sans effet ; un nom choisi par le Fondateur n'est pas écrasé.
+  await base.executer("UPDATE teams SET nom = 'Communication LZ0' WHERE id = ?", [TEAM_CM_ID]);
+  await reprendreTeamCm(base);
+  assert.equal((await base.premier('SELECT nom FROM teams WHERE id = ?', [TEAM_CM_ID])).nom, 'Communication LZ0');
 });

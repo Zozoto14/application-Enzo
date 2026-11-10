@@ -93,7 +93,7 @@ test('enregistrement versionné : révisions, conflit (409), historique, documen
   r = await b.appel(`${url}/${id}`, { methode: 'PATCH', jeton: sessions.coach123, corps: { titre: 'Exec A (v2)', tags: ['A'] } });
   assert.equal(r.corps.titre, 'Exec A (v2)');
   assert.equal(r.corps.donnees.etapes.length, 2);
-  const journal = (await b.appel(`/teams/${(await b.appel('/teams', { jeton: sessions.fondateur })).corps.teams[0].id}/journal`, { jeton: sessions.fondateur })).corps.entrees.map(e => e.action);
+  const journal = (await b.appel(`/teams/${(await b.appel('/teams', { jeton: sessions.fondateur })).corps.teams.find(t => t.genre !== 'cm').id}/journal`, { jeton: sessions.fondateur })).corps.entrees.map(e => e.action);
   assert.ok(journal.includes('strat.created') && journal.includes('strat.updated'));
 });
 
@@ -197,7 +197,7 @@ test('lien de lecture seule : page publique sans session, CSP stricte, puis rév
   await b.appel(`${url}/${id}`, { methode: 'DELETE', jeton: coach });
   assert.equal((await b.brut(autre.url)).status, 404, 'strat supprimée');
   const fondateur = await b.session('principal');
-  const journal = (await b.appel(`/teams/${(await b.appel('/teams', { jeton: fondateur })).corps.teams[0].id}/journal?action=strat`, { jeton: fondateur })).corps.entrees.map(e => e.action);
+  const journal = (await b.appel(`/teams/${(await b.appel('/teams', { jeton: fondateur })).corps.teams.find(t => t.genre !== 'cm').id}/journal?action=strat`, { jeton: fondateur })).corps.entrees.map(e => e.action);
   assert.ok(journal.includes('strat.share_created') && journal.includes('strat.share_revoked'));
 });
 

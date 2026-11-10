@@ -1,5 +1,5 @@
 /**
- * La Team CM (migration 0068, docs/esport/cm.md, « La Team CM ») : une vraie team (`teams.genre` = « cm »), dont
+ * Le CM du club, une team (migrations 0068 et 0069, docs/esport/cm.md, « La Team CM ») : une vraie team nommée « CM du club » (`teams.genre` = « cm »), dont
  * l'appartenance active EST l'appartenance CM du club. Ses rôles sont liés aux rôles CM (`roles.cm_role_id`) : les
  * permissions CM viennent du rôle CM (vue `cm_affectations`, portée « club »), les permissions de team (planning,
  * dispos, membres…) du rôle de team. Rôles CM créés, renommés, supprimés (page Rôles et permissions) : le rôle de la
@@ -9,6 +9,9 @@
 /** Identifiant fixe de la Team CM (une seule par club). */
 export const TEAM_CM_ID = '00000000-0000-4000-8000-00000000c0de';
 export const GENRE_CM = 'cm';
+/** Nom de la team (migration 0069) : l'espace « CM du club » EST la team. */
+export const NOM_TEAM_CM = 'CM du club';
+export const SLUG_TEAM_CM = 'cm-du-club';
 /** Rôles de la Team CM liés aux deux rôles CM système. */
 export const ROLES_TEAM_CM_SYSTEME = Object.freeze({ responsable: '00000000-0000-4000-8000-00000000c001', correspondant: '00000000-0000-4000-8000-00000000c002' });
 
@@ -33,8 +36,8 @@ export const PERMISSIONS_TEAM_CM_RESPONSABLE = Object.freeze([
 export const estTeamCm = team => Boolean(team) && (team.genre === GENRE_CM || team.id === TEAM_CM_ID);
 
 /**
- * Instructions de reprise, rejouables sans effet : MÊMES instructions que la migration 0068 (entre « Reprise (debut) »
- * et « Reprise (fin) », vérifié par esport/test/team-cm.test.mjs). Team CM, modules, rôles liés aux rôles CM et leurs
+ * Instructions de reprise, rejouables sans effet : MÊMES instructions que les migrations 0068 puis 0069 (entre
+ * « Reprise (debut) » et « Reprise (fin) », vérifié par esport/test/team-cm.test.mjs). Team CM, modules, rôles liés aux rôles CM et leurs
  * permissions de team, affectations « club » restantes changées en membres de la Team CM.
  */
 export const SQL_REPRISE_TEAM_CM = Object.freeze([
@@ -61,7 +64,8 @@ export const SQL_REPRISE_TEAM_CM = Object.freeze([
   ON CONFLICT DO NOTHING`,
   `DELETE FROM cm_affectations_directes
  WHERE portee = 'club'
-   AND EXISTS (SELECT 1 FROM membres m JOIN roles r ON r.id = m.role_id WHERE m.team_id = '00000000-0000-4000-8000-00000000c0de' AND m.compte_id = cm_affectations_directes.compte_id AND r.cm_role_id = cm_affectations_directes.role_id)`
+   AND EXISTS (SELECT 1 FROM membres m JOIN roles r ON r.id = m.role_id WHERE m.team_id = '00000000-0000-4000-8000-00000000c0de' AND m.compte_id = cm_affectations_directes.compte_id AND r.cm_role_id = cm_affectations_directes.role_id)`,
+  `UPDATE teams SET nom = 'CM du club', slug = CASE WHEN EXISTS (SELECT 1 FROM teams x WHERE x.slug = 'cm-du-club' AND x.id <> '00000000-0000-4000-8000-00000000c0de') THEN slug ELSE 'cm-du-club' END WHERE id = '00000000-0000-4000-8000-00000000c0de' AND nom = 'Team CM'`
 ]);
 
 /** Rejoue la reprise (import d'un export antérieur à la migration 0068, réparation). */

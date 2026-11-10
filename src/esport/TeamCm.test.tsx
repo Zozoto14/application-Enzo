@@ -1,5 +1,5 @@
 /**
- * Team CM (migration 0068, docs/esport/cm.md, « La Team CM ») côté app : la Team CM est une team comme les autres —
+ * Le CM du club, une team (migrations 0068 et 0069, docs/esport/cm.md) côté app — 
  * sélecteur de teams de la création / de l'ajout d'un membre (rôles Responsable CM, Correspondant CM ; pas de poste en
  * jeu), page Teams (carte avec l'entrée de l'espace CM), accueil de la team (entrée « Espace CM du club »),
  * Trombinoscope (cartes des membres du CM avec leur rôle CM, sans elo).
@@ -9,12 +9,15 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
-import type { Annuaire, ClientEsport, CompteEsport, TeamAnnuaire, TeamListee } from './client';
+import { CATALOGUE, type Annuaire, type ClientEsport, type CompteEsport, type DetailTeam, type TeamAnnuaire, type TeamListee } from './client';
+import type { MoiCm } from './cm/api';
 import { definirLangue } from './i18n';
 import { AjoutTeams } from './ui/AjoutTeams';
 import { ROLE_CORRESPONDANT_CM, roleParDefaut } from './ui/CreationCompte';
-import { EntreeEspaceCm } from './ui/PageTeam';
-import { CarteTeamListe } from './ui/RacineEsport';
+import { CarteCmClub, CarteTeamListe, versEspaceCm } from './ui/RacineEsport';
+import { groupesCm } from './ui/cm/EspaceCm';
+import { entreesTeamCm } from './ui/cm/SectionsTeamCm';
+import { entreesBarre } from './ui/PageTeam';
 import { Trombinoscope } from './ui/membres/Trombinoscope';
 import type { CarteTrombi, Trombinoscope as Donnees } from './trombi/api';
 
@@ -26,8 +29,8 @@ afterEach(() => definirLangue('fr'));
 
 const teamCm: TeamAnnuaire = {
   id: TEAM_CM,
-  nom: 'Team CM',
-  slug: 'team-cm',
+  nom: 'CM du club',
+  slug: 'cm-du-club',
   jeu: 'communication',
   genre: 'cm',
   archivee: false,
@@ -51,13 +54,13 @@ const valorant: TeamAnnuaire = {
   ],
 };
 
-describe('Team CM : sélecteur de teams d’un membre', () => {
-  it('rôle par défaut : Correspondant CM dans la Team CM, Joueur ailleurs', () => {
+describe('CM du club : sélecteur de teams d’un membre', () => {
+  it('rôle par défaut : Correspondant CM dans le CM du club, Joueur ailleurs', () => {
     expect(roleParDefaut(teamCm)).toBe(ROLE_CORRESPONDANT_CM);
     expect(roleParDefaut(valorant)).toBe('r-jou');
   });
 
-  it('ajouter un joueur à la Team CM avec un rôle CM (en plus de sa team de jeu), sans poste en jeu', async () => {
+  it('ajouter un joueur au CM du club avec un rôle CM (en plus de sa team de jeu), sans poste en jeu', async () => {
     const ajouterATeams = jest.fn(async () => null);
     const compte = { compte: 'lea12345', pseudo: 'Léa', appartenances: [{ teamId: 't-val', membreId: 'm1', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: true }] } as unknown as CompteEsport;
     const annuaire = { superAdmin: true, peutCreerCompte: true, teams: [teamCm, valorant], comptes: [compte] } as Annuaire;
@@ -67,8 +70,8 @@ describe('Team CM : sélecteur de teams d’un membre', () => {
         <AjoutTeams theme={theme} compte={compte} annuaire={annuaire} client={client} onFait={() => undefined} />
       </ModeAffichageForce>,
     );
-    await fireEvent.press(await screen.findByTestId('esport-ajout-team-lea12345-team-cm'));
-    expect(screen.queryByTestId('esport-ajout-poste-lea12345-team-cm')).toBeNull();
+    await fireEvent.press(await screen.findByTestId('esport-ajout-team-lea12345-cm-du-club'));
+    expect(screen.queryByTestId('esport-ajout-poste-lea12345-cm-du-club')).toBeNull();
     expect(screen.getByText('Responsable CM')).toBeTruthy();
     expect(screen.getByText('Graphiste')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-lea12345'));
@@ -76,30 +79,61 @@ describe('Team CM : sélecteur de teams d’un membre', () => {
   });
 });
 
-describe('Team CM : page Teams et accueil', () => {
-  const liste: TeamListee = { id: TEAM_CM, nom: 'Team CM', slug: 'team-cm', jeu: 'communication', jeuNom: 'Communication', genre: 'cm', description: '', logoUrl: null, fuseau: 'Europe/Paris', creeLe: '', archivee: false, membres: 4, modules: ['planning', 'availability', 'resources'], role: { nom: 'Responsable CM', couleur: '#db2777' }, suspendu: false };
+describe('CM du club : une seule carte, la team dans l’espace CM', () => {
+  const liste: TeamListee = { id: TEAM_CM, nom: 'CM du club', slug: 'cm-du-club', jeu: 'communication', jeuNom: 'Communication', genre: 'cm', description: '', logoUrl: null, fuseau: 'Europe/Paris', creeLe: '', archivee: false, membres: 4, modules: ['planning', 'availability', 'resources', 'meeting_summaries'], role: null, suspendu: false };
+  const MOI: MoiCm = { espace: true, sponsors: ['sponsors.voir'], club: ['cm.voir', 'cm.drive.voir'], teams: [], gerer: true };
+  const clientCm = { config: { adresse: 'https://esport.test', jetonRelais: 'x' }, teams: async () => [liste], requete: async () => ({ versions: {}, aValider: 0, nonLus: { total: 0, tableaux: {} } }) } as unknown as ClientEsport;
 
-  it('la Team CM est une carte de la liste des teams (rôle, effectif, entrée de l’espace CM)', async () => {
+  it('carte « CM du club » : « Communication · N membres », sections du CM (Contenus, Drive, Sponsors), ouvre l’espace CM', async () => {
     const ouvrir = jest.fn();
-    await render(<CarteTeamListe theme={theme} team={liste} onOuvrir={ouvrir} />);
-    expect(screen.getByText('Team CM')).toBeTruthy();
-    expect(screen.getByText(/Communication · 4 membres/)).toBeTruthy();
-    expect(screen.getByText('Responsable CM')).toBeTruthy();
-    expect(screen.getByTestId('esport-team-team-cm-cm')).toHaveTextContent('Espace CM du club');
-    await fireEvent.press(screen.getByTestId('esport-team-team-cm'));
+    await render(<CarteCmClub theme={theme} moi={MOI} client={clientCm} onOuvrir={ouvrir} membres={4} />);
+    expect(screen.getByText('CM du club')).toBeTruthy();
+    expect(screen.getByTestId('esport-teams-cm-sous')).toHaveTextContent('Communication · 4 membres');
+    expect(screen.getByText('Contenus')).toBeTruthy();
+    expect(screen.getByText('Sponsors')).toBeTruthy();
+    for (const absent of ['Jeu', 'Agenda', 'Équipe', 'Super admin']) expect(screen.queryByText(absent)).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-teams-cm-ouvrir'));
     expect(ouvrir).toHaveBeenCalled();
   });
 
-  it('accueil de la Team CM : « Ouvrir l’espace CM »', async () => {
-    const ouvrir = jest.fn();
-    await render(<EntreeEspaceCm theme={theme} onOuvrir={ouvrir} />);
-    await fireEvent.press(screen.getByTestId('esport-accueil-espace-cm-ouvrir'));
-    expect(ouvrir).toHaveBeenCalled();
+  it('carte de team de secours (sans espace CM) : jamais la section « Jeu », couleur et initiales du CM', async () => {
+    await render(<CarteTeamListe theme={theme} team={liste} onOuvrir={() => undefined} />);
+    expect(screen.queryByText('Jeu')).toBeNull();
+    expect(screen.getByText('CM', { includeHiddenElements: true })).toBeTruthy();
+  });
+
+  it('une page de team du CM du club ouvre l’espace CM (accueil, ou la même section)', () => {
+    expect(versEspaceCm({ v: 'team', id: TEAM_CM })).toEqual({ v: 'cm' });
+    expect(versEspaceCm({ v: 'team', id: TEAM_CM, section: 'membres' })).toEqual({ v: 'cm', onglet: 'team:membres' });
+    expect(versEspaceCm({ v: 'team', id: TEAM_CM, section: 'module:planning' })).toEqual({ v: 'cm', onglet: 'team:module:planning' });
+    expect(versEspaceCm({ v: 'team', id: 't-val' })).toEqual({ v: 'team', id: 't-val' });
+  });
+
+  it('espace CM › Équipe : Équipe CM (membres de la team), Réunions, Planning, Disponibilités, puis Rôles CM ; Gestion : Paramètres de la team', () => {
+    const detail: DetailTeam = {
+      team: { id: TEAM_CM, nom: 'CM du club', slug: 'cm-du-club', jeu: 'communication', genre: 'cm', description: '', logoUrl: null, fuseau: 'Europe/Paris', creeLe: '', archivee: false },
+      modules: CATALOGUE.modules.map(m => ({ cle: m.cle, active: ['planning', 'availability', 'discord', 'resources'].includes(m.cle) })),
+      membres: 4,
+      moi: { membreId: 'm1', role: { id: RESPONSABLE, nom: 'Responsable CM', couleur: '#db2777', cle: null }, permissions: ['members.view', 'planning.view', 'availability.view_all', 'availability.edit_own', 'discord.manage', 'resources.view'], superAdmin: false },
+    };
+    const groupes = groupesCm({ voirCm: true, drive: true, sponsors: false, reunions: true, gerer: true, team: entreesTeamCm(entreesBarre(detail)) });
+    const equipe = groupes.find(g => g.id === 'equipe')!;
+    expect(equipe.entrees.map(e => [e.id, e.libelle])).toEqual([
+      ['team:membres', 'Équipe CM'],
+      ['reunions', expect.any(String)],
+      ['team:module:planning', 'Planning'],
+      ['team:module:availability', 'Disponibilités'],
+      ['equipe', 'Rôles CM'],
+    ]);
+    expect(groupes.find(g => g.id === 'gestion')!.entrees.map(e => e.id)).toEqual(expect.arrayContaining(['team:parametres', 'team:module:discord']));
+    expect(groupes.find(g => g.id === 'data')!.entrees.map(e => e.id)).toContain('team:module:resources');
+    // Sans la team (compte hors équipe), rien ne change.
+    expect(groupesCm({ voirCm: true, drive: false, sponsors: false, reunions: true, gerer: true }).find(g => g.id === 'equipe')!.entrees.map(e => e.libelle)).toEqual([expect.any(String), 'Équipe CM']);
   });
 });
 
-describe('Team CM : Trombinoscope', () => {
-  const tcm = { id: TEAM_CM, nom: 'Team CM', slug: 'team-cm', logoUrl: null, jeu: 'communication', jeuNom: 'Communication', genre: 'cm' as const };
+describe('CM du club : Trombinoscope', () => {
+  const tcm = { id: TEAM_CM, nom: 'CM du club', slug: 'cm-du-club', logoUrl: null, jeu: 'communication', jeuNom: 'Communication', genre: 'cm' as const };
   const val = { id: 't-val', nom: 'Valorant LZ0', slug: 'valorant-lz0', logoUrl: null, jeu: 'valorant', jeuNom: 'Valorant', genre: 'jeu' as const };
   const carte = (compte: string, pseudo: string, teams: CarteTrombi['teams'], extra: Partial<CarteTrombi> = {}): CarteTrombi => ({ compte, pseudo, photo: null, teams, elo: null, reseaux: [], palmares: 0, badges: [], peutEditer: false, moi: false, ...extra });
   const elo = { jeu: 'valorant', jeuNom: 'Valorant', valeur: '2100', rang: 'Immortal 2', pic: '', majLe: '' };
@@ -115,7 +149,7 @@ describe('Team CM : Trombinoscope', () => {
   };
   const client = { requete: async (chemin: string) => (chemin.startsWith('/trombi') ? donnees : {}) } as unknown as ClientEsport;
 
-  it('les membres de la Team CM ont leur carte, avec leur rôle CM et sans elo', async () => {
+  it('les membres du CM du club ont leur carte, avec leur rôle CM et sans elo', async () => {
     await render(
       <ModeAffichageForce mode="large">
         <Trombinoscope theme={theme} client={client} large />
@@ -123,7 +157,7 @@ describe('Team CM : Trombinoscope', () => {
     );
     expect(await screen.findByTestId('esport-trombi-carte-lina0001')).toBeTruthy();
     expect(screen.getByTestId('esport-trombi-carte-lina0001-role-cm')).toHaveTextContent('Responsable CM');
-    expect(screen.getByText('Team CM · Responsable CM')).toBeTruthy();
+    expect(screen.getByText('CM du club · Responsable CM')).toBeTruthy();
     expect(screen.queryByTestId('esport-trombi-carte-lina0001-elo')).toBeNull();
     expect(screen.getByTestId('esport-trombi-carte-kai12345-elo')).toBeTruthy();
     // Recherche par rôle CM.

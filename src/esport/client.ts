@@ -1238,6 +1238,9 @@ export const descriptionRole = (r: { cle: string; description: string }): string
 export const nomPreset = (p: { cle: string; nom: string }): string => trOu(`cat.preset.${p.cle}.nom`, p.nom);
 export const descriptionPreset = (p: { cle: string; description: string }): string => trOu(`cat.preset.${p.cle}.description`, p.description);
 /** Nom d'un jeu : traduit pour les jeux du catalogue (Valorant, Autre jeu), sinon le nom de son profil. */
+/** Identifiant fixe du CM du club (la team de l'espace CM, migration 0068). */
+export const TEAM_CM_ID = '00000000-0000-4000-8000-00000000c0de';
+
 export const nomJeu = (cle: string, nom?: string | null): string => trOu(`cat.jeu.${cle}`, nom ?? CATALOGUE.jeux.find(j => j.cle === cle)?.nom ?? cle);
 /** Poste d'un jeu (« Duelliste » / « Duelist »). */
 export const nomPoste = (poste: string): string => trOu(`cat.poste.${slugPoste(poste)}`, poste);

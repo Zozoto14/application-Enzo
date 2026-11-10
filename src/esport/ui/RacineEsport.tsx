@@ -22,8 +22,9 @@ import { Avis, BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { fabrique } from '../fabrique';
-import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type TeamListee, nomRole, nomJeu } from '../client';
+import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type TeamListee, nomRole, nomJeu, TEAM_CM_ID } from '../client';
 import { Assistant } from './Assistant';
+import { SECTIONS_TEAM_CM } from './SectionTeamCm';
 import { CadreEsport, EntreeLaterale, PageEsport, navMobile, type OngletEsport } from './CadreEsport';
 import { Dashboard } from './Dashboard';
 import { PageMembres, type SousOngletMembres } from './membres/PageMembres';
@@ -90,6 +91,12 @@ export function normaliserVue(v: VueDemandee): Vue {
   return v as Vue;
 }
 
+/** Page de team du CM du club → espace CM, sur la section correspondante (accueil de la team : accueil de l'espace). */
+export function versEspaceCm(v: Vue): Vue {
+  if (v.v !== 'team' || v.id !== TEAM_CM_ID) return v;
+  return !v.section || v.section === 'accueil' ? { v: 'cm' } : { v: 'cm', onglet: `team:${v.section}` };
+}
+
 /** Écran d'une entrée de la navigation de premier niveau (sous-onglet par défaut). */
 const vueDOnglet = (o: OngletEsport): Vue => (o === 'membres' ? { v: 'membres' } : o === 'administration' ? { v: 'administration' } : { v: o });
 
@@ -110,7 +117,7 @@ export function Esport(props: PropsRacineApp) {
   }, [langueEsport]);
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vueDemandee, setVue] = useState<VueDemandee>({ v: 'dashboard' });
-  const vue = normaliserVue(vueDemandee);
+  const vueNormale = normaliserVue(vueDemandee);
   // Section CM (GET /cm/moi) : carte « CM du club » de la page Teams ; un ancien serveur sans section CM n'affiche rien.
   const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
   // Tickets Discord (GET /tickets/moi) : entrée « Tickets » pour qui voit les tickets ou les configure.
@@ -171,6 +178,9 @@ export function Esport(props: PropsRacineApp) {
   // Compteur de la navigation : tickets ouverts avec du nouveau (temps réel, et relecture lente de secours).
   const nonLusTickets = useCompteurTickets(moiTickets?.voir ? clientPret : undefined);
   const cm = Boolean(moiCm?.espace);
+  // Le CM du club EST l'espace CM (migration 0069) : un lien vers sa page de team (Dashboard, Membres, notification,
+  // ancien lien) ouvre l'espace CM, sur la même section (Équipe CM, Planning, Dispos, Paramètres…).
+  const vue: Vue = cm ? versEspaceCm(vueNormale) : vueNormale;
   // Fenêtre « Nouveautés » : le dernier devblog publié pas encore vu par ce compte (une fois, marque en base).
   const nouveautes = useNouveautes(clientPret, profilPret);
   // Statistiques : le Fondateur, ou un rôle du club qui a statistiques.voir (Second CEO…).
@@ -365,6 +375,7 @@ export function Esport(props: PropsRacineApp) {
           fondateur={etat.moi.superAdmin}
           onQuitter={() => setVue({ v: 'teams' })}
           onOuvrirTeam={id => setVue({ v: 'team', id })}
+          sectionsTeam={SECTIONS_TEAM_CM}
         />
       );
     } else if (onglet === 'membres') {
@@ -622,8 +633,9 @@ function MesTeams({
       ) : null}
       {teams?.length || moiCm?.espace ? (
         <Grille min={large ? 320 : 280} testID="esport-liste-teams">
-          {moiCm?.espace ? <CarteCmClub theme={theme} moi={moiCm} client={client} onOuvrir={onCm} /> : null}
-          {teams?.map(t => (
+          {/* Le CM du club EST une team (migrations 0068 et 0069) : une seule carte, celle de l'espace CM. */}
+          {moiCm?.espace ? <CarteCmClub theme={theme} moi={moiCm} client={client} onOuvrir={onCm} membres={teams?.find(t => t.genre === 'cm')?.membres} /> : null}
+          {teams?.filter(t => !(t.genre === 'cm' && moiCm?.espace)).map(t => (
             <CarteTeamListe key={t.id} theme={theme} team={t} onOuvrir={() => onOuvrir(t.id)} />
           ))}
         </Grille>
@@ -644,7 +656,7 @@ export { COULEUR_CM_CLUB };
  * Elle dit ce que le compte y trouve (Contenus, Posts à valider, Drive, Sponsors : selon GET /cm/moi) ; la puce
  * « Drive » ouvre directement le Drive pour qui y a droit.
  */
-export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub; moi: MoiCm; client?: ClientEsport; onOuvrir(onglet?: OngletCm): void }) {
+export function CarteCmClub({ theme, moi, client, onOuvrir, membres }: { theme: ThemeHub; moi: MoiCm; client?: ClientEsport; onOuvrir(onglet?: OngletCm): void; /** Effectif du CM du club (la team), quand le compte la voit dans ses teams. */ membres?: number }) {
   const contenus = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
@@ -672,7 +684,9 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
           <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1} accessibilityRole="header">
             {tr('cm.club_titre')}
           </Text>
-          <Text style={attenue(theme)} numberOfLines={1}>{trn('cm.tuile_sous', nb)}</Text>
+          <Text style={attenue(theme)} numberOfLines={1} testID="esport-teams-cm-sous">
+            {membres === undefined ? trn('cm.tuile_sous', nb) : `${tr('cat.jeu.communication')} · ${trn('statsTeam.membres', membres)}`}
+          </Text>
         </View>
       </View>
       <Text style={attenue(theme, 14)} numberOfLines={2}>
@@ -712,7 +726,8 @@ export function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; 
   const couleur = couleurTeam(t.slug);
   const jeu = nomJeu(t.jeu, t.jeuNom);
   // Sections de la team, d'après ses modules (comme la navigation dans la team).
-  const groupes = GROUPES_TEAM.filter(g => g.id !== 'accueil' && g.id !== 'reglages' && t.modules.some(m => g.sections.includes(`module:${m}`)));
+  // Le CM du club (team de staff) : ni « Jeu » ni « Compétition ».
+  const groupes = GROUPES_TEAM.filter(g => g.id !== 'accueil' && g.id !== 'reglages' && !(t.genre === 'cm' && (g.id === 'jeu' || g.id === 'competition')) && t.modules.some(m => g.sections.includes(`module:${m}`)));
   return (
     <Carte
       theme={theme}
@@ -737,8 +752,6 @@ export function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
         {t.role ? <PastilleRole theme={theme} nom={nomRole(t.role.nom)} couleur={t.role.couleur} /> : <Badge theme={theme} texte={tr('pageTeam.super_admin')} ton="accent" />}
         {t.suspendu ? <Badge theme={theme} texte={tr('racineEsport.acces_suspendu')} ton="critique" /> : null}
-        {/* Team CM (migration 0068) : sa page d'accueil ouvre l'espace CM du club. */}
-        {t.genre === 'cm' ? <Badge theme={theme} texte={tr('teamCm.espace_titre')} ton="accent" testID={`esport-team-${t.slug}-cm`} /> : null}
         {groupes.map(g => (
           <Badge key={g.id} theme={theme} texte={g.libelle} />
         ))}

@@ -75,8 +75,8 @@ test('état : Fondateur et tickets.configurer seulement ; aucun secret ; invitat
   assert.equal(e.tickets.connexion.mode, 'hors_ligne');
   assert.equal(e.tickets.diagnostic.bot, true);
   assert.equal(e.tickets.commandes.ouvrir.actif, true);
-  // La Team CM (migration 0068) a son module Discord comme les autres.
-  assert.deepEqual(e.teams.map(t => t.nom), ['Team Alpha', 'Team Bravo', 'Team CM']);
+  // Le CM du club (migration 0068) a son module Discord comme les autres.
+  assert.deepEqual(e.teams.map(t => t.nom), ['CM du club', 'Team Alpha', 'Team Bravo']);
   const ta = e.teams.find(t => t.id === alpha.teamId);
   assert.deepEqual([ta.moduleActif, ta.webhook, ta.serveurBot, ta.filFr, ta.relancesMp], [true, null, null, false, true]);
   assert.ok(e.commandes.some(c => c.nom === 'ticket' && c.sousCommandes.some(s => s.nom === 'ouvrir')));
