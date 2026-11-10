@@ -148,9 +148,14 @@ test('suppression depuis l’app : ticket fermé seulement, permission, salon Di
   const avant = p.k.discord.appels.length;
   const s = await p.k.api(`/tickets/${tk.id}/supprimer`, p.chef.jeton, { methode: 'POST', corps: {} });
   assert.equal(s.statut, 200, JSON.stringify(s.corps));
-  assert.deepEqual(s.corps, { ok: true, numero: tk.numero });
+  assert.deepEqual([s.corps.ok, s.corps.numero, s.corps.jours], [true, tk.numero, 30]);
   assert.ok(p.k.discord.appels.slice(avant).some(a => a.methode === 'DELETE' && a.chemin === `/channels/${salon}`), 'salon archivé supprimé');
   assert.equal(p.k.discord.etat.salons.has(salon), false);
+  // « Supprimer » ne fait que sortir le ticket de Discord : il reste lisible 30 jours (corbeille.test.mjs) ;
+  // « Supprimer définitivement maintenant » (/effacer) l'efface tout de suite.
+  assert.ok(await p.ticket(tk.id));
+  const e = await p.k.api(`/tickets/${tk.id}/effacer`, p.chef.jeton, { methode: 'POST', corps: {} });
+  assert.deepEqual(e.corps, { ok: true, numero: tk.numero });
   assert.ok(!(await p.ticket(tk.id)));
   for (const table of ['tickets_messages', 'tickets_pieces', 'tickets_membres', 'tickets_lectures']) assert.equal(Number((await p.k.b.base.premier(`SELECT COUNT(*) AS n FROM ${table} WHERE ticket_id = ?`, [tk.id])).n), 0, table);
   assert.equal(await p.k.b.stockage.lire(piece.cle_stockage), null, 'octets de la pièce effacés');
@@ -188,9 +193,15 @@ test('suppression : avis supprimé aussi, salon déjà supprimé sur Discord (40
   const t1 = await p.ouvrir(p.A);
   await p.fermer(t1);
   await p.noter(t1, 1, 'Bof');
+  // « Supprimer » puis « Supprimer définitivement maintenant » (le choix de l'avis fait au premier temps est gardé).
+  const dur = async (id, corps) => {
+    const r = await p.k.api(`/tickets/${id}/supprimer`, p.k.fondateur, { methode: 'POST', corps });
+    if (r.statut === 200) assert.equal((await p.k.api(`/tickets/${id}/effacer`, p.k.fondateur, { methode: 'POST', corps: {} })).statut, 200);
+    return r;
+  };
   // Le salon a disparu sur Discord : DELETE → 404, ignoré.
   p.k.discord.etat.salons.delete(t1.salon_id);
-  const s = await p.k.api(`/tickets/${t1.id}/supprimer`, p.k.fondateur, { methode: 'POST', corps: { garderAvis: false } });
+  const s = await dur(t1.id, { garderAvis: false });
   assert.equal(s.statut, 200, JSON.stringify(s.corps));
   assert.ok(!(await p.ticket(t1.id)));
   assert.equal(Number((await p.k.b.base.premier('SELECT COUNT(*) AS n FROM tickets_avis_anonymes', [])).n), 0, 'avis supprimé');
@@ -205,7 +216,7 @@ test('suppression : avis supprimé aussi, salon déjà supprimé sur Discord (40
   const avant = console.error;
   console.error = (...a) => erreurs.push(a.join(' '));
   try {
-    assert.equal((await p.k.api(`/tickets/${t2.id}/supprimer`, p.k.fondateur, { methode: 'POST', corps: {} })).statut, 200);
+    assert.equal((await dur(t2.id, {})).statut, 200);
   } finally {
     console.error = avant;
   }
@@ -251,7 +262,7 @@ test('/ticket supprimer : ticket fermé, compte lié qui gère, confirmation, sa
   // Confirmation éphémère, puis clic : avis gardé par défaut.
   const conf = await p.cmd('supprimer', {}, { salon });
   assert.equal(conf.corps.data.flags, 64);
-  assert.match(conf.corps.data.content, /DÉFINITIVEMENT le ticket n° \d+/);
+  assert.match(conf.corps.data.content, /Supprimer le ticket n° \d+ \?/);
   assert.match(conf.corps.data.content, /gardé, anonyme/);
   const bouton = conf.corps.data.components[0].components[0];
   assert.equal(bouton.custom_id, `tk:dc:${tk.id}:g`);
@@ -259,7 +270,7 @@ test('/ticket supprimer : ticket fermé, compte lié qui gère, confirmation, sa
   assert.ok(await p.ticket(tk.id), 'rien de supprimé avant la confirmation');
   // Option « supprimer aussi l'avis » : autre bouton ; réponse en anglais.
   const en = await p.cmd('supprimer', { avis: 'supprimer' }, { salon, locale: 'en-US' });
-  assert.match(en.corps.data.content, /PERMANENTLY delete ticket #\d+/);
+  assert.match(en.corps.data.content, /Delete ticket #\d+\?/);
   assert.match(en.corps.data.content, /deleted too/);
   assert.equal(en.corps.data.components[0].components[0].custom_id, `tk:dc:${tk.id}:s`);
 
@@ -275,8 +286,10 @@ test('/ticket supprimer : ticket fermé, compte lié qui gère, confirmation, sa
   const fait = await p.clic(`tk:dc:${tk.id}:g`, { salon, roles: [STAFF, AUTRE_ROLE] });
   assert.match(fait.corps.data.content, new RegExp(`Ticket n° ${tk.numero} supprimé`));
   assert.equal(fait.corps.apres, undefined, 'le travail d’après n’est jamais envoyé à Discord');
-  assert.ok(!(await p.ticket(tk.id)));
+  assert.ok((await p.ticket(tk.id)).supprime_le, 'supprimé, encore lisible dans l’app');
   assert.equal(p.k.discord.etat.salons.has(salon), false, 'salon supprimé après la réponse');
+  assert.equal((await p.k.api(`/tickets/${tk.id}/effacer`, p.chef.jeton, { methode: 'POST', corps: {} })).statut, 200);
+  assert.ok(!(await p.ticket(tk.id)));
   const anon = await p.k.b.base.tous('SELECT note, commentaire FROM tickets_avis_anonymes', []);
   assert.deepEqual(anon.map(a => [Number(a.note), a.commentaire]), [[4, 'Merci']]);
   const ev = await p.k.b.base.premier("SELECT acteur_id, charge FROM evenements WHERE type = 'ticket.supprime'", []);

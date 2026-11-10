@@ -38,6 +38,8 @@ export const GENERAL_DEFAUT = Object.freeze({
   avertissementH: 24,
   suppressionArchivesJours: 7,
   retentionJours: 365,
+  // Ticket supprimé : lisible dans l'app (Supprimés) ce nombre de jours, puis effacé définitivement (migration 0065).
+  retentionSuppressionJours: 30,
   copierPieces: true,
   pieceMaxMo: 8,
   // « Le staff répond uniquement depuis l'AppDashboard » : les rôles Discord des catégories lisent les salons des
@@ -158,6 +160,7 @@ export function validerGeneral(c, actuel) {
   s.avertissementH = entier(c.avertissementH, 0, 168, 'avertissement', s.avertissementH);
   s.suppressionArchivesJours = entier(c.suppressionArchivesJours, 0, 365, 'suppression', s.suppressionArchivesJours);
   s.retentionJours = entier(c.retentionJours, 7, 3650, 'retention', s.retentionJours);
+  s.retentionSuppressionJours = entier(c.retentionSuppressionJours, 1, 365, 'retention-suppression', s.retentionSuppressionJours);
   if (c.copierPieces !== undefined) s.copierPieces = c.copierPieces === true;
   if (c.reponsesAppSeules !== undefined) s.reponsesAppSeules = c.reponsesAppSeules !== false;
   if (c.annonces !== undefined) {

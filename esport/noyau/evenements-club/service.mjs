@@ -841,7 +841,7 @@ export function servicesEvenements({
         'Vous n’avez pas la permission de faire cela.',
       );
     const tickets = await base.tous(
-      'SELECT id, numero, statut, auteur_nom, reponses FROM tickets WHERE categorie_id = ? ORDER BY numero LIMIT 200',
+      'SELECT id, numero, statut, auteur_nom, reponses FROM tickets WHERE categorie_id = ? AND supprime_le IS NULL ORDER BY numero LIMIT 200',
       [categorieId],
     );
     const deja = await equipesDe(base, id);

@@ -119,11 +119,12 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
   }
 
   /**
-   * Supprimer un ticket fermé (/ticket supprimer) : compte Esport lié avec `tickets.gerer`, ou `tickets.configurer`
+   * Supprimer un ticket fermé (/ticket supprimer ; le salon disparaît, le ticket reste 30 j dans l'app) : compte Esport lié avec `tickets.gerer`, ou `tickets.configurer`
    * pour une catégorie de ses rôles (gereAvis) ; jamais un simple rôle Discord (c'est irréversible).
    */
   async function exigerSuppression(ticket, acteur) {
     if (ticket.statut !== 'ferme') throw new RefusLocal('supprimer_pas_ferme');
+    if (ticket.supprime_le) throw new RefusLocal('supprime_deja');
     const d = acteur.compte ? await droitsTickets(base, { compte: acteur.compte, superAdmin: acteur.superAdmin }) : null;
     if (!d || !gereAvis(d, ticket.categorie_id)) throw new RefusLocal('supprimer_droits');
   }
@@ -180,7 +181,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       await cycle.noter(m[1], acteur.discordId, Number(m[2]));
       return fenetre(`tk:nc:${m[1]}:${m[2]}`, t(langue, 'note_titre'), [{ type: 4, custom_id: 'commentaire', style: 2, label: t(langue, 'commentaire').slice(0, 45), placeholder: t(langue, 'commentaire_placeholder').slice(0, 100), required: false, max_length: 1000 }]);
     }
-    // Suppression confirmée (/ticket supprimer) : `g` garde l'avis anonyme, `s` le supprime aussi. Le salon est
+    // Suppression confirmée (/ticket supprimer) : `g` garde l'avis anonyme à l'effacement définitif, `s` le supprime aussi. Le salon est
     // supprimé APRÈS la réponse (`apres`, lancé par interactions.mjs) : Discord ne pourrait plus l'afficher.
     m = /^tk:dc:([0-9a-f-]{36}):([gs])$/.exec(id);
     if (m) {
@@ -188,7 +189,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       const ticket = await ticketDuBouton(i, m[1]);
       await exigerSuppression(ticket, acteur);
       const r = await cycle.supprimer(ticket, acteur, { garderAvis: m[2] === 'g', salonPlusTard: true });
-      return { ...avis(t(langue, 'supprime_ok', { numero: r.numero })), apres: r.salonId ? () => patienter(REGLAGES_SUPPRESSION.delaiSalonMs).then(() => cycle.supprimerSalon(r.salonId, r.numero)) : undefined };
+      return { ...avis(t(langue, 'supprime_ok', { numero: r.numero, jours: r.jours })), apres: r.salonId ? () => patienter(REGLAGES_SUPPRESSION.delaiSalonMs).then(() => cycle.supprimerSalon(r.salonId, r.numero)) : undefined };
     }
     m = /^tk:([a-z]{1,2}):([0-9a-f-]{36})$/.exec(id);
     if (!m) return avis(t(langue, 'erreur'));
@@ -394,7 +395,7 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
         type: 4,
         data: {
           flags: EPHEMERE,
-          content: t(langue, 'supprimer_confirmer', { numero: tk.numero, avis: t(langue, garder ? 'supprimer_avis_garde' : 'supprimer_avis_efface') }).slice(0, 2000),
+          content: t(langue, 'supprimer_confirmer', { numero: tk.numero, jours: (await lireGeneral(base)).retentionSuppressionJours, avis: t(langue, garder ? 'supprimer_avis_garde' : 'supprimer_avis_efface') }).slice(0, 2000),
           allowed_mentions: { parse: [] },
           components: [{ type: 1, components: [{ type: 2, style: 4, custom_id: `tk:dc:${tk.id}:${garder ? 'g' : 's'}`, label: t(langue, 'b_supprimer') }] }],
         },
@@ -426,14 +427,18 @@ export function creerBotTickets({ base, maintenant = () => Date.now(), cycle, co
       const depuis = iso(maintenant() - 30 * 86_400_000);
       const lignes = [];
       const toutes = [];
+      // Tickets supprimés (migration 0065) : plus comptés, mais leur avis reste (sauf s'il doit être supprimé avec eux).
+      const avisSupprimes = [];
       for (const c of cats.slice(0, 20)) {
-        const ls = await base.tous('SELECT statut, ouvert_le, ferme_le, premiere_reponse_le, note FROM tickets WHERE categorie_id = ? AND (ouvert_le >= ? OR statut <> ?)', [c.id, depuis, 'ferme']);
+        const tous = await base.tous('SELECT statut, ouvert_le, ferme_le, premiere_reponse_le, note, supprime_le, supprime_garder_avis FROM tickets WHERE categorie_id = ? AND (ouvert_le >= ? OR statut <> ?)', [c.id, depuis, 'ferme']);
+        const ls = tous.filter(x => !x.supprime_le);
+        avisSupprimes.push(...tous.filter(x => x.supprime_le && Number(x.supprime_garder_avis) !== 0));
         toutes.push(...ls);
         lignes.push(t(langue, 'stats_ligne', { categorie: nomCategorie(c, langue), ouverts: ls.filter(x => x.statut !== 'ferme').length, crees: ls.filter(x => x.ouvert_le >= depuis).length, fermes: ls.filter(x => x.ferme_le && x.ferme_le >= depuis).length }));
       }
       const ms = (a, b) => (a && b ? Date.parse(b) - Date.parse(a) : NaN);
       const h = v => (v === null ? '—' : `${Math.round(v / 3_600_000)} h`);
-      const notes = toutes.filter(x => x.note !== null && x.note !== undefined).map(x => Number(x.note));
+      const notes = [...toutes, ...avisSupprimes].filter(x => x.note !== null && x.note !== undefined).map(x => Number(x.note));
       return {
         type: 4,
         data: {

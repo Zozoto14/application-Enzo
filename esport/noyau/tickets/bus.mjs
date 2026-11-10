@@ -36,6 +36,9 @@ export const TYPES_TICKETS = [
   'ticket.liaison',
   'ticket.permanent',
   'ticket.supprime',
+  'ticket.corbeille',
+  'ticket.restaure',
+  'ticket.purge',
   'ticket.mention',
 ];
 

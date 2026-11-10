@@ -45,6 +45,14 @@ const messageErreur = (e: unknown): string => {
   return e instanceof Error ? e.message : String(e);
 };
 
+/** Jours restants avant l'effacement définitif d'un ticket supprimé (arrondis au-dessus). */
+const joursRestants = (effaceLe: string | null | undefined) => (effaceLe ? Math.max(0, Math.ceil((Date.parse(effaceLe) - Date.now()) / 86_400_000)) : 0);
+const compteARebours = (effaceLe: string | null | undefined) => {
+  const n = joursRestants(effaceLe);
+  return n > 0 ? trTk('corbeille.compte', { n }) : trTk('corbeille.imminent');
+};
+const dateJour = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'long' }) : '—');
+
 function duree(ms: number | null): string {
   if (ms === null || !Number.isFinite(ms)) return '—';
   const min = Math.round(ms / 60_000);
@@ -90,7 +98,7 @@ export function ListeTickets({
   const api = useMemo(() => apiTickets(client), [client]);
   const [f, setF] = useState<FiltresTickets>({ statut: 'ouverts' });
   const [q, setQ] = useState('');
-  const [donnees, setDonnees] = useState<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; droits?: { supprimer?: boolean } } | undefined>();
+  const [donnees, setDonnees] = useState<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; nbSupprimes?: number; retentionSuppressionJours?: number; droits?: { supprimer?: boolean } } | undefined>();
   const [ouvert, setOuvert] = useState<string | undefined>(ouvrir?.id);
   const [version, setVersion] = useState(0);
   // Suppression groupée (tickets fermés) : mode « choisir », tickets choisis, confirmation.
@@ -114,6 +122,8 @@ export function ListeTickets({
       vivant = false;
     };
   }, [api, f, q, version, agir]);
+  const corbeille = f.statut === 'supprimes';
+  const jours = donnees?.retentionSuppressionJours ?? 30;
   const fermes = f.statut === 'ferme' && Boolean(donnees?.droits?.supprimer);
   const basculer = (id: string) => {
     const n = new Set(choix);
@@ -129,7 +139,7 @@ export function ListeTickets({
       relire();
       return [trTk('suppr.ok_plusieurs', { n: r.supprimes.length }), r.echecs.length ? trTk('suppr.echecs', { n: r.echecs.length }) : ''].filter(Boolean).join(' ');
     });
-  const statuts: Array<{ id: string; nom: string }> = [{ id: 'ouverts', nom: trTk('f.ouverts') }, ...(['ouvert', 'pris_en_charge', 'en_attente', 'resolu', 'ferme'] as Statut[]).map(s => ({ id: s, nom: nomStatut(s) })), { id: 'tous', nom: trTk('f.tous') }];
+  const statuts: Array<{ id: string; nom: string }> = [{ id: 'ouverts', nom: trTk('f.ouverts') }, ...(['ouvert', 'pris_en_charge', 'en_attente', 'resolu', 'ferme'] as Statut[]).map(s => ({ id: s, nom: nomStatut(s) })), { id: 'tous', nom: trTk('f.tous') }, { id: 'supprimes', nom: trTk('f.supprimes', { jours }) }];
   return (
     <View style={{ gap: ESP.m }} testID="esport-tk-liste">
       <Preferences theme={theme} api={api} />
@@ -160,9 +170,14 @@ export function ListeTickets({
           {choix?.size ? <BoutonHub theme={theme} variante="danger" titre={trTk('suppr.supprimer_choisis')} onPress={() => setConfirmer(true)} testID="esport-tk-selection-supprimer" /> : null}
         </View>
       ) : null}
-      {confirmer && choix?.size ? <DialogueSuppression theme={theme} titre={trTk('suppr.titre_plusieurs', { n: choix.size })} onConfirmer={supprimerChoisis} onAnnuler={() => setConfirmer(false)} testID="esport-tk-suppr-groupe" /> : null}
+      {confirmer && choix?.size ? <DialogueSuppression theme={theme} titre={trTk('suppr.titre_plusieurs', { n: choix.size })} texte={trTk('suppr.texte', { jours })} onConfirmer={supprimerChoisis} onAnnuler={() => setConfirmer(false)} testID="esport-tk-suppr-groupe" /> : null}
       {!donnees ? <Squelette theme={theme} lignes={4} /> : null}
-      {donnees && !donnees.tickets.length ? <EtatVide theme={theme} glyphe="billets" titre={trTk('liste.vide')} /> : null}
+      {corbeille ? (
+        <Text style={attenue(theme)} testID="esport-tk-corbeille-aide">
+          {trTk('corbeille.liste_aide', { jours })}
+        </Text>
+      ) : null}
+      {donnees && !donnees.tickets.length ? <EtatVide theme={theme} glyphe="billets" titre={corbeille ? trTk('corbeille.vide') : trTk('liste.vide')} /> : null}
       <View style={{ gap: ESP.xs }}>
         {(donnees?.tickets ?? []).map(tk => (
           <LigneTicket key={tk.id} theme={theme} tk={tk} onPress={() => (choix && fermes ? basculer(tk.id) : setOuvert(tk.id))} choisi={choix && fermes ? choix.has(tk.id) : undefined} />
@@ -179,11 +194,18 @@ export function ListeTickets({
             onChange={relire}
             onExporter={onExporter}
             categories={donnees?.categories ?? []}
-            onSupprime={numero =>
+            onSupprime={(numero, effaceLe) =>
               void suppr.agir('suppression', async () => {
                 setOuvert(undefined);
                 relire();
-                return trTk('suppr.ok', { numero });
+                return trTk('suppr.ok', { numero, date: dateJour(effaceLe) });
+              })
+            }
+            onEfface={numero =>
+              void suppr.agir('suppression', async () => {
+                setOuvert(undefined);
+                relire();
+                return trTk('corbeille.effacer_ok', { numero });
               })
             }
           />
@@ -220,6 +242,7 @@ function LigneTicket({ theme, tk, onPress, choisi }: { theme: ThemeHub; tk: Resu
         </View>
         <View style={{ flexDirection: 'row', gap: ESP.xxs, alignItems: 'center' }}>
           {tk.permanent ? <Badge theme={theme} ton="accent" icone="epingle" texte={trTk('vue.permanent')} testID={`esport-tk-ticket-${tk.numero}-permanent`} /> : null}
+          {tk.supprime ? <Badge theme={theme} ton="critique" icone="corbeille" texte={compteARebours(tk.supprime.effaceLe)} testID={`esport-tk-ticket-${tk.numero}-compte`} /> : null}
           <Badge theme={theme} ton={TONS_STATUT[tk.statut]} texte={nomStatut(tk.statut)} />
         </View>
       </View>
@@ -232,6 +255,11 @@ function LigneTicket({ theme, tk, onPress, choisi }: { theme: ThemeHub; tk: Resu
           {tk.responsable ? trTk('pris_par', { nom: tk.responsable.nom }) : trTk('personne')} · {trTk('activite', { quand: quand(tk.derniereActivite) })}
         </Text>
       </View>
+      {tk.supprime ? (
+        <Text style={attenue(theme)} testID={`esport-tk-ticket-${tk.numero}-corbeille`}>
+          {trTk('corbeille.badge', { date: dateJour(tk.supprime.effaceLe) })}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -247,6 +275,7 @@ export function VueTicket({
   onExporter,
   categories,
   onSupprime,
+  onEfface,
   large = false,
 }: {
   theme: ThemeHub;
@@ -258,7 +287,9 @@ export function VueTicket({
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
   categories: CategorieCourte[];
   /** Ticket supprimé (fermé, tickets.gerer) : le volet se ferme. */
-  onSupprime?(numero: number): void;
+  onSupprime?(numero: number, effaceLe?: string): void;
+  /** Ticket supprimé effacé définitivement tout de suite : le volet se ferme. */
+  onEfface?(numero: number): void;
 }) {
   const [d, setD] = useState<DetailTicket | undefined>();
   const [texteMsg, setTexteMsg] = useState('');
@@ -270,6 +301,7 @@ export function VueTicket({
   const [discordId, setDiscordId] = useState('');
   const [assignables, setAssignables] = useState<Array<{ compte: string; pseudo: string | null }>>([]);
   const [suppression, setSuppression] = useState(false);
+  const [effacement, setEffacement] = useState(false);
   const [mention, setMention] = useState(false);
   const { erreur, avis, agir: agirBrut, enCours, setErreur } = useAgir();
   const agir = useCallback(
@@ -329,7 +361,20 @@ export function VueTicket({
       const r = await api.supprimer(id, garderAvis);
       setSuppression(false);
       onChange?.();
-      onSupprime?.(r.numero);
+      onSupprime?.(r.numero, r.effaceLe);
+    });
+  const restaurer = (rouvrir: boolean) =>
+    void agir('restaurer', async () => {
+      setD(await api.restaurer(id, rouvrir));
+      onChange?.();
+      return trTk('corbeille.restaure_ok');
+    });
+  const effacer = (garderAvis: boolean) =>
+    void agir('effacer', async () => {
+      const r = await api.effacer(id, garderAvis);
+      setEffacement(false);
+      onChange?.();
+      onEfface?.(r.numero);
     });
   const lier = (type: 'sponsors' | 'cm' | 'fiche' | 'aucune') =>
     void agir('lier', async () => {
@@ -345,6 +390,42 @@ export function VueTicket({
         {d.note ? <Badge theme={theme} ton="accent" texte={trTk('vue.note', { note: d.note })} /> : null}
         {d.permanent ? <Badge theme={theme} ton="accent" icone="epingle" texte={trTk('vue.permanent')} testID="esport-tk-vue-permanent" /> : null}
       </View>
+      {d.supprime ? (
+        <Panneau theme={theme} testID="esport-tk-vue-corbeille">
+          <Badge theme={theme} ton="critique" icone="corbeille" texte={trTk('corbeille.badge', { date: dateJour(d.supprime.effaceLe) })} testID="esport-tk-vue-corbeille-badge" />
+          <Text style={{ ...texte(theme), fontWeight: '700' }} testID="esport-tk-vue-corbeille-compte">
+            {compteARebours(d.supprime.effaceLe)}
+          </Text>
+          {d.supprime.par ? <Text style={attenue(theme)}>{trTk('corbeille.par', { nom: d.supprime.par, quand: quand(d.supprime.le) })}</Text> : null}
+          <Text style={attenue(theme)}>{trTk('corbeille.explication')}</Text>
+          {d.droits.supprimer && !effacement ? (
+            <View style={{ gap: ESP.xs }}>
+              <View style={styles.ligne}>
+                <BoutonHub theme={theme} titre={trTk('corbeille.restaurer')} desactive={Boolean(enCours)} onPress={() => restaurer(false)} testID="esport-tk-restaurer" />
+                <BoutonHub theme={theme} titre={trTk('corbeille.rouvrir')} desactive={Boolean(enCours) || d.purge} onPress={() => restaurer(true)} testID="esport-tk-restaurer-rouvrir" />
+              </View>
+              <Text style={attenue(theme)}>{trTk('corbeille.restaurer_aide')}</Text>
+              <Text style={attenue(theme)}>{trTk('corbeille.rouvrir_aide')}</Text>
+              <View style={styles.ligne}>
+                <BoutonHub theme={theme} variante="danger" icone="corbeille" titre={trTk('corbeille.effacer')} onPress={() => setEffacement(true)} testID="esport-tk-effacer" />
+              </View>
+            </View>
+          ) : null}
+          {d.droits.supprimer && effacement ? (
+            <DialogueSuppression
+              theme={theme}
+              titre={trTk('corbeille.effacer_titre', { numero: d.numero })}
+              texte={trTk('corbeille.effacer_texte', { date: dateJour(d.supprime.effaceLe) })}
+              confirmer={trTk('corbeille.effacer_confirmer')}
+              garderParDefaut={d.supprime.garderAvis}
+              desactive={Boolean(enCours)}
+              onConfirmer={effacer}
+              onAnnuler={() => setEffacement(false)}
+              testID="esport-tk-effacer-dialogue"
+            />
+          ) : null}
+        </Panneau>
+      ) : null}
       <Text style={texte(theme)}>{trTk('vue.auteur', { nom: d.auteur.nom || d.auteur.discordId })}</Text>
       {d.salon ? <Text style={attenue(theme)}>{d.salon.supprime ? trTk('vue.salon_supprime') : trTk('vue.salon', { nom: d.salon.nom })}</Text> : null}
       <Text style={attenue(theme)}>{d.responsable ? trTk('pris_par', { nom: d.responsable.nom }) : trTk('personne')}</Text>
@@ -387,7 +468,7 @@ export function VueTicket({
           {ouvert && d.statut !== 'en_attente' ? <BoutonHub theme={theme} titre={trTk('vue.attente')} onPress={() => faire('attente')} testID="esport-tk-attente" /> : null}
           {ouvert && d.statut !== 'resolu' ? <BoutonHub theme={theme} titre={trTk('vue.resolu')} onPress={() => faire('statut', { statut: 'resolu' })} testID="esport-tk-resolu" /> : null}
           {ouvert && d.salon && !d.salon.supprime ? <BoutonHub theme={theme} titre={trTk('vue.mentionner')} icone="megaphone" onPress={() => setMention(true)} testID="esport-tk-mentionner" /> : null}
-          {!ouvert && !d.purge ? <BoutonHub theme={theme} titre={trTk('vue.rouvrir')} onPress={() => faire('rouvrir')} testID="esport-tk-rouvrir" /> : null}
+          {!ouvert && !d.purge && !d.supprime ? <BoutonHub theme={theme} titre={trTk('vue.rouvrir')} onPress={() => faire('rouvrir')} testID="esport-tk-rouvrir" /> : null}
           {d.droits.gerer && onExporter ? <BoutonHub theme={theme} titre={trTk('vue.transcript')} onPress={() => void agir('transcript', async () => {
                 const tr = await api.transcript(id);
                 await onExporter(tr.nom, tr.contenu, tr.type);
@@ -414,12 +495,12 @@ export function VueTicket({
           }
         />
       ) : null}
-      {!ouvert && d.droits.supprimer && !suppression ? (
+      {!ouvert && !d.supprime && d.droits.supprimer && !suppression ? (
         <View style={styles.ligne}>
           <BoutonHub theme={theme} variante="danger" icone="corbeille" titre={trTk('suppr.bouton')} onPress={() => setSuppression(true)} testID="esport-tk-supprimer" />
         </View>
       ) : null}
-      {!ouvert && d.droits.supprimer && suppression ? <DialogueSuppression theme={theme} titre={trTk('suppr.titre', { numero: d.numero })} desactive={Boolean(enCours)} onConfirmer={supprimer} onAnnuler={() => setSuppression(false)} testID="esport-tk-suppr" /> : null}
+      {!ouvert && !d.supprime && d.droits.supprimer && suppression ? <DialogueSuppression theme={theme} titre={trTk('suppr.titre', { numero: d.numero })} texte={trTk('suppr.texte', { jours: d.retentionSuppressionJours ?? 30 })} desactive={Boolean(enCours)} onConfirmer={supprimer} onAnnuler={() => setSuppression(false)} testID="esport-tk-suppr" /> : null}
       {d.droits.repondre && ouvert ? <Choix theme={theme} libelle={trTk('vue.priorite')} valeur={d.priorite} options={PRIORITES.map(p => ({ id: p, nom: nomPriorite(p) }))} onChoisir={priorite => faire('priorite', { priorite })} testID="esport-tk-vue-priorite" /> : null}
       {d.droits.gerer && ouvert && assignables.length ? <Choix theme={theme} libelle={trTk('vue.assigner')} valeur={d.responsable?.compte ?? undefined} options={assignables.map(a => ({ id: a.compte, nom: a.pseudo ?? a.compte }))} onChoisir={compte => faire('assigner', { compte })} testID="esport-tk-vue-assigner" /> : null}
       {d.droits.gerer && ouvert ? <Choix theme={theme} libelle={trTk('vue.categorie')} valeur={d.categorie.id} options={categories.filter(c => c.actif).map(c => ({ id: c.id, nom: nomCat(c), couleur: c.couleur }))} onChoisir={categorie => faire('categorie', { categorie })} testID="esport-tk-vue-categorie" /> : null}
@@ -527,21 +608,44 @@ export function VueTicket({
  * conversation, notes internes, pièces jointes, transcript, salon archivé), choix de garder l'avis anonyme dans les
  * statistiques (par défaut) ou de le supprimer aussi.
  */
-function DialogueSuppression({ theme, titre, onConfirmer, onAnnuler, desactive, testID }: { theme: ThemeHub; titre: string; onConfirmer(garderAvis: boolean): void; onAnnuler(): void; desactive?: boolean; testID: string }) {
-  const [garder, setGarder] = useState(true);
+function DialogueSuppression({
+  theme,
+  titre,
+  texte: corps,
+  confirmer,
+  garderParDefaut = true,
+  onConfirmer,
+  onAnnuler,
+  desactive,
+  testID,
+}: {
+  theme: ThemeHub;
+  titre: string;
+  /** Avertissement affiché (les conséquences de ce qui va être fait). */
+  texte: string;
+  /** Libellé du bouton de confirmation (« Supprimer » par défaut). */
+  confirmer?: string;
+  /** Valeur initiale de « garder l'avis anonyme » (le choix fait à la suppression, pour l'effacement définitif). */
+  garderParDefaut?: boolean;
+  onConfirmer(garderAvis: boolean): void;
+  onAnnuler(): void;
+  desactive?: boolean;
+  testID: string;
+}) {
+  const [garder, setGarder] = useState(garderParDefaut);
   return (
     <View accessibilityRole="alert" testID={testID} style={{ gap: ESP.xs, padding: ESP.s, borderWidth: 1, borderColor: theme.critique, borderRadius: 10, backgroundColor: teinteTransparente(theme.critique, 0.08) }}>
       <Text style={{ ...texte(theme, 15), fontWeight: '700' }} testID={`${testID}-titre`}>
         {titre}
       </Text>
-      <Text style={texte(theme, 13)}>{trTk('suppr.texte')}</Text>
+      <Text style={texte(theme, 13)}>{corps}</Text>
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Text style={{ ...texte(theme, 13), flex: 1, minWidth: 0 }}>{trTk('suppr.garder_avis')}</Text>
         <Interrupteur theme={theme} libelle={trTk('suppr.garder_avis')} valeur={garder} onChanger={setGarder} testID={`${testID}-garder-avis`} />
       </View>
       <Text style={attenue(theme)}>{trTk('suppr.garder_avis_aide')}</Text>
       <View style={styles.ligne}>
-        <BoutonHub theme={theme} variante="danger" icone="corbeille" titre={trTk('suppr.confirmer')} desactive={desactive} onPress={() => onConfirmer(garder)} testID={`${testID}-confirmer`} />
+        <BoutonHub theme={theme} variante="danger" icone="corbeille" titre={confirmer ?? trTk('suppr.confirmer')} desactive={desactive} onPress={() => onConfirmer(garder)} testID={`${testID}-confirmer`} />
         <BoutonHub theme={theme} titre={trTk('annuler')} onPress={onAnnuler} testID={`${testID}-annuler`} />
       </View>
     </View>

@@ -15,7 +15,9 @@
  *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
  *   GET           /tickets?statut&categorie&priorite&responsable&auteur&du&au&q ; /tickets/compteur ; /tickets/stats
  *   GET           /tickets/avis?categorie&note&du&au&responsable&tri   (tickets.gerer, ou configurer : ses catégories)
- *   POST          /tickets/supprimer { ids, garderAvis } ; /tickets/:id/supprimer { garderAvis }   (ticket FERMÉ)
+ *   POST          /tickets/supprimer { ids, garderAvis } ; /tickets/:id/supprimer { garderAvis }   (ticket FERMÉ : salon Discord supprimé,
+ *                 ticket lisible 30 j dans « Supprimés ») ; /tickets/:id/restaurer { rouvrir } ; /tickets/:id/effacer { garderAvis }
+ *                 (ticket supprimé : effacement définitif tout de suite)
  *   GET|PUT       /tickets/preferences (MP Discord)
  *   GET           /tickets/:id ; /tickets/:id/assignables ; /tickets/:id/transcript ; /tickets/:id/mentionnables?q
  *   POST          /tickets/:id/(lu|messages|notes|liaison|mentionner) ; /tickets/:id/pieces/:piece/lien
@@ -87,6 +89,8 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
       return { url: `${url.origin}${url.pathname.startsWith('/api/esport') ? '/api/esport' : ''}${lien.chemin}`, expire: lien.expire };
     }
     if (n === 2 && b === 'supprimer' && m === 'POST') return v.supprimer(acteur, a, await lireCorps());
+    if (n === 2 && b === 'restaurer' && m === 'POST') return v.restaurer(acteur, a, await lireCorps());
+    if (n === 2 && b === 'effacer' && m === 'POST') return v.effacer(acteur, a, await lireCorps());
     if (n === 2 && m === 'POST') return v.action(acteur, a, b, await lireCorps());
   }
 

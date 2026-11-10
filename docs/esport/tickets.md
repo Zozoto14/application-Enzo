@@ -12,8 +12,8 @@ anonyme, messages du bot **bilingues** (langue de la personne d'abord, l'autre d
 Livraison par étapes : **1. socle et configuration** · **2. cycle de vie des tickets** · **3. tickets dans l'app** ·
 **4. commandes utiles** · puis **tickets paramétrables** (un ticket ou une catégorie qui ne se ferme jamais, fermeture
 par le staff seul : voir « Tickets qui ne se ferment jamais »), puis **avis et suppression** (onglet **Avis** : les
-notes et commentaires des auteurs ; un ticket fermé peut être **supprimé** définitivement : voir « Supprimer un ticket
-fermé »).
+notes et commentaires des auteurs ; un ticket fermé peut être **supprimé** : salon Discord supprimé, ticket lisible 30 jours dans « Supprimés »,
+puis effacé : voir « Supprimer un ticket fermé »).
 
 ---
 
@@ -129,7 +129,8 @@ l'Administration ; l'ancien lien Administration › Tickets y mène. Le **compte
 
 Sur 30 jours : tickets ouverts maintenant, créés, fermés, **délai de 1re réponse** et **de résolution** (médianes),
 **satisfaction moyenne** (et nombre de notes), par catégorie et par responsable. Les avis gardés (anonymes) des
-tickets supprimés comptent dans la satisfaction (à la date de l'avis).
+tickets supprimés comptent dans la satisfaction (à la date de l'avis) ; un ticket **supprimé** (encore lisible 30 jours) n'est plus compté
+comme ticket (créés, fermés, ouverts) mais son avis reste compté, sauf si l'on a choisi de le supprimer avec lui.
 
 ### Avis (`tickets.gerer`, ou `tickets.configurer`)
 
@@ -154,7 +155,7 @@ Demande du Fondateur : « voir les avis » (migration `0056_tickets_avis.sql`). 
 | Section | Contenu |
 | --- | --- |
 | **Connexion** | état de la connexion et explication ; **diagnostic** condition par condition (voir plus bas) ; « intent Message Content à activer » si Discord a refusé (4014) ; **permissions du bot** au niveau du serveur, puis dans la catégorie des tickets ouverts, celle des archives et le salon des journaux, avec ce qui manque ; lien d'invitation |
-| **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; copie des pièces jointes et taille maximale ; **Le staff répond uniquement depuis l'AppDashboard** (activé par défaut, voir plus bas) |
+| **Général** | tickets activés ; serveur Discord (un seul) ; catégorie Discord des tickets ouverts et des archives ; salon des journaux ; **langue des messages** ; fermeture automatique (heures sans message, défaut 168 = 7 jours ; 0 = jamais) ; avertissement avant (défaut 24 h) ; suppression des salons archivés (défaut 7 jours) ; **rétention** des tickets fermés (défaut 365 jours) ; **tickets supprimés** : jours pendant lesquels ils restent lisibles dans l'app avant l'effacement définitif (défaut 30) ; copie des pièces jointes et taille maximale ; **Le staff répond uniquement depuis l'AppDashboard** (activé par défaut, voir plus bas) |
 | **Catégories** | bouton **Catégories par défaut** (modèles à cocher) ; avertissement « À configurer : qui traite ? » sur une catégorie sans rôle Discord ni rôle de l'app ; nom et description FR / EN, icône (monochrome), couleur, ordre, active ou non ; **rôles Discord** qui traitent (voient le salon) et **rôles de l'app** qui traitent (voient le ticket dans l'app) ; **formulaire** (5 champs au plus : limite des fenêtres Discord ; libellé de 45 caractères, réponse courte ou longue, obligatoire, exemple, longueur max ; FR / EN) ; message d'accueil propre ; modèle du nom de salon (`ticket-{numero}-{pseudo}`) ; tickets ouverts au plus par personne ; **fermeture automatique** : « Délai global » (le réglage Général, défaut), délai propre **en jours** (90 au plus ; 1,5 = 36 h) ou « **Jamais** » (ni fermeture ni avertissement d'inactivité : sponsors…) ; **Seul le staff peut fermer** (l'auteur ne peut pas fermer son ticket) ; satisfaction oui / non ; priorité par défaut (4 niveaux d'urgence du CM) ; rôles mentionnés à l'ouverture (5 au plus) ; **liaison** facultative (Recrutement → fiche du membre, Partenariat → prospect Sponsors, Demande CM → carte du tableau CM choisi) |
 | **Panneaux** | bouton **Panneaux par défaut** (modèles prêts, voir plus bas) ; titre et texte FR / EN, couleur, **image du Drive** (PNG, JPEG, GIF, WebP, 8 Mo), boutons ou menu déroulant, catégories proposées, **libellé propre de chaque bouton** (facultatif, FR / EN, 80 caractères : « S'inscrire » au lieu du nom de la catégorie), salon de publication ; conseil « salon en lecture seule pour @everyone » ; **aperçu comme sur Discord** (la charge exacte que le bot enverra) ; **Publier** puis **Mettre à jour** (le même message est modifié) |
 | **Messages** | **Messages automatiques dans le salon** (un interrupteur par événement, voir plus bas) ; textes : accueil, prise en charge, libération, attente, fermeture, réouverture, avertissement d'inactivité, demande de note, remerciement, MP récapitulatif, réponse hors horaires ; FR et EN ; vide = texte par défaut (affiché en gris) ; variables `{utilisateur}` `{numero}` `{categorie}` `{staff}` `{raison}` `{delai}` `{serveur}` `{horaires}` `{ouverture}` `{fermeture}` `{note}` |
@@ -315,7 +316,8 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
      une nouvelle note remplace la précédente. MP impossibles (l'auteur les a fermés) : rien d'autre ne bloque ;
    - le **transcript** est la conversation gardée dans l'app (messages, auteurs, pièces jointes, messages du bot ;
      les notes internes ne sont jamais envoyées sur Discord) ;
-   - le salon archivé est **supprimé** après N jours (défaut 7).
+   - le salon archivé est **supprimé** après N jours (défaut 7) ; un ticket **supprimé** par le staff perd son salon tout de
+     suite (voir « Supprimer un ticket fermé »).
 6. **Réouverture** (bouton **Rouvrir**, staff) : le salon revient dans les tickets ouverts, l'auteur peut écrire ; si le
    salon a été supprimé, un nouveau est créé.
 7. **Fermeture automatique** (cron, toutes les 5 min) : après le délai sans message (défaut 7 jours, réglable par
@@ -328,28 +330,56 @@ avec le réglage par défaut. Les réponses visibles par une seule personne (ép
 
 ### Supprimer un ticket fermé
 
-Demande du Fondateur : « quand on ferme un ticket, pouvoir le supprimer après » (migration `0056_tickets_avis.sql`).
-Seul un ticket **fermé** se supprime (un ticket ouvert : fermez-le d'abord). C'est **définitif** : conversation, notes
-internes, pièces jointes (octets du stockage compris), personnes ajoutées, « lu », notifications et transcript
-disparaissent, ainsi que le **salon archivé sur Discord** s'il existe encore (au mieux : déjà supprimé à la main = 404
-ignoré ; tout autre refus de Discord est noté dans les journaux du serveur, la suppression est faite quand même).
+Demande du Fondateur : « quand on supprime les tickets, qu'il soit supprimé sur Discord mais qu'il reste ouvert pendant
+30 jours sur l'AppDashboard » (migrations `0056_tickets_avis.sql` et `0065_tickets_corbeille.sql`). La suppression se
+fait **en deux temps**. Seul un ticket **fermé** se supprime (un ticket ouvert : fermez-le d'abord).
+
+1. **Supprimer** (app, suppression groupée, `/ticket supprimer`) : le **salon Discord est supprimé tout de suite**
+   (déjà supprimé à la main = 404 ignoré ; tout autre refus de Discord est noté dans les journaux du serveur, la
+   suppression est faite quand même et le cron réessaie de supprimer le salon). Le ticket est marqué supprimé
+   (`supprime_le`, `supprime_par`) mais **reste entièrement lisible dans l'app** : conversation, notes internes,
+   pièces jointes, transcript, avis. Il n'apparaît plus dans les listes habituelles, ni dans les compteurs, ni dans
+   les statistiques de tickets (créés, fermés, ouverts), et la fermeture automatique ne le touche pas ; son **avis**
+   reste compté dans les statistiques et dans l'onglet Avis (sauf si le choix « supprimer aussi l'avis » a été fait :
+   il n'est alors plus compté dès la suppression). Plus aucune action n'est possible dessus (répondre, noter,
+   rouvrir…) tant qu'il n'est pas restauré.
+2. **Effacement définitif** au bout de **30 jours** (réglage `retentionSuppressionJours`, Configuration › Général, de
+   1 à 365, défaut 30), par le cron des tickets (toutes les 5 minutes) : conversation, notes internes, pièces jointes
+   (octets du stockage compris), personnes ajoutées, « lu », notifications et transcript disparaissent, la ligne du
+   ticket aussi. L'**avis** est gardé anonyme ou supprimé selon le choix fait **au moment de la suppression** (stocké
+   sur le ticket, `supprime_garder_avis`). Le **numéro** ne sert jamais une seconde fois (`dernier_numero` dans
+   `tickets_reglages`). La rétention générale des tickets fermés (défaut 365 jours) continue de s'appliquer : si
+   elle est réglée plus courte que le délai de suppression, la conversation est effacée à son échéance.
 
 - **Dans l'app** (`tickets.gerer`, ou `tickets.configurer` pour une catégorie de ses rôles ; il faut aussi voir le
-  ticket) : vue du ticket fermé › **Supprimer** › confirmation qui dit clairement ce qui sera effacé, avec l'interrupteur
-  **Garder l'avis de l'auteur, anonyme, dans les statistiques** (activé par défaut ; coupé : l'avis est supprimé aussi).
-  **Suppression groupée** : filtre statut **Fermé** › **Choisir des tickets à supprimer** › cocher › **Supprimer les
-  tickets choisis** (50 au plus ; un ticket rouvert entre-temps est laissé et signalé).
+  ticket) : vue du ticket fermé › **Supprimer** › confirmation qui dit clairement ce qui va se passer (salon Discord
+  supprimé, ticket lisible 30 jours puis effacé), avec l'interrupteur **Garder l'avis de l'auteur, anonyme, dans les
+  statistiques** (activé par défaut ; coupé : l'avis est supprimé aussi). **Suppression groupée** : filtre statut
+  **Fermé** › **Choisir des tickets à supprimer** › cocher › **Supprimer les tickets choisis** (50 au plus ; un ticket
+  rouvert entre-temps est laissé et signalé).
+- **Filtre « Supprimés (30 j) »** (liste des tickets, visible de toute personne qui voit la catégorie) : chaque ligne
+  porte le badge **« Supprimé de Discord — effacé définitivement le {date} »** et un compte à rebours (« 12 j
+  restants »). Dans la vue du ticket supprimé (lecture complète, **transcript** exportable avec `tickets.gerer`) :
+  - **Restaurer** : annule l'effacement ; le ticket redevient un ticket **fermé, sans salon Discord** ;
+  - **Restaurer et rouvrir** : le restaure et le rouvre, un **nouveau salon Discord** est créé (comme une réouverture
+    dont le salon avait disparu) ;
+  - **Supprimer définitivement maintenant** : confirmation, puis le même effacement que le cron, tout de suite ;
+    l'interrupteur de l'avis reprend le choix fait à la suppression, modifiable.
 - **Sur Discord** : `/ticket supprimer [avis: garder|supprimer]` dans le salon du ticket fermé (archivé) : réponse
-  éphémère qui demande de confirmer (bouton rouge **Supprimer définitivement**) ; le salon disparaît quelques secondes
-  après la réponse. Réservé à un **compte Esport lié** (`/lier`) qui a `tickets.gerer` (ou `tickets.configurer` pour une
-  catégorie de ses rôles) : un simple rôle Discord du staff ne suffit pas (c'est irréversible). La commande peut être
-  coupée ou réservée à des rôles (Configuration › Commandes), comme les autres.
-- **Avis gardé** : la note, le commentaire, sa date, la catégorie et qui avait pris le ticket en charge restent dans
-  `tickets_avis_anonymes`, **sans aucun lien** avec le ticket ni son auteur (ni numéro, ni Discord ID, ni nom). Son
-  commentaire suit la **rétention** (effacé après N jours, comme les conversations).
-- **Journal** : événement `ticket.supprime` (qui a supprimé, numéro, catégorie, avis gardé ou non : jamais le contenu)
-  et une ligne dans le salon des journaux Discord.
-- Le **numéro** d'un ticket supprimé ne sert jamais une seconde fois (`dernier_numero` dans `tickets_reglages`).
+  éphémère qui demande de confirmer (bouton rouge **Supprimer**, avec le délai de 30 jours rappelé) ; le salon
+  disparaît quelques secondes après la réponse. Réservé à un **compte Esport lié** (`/lier`) qui a `tickets.gerer` (ou
+  `tickets.configurer` pour une catégorie de ses rôles) : un simple rôle Discord du staff ne suffit pas. La commande
+  peut être coupée ou réservée à des rôles (Configuration › Commandes), comme les autres. Restaurer se fait dans l'app.
+- **Avis gardé** : à l'effacement, la note, le commentaire, sa date, la catégorie et qui avait pris le ticket en charge
+  restent dans `tickets_avis_anonymes`, **sans aucun lien** avec le ticket ni son auteur (ni numéro, ni Discord ID, ni
+  nom). Son commentaire suit la **rétention** (effacé après N jours, comme les conversations).
+- **API** : `POST /tickets/:id/supprimer { garderAvis }` (temps 1), `POST /tickets/:id/restaurer { rouvrir }`,
+  `POST /tickets/:id/effacer { garderAvis }` (temps 2 tout de suite, ticket déjà supprimé seulement),
+  `POST /tickets/supprimer { ids, garderAvis }` (groupé), `GET /tickets?statut=supprimes`.
+- **Journal** (jamais le contenu : qui, numéro, catégorie, avis gardé ou non) : `ticket.corbeille` (suppression),
+  `ticket.restaure` (restauration, avec ou sans réouverture), `ticket.supprime` (effacement définitif demandé par une
+  personne), `ticket.purge` (effacement par le cron, sans acteur) ; chacun avec une ligne dans le salon des journaux
+  Discord.
 
 ### Tickets qui ne se ferment jamais
 
@@ -397,7 +427,7 @@ compte Esport lié avec `tickets.repondre` sur la catégorie). Elles se tapent *
 | `/ticket note texte` | staff | **note interne** : gardée dans l'app, jamais postée sur Discord (réponse éphémère seulement) |
 | `/ticket transcript` | staff | transcript HTML **en message privé** (sans les notes internes, qui ne passent jamais par Discord ; l'app les montre) |
 | `/ticket rouvrir` | staff | rouvrir le ticket fermé du salon |
-| `/ticket supprimer [avis]` | compte Esport lié avec `tickets.gerer` (ou `tickets.configurer`, catégorie de ses rôles) | ticket **fermé** du salon : supprimé définitivement après confirmation (bouton) ; `avis: garder` (défaut : note et commentaire gardés anonymes) ou `supprimer` ; le salon disparaît quelques secondes après |
+| `/ticket supprimer [avis]` | compte Esport lié avec `tickets.gerer` (ou `tickets.configurer`, catégorie de ses rôles) | ticket **fermé** du salon : supprimé après confirmation (bouton) ; le salon disparaît quelques secondes après, le ticket reste lisible 30 jours dans l'app (filtre « Supprimés »), puis est effacé ; `avis: garder` (défaut : note et commentaire gardés anonymes à l'effacement) ou `supprimer` |
 | `/ticket permanent etat` | staff | `on` : ce ticket ne se ferme jamais automatiquement (avertissement en attente annulé) ; `off` : il suit de nouveau sa catégorie |
 | `/ticket ping qui [message]` | staff | mentionner une personne (ou un rôle qui traite la catégorie) dans le ticket : le bot poste la mention, notifiée à cette cible seulement ; 3 mentions par minute et par ticket |
 | `/ticket stats` | staff | 30 jours : ouverts, créés, fermés par catégorie, délai de 1re réponse et de résolution, satisfaction |
@@ -543,7 +573,8 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `GET /tickets?statut&categorie&priorite&responsable&auteur&du&au&q` | liste (catégories visibles), non lus |
 | `GET /tickets/compteur` ; `GET /tickets/stats?du&au` ; `GET\|PUT /tickets/preferences` | compteur, statistiques (`gerer`), MP |
 | `GET /tickets/avis?categorie&note&du&au&responsable&tri` | avis (`gerer`, ou `configurer` : ses catégories) : `{ total, moyenne, repartition[5], avis[], categories, responsables, voirTickets }` ; `tri` : `recent` (défaut), `ancien`, `note_haut`, `note_bas` |
-| `POST /tickets/:id/supprimer` `{ garderAvis? }` ; `POST /tickets/supprimer` `{ ids, garderAvis? }` | supprimer un ticket **fermé** (409 sinon) ; groupé : `{ supprimes: [numéros], echecs: [{ id, code }] }` ; `GET /tickets/:id` donne `droits.supprimer`, `noteLe` |
+| `POST /tickets/:id/supprimer` `{ garderAvis? }` ; `POST /tickets/supprimer` `{ ids, garderAvis? }` | supprimer un ticket **fermé** (409 sinon) : salon Discord supprimé, ticket lisible dans « Supprimés » ; groupé : `{ supprimes: [numéros], echecs: [{ id, code }] }` ; `GET /tickets/:id` donne `droits.supprimer`, `noteLe`, `supprime { le, par, effaceLe, garderAvis }` |
+| `POST /tickets/:id/restaurer` `{ rouvrir? }` ; `POST /tickets/:id/effacer` `{ garderAvis? }` ; `GET /tickets?statut=supprimes` | restaurer un ticket supprimé (avec `rouvrir`, un nouveau salon est créé) ; l'effacer définitivement tout de suite (409 s'il n'est pas supprimé) ; liste des supprimés (`nbSupprimes`, `retentionSuppressionJours` dans la réponse de la liste) |
 | `GET /tickets/:id` ; `POST /tickets/:id/lu` | ticket et conversation ; marquer lu |
 | `POST /tickets/:id/messages` `{ texte, pieces?, drive? }` ; `POST /tickets/:id/notes` `{ texte }` | réponse (le bot poste) ; note interne |
 | `POST /tickets/:id/(prendre\|liberer\|attente\|statut\|priorite\|fermer\|rouvrir)` | actions (`repondre`) |
@@ -573,8 +604,9 @@ depuis l'AppDashboard » change, et accepte `annonces` (messages automatiques, p
   notifications), `cron.mjs`, `modeles.mjs` (catégories et panneaux par défaut). Commandes `/ticket` et `/tickets` : `esport/noyau/discord/bot/commandes.mjs` (`SOUS_COMMANDES_TICKET`).
 - Migrations `0054_tickets.sql`, `0055_tickets_permanents.sql` (ticket permanent, fermeture par le staff seul ;
   ordre de priorité de la fermeture automatique : `delaiFermeture` dans `reglages.mjs`) et `0056_tickets_avis.sql`
-  (avis gardés anonymes des tickets supprimés ; suppression : `supprimer` dans `cycle.mjs`), `0057_tickets_panneaux_libelles.sql`
-  (libellé propre d'un bouton de panneau) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
+  (avis gardés anonymes des tickets supprimés ; suppression : `supprimer`, `restaurer` et `effacer` dans `cycle.mjs`),
+  `0057_tickets_panneaux_libelles.sql` (libellé propre d'un bouton de panneau) et `0065_tickets_corbeille.sql`
+  (`supprime_le`, `supprime_par`, `supprime_garder_avis` : suppression en deux temps, effacement par `tachesCycle`) ; permissions au catalogue (`catalogue.json`) ; Second CEO par défaut (test
   `roles-permissions.test.mjs`).
 - Écrans : `src/esport/ui/tickets/` (`PageTickets.tsx`, `TicketsStaff.tsx` : liste, vue, statistiques, suppression ;
   `AvisTickets.tsx` : avis, étoiles ;
@@ -589,7 +621,7 @@ depuis l'AppDashboard » change, et accepte `annonces` (messages automatiques, p
   (visibilité par catégorie, non lus, réponse depuis l'app, notes internes jamais envoyées, droits, transcript, pièces,
   liaisons, statistiques), `esport/test/tickets-cycle.test.mjs`
   (cycle de vie complet avec interactions signées : formulaire, salon et droits, staff, fermeture, MP, note,
-  réouverture, fermeture automatique, archives, rétention, RGPD), `esport/test/tickets-permanents.test.mjs` (ordre de
+  réouverture, fermeture automatique, archives, rétention, RGPD), `esport/test/tickets-corbeille.test.mjs` (suppression en deux temps : salon supprimé, ticket lisible, listes, compteurs et statistiques, restauration, effacement par le cron à 30 jours avec horloge simulée, avis, `/ticket supprimer`), `esport/test/tickets-permanents.test.mjs` (ordre de
   priorité, catégorie « Jamais », ticket permanent par l'app et `/ticket permanent`, staff seul),
   `esport/test/tickets-avis.test.mjs` (avis : droits par catégorie, moyenne, répartition, filtres, tri ; suppression :
   ticket fermé seulement, droits, salon Discord et 404, pièces, avis gardé anonyme ou supprimé, groupée,

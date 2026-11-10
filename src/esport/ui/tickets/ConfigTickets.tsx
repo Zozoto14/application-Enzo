@@ -384,6 +384,7 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
       {nombre('avertissementH', 'general.avertissement')}
       {nombre('suppressionArchivesJours', 'general.suppression')}
       {nombre('retentionJours', 'general.retention')}
+      {nombre('retentionSuppressionJours', 'general.retention_suppression')}
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('general.copier')}</Text>
         <Interrupteur theme={theme} libelle={trTk('general.copier')} valeur={g.copierPieces} onChanger={copierPieces => setG({ ...g, copierPieces })} testID="esport-tk-general-copier" />

@@ -31,6 +31,7 @@ const PIECE_MAX = 5 * 1024 * 1024;
 const TOTAL_MAX = 5 * 1024 * 1024;
 const TYPES_PIECE = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain|video\/mp4|application\/zip)$/;
 const DUREE_LIEN = 5 * 60_000;
+const JOUR = 86_400_000;
 
 const mediane = l => {
   const v = l.filter(x => Number.isFinite(x)).sort((a, b) => a - b);
@@ -44,12 +45,17 @@ const ms = (a, b) => (a && b ? Date.parse(b) - Date.parse(a) : NaN);
 export function servicesVueTickets({ base, maintenant = () => Date.now(), stockage, cycle, cleSession, drive, fetch: fetchDiscord, jetonBot, liaisons = {} }) {
   // ---------------------------------------------------------------- Accès
 
-  async function ticketVisible(acteur, id, { exiger } = {}) {
+  /**
+   * `modifiable` : écriture (réponse, note, action, liaison…) ; un ticket supprimé (migration 0065) ne se modifie plus,
+   * il se restaure d'abord.
+   */
+  async function ticketVisible(acteur, id, { exiger, modifiable = false } = {}) {
     const ctx = await contexteTickets(base, acteur);
     if (!ctx.droits.voir || !MOTIF_ID.test(String(id))) throw echec(404, 'ticket', 'Ticket introuvable.');
     const ticket = await base.premier('SELECT * FROM tickets WHERE id = ?', [id]);
     if (!ticket || !voitCategorie(ctx.droits, ticket.categorie_id)) throw echec(404, 'ticket', 'Ticket introuvable.');
     if (exiger && !ctx.droits[exiger]) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (modifiable && ticket.supprime_le) throw echec(409, 'ticket-supprime', 'Ce ticket est supprimé : restaurez-le d’abord.');
     return { ...ctx, ticket };
   }
 
@@ -67,7 +73,8 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
 
   // ---------------------------------------------------------------- Liste
 
-  const resume = (l, cats, compte) => ({
+  const effaceLe = (l, jours) => (l.supprime_le ? iso(Date.parse(l.supprime_le) + jours * JOUR) : null);
+  const resume = (l, cats, compte, jours = 30) => ({
     id: l.id,
     numero: Number(l.numero),
     categorie: cats.get(l.categorie_id) ?? { id: l.categorie_id, nom: { fr: '?', en: '?' }, couleur: '#8b8b9a', icone: 'billets' },
@@ -81,6 +88,8 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     note: l.note === null || l.note === undefined ? null : Number(l.note),
     nonLu: Boolean(l.dernier_autre && (!l.lu_le || l.dernier_autre > l.lu_le)),
     permanent: Number(l.permanent) === 1,
+    // Ticket supprimé (migration 0065) : lisible dans l'app jusqu'à `effaceLe`, puis effacé définitivement.
+    supprime: l.supprime_le ? { le: l.supprime_le, par: l.supprime_par ?? null, effaceLe: effaceLe(l, jours), garderAvis: Number(l.supprime_garder_avis) !== 0 } : null,
   });
 
   async function categoriesMap() {
@@ -91,7 +100,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
   }
 
   /** Lignes visibles avec « dernier message d'un autre » et « lu jusqu'à » de l'acteur. */
-  async function lignes(acteur, droits, { where = [], params = [], limite = 200 } = {}) {
+  async function lignes(acteur, droits, { where = [], params = [], limite = 200, ordre = 't.derniere_activite_le DESC' } = {}) {
     const visible = filtreCategories(droits);
     const conditions = [visible.sql, ...where];
     return base.tous(
@@ -99,7 +108,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
               (SELECT MAX(m.cree_le) FROM tickets_messages m WHERE m.ticket_id = t.id AND m.genre <> 'systeme' AND COALESCE(m.auteur_compte_id, '') <> ?) AS dernier_autre
          FROM tickets t LEFT JOIN tickets_lectures l ON l.ticket_id = t.id AND l.compte_id = ?
         WHERE ${conditions.join(' AND ')}
-        ORDER BY t.derniere_activite_le DESC LIMIT ?`,
+        ORDER BY ${ordre} LIMIT ?`,
       [acteur.compte, acteur.compte, ...visible.params, ...params, limite],
     );
   }
@@ -110,6 +119,9 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const where = [];
     const params = [];
     const statut = String(f.statut ?? 'ouverts');
+    // Les tickets supprimés (migration 0065) n'apparaissent que dans « Supprimés » ; partout ailleurs, jamais.
+    const corbeille = statut === 'supprimes';
+    where.push(corbeille ? 't.supprime_le IS NOT NULL' : 't.supprime_le IS NULL');
     if (statut === 'ouverts') where.push("t.statut <> 'ferme'");
     else if (STATUTS.includes(statut)) {
       where.push('t.statut = ?');
@@ -156,16 +168,20 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       }
     }
     const cats = await categoriesMap();
-    const ls = await lignes(acteur, droits, { where, params });
+    const ls = await lignes(acteur, droits, { where, params, ordre: corbeille ? 't.supprime_le DESC' : undefined });
     const visibles = [...cats.values()].filter(c => voitCategorie(droits, c.id));
-    return { tickets: ls.map(l => resume(l, cats, acteur.compte)), categories: visibles, droits: { repondre: droits.repondre, gerer: droits.gerer, configurer: droits.configurer, supprimer: droits.gerer || droits.configurer } };
+    const jours = (await lireGeneral(base)).retentionSuppressionJours;
+    const filtre = filtreCategories(droits);
+    const condition = ['t.supprime_le IS NOT NULL', filtre.sql].join(' AND ');
+    const nbSupprimes = Number((await base.premier(`SELECT COUNT(*) AS n FROM tickets t WHERE ${condition}`, filtre.params))?.n ?? 0);
+    return { tickets: ls.map(l => resume(l, cats, acteur.compte, jours)), categories: visibles, nbSupprimes, retentionSuppressionJours: jours, droits: { repondre: droits.repondre, gerer: droits.gerer, configurer: droits.configurer, supprimer: droits.gerer || droits.configurer } };
   }
 
   /** Nombre de tickets ouverts avec du nouveau pour l'acteur (compteur de la navigation). */
   async function compteur(acteur) {
     const { droits } = await contexteTickets(base, acteur);
     if (!droits.voir) return { nonLus: 0 };
-    const ls = await lignes(acteur, droits, { where: ["t.statut <> 'ferme'"], limite: 500 });
+    const ls = await lignes(acteur, droits, { where: ["t.statut <> 'ferme'", 't.supprime_le IS NULL'], limite: 500 });
     return { nonLus: ls.filter(l => l.dernier_autre && (!l.lu_le || l.dernier_autre > l.lu_le)).length, ouverts: ls.length };
   }
 
@@ -186,9 +202,10 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const cat = await base.premier('SELECT * FROM tickets_categories WHERE id = ?', [ticket.categorie_id]);
     const catPublique = cat ? categoriePublique(cat) : null;
     // Fermeture automatique : délai en heures (0 : jamais) et d'où il vient (ticket permanent > catégorie > général).
-    const delai = delaiFermeture(ticket, catPublique, await lireGeneral(base));
+    const general = await lireGeneral(base);
+    const delai = delaiFermeture(ticket, catPublique, general);
     return {
-      ...resume({ ...ticket, lu_le: lu?.lu_le ?? null, dernier_autre: null }, cats, acteur.compte),
+      ...resume({ ...ticket, lu_le: lu?.lu_le ?? null, dernier_autre: null }, cats, acteur.compte, general.retentionSuppressionJours),
       nonLuDepuis: lu?.lu_le ?? null,
       salon: ticket.salon_id ? { id: ticket.salon_id, nom: ticket.salon_nom, supprime: Boolean(ticket.salon_supprime_le) } : null,
       reponses: jsonOu(ticket.reponses, []),
@@ -214,6 +231,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
         supprimeLe: m.supprime_le ?? null,
         pieces: parMessage.get(m.id) ?? [],
       })),
+      retentionSuppressionJours: general.retentionSuppressionJours,
       droits: { repondre: droits.repondre, gerer: droits.gerer, supprimer: gereAvis(droits, ticket.categorie_id) },
     };
   }
@@ -261,7 +279,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
   }
 
   async function repondre(acteur, id, corps) {
-    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre', modifiable: true });
     if (ticket.statut === 'ferme') throw echec(409, 'ticket-ferme', 'Ce ticket est fermé : rouvrez-le pour répondre.');
     if (!ticket.salon_id || ticket.salon_supprime_le) throw echec(409, 'salon', 'Le salon Discord de ce ticket n’existe plus.');
     const texte = String(corps?.texte ?? '').replace(/\r\n?/g, '\n').trim();
@@ -304,7 +322,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
 
   /** Note interne : gardée dans l'app, JAMAIS envoyée sur Discord. */
   async function noter(acteur, id, corps) {
-    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre', modifiable: true });
     const texte = String(corps?.texte ?? '').replace(/\r\n?/g, '\n').trim();
     if (!texte) throw echec(400, 'texte', 'Message vide.');
     if (texte.length > NOTE_MAX) throw echec(400, 'texte', `${NOTE_MAX} caractères au plus.`);
@@ -351,7 +369,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
   async function action(acteur, id, nom, corps) {
     const def = ACTIONS[nom];
     if (!def) throw echec(404, 'route', 'Adresse inconnue.');
-    const { ticket } = await ticketVisible(acteur, id, { exiger: def.droit });
+    const { ticket } = await ticketVisible(acteur, id, { exiger: def.droit, modifiable: true });
     try {
       await def.faire(ticket, acteur, corps, await nomActeur(acteur));
     } catch (e) {
@@ -412,7 +430,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
    * déjà ajoutées sont d'abord ajoutées au ticket (sinon elles ne voient pas le salon, et la mention ne leur parvient pas).
    */
   async function mentionner(acteur, id, corps) {
-    const { ticket, droits } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const { ticket, droits } = await ticketVisible(acteur, id, { exiger: 'repondre', modifiable: true });
     const ac = await nomActeur(acteur);
     const cibles = (Array.isArray(corps?.cibles) ? corps.cibles : []).slice(0, 30).map(c => ({ type: c?.type === 'role' ? 'role' : 'membre', id: String(c?.id ?? ''), nom: sur(c?.nom, 60), ajouter: c?.ajouter === true }));
     try {
@@ -474,7 +492,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
   // ---------------------------------------------------------------- Liaisons
 
   async function lier(acteur, id, corps) {
-    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre' });
+    const { ticket } = await ticketVisible(acteur, id, { exiger: 'repondre', modifiable: true });
     const type = String(corps?.type ?? '');
     const titre = `Ticket ${ticket.numero} · ${ticket.auteur_nom || ticket.auteur_discord_id}`.slice(0, 120);
     const resumeTicket = jsonOu(ticket.reponses, []).map(r => `${r.libelle?.fr ?? r.id} : ${r.valeur}`).join('\n').slice(0, 4000);
@@ -508,10 +526,17 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const fin = au && /^\d{4}-\d{2}-\d{2}$/.test(au) ? `${au}T23:59:59.999Z` : iso(maintenant());
     const debut = du && /^\d{4}-\d{2}-\d{2}$/.test(du) ? `${du}T00:00:00.000Z` : iso(Date.parse(fin) - 30 * 86_400_000);
     const cats = await categoriesMap();
-    const ls = await base.tous('SELECT * FROM tickets WHERE (ouvert_le >= ? AND ouvert_le <= ?) OR (ferme_le >= ? AND ferme_le <= ?)', [debut, fin, debut, fin]);
-    const ouverts = await base.tous("SELECT categorie_id, COUNT(*) AS n FROM tickets WHERE statut <> 'ferme' GROUP BY categorie_id", []);
+    const tous = await base.tous('SELECT * FROM tickets WHERE (ouvert_le >= ? AND ouvert_le <= ?) OR (ferme_le >= ? AND ferme_le <= ?)', [debut, fin, debut, fin]);
+    // Tickets supprimés (migration 0065) : plus comptés comme tickets, mais leur avis reste dans les statistiques (comme
+    // un avis anonyme) tant qu'ils attendent l'effacement, sauf si l'avis doit être supprimé avec eux.
+    const ls = tous.filter(x => !x.supprime_le);
+    const avisEnAttente = tous.filter(x => x.supprime_le && Number(x.supprime_garder_avis) !== 0 && x.note !== null && x.note !== undefined);
+    const ouverts = await base.tous("SELECT categorie_id, COUNT(*) AS n FROM tickets WHERE statut <> 'ferme' AND supprime_le IS NULL GROUP BY categorie_id", []);
     // Avis gardés (anonymes) des tickets supprimés : comptés dans la satisfaction de la période (date de l'avis).
-    const anonymes = await base.tous('SELECT categorie_id, note, responsable_compte_id, responsable_discord_id, responsable_nom FROM tickets_avis_anonymes WHERE note_le >= ? AND note_le <= ?', [debut, fin]);
+    const anonymes = [
+      ...(await base.tous('SELECT categorie_id, note, responsable_compte_id, responsable_discord_id, responsable_nom FROM tickets_avis_anonymes WHERE note_le >= ? AND note_le <= ?', [debut, fin])),
+      ...avisEnAttente.filter(x => (x.note_le ?? x.ferme_le ?? '') >= debut && (x.note_le ?? x.ferme_le ?? '') <= fin),
+    ];
     const bloc = (l, anon = []) => {
       const crees = l.filter(x => x.ouvert_le >= debut && x.ouvert_le <= fin);
       const fermes = l.filter(x => x.ferme_le && x.ferme_le >= debut && x.ferme_le <= fin);
@@ -565,7 +590,8 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     const categorie = f.categorie && ids.includes(String(f.categorie)) ? String(f.categorie) : f.categorie ? '__aucune__' : null;
     const lignesAvis = [];
     if (ids.length) {
-      const where = ['note IS NOT NULL', `categorie_id IN (${ids.map(() => '?').join(', ')})`];
+      // Ticket supprimé (migration 0065) : son avis compte encore, sauf s'il doit être supprimé avec lui.
+      const where = ['note IS NOT NULL', '(supprime_le IS NULL OR supprime_garder_avis <> 0)', `categorie_id IN (${ids.map(() => '?').join(', ')})`];
       const params = [...ids];
       if (categorie) {
         where.push('categorie_id = ?');
@@ -581,7 +607,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       }
       const conditions = where.join(' AND ');
       const tks = await base.tous(`SELECT id, numero, categorie_id, auteur_nom, auteur_discord_id, salon_nom, responsable_compte_id, responsable_discord_id, responsable_nom, note, note_commentaire, note_le, ferme_le FROM tickets WHERE ${conditions} ORDER BY COALESCE(note_le, ferme_le) DESC LIMIT 5000`, params);
-      const whereA = where.filter(w => !w.startsWith('note IS')).map(w => w.replace('COALESCE(note_le, ferme_le)', 'note_le'));
+      const whereA = where.filter(w => !w.startsWith('note IS') && !w.startsWith('(supprime_le')).map(w => w.replace('COALESCE(note_le, ferme_le)', 'note_le'));
       const condition = whereA.join(' AND ');
       const anon = await base.tous(`SELECT * FROM tickets_avis_anonymes WHERE ${condition} ORDER BY note_le DESC LIMIT 5000`, params);
       for (const l of tks) lignesAvis.push({ ...l, commentaire: l.note_commentaire, le: l.note_le ?? l.ferme_le, anonyme: false });
@@ -623,18 +649,54 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     };
   }
 
-  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migration 0056)
+  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migrations 0056 et 0065)
 
-  /** Un ticket fermé, supprimé définitivement (cycle.mjs, `supprimer`). `garderAvis` : vrai par défaut. */
+  const refusDe = e => {
+    if (estRefus(e)) return echec(e.statut ?? 400, `ticket-${e.cle}`, tx('fr', e.cle, e.vars));
+    return e;
+  };
+
+  /**
+   * Supprime un ticket fermé : son salon Discord disparaît tout de suite, il reste lisible dans « Supprimés » pendant
+   * `retentionSuppressionJours` (cycle.mjs, `supprimer`). `garderAvis` (vrai par défaut) : choix appliqué à l'effacement.
+   */
   async function supprimer(acteur, id, corps) {
     const { ticket, droits } = await ticketVisible(acteur, id);
     if (!gereAvis(droits, ticket.categorie_id)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     try {
       const r = await cycle.supprimer(ticket, await nomActeur(acteur), { garderAvis: corps?.garderAvis !== false });
+      return { ok: true, numero: r.numero, effaceLe: r.effaceLe, jours: r.jours };
+    } catch (e) {
+      throw refusDe(e);
+    }
+  }
+
+  /** Restaure un ticket supprimé ; `rouvrir` : le rouvre aussitôt (nouveau salon Discord). */
+  async function restaurer(acteur, id, corps) {
+    const { ticket, droits } = await ticketVisible(acteur, id);
+    if (!gereAvis(droits, ticket.categorie_id)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    try {
+      await cycle.restaurer(ticket, await nomActeur(acteur), { rouvrir: corps?.rouvrir === true });
+    } catch (e) {
+      throw refusDe(e);
+    }
+    return detail(acteur, id);
+  }
+
+  /**
+   * « Supprimer définitivement maintenant » : efface un ticket déjà supprimé sans attendre la fin du délai (cycle.mjs,
+   * `effacer`). `garderAvis` : à défaut, le choix fait à la suppression.
+   */
+  async function effacer(acteur, id, corps) {
+    const { ticket, droits } = await ticketVisible(acteur, id);
+    if (!gereAvis(droits, ticket.categorie_id)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (!ticket.supprime_le) throw echec(409, 'ticket-pas_supprime', tx('fr', 'pas_supprime'));
+    const garderAvis = typeof corps?.garderAvis === 'boolean' ? corps.garderAvis : Number(ticket.supprime_garder_avis) !== 0;
+    try {
+      const r = await cycle.effacer(ticket, await nomActeur(acteur), { garderAvis });
       return { ok: true, numero: r.numero };
     } catch (e) {
-      if (estRefus(e)) throw echec(e.statut ?? 400, `ticket-${e.cle}`, tx('fr', e.cle, e.vars));
-      throw e;
+      throw refusDe(e);
     }
   }
 
@@ -670,5 +732,5 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
     return v;
   }
 
-  return { liste, compteur, detail, marquerLu, repondre, noter, action, mentionnables, mentionner, assignables, transcript, lienPiece, servirPiece, lier, stats, avis, supprimer, supprimerPlusieurs, preferences, changerPreferences };
+  return { liste, compteur, detail, marquerLu, repondre, noter, action, mentionnables, mentionner, assignables, transcript, lienPiece, servirPiece, lier, stats, avis, supprimer, restaurer, effacer, supprimerPlusieurs, preferences, changerPreferences };
 }

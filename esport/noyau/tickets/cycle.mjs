@@ -592,6 +592,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     if (!ticket) throw refusTk('pas_ticket', {}, 404);
     if (ticket.statut !== 'ferme') throw refusTk('pas_ferme', {}, 409);
     if (ticket.purge_le) throw refusTk('erreur', {}, 410);
+    // Un ticket supprimé se restaure d'abord (restaurer, avec ou sans réouverture).
+    if (ticket.supprime_le) throw refusTk('supprime_deja', {}, 409);
     const { general, messages } = await contexte();
     const cat = await categorie(ticket.categorie_id);
     const t = maintenant();
@@ -618,7 +620,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
   /** Note de satisfaction (l'auteur seulement, ticket fermé) ; une nouvelle note remplace la précédente. */
   async function noter(ticketId, discordId, note) {
     const ticket = await ticketPar(ticketId);
-    if (!ticket || ticket.auteur_discord_id !== discordId) throw refusTk('pas_ticket', {}, 404);
+    if (!ticket || ticket.supprime_le || ticket.auteur_discord_id !== discordId) throw refusTk('pas_ticket', {}, 404);
     if (ticket.statut !== 'ferme') throw refusTk('pas_ferme', {}, 409);
     const n = Number(note);
     if (!Number.isInteger(n) || n < 1 || n > 5) throw refusTk('erreur');
@@ -632,13 +634,13 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   async function commenterNote(ticketId, discordId, texte) {
     const ticket = await ticketPar(ticketId);
-    if (!ticket || ticket.auteur_discord_id !== discordId || !ticket.note) throw refusTk('pas_ticket', {}, 404);
+    if (!ticket || ticket.supprime_le || ticket.auteur_discord_id !== discordId || !ticket.note) throw refusTk('pas_ticket', {}, 404);
     await base.executer('UPDATE tickets SET note_commentaire = ? WHERE id = ?', [String(texte ?? '').trim().slice(0, 1000) || null, ticket.id]);
     await annoncer(base, ticket.id, maintenant());
     return ticketPar(ticket.id);
   }
 
-  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migration 0056)
+  // ---------------------------------------------------------------- Suppression d'un ticket fermé (migrations 0056 et 0065)
 
   async function dernierNumeroSupprime() {
     return Number(jsonOu((await base.premier("SELECT valeur FROM tickets_reglages WHERE cle = 'dernier_numero'", []))?.valeur, 0)) || 0;
@@ -646,23 +648,82 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   /**
    * Supprime le salon Discord d'un ticket supprimé (au mieux) : 404 (déjà supprimé à la main) ignoré, tout autre échec
-   * journalisé sans contenu. Rend `{ ok, statut }`.
+   * journalisé sans contenu (le cron réessaie). Un ticket supprimé (migration 0065) dont le salon a disparu est marqué
+   * `salon_supprime_le`. Rend `{ ok, statut }`.
    */
   async function supprimerSalon(salonId, numero) {
     if (!salonId || !jetonBot) return { ok: true, statut: 0 };
     const r = await appel('DELETE', `/channels/${salonId}`, undefined, { raison: `Ticket ${numero} supprimé` });
     if (!r.ok && r.statut !== 404) console.error(`[esport] tickets : salon du ticket ${numero} non supprimé sur Discord (${r.motif ?? `HTTP ${r.statut}`})`);
-    return { ok: r.ok || r.statut === 404, statut: r.statut };
+    const ok = r.ok || r.statut === 404;
+    if (ok) await base.executer('UPDATE tickets SET salon_supprime_le = COALESCE(salon_supprime_le, ?) WHERE salon_id = ? AND supprime_le IS NOT NULL', [iso(maintenant()), salonId]);
+    return { ok, statut: r.statut };
+  }
+
+  const qui = (acteur, general) => (acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Esport HQ', 80));
+  const optsJournal = general => ({ mode: general.langue === 'auteur' ? 'en_fr' : general.langue });
+
+  /**
+   * Supprime un ticket FERMÉ (« Supprimer ») : le salon Discord est supprimé tout de suite, mais le ticket reste
+   * entièrement lisible dans l'app (conversation, notes, pièces, transcript, avis) pendant `retentionSuppressionJours`
+   * (30 par défaut) : rubrique « Supprimés ». Le cron l'efface ensuite (`effacer`). `garderAvis` : choix appliqué à
+   * l'effacement définitif (avis gardé anonyme pour les statistiques, ou supprimé aussi). `salonPlusTard` : le salon
+   * n'est pas supprimé ici (commande tapée dans ce salon : la réponse part d'abord) ; rendu dans `salonId` pour
+   * l'appelant, qui appelle `supprimerSalon`. Journal : qui, quel numéro, jamais le contenu.
+   * Rend `{ numero, salonId, jours, effaceLe }`.
+   */
+  async function supprimer(ticket, acteur, { garderAvis = true, salonPlusTard = false } = {}) {
+    if (!ticket) throw refusTk('pas_ticket', {}, 404);
+    if (ticket.statut !== 'ferme') throw refusTk('supprimer_pas_ferme', {}, 409);
+    if (ticket.supprime_le) throw refusTk('supprime_deja', {}, 409);
+    const t = maintenant();
+    const numero = Number(ticket.numero);
+    const { general } = await contexte();
+    const jours = general.retentionSuppressionJours;
+    const effaceLe = iso(t + jours * J);
+    // Conditionnel : deux suppressions (ou une réouverture) simultanées n'en font qu'une.
+    const r = await base.executer("UPDATE tickets SET supprime_le = ?, supprime_par = ?, supprime_garder_avis = ?, maj_le = ? WHERE id = ? AND statut = 'ferme' AND supprime_le IS NULL", [iso(t), String(acteur?.nom ?? '').slice(0, 100) || null, garderAvis ? 1 : 0, iso(t), ticket.id]);
+    if (Number(r.changements) !== 1) throw refusTk('supprime_deja', {}, 409);
+    await base.lot([
+      { sql: "DELETE FROM notifications WHERE categorie = 'tickets' AND charge LIKE ?", params: [`%"ticket":"${ticket.id}"%`] },
+      ev('ticket.corbeille', ticket, acteur, { avisGarde: garderAvis && ticket.note !== null && ticket.note !== undefined, jours, par: String(acteur?.nom ?? '').slice(0, 100) || null }),
+    ]);
+    const salonId = ticket.salon_id && !ticket.salon_supprime_le ? ticket.salon_id : null;
+    if (salonId && !salonPlusTard) await supprimerSalon(salonId, numero);
+    const staff = qui(acteur, general);
+    await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_corbeille', { numero, staff, date: dateCourte(l, effaceLe) }), optsJournal(general)), color: 0x8b8b9a }).catch(() => undefined);
+    await annoncer(base, ticket.id, t, { acteur: acteur?.compte });
+    return { numero, salonId, jours, effaceLe };
   }
 
   /**
-   * Supprime DÉFINITIVEMENT un ticket FERMÉ : conversation, notes internes, pièces jointes (octets du stockage compris),
-   * personnes ajoutées, « lu », notifications, et son salon Discord archivé s'il existe encore (au mieux). L'avis
-   * (note et commentaire) est gardé ANONYME pour les statistiques (`garderAvis`, par défaut) ou supprimé aussi.
-   * `salonPlusTard` : le salon n'est pas supprimé ici (commande tapée dans ce salon : la réponse part d'abord) ; rendu
-   * dans `salonId` pour l'appelant. Journal : qui a supprimé quel numéro, jamais le contenu. Rend `{ numero, salonId }`.
+   * Restaure un ticket supprimé : la suppression prévue est annulée, le ticket redevient un ticket fermé (sans salon
+   * Discord tant qu'on ne le rouvre pas). `rouvrir` : le rouvre aussitôt (un nouveau salon est créé). Rend le ticket.
    */
-  async function supprimer(ticket, acteur, { garderAvis = true, salonPlusTard = false } = {}) {
+  async function restaurer(ticket, acteur, { rouvrir: veutRouvrir = false } = {}) {
+    if (!ticket) throw refusTk('pas_ticket', {}, 404);
+    if (!ticket.supprime_le) throw refusTk('pas_supprime', {}, 409);
+    if (veutRouvrir && ticket.purge_le) throw refusTk('erreur', {}, 410);
+    const t = maintenant();
+    const r = await base.executer('UPDATE tickets SET supprime_le = NULL, supprime_par = NULL, supprime_garder_avis = 1, maj_le = ? WHERE id = ? AND supprime_le IS NOT NULL', [iso(t), ticket.id]);
+    if (Number(r.changements) !== 1) throw refusTk('pas_supprime', {}, 409);
+    const restaure = await ticketPar(ticket.id);
+    await base.lot([ev('ticket.restaure', restaure, acteur, { rouvert: veutRouvrir })]);
+    const { general } = await contexte();
+    await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_restaure', { numero: restaure.numero, staff: qui(acteur, general) }), optsJournal(general)), color: 0x4caf7a }).catch(() => undefined);
+    await annoncer(base, ticket.id, t, { acteur: acteur?.compte });
+    return veutRouvrir ? rouvrir(restaure, acteur) : restaure;
+  }
+
+  /**
+   * Efface DÉFINITIVEMENT un ticket FERMÉ (« Supprimer définitivement maintenant », ou le cron `auto` à la fin du
+   * délai) : conversation, notes internes, pièces jointes (octets du stockage compris), personnes ajoutées, « lu »,
+   * notifications, et son salon Discord archivé s'il existe encore (au mieux). L'avis (note et commentaire) est gardé
+   * ANONYME pour les statistiques (`garderAvis`, par défaut) ou supprimé aussi. `salonPlusTard` : le salon n'est pas
+   * supprimé ici ; rendu dans `salonId` pour l'appelant. Journal : qui a supprimé quel numéro, jamais le contenu.
+   * Rend `{ numero, salonId }`.
+   */
+  async function effacer(ticket, acteur, { garderAvis = true, salonPlusTard = false, auto = false } = {}) {
     if (!ticket) throw refusTk('pas_ticket', {}, 404);
     if (ticket.statut !== 'ferme') throw refusTk('supprimer_pas_ferme', {}, 409);
     const t = maintenant();
@@ -689,7 +750,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
         params: [String(numero), iso(t)],
       },
       { sql: "DELETE FROM tickets WHERE id = ? AND statut = 'ferme'", params: [ticket.id] },
-      ev('ticket.supprime', ticket, acteur, { avisGarde: avis, par: String(acteur?.nom ?? '').slice(0, 100) || null }),
+      ev(auto ? 'ticket.purge' : 'ticket.supprime', ticket, auto ? null : acteur, { avisGarde: avis, corbeille: Boolean(ticket.supprime_le), ...(auto ? {} : { par: String(acteur?.nom ?? '').slice(0, 100) || null }) }),
     ]);
     if (await ticketPar(ticket.id)) throw refusTk('supprimer_pas_ferme', {}, 409);
     // Octets des pièces : après la base (une pièce orpheline ne se lit plus : sa ligne a disparu).
@@ -697,8 +758,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const salonId = ticket.salon_id && !ticket.salon_supprime_le ? ticket.salon_id : null;
     if (salonId && !salonPlusTard) await supprimerSalon(salonId, numero);
     const { general } = await contexte();
-    const qui = acteur?.discordId ? `<@${acteur.discordId}>` : sur(acteur?.nom ?? 'Esport HQ', 80);
-    await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_supprime', { numero, staff: qui }), { mode: general.langue === 'auteur' ? 'en_fr' : general.langue }), color: 0x8b8b9a }).catch(() => undefined);
+    const texte = auto ? bilingue(l => tx(l, 'journal_purge', { numero }), optsJournal(general)) : bilingue(l => tx(l, 'journal_supprime', { numero, staff: qui(acteur, general) }), optsJournal(general));
+    await journalDiscord(general, { description: texte, color: 0x8b8b9a }).catch(() => undefined);
     try {
       await publierEnBase(base, { sujet: 'tickets', cle: `ticket:${ticket.id}`, sonde: `/tickets/${ticket.id}`, action: 'supprime', ...(acteur?.compte ? { acteur: acteur.compte } : {}) }, t);
     } catch (e) {
@@ -720,7 +781,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
 
   async function tachesCycle() {
     const { general, messages } = await contexte();
-    const bilan = { avertis: 0, fermes: 0, salonsSupprimes: 0, purges: 0 };
+    const bilan = { avertis: 0, fermes: 0, salonsSupprimes: 0, purges: 0, corbeille: 0 };
     if (!general.actif || !jetonBot) return bilan;
     // Mise à niveau des droits des salons ouverts (une seule fois, au mieux : jamais bloquante).
     const migration = await migrerDroits().catch(e => (console.error('[esport] tickets : mise à niveau des droits', e?.message ?? e), null));
@@ -760,6 +821,23 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
           await base.executer('UPDATE tickets SET salon_supprime_le = ? WHERE id = ?', [iso(t), tk.id]);
           bilan.salonsSupprimes++;
         } else if (r.statut === 429) break;
+      }
+    }
+    // Tickets supprimés (migration 0065) : salon Discord resté (échec de la suppression) réessayé, puis effacement
+    // définitif une fois le délai écoulé (avis gardé anonyme ou supprimé selon le choix fait à la suppression).
+    const sansSalon = await base.tous('SELECT id, numero, salon_id FROM tickets WHERE supprime_le IS NOT NULL AND salon_id IS NOT NULL AND salon_supprime_le IS NULL LIMIT ?', [LOT_CRON]);
+    for (const tk of sansSalon) {
+      const r = await supprimerSalon(tk.salon_id, tk.numero);
+      if (r.ok) bilan.salonsSupprimes++;
+      else if (r.statut === 429) break;
+    }
+    const echus = await base.tous('SELECT * FROM tickets WHERE supprime_le IS NOT NULL AND supprime_le < ? ORDER BY supprime_le LIMIT ?', [iso(t - general.retentionSuppressionJours * J), LOT_CRON]);
+    for (const tk of echus) {
+      try {
+        await effacer(tk, { nom: 'Esport HQ' }, { garderAvis: Number(tk.supprime_garder_avis) !== 0, auto: true });
+        bilan.corbeille++;
+      } catch (e) {
+        console.error('[esport] tickets : effacement d’un ticket supprimé', e?.message ?? e);
       }
     }
     bilan.purges = await purgerAnciens(t - general.retentionJours * J);
@@ -869,6 +947,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     commenterNote,
     salonSupprime,
     supprimer,
+    restaurer,
+    effacer,
     supprimerSalon,
     tachesCycle,
     purgerAnciens,

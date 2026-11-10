@@ -23,7 +23,7 @@ afterEach(() => definirLangue('fr'));
 const VIDE = { fr: '', en: '' };
 function configDe(): Config {
   return {
-    general: { actif: true, guildId: '700', guildNom: 'Club', categorieOuverts: '710', categorieArchives: null, salonJournaux: null, langue: 'auteur', fermetureAutoH: 168, avertissementH: 24, suppressionArchivesJours: 7, retentionJours: 365, copierPieces: true, pieceMaxMo: 8, reponsesAppSeules: true },
+    general: { actif: true, guildId: '700', guildNom: 'Club', categorieOuverts: '710', categorieArchives: null, salonJournaux: null, langue: 'auteur', fermetureAutoH: 168, avertissementH: 24, suppressionArchivesJours: 7, retentionJours: 365, retentionSuppressionJours: 30, copierPieces: true, pieceMaxMo: 8, reponsesAppSeules: true },
     messages: {},
     messagesDefaut: { accueil: { fr: 'Bonjour {utilisateur}', en: 'Hi {utilisateur}' } },
     horaires: { actif: false, fuseau: 'Europe/Paris', plages: [] },
@@ -343,12 +343,15 @@ test('Général : choisir le serveur montre ses catégories sans enregistrer ; s
   await fireEvent.press(screen.getByTestId('esport-tk-general-archives-711'));
   await fireEvent.press(screen.getByTestId('esport-tk-general-journaux-713'));
   expect(screen.queryByTestId('esport-tk-general-manque')).toBeNull();
+  // Tickets supprimés : lisibles 30 jours par défaut, réglable.
+  expect(screen.getByTestId('esport-tk-general-retentionSuppressionJours').props.value).toBe('30');
+  await fireEvent.changeText(screen.getByTestId('esport-tk-general-retentionSuppressionJours'), '14');
   await fireEvent.press(screen.getByTestId('esport-tk-general-enregistrer'));
   // Le retour s'affiche près du bouton.
   await screen.findByTestId('esport-tk-general-avis');
   expect(screen.getByText(/connexion Discord démarre dans la minute/)).toBeTruthy();
   const put = appels.find(a => a.methode === 'PUT')!.corps as Record<string, unknown>;
-  expect(put).toMatchObject({ actif: true, guildId: '700', guildNom: 'Ligne Zero | 線ゼロ', categorieOuverts: '710', categorieArchives: '711', salonJournaux: '713' });
+  expect(put).toMatchObject({ actif: true, guildId: '700', guildNom: 'Ligne Zero | 線ゼロ', categorieOuverts: '710', categorieArchives: '711', salonJournaux: '713', retentionSuppressionJours: 14 });
   // L'état de la connexion est relu après l'enregistrement.
   await waitFor(() => expect(appels.filter(a => a.chemin === '/tickets/etat').length).toBeGreaterThanOrEqual(2));
 });
@@ -478,7 +481,7 @@ function clientFerme() {
     if (chemin.endsWith('/lu')) return { ok: true };
     if (chemin.endsWith('/supprimer') && chemin !== '/tickets/supprimer') {
       supprime = true;
-      return { ok: true, numero: 1 };
+      return { ok: true, numero: 1, jours: 30, effaceLe: '2026-12-04T11:00:00.000Z' };
     }
     if (chemin === '/tickets/supprimer') {
       supprime = true;
@@ -500,8 +503,8 @@ test('vue d’un ticket fermé : avis de l’auteur (étoiles, commentaire) ; Su
   expect(screen.getByText(/^Noté le /)).toBeTruthy();
   // Rien n'est supprimé avant la confirmation ; Annuler referme la confirmation.
   await fireEvent.press(screen.getByTestId('esport-tk-supprimer'));
-  expect(screen.getByTestId('esport-tk-suppr-titre')).toHaveTextContent('Supprimer définitivement le ticket n° 1 ?');
-  expect(screen.getByText(/C’est irréversible : la conversation, les notes internes, les pièces jointes et le transcript seront effacés/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-suppr-titre')).toHaveTextContent('Supprimer le ticket n° 1 ?');
+  expect(screen.getByText(/Le salon Discord est supprimé tout de suite\. Le ticket reste lisible dans l’app pendant 30 jours/)).toBeTruthy();
   expect(screen.getByTestId('esport-tk-suppr-garder-avis').props.value).toBe(true);
   await fireEvent.press(screen.getByTestId('esport-tk-suppr-annuler'));
   expect(screen.queryByTestId('esport-tk-suppr')).toBeNull();
@@ -516,7 +519,7 @@ test('vue d’un ticket fermé : avis de l’auteur (étoiles, commentaire) ; Su
   expect(post.corps).toEqual({ garderAvis: false });
   // Le volet se ferme, la liste est relue, la suppression est annoncée.
   await waitFor(() => expect(screen.queryByTestId('esport-tk-vue')).toBeNull());
-  await screen.findByText('Ticket n° 1 supprimé.');
+  await screen.findByText(/^Ticket n° 1 supprimé de Discord : encore lisible dans « Supprimés » jusqu’au /);
   await waitFor(() => expect(screen.queryByTestId('esport-tk-ticket-1')).toBeNull());
 });
 
@@ -541,11 +544,114 @@ test('vue : un ticket ouvert n’a pas de bouton Supprimer ; liste des fermés :
   expect(screen.getByTestId('esport-tk-ticket-1').props.accessibilityState).toEqual({ checked: true });
   expect(screen.getByText('2 ticket(s) choisi(s)')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-tk-selection-supprimer'));
-  expect(screen.getByTestId('esport-tk-suppr-groupe-titre')).toHaveTextContent('Supprimer définitivement 2 ticket(s) fermé(s) ?');
+  expect(screen.getByTestId('esport-tk-suppr-groupe-titre')).toHaveTextContent('Supprimer 2 ticket(s) fermé(s) ?');
   await fireEvent.press(screen.getByTestId('esport-tk-suppr-groupe-confirmer'));
   await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/supprimer')).toBe(true));
   expect(appels.find(a => a.chemin === '/tickets/supprimer')!.corps).toEqual({ ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'], garderAvis: true });
-  await screen.findByText('2 ticket(s) supprimé(s).');
+  await screen.findByText('2 ticket(s) supprimé(s) de Discord, lisibles dans « Supprimés ».');
+});
+
+/** Client des tickets supprimés (migration 0065) : la liste « Supprimés » et un ticket supprimé, restaurable. */
+function clientCorbeille({ garderAvis = true }: { garderAvis?: boolean } = {}) {
+  const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
+  const effaceLe = new Date(Date.now() + 12 * 86_400_000 + 3_600_000).toISOString();
+  const supprime = { le: '2026-11-04T12:00:00.000Z', par: 'Kai', effaceLe, garderAvis };
+  const ticket = (numero: number): ResumeTicket => ({ ...resumeTk(numero, false), statut: 'ferme', fermeLe: '2026-11-04T11:00:00.000Z', note: 4, supprime });
+  const detail = (): DetailTicket => ({
+    ...ticket(1),
+    nonLuDepuis: null,
+    salon: { id: '7001', nom: 'ticket-0001-lea', supprime: true },
+    reponses: [],
+    raison: null,
+    noteCommentaire: 'Merci',
+    noteLe: '2026-11-04T11:30:00.000Z',
+    liaison: { type: 'aucune' },
+    liaisonCategorie: { type: 'aucune' },
+    purge: false,
+    fermeture: { heures: 168, source: 'general', staffSeul: false, permanentPar: null, permanentLe: null },
+    membres: [],
+    messages: [{ id: 'm1', genre: 'discord', auteur: { nom: 'Léa', discordId: '8001', compte: null }, staff: false, contenu: 'Bonjour, je postule', envoi: 'ok', le: '2026-11-04T10:01:00.000Z', modifieLe: null, supprimeLe: null, pieces: [] }],
+    droits: { repondre: true, gerer: true, supprimer: true },
+    retentionSuppressionJours: 30,
+  });
+  const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
+    appels.push({ chemin, methode, corps });
+    if (chemin.startsWith('/tickets?')) return { tickets: chemin.includes('statut=supprimes') ? [ticket(1)] : [], categories: [CAT], nbSupprimes: 1, retentionSuppressionJours: 30, droits: { repondre: true, gerer: true, configurer: false, supprimer: true } };
+    if (chemin === '/tickets/preferences') return { mpNouveau: false, mpMessage: true };
+    if (chemin.endsWith('/assignables')) return { comptes: [] };
+    if (chemin.endsWith('/lu')) return { ok: true };
+    if (chemin.endsWith('/restaurer')) return { ...detail(), supprime: null };
+    if (chemin.endsWith('/effacer')) return { ok: true, numero: 1 };
+    if (/\/tickets\/[^/]+$/.test(chemin)) return detail();
+    throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
+  };
+  return { client: { requete } as unknown as ClientEsport, appels };
+}
+
+test('filtre « Supprimés (30 j) » : badge « Supprimé de Discord », compte à rebours, ticket lisible ; Restaurer, Restaurer et rouvrir, Supprimer définitivement maintenant', async () => {
+  const { client, appels } = clientCorbeille({ garderAvis: false });
+  await render(<ListeTickets theme={theme} client={client} large />);
+  expect(await screen.findByText('Supprimés (30 j)')).toBeTruthy();
+  expect(appels.filter(a => a.chemin.startsWith('/tickets?')).every(a => !a.chemin.includes('supprimes'))).toBe(true);
+  await fireEvent.press(screen.getByTestId('esport-tk-f-statut-supprimes'));
+  await waitFor(() => expect(appels.some(a => a.chemin.includes('statut=supprimes'))).toBe(true));
+  expect(await screen.findByTestId('esport-tk-corbeille-aide')).toHaveTextContent(/Les tickets supprimés sont retirés de Discord et restent lisibles ici 30 jours/);
+  expect(screen.getByTestId('esport-tk-ticket-1-corbeille')).toHaveTextContent(/^Supprimé de Discord — effacé définitivement le /);
+  expect(screen.getByTestId('esport-tk-ticket-1-compte')).toHaveTextContent(/13 j restants/);
+
+  // Le ticket supprimé reste lisible : conversation, avis ; pas de Rouvrir ni de Supprimer ordinaires.
+  await fireEvent.press(screen.getByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue-corbeille');
+  expect(screen.getByTestId('esport-tk-vue-corbeille-badge')).toHaveTextContent(/Supprimé de Discord — effacé définitivement le /);
+  expect(screen.getByTestId('esport-tk-vue-corbeille-compte')).toHaveTextContent(/13 j restants/);
+  expect(screen.getByText('Supprimé par Kai le', { exact: false })).toBeTruthy();
+  expect(screen.getByText('Bonjour, je postule')).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-vue-avis-commentaire')).toHaveTextContent('Merci');
+  expect(screen.queryByTestId('esport-tk-rouvrir')).toBeNull();
+  expect(screen.queryByTestId('esport-tk-supprimer')).toBeNull();
+  expect(screen.getByTestId('esport-tk-restaurer')).toBeTruthy();
+
+  // Restaurer : sans réouverture (pas de nouveau salon Discord).
+  await fireEvent.press(screen.getByTestId('esport-tk-restaurer'));
+  await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/restaurer'))).toBe(true));
+  expect(appels.find(a => a.chemin.endsWith('/restaurer'))).toMatchObject({ methode: 'POST', corps: { rouvrir: false } });
+  await screen.findByText('Ticket restauré.');
+  await waitFor(() => expect(screen.queryByTestId('esport-tk-vue-corbeille')).toBeNull());
+  expect(screen.getByTestId('esport-tk-rouvrir')).toBeTruthy();
+});
+
+test('ticket supprimé : « Restaurer et rouvrir » demande la réouverture (nouveau salon Discord)', async () => {
+  const { client, appels } = clientCorbeille({ garderAvis: false });
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-f-statut-supprimes'));
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue-corbeille');
+  await fireEvent.press(screen.getByTestId('esport-tk-restaurer-rouvrir'));
+  await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/restaurer'))).toBe(true));
+  expect(appels.find(a => a.chemin.endsWith('/restaurer'))!.corps).toEqual({ rouvrir: true });
+  await screen.findByText('Ticket restauré.');
+});
+
+test('ticket supprimé : effacement définitif tout de suite, avec confirmation et le choix de l’avis', async () => {
+  const { client, appels } = clientCorbeille({ garderAvis: false });
+  await render(<ListeTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-f-statut-supprimes'));
+  await fireEvent.press(await screen.findByTestId('esport-tk-ticket-1'));
+  await screen.findByTestId('esport-tk-vue-corbeille');
+  await fireEvent.press(screen.getByTestId('esport-tk-effacer'));
+  expect(screen.getByTestId('esport-tk-effacer-dialogue-titre')).toHaveTextContent('Supprimer définitivement le ticket n° 1 maintenant ?');
+  expect(screen.getByText(/C’est irréversible : la conversation, les notes internes, les pièces jointes et le transcript sont effacés tout de suite/)).toBeTruthy();
+  expect(screen.getByTestId('esport-tk-effacer-dialogue-garder-avis').props.value).toBe(false);
+  // Rien n'est effacé avant la confirmation ; Annuler referme.
+  await fireEvent.press(screen.getByTestId('esport-tk-effacer-dialogue-annuler'));
+  expect(appels.some(a => a.chemin.endsWith('/effacer'))).toBe(false);
+  await fireEvent.press(screen.getByTestId('esport-tk-effacer'));
+  await fireEvent(screen.getByTestId('esport-tk-effacer-dialogue-garder-avis'), 'valueChange', true);
+  await fireEvent.press(screen.getByTestId('esport-tk-effacer-dialogue-confirmer'));
+  await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/effacer'))).toBe(true));
+  expect(appels.find(a => a.chemin.endsWith('/effacer'))).toMatchObject({ methode: 'POST', corps: { garderAvis: true } });
+  await waitFor(() => expect(screen.queryByTestId('esport-tk-vue')).toBeNull());
+  await screen.findByText('Ticket n° 1 effacé définitivement.');
 });
 
 // ------------------------------------------------------------------ Catégories par défaut, réponses depuis l'app seulement

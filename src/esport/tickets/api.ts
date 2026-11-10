@@ -76,6 +76,8 @@ export interface General {
   avertissementH: number;
   suppressionArchivesJours: number;
   retentionJours: number;
+  /** Tickets supprimés : jours pendant lesquels ils restent lisibles dans l'app avant l'effacement définitif (30 par défaut). */
+  retentionSuppressionJours?: number;
   copierPieces: boolean;
   pieceMaxMo: number;
   /** « Le staff répond uniquement depuis l'AppDashboard » : le staff lit les salons sans y écrire ; l'auteur écrit. */
@@ -276,6 +278,8 @@ export interface ResumeTicket {
   nonLu: boolean;
   /** Ticket permanent : jamais fermé automatiquement. */
   permanent: boolean;
+  /** Ticket supprimé (migration 0065) : salon Discord supprimé, lisible jusqu'à `effaceLe`, puis effacé. */
+  supprime?: { le: string; par: string | null; effaceLe: string | null; garderAvis: boolean } | null;
 }
 
 export interface PieceTicket {
@@ -325,6 +329,8 @@ export interface DetailTicket extends ResumeTicket {
   fermeture: { heures: number; source: 'ticket' | 'categorie' | 'general'; staffSeul: boolean; permanentPar: string | null; permanentLe: string | null };
   membres: Array<{ discordId: string; nom: string; depuis: string }>;
   messages: MessageTicket[];
+  /** Jours pendant lesquels un ticket supprimé reste lisible (réglage général). */
+  retentionSuppressionJours?: number;
   /** `supprimer` : supprimer ce ticket une fois fermé (tickets.gerer, ou configurer pour une catégorie de ses rôles). */
   droits: { repondre: boolean; gerer: boolean; supprimer?: boolean };
 }
@@ -445,7 +451,7 @@ export function apiTickets(client: ClientEsport) {
     publierPanneau: (id: string) => r<Panneau>(`/tickets/config/panneaux/${encodeURIComponent(id)}/publier`, 'POST'),
     ajouterListeNoire: (c: { discordId: string; nom?: string; raison?: string }) => r<{ ok: true }>('/tickets/config/liste-noire', 'POST', c),
     retirerListeNoire: (id: string) => r<{ ok: true }>(`/tickets/config/liste-noire/${encodeURIComponent(id)}`, 'DELETE'),
-    liste: (f: FiltresTickets = {}) => r<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; droits: { repondre: boolean; gerer: boolean; configurer: boolean; supprimer?: boolean } }>(`/tickets${requeteUrl({ ...f })}`),
+    liste: (f: FiltresTickets = {}) => r<{ tickets: ResumeTicket[]; categories: CategorieCourte[]; nbSupprimes?: number; retentionSuppressionJours?: number; droits: { repondre: boolean; gerer: boolean; configurer: boolean; supprimer?: boolean } }>(`/tickets${requeteUrl({ ...f })}`),
     compteur: () => r<{ nonLus: number; ouverts?: number }>('/tickets/compteur'),
     detail: (id: string) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}`),
     lu: (id: string) => r<{ ok: true }>(`/tickets/${encodeURIComponent(id)}/lu`, 'POST'),
@@ -460,7 +466,12 @@ export function apiTickets(client: ClientEsport) {
     lier: (id: string, c: { type: TypeLiaison; id?: string; nom?: string; tableauId?: string }) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/liaison`, 'POST', c),
     stats: (p: { du?: string; au?: string } = {}) => r<StatsTickets>(`/tickets/stats${requeteUrl({ ...p })}`),
     avis: (f: FiltresAvis = {}) => r<ListeAvis>(`/tickets/avis${requeteUrl({ ...f })}`),
-    supprimer: (id: string, garderAvis: boolean) => r<{ ok: true; numero: number }>(`/tickets/${encodeURIComponent(id)}/supprimer`, 'POST', { garderAvis }),
+    /** « Supprimer » : le salon Discord disparaît, le ticket reste lisible `jours` jours dans « Supprimés ». */
+    supprimer: (id: string, garderAvis: boolean) => r<{ ok: true; numero: number; effaceLe?: string; jours?: number }>(`/tickets/${encodeURIComponent(id)}/supprimer`, 'POST', { garderAvis }),
+    /** Restaure un ticket supprimé ; `rouvrir` : le rouvre aussi (nouveau salon Discord). */
+    restaurer: (id: string, rouvrir: boolean) => r<DetailTicket>(`/tickets/${encodeURIComponent(id)}/restaurer`, 'POST', { rouvrir }),
+    /** « Supprimer définitivement maintenant » (ticket déjà supprimé). */
+    effacer: (id: string, garderAvis: boolean) => r<{ ok: true; numero: number }>(`/tickets/${encodeURIComponent(id)}/effacer`, 'POST', { garderAvis }),
     supprimerPlusieurs: (ids: string[], garderAvis: boolean) => r<{ supprimes: number[]; echecs: Array<{ id: string; code: string }> }>('/tickets/supprimer', 'POST', { ids, garderAvis }),
     preferences: () => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences'),
     changerPreferences: (c: { mpNouveau: boolean; mpMessage: boolean }) => r<{ mpNouveau: boolean; mpMessage: boolean }>('/tickets/preferences', 'PUT', c),
