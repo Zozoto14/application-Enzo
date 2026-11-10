@@ -48,7 +48,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
 import { usageSequestre } from '../session/session';
 import { lireEvenement, type EvenementAudit } from '../hub/admin/journal';
-import { ID_PRINCIPAL, lireProfils, nettoyerApps, nettoyerNiveaux, roleEnregistre, type EtatSequestre, type Profil } from './profils';
+import { ID_PRINCIPAL, NOM_INCONNU, lireProfils, nettoyerApps, nettoyerNiveaux, roleEnregistre, type EtatSequestre, type Profil } from './profils';
 
 export const VERSION_ANNUAIRE = 3;
 const MOTIF_ID = /^[a-z0-9]{6,16}$/;
@@ -210,11 +210,20 @@ function dateIso(valeur: unknown): string | undefined {
   return typeof valeur === 'string' && valeur.length <= 40 && !Number.isNaN(Date.parse(valeur)) ? valeur : undefined;
 }
 
-function hexa(valeur: unknown, longueur?: number): string | undefined {
-  return typeof valeur === 'string' && MOTIF_HEXA.test(valeur) && valeur.length <= 4096 && (longueur === undefined || valeur.length === longueur)
+function hexa(valeur: unknown, longueur?: number, max = 4096): string | undefined {
+  return typeof valeur === 'string' && valeur.length <= max && MOTIF_HEXA.test(valeur) && (longueur === undefined || valeur.length === longueur)
     ? valeur
     : undefined;
 }
+
+/**
+ * Taille maximale (caractères hexadécimaux) d'un bloc privé scellé (`prive` de l'administrateur,
+ * `titulaire.prive`). Il grandit avec le nombre de comptes (prénom, date, code d'accès : ~260
+ * caractères par compte). L'ancienne borne commune de 4096 l'écartait EN SILENCE à la lecture dès
+ * ~14 comptes : tous les prénoms devenaient « (prénom inconnu) », et la synchronisation propageait
+ * la perte (docs/diagnostic-comptes.md). 4 Mio laissent la place à des milliers de comptes.
+ */
+export const TAILLE_MAX_BLOC_PRIVE = 4 * 1024 * 1024;
 
 function lireAcces(brut: unknown): AccesPublic {
   const o = brut && typeof brut === 'object' && !Array.isArray(brut) ? (brut as Record<string, unknown>) : {};
@@ -267,7 +276,7 @@ function lireTitulaire(brut: unknown): PaireTitulaire | undefined {
   if (cle) paire.cle = cle;
   const privee = hexa(o.privee);
   if (privee) paire.privee = privee;
-  const prive = hexa(o.prive);
+  const prive = hexa(o.prive, undefined, TAILLE_MAX_BLOC_PRIVE);
   if (prive) paire.prive = prive;
   return Object.keys(paire).length > 0 ? paire : undefined;
 }
@@ -352,7 +361,7 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
   }
   const juridique = lireDocsJuridiques(o.juridique);
   if (juridique) annuaire.juridique = juridique;
-  const prive = hexa(o.prive);
+  const prive = hexa(o.prive, undefined, TAILLE_MAX_BLOC_PRIVE);
   if (prive) annuaire.prive = prive;
   if (Array.isArray(o.journalGestion)) {
     const scelles = o.journalGestion.filter((e): e is string => typeof e === 'string' && MOTIF_DEPOT.test(e) && e.length <= 4096).slice(-MAX_JOURNAL_GESTION);
@@ -561,7 +570,8 @@ function lirePrive(annuaire: Annuaire, cles: ClesAdmin): Prive {
   const prive = { ...vide };
   if (typeof o.nomAdmin === 'string') prive.nomAdmin = o.nomAdmin.slice(0, 30);
   if (typeof o.creeLeAdmin === 'string') prive.creeLeAdmin = o.creeLeAdmin.slice(0, 40);
-  for (const [id, nom] of Object.entries(dict(o.noms))) if (MOTIF_ID.test(id) && typeof nom === 'string') prive.noms[id] = nom.slice(0, 30);
+  // Le texte de remplacement n'est jamais un prénom (anciennes versions : il a pu être enregistré tel quel).
+  for (const [id, nom] of Object.entries(dict(o.noms))) if (MOTIF_ID.test(id) && typeof nom === 'string' && nom.trim() && nom !== NOM_INCONNU) prive.noms[id] = nom.slice(0, 30);
   for (const [id, d] of Object.entries(dict(o.creeLe))) if (MOTIF_ID.test(id) && typeof d === 'string') prive.creeLe[id] = d.slice(0, 40);
   for (const [id, par] of Object.entries(dict(o.creePar))) if (MOTIF_ID.test(id) && typeof par === 'string' && MOTIF_ID.test(par)) prive.creePar[id] = par;
   prive.anterieurs = Array.isArray(o.anterieurs) ? o.anterieurs.filter((id): id is string => typeof id === 'string' && MOTIF_ID.test(id)) : [];
@@ -733,7 +743,8 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
       },
       ...annuaire.comptes.map(c => {
         const suivi: { derniereConnexion?: string; connexions?: number; appareils?: Array<{ nom: string; vu: string }> } = suivisHerites[c.id] ?? lireSuivi(privee, c);
-        const profil: Profil = { id: c.id, nom: prive.noms[c.id] ?? '(prénom inconnu)', admin: false, creeLe: prive.creeLe[c.id] ?? '', ...c.acces, sequestre: c.sequestre.etat };
+        const profil: Profil = { id: c.id, nom: prive.noms[c.id] ?? NOM_INCONNU, admin: false, creeLe: prive.creeLe[c.id] ?? '', ...c.acces, sequestre: c.sequestre.etat };
+        if (prive.noms[c.id] === undefined) profil.nomInconnu = true;
         if (suivi.derniereConnexion) profil.derniereConnexion = suivi.derniereConnexion;
         if (suivi.connexions !== undefined) profil.connexions = suivi.connexions;
         if (suivi.appareils) profil.appareils = suivi.appareils;
@@ -797,6 +808,17 @@ export function appliquerProfilsAdmin(source: Annuaire, profils: readonly Profil
     if (p.admin || p.id === ID_PRINCIPAL || !MOTIF_ID.test(p.id)) continue;
     const avant = base.comptes.find(c => c.id === p.id);
     const nom = p.nom.trim().slice(0, 30);
+    // Prénom inconnu (bloc privé perdu) : on garde l'empreinte et le prénom scellé tels quels. Le texte
+    // de remplacement n'est JAMAIS scellé : il changerait l'empreinte (le compte ne se retrouverait plus
+    // par son prénom) et deux comptes inconnus « auraient le même prénom » (toute modification refusée).
+    if (p.nomInconnu || nom === NOM_INCONNU) {
+      if (!avant) throw new ErreurAnnuaire('Donnez un prénom au compte.');
+      empreintes.add(avant.empreinte);
+      if (p.creeLe) prive.creeLe[p.id] = p.creeLe;
+      const garde: EntreeCompte = { ...avant, acces: accesDe(p) };
+      annuaire.comptes.push(garde);
+      continue;
+    }
     const scelle = avant && prive.noms[p.id] === nom ? { empreinte: avant.empreinte, nom: avant.nom } : sceller(annuaire.sel, p.id, nom, alea);
     if (empreintes.has(scelle.empreinte) || MOTS_ADMIN.has(normaliserNom(nom))) {
       throw new ErreurAnnuaire(`Le prénom « ${nom} » est déjà pris ou réservé.`);
@@ -818,6 +840,57 @@ export function appliquerProfilsAdmin(source: Annuaire, profils: readonly Profil
   prive.anterieurs = prive.anterieurs.filter(id => ids.has(id));
   annuaire.prive = ecrirePrive(prive, cles, alea);
   return annuaire;
+}
+
+export interface BilanReparationNoms {
+  annuaire: Annuaire;
+  /** Prénoms retrouvés et vérifiés, par compte. */
+  repares: Record<string, string>;
+  /** Comptes toujours sans prénom vérifiable (aucun candidat, ou aucun ne correspond à l'empreinte). */
+  restants: string[];
+}
+
+/**
+ * Répare les prénoms perdus du bloc privé (« (prénom inconnu) ») à partir de CANDIDATS (pseudo
+ * Esport, prénom noté au journal de l'Administration…). Rien n'est deviné : un candidat n'est
+ * retenu que si son empreinte salée est EXACTEMENT celle du compte (le prénom avec lequel il a été
+ * créé, et avec lequel il se retrouve à la connexion). Seule exception : un compte dont l'empreinte
+ * est celle du texte de remplacement lui-même (abîmé par une ancienne version) reprend son seul
+ * candidat, s'il n'en a qu'un et qu'aucun autre compte ne porte ce prénom ; il est alors rescellé.
+ */
+export function reparerNomsAdmin(
+  source: Annuaire,
+  cles: ClesAdmin,
+  candidats: Readonly<Record<string, readonly string[]>>,
+  alea: SourceAleatoire = aleatoireParDefaut,
+): BilanReparationNoms {
+  if (source.heritage || source.restreint || !source.sel) return { annuaire: source, repares: {}, restants: [] };
+  const prive = lirePrive(source, cles);
+  const repares: Record<string, string> = {};
+  const restants: string[] = [];
+  const abimee = empreinteNom(source.sel, NOM_INCONNU);
+  const prises = new Set<string>([source.admin.empreinte ?? '', ...source.comptes.map(c => c.empreinte)]);
+  const comptes = source.comptes.map(c => {
+    if (prive.noms[c.id] !== undefined) return c;
+    const liste = [...new Set((candidats[c.id] ?? []).map(n => String(n).trim().slice(0, 30)).filter(n => n && n !== NOM_INCONNU && !MOTS_ADMIN.has(normaliserNom(n))))];
+    const juste = liste.find(n => empreinteNom(source.sel, n) === c.empreinte);
+    if (juste) {
+      prive.noms[c.id] = juste;
+      repares[c.id] = juste;
+      return c;
+    }
+    if (c.empreinte === abimee && liste.length === 1 && !prises.has(empreinteNom(source.sel, liste[0]))) {
+      const scelle = sceller(source.sel, c.id, liste[0], alea);
+      prises.add(scelle.empreinte);
+      prive.noms[c.id] = liste[0];
+      repares[c.id] = liste[0];
+      return { ...c, ...scelle };
+    }
+    restants.push(c.id);
+    return c;
+  });
+  if (Object.keys(repares).length === 0) return { annuaire: source, repares, restants };
+  return { annuaire: { ...source, comptes, prive: ecrirePrive(prive, cles, alea) }, repares, restants };
 }
 
 /**

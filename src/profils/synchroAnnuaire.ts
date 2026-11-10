@@ -110,12 +110,22 @@ export interface FusionAnnuaire extends ResultatLww {
   annuaire: Annuaire;
   /** Comptes retirés ici par une suppression faite ailleurs (leurs fichiers sont à effacer). */
   comptesRetires: string[];
+  /**
+   * Blocs privés écartés par le « dernier gagnant » faute de clés (administrateur pas encore
+   * déverrouillé) : à garder de côté et à RÉUNIR au prochain tour avec les clés. Sans cela, un bloc
+   * modifié sur un appareil puis synchronisé avant le déverrouillage écrasait les prénoms ajoutés
+   * ailleurs (docs/diagnostic-comptes.md).
+   */
+  privesEcartes: string[];
 }
+
+/** Au plus autant de blocs privés écartés gardés de côté (les plus récents). */
+export const MAX_PRIVES_ECARTES = 8;
 
 /**
  * Fusionne l'annuaire d'ici avec celui du relais. `cles` (administrateur
  * déverrouillé) permet de réunir deux blocs privés divergents plutôt que
- * d'en perdre un.
+ * d'en perdre un ; `ecartes` : blocs mis de côté aux tours précédents (sans clés).
  */
 export function fusionnerAnnuaire(
   local: Annuaire,
@@ -124,6 +134,7 @@ export function fusionnerAnnuaire(
   maintenant: string,
   cles?: ClesAdmin,
   alea?: SourceAleatoire,
+  ecartes: readonly string[] = [],
 ): FusionAnnuaire {
   const locales = entitesAnnuaire(local);
   const note = noterLocal(etat, locales, maintenant);
@@ -132,26 +143,40 @@ export function fusionnerAnnuaire(
   if (distant?.entites.sel && locales.sel && distant.entites.sel !== locales.sel) {
     const resultat = fusionner({}, { ...note, connus: {}, dates: {}, supprimes: {} }, distant);
     const annuaire = annuaireDepuisEntites(resultat.entites, local.comptes.map(c => c.id));
-    return { ...resultat, changeIci: true, aPublier: false, annuaire, comptesRetires: [] };
+    return { ...resultat, changeIci: true, aPublier: false, annuaire, comptesRetires: [], privesEcartes: [...ecartes] };
   }
   let resultat = fusionner(locales, note, distant);
-  // Blocs privés divergents : on réunit (voir fusionnerBlocsPrives).
-  const privesDiffèrent = cles && typeof locales.prive === 'string' && typeof distant?.entites.prive === 'string' && locales.prive !== distant.entites.prive;
-  if (privesDiffèrent && typeof resultat.entites.prive === 'string') {
-    const gagnant = resultat.entites.prive;
-    const perdant = gagnant === locales.prive ? (distant!.entites.prive as string) : (locales.prive as string);
-    const ids = new Set(Object.keys(resultat.entites).filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length)));
-    const reuni = fusionnerBlocsPrives(gagnant, perdant, ids, cles!, alea);
-    if (reuni !== gagnant) {
-      const entites = { ...resultat.entites, prive: reuni };
-      const etatReuni = { ...resultat.etat, dates: { ...resultat.etat.dates, prive: maintenant } };
+  const ids = () => new Set(Object.keys(resultat.entites).filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length)));
+  // Blocs privés divergents : on réunit (voir fusionnerBlocsPrives), ou, sans clés, on garde le perdant de côté.
+  const autres: string[] = [];
+  if (typeof locales.prive === 'string' && typeof distant?.entites.prive === 'string' && locales.prive !== distant.entites.prive && typeof resultat.entites.prive === 'string') {
+    autres.push(resultat.entites.prive === locales.prive ? (distant.entites.prive as string) : (locales.prive as string));
+  } else if (typeof locales.prive === 'string' && resultat.entites.prive === undefined) {
+    // Bloc privé retiré par une suppression venue d'ailleurs : jamais perdu en silence.
+    autres.push(locales.prive as string);
+  }
+  if (!cles) {
+    const garder = [...ecartes, ...autres].filter((b, i, t) => t.indexOf(b) === i && b !== resultat.entites.prive).slice(-MAX_PRIVES_ECARTES);
+    const annuaire = annuaireDepuisEntites(resultat.entites, local.comptes.map(c => c.id));
+    const comptesRetires = resultat.retirees.filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length));
+    return { ...resultat, annuaire, comptesRetires, privesEcartes: garder };
+  }
+  const aReunir = [...ecartes, ...autres];
+  if (aReunir.length > 0) {
+    let courant = typeof resultat.entites.prive === 'string' ? resultat.entites.prive : undefined;
+    for (const bloc of aReunir) {
+      courant = courant === undefined ? bloc : fusionnerBlocsPrives(courant, bloc, ids(), cles, alea);
+    }
+    if (courant !== undefined && courant !== resultat.entites.prive) {
+      const entites = { ...resultat.entites, prive: courant };
+      const etatReuni = { ...resultat.etat, dates: { ...resultat.etat.dates, prive: maintenant }, supprimes: Object.fromEntries(Object.entries(resultat.etat.supprimes).filter(([cle]) => cle !== 'prive')) };
       const retirees = resultat.retirees;
       resultat = { ...fusionner(entites, etatReuni, distant), retirees, changeIci: true };
     }
   }
   const annuaire = annuaireDepuisEntites(resultat.entites, local.comptes.map(c => c.id));
   const comptesRetires = resultat.retirees.filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length));
-  return { ...resultat, annuaire, comptesRetires };
+  return { ...resultat, annuaire, comptesRetires, privesEcartes: [] };
 }
 
 // --- Côté ami --------------------------------------------------------------------

@@ -33,6 +33,18 @@ export async function baseSqlite(chemin = ':memory:') {
   const { DatabaseSync } = await import('node:sqlite');
   const db = new DatabaseSync(chemin);
   db.exec('PRAGMA foreign_keys = ON');
+  // Plusieurs processus (serveur, cron, bot) sur le même fichier : sans délai d'attente, une écriture
+  // pendant celle d'un autre échoue AUSSITÔT (« database is locked », SQLITE_BUSY), d'où des erreurs au
+  // hasard (connexion comprise : la limite de débit écrit à chaque ouverture de session). On attend
+  // jusqu'à 5 s, et le journal WAL laisse lire pendant qu'un autre écrit.
+  db.exec('PRAGMA busy_timeout = 5000');
+  if (chemin !== ':memory:' && !String(chemin).startsWith('file::memory:')) {
+    try {
+      db.exec('PRAGMA journal_mode = WAL');
+    } catch {
+      // Système de fichiers sans mémoire partagée (rare) : journal par défaut, le délai d'attente suffit.
+    }
+  }
   const preparer = sql => db.prepare(sql);
   const base = {
     async tous(sql, params = []) {
@@ -46,7 +58,8 @@ export async function baseSqlite(chemin = ':memory:') {
     },
     async lot(liste) {
       const resultats = [];
-      db.exec('BEGIN');
+      // IMMEDIATE : le verrou d'écriture est pris d'emblée (en attendant busy_timeout), jamais en cours de lot.
+      db.exec('BEGIN IMMEDIATE');
       try {
         for (const { sql, params = [] } of liste) resultats.push({ changements: Number(preparer(sql).run(...params.map(normaliser)).changes) });
         db.exec('COMMIT');

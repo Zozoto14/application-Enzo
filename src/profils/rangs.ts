@@ -65,7 +65,7 @@ import {
   type SequestreCompte,
   type VueAdmin,
 } from './annuaire';
-import { ID_PRINCIPAL, type Profil } from './profils';
+import { ID_PRINCIPAL, NOM_INCONNU, type Profil } from './profils';
 
 export { usageDepotTitulaire };
 
@@ -190,7 +190,7 @@ function lirePriveTitulaire(annuaire: Annuaire, titulaire: string, cles: ClesAdm
   }
   const dict = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
   const prive = priveVide();
-  for (const [id, nom] of Object.entries(dict(o.noms))) if (internes.MOTIF_ID.test(id) && typeof nom === 'string') prive.noms[id] = nom.slice(0, 30);
+  for (const [id, nom] of Object.entries(dict(o.noms))) if (internes.MOTIF_ID.test(id) && typeof nom === 'string' && nom.trim() && nom !== NOM_INCONNU) prive.noms[id] = nom.slice(0, 30);
   for (const [id, d] of Object.entries(dict(o.creeLe))) if (internes.MOTIF_ID.test(id) && typeof d === 'string') prive.creeLe[id] = d.slice(0, 40);
   for (const [id, c] of Object.entries(dict(o.codes))) {
     const code = dict(c);
@@ -624,7 +624,8 @@ export function ouvrirAnnuaireTitulaire(
       .map(e => {
         const profil: Profil = {
           id: e.id,
-          nom: prive.noms[e.id] ?? '(prénom inconnu)',
+          nom: prive.noms[e.id] ?? NOM_INCONNU,
+          ...(prive.noms[e.id] === undefined ? { nomInconnu: true } : {}),
           admin: false,
           creeLe: prive.creeLe[e.id] ?? '',
           ...e.acces,

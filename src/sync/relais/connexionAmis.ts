@@ -113,6 +113,8 @@ async function causeDe(reponse: Response, qui?: string): Promise<ErreurInvitatio
       return erreur('identifiant-pris');
     case 'preuve':
       return erreur('lien-illisible');
+    case 'erreur-serveur':
+      return new ErreurInvitation('relais-injoignable', 'Le serveur a eu un problème pendant la connexion : réessaie dans un instant (ton mot de passe n’est pas en cause).');
     case 'acces-illisible':
       return new ErreurInvitation(
         'relais-injoignable',
@@ -350,4 +352,46 @@ export async function heureRelais(liaison: Liaison, requete: Fetch = fetch): Pro
   } catch {
     return undefined;
   }
+}
+
+// ------------------------------------------------------------ Diagnostic des connexions (Fondateur)
+
+export interface DiagnosticRelais {
+  tentatives: Array<{ le: string; issue: string; ip: string }>;
+  verrou: { echecs: number; jusqua: number } | null;
+  adresses: Array<{ ip: string; echecs: number; jusqua: number }>;
+  inconnus: Array<{ le: string; ip: string }>;
+  revoque: boolean;
+  heure: number;
+}
+
+/**
+ * Dernières tentatives de connexion d'un compte relevées par le relais (codes d'issue, adresses
+ * masquées), verrou de son identifiant (`h` : `empreinteIdentifiant(prénom)`), adresses limitées.
+ * Un relais d'avant ce diagnostic répond 404 : `undefined`.
+ */
+export async function diagnosticConnexions(maitre: Liaison, compte: string, h?: string, requete: Fetch = fetch): Promise<DiagnosticRelais | undefined> {
+  const reponse = await demander(maitre.relais, `/v10/diagnostic/connexions/${encodeURIComponent(compte)}${h ? `?h=${h}` : ''}`, { jeton: maitre.jeton }, requete);
+  if (reponse.status === 404) return undefined;
+  if (!reponse.ok) throw await causeDe(reponse);
+  const lu = await corps(reponse);
+  const liste = <T,>(v: unknown, garder: (x: Record<string, unknown>) => T | undefined): T[] =>
+    Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === 'object').map(garder).filter((x): x is T => x !== undefined) : [];
+  const verrou = lu.verrou && typeof lu.verrou === 'object' ? (lu.verrou as Record<string, unknown>) : undefined;
+  return {
+    tentatives: liste(lu.tentatives, x => (typeof x.le === 'string' && typeof x.issue === 'string' ? { le: x.le, issue: x.issue, ip: typeof x.ip === 'string' ? x.ip : 'inconnue' } : undefined)),
+    verrou: verrou ? { echecs: Number(verrou.echecs) || 0, jusqua: Number(verrou.jusqua) || 0 } : null,
+    adresses: liste(lu.adresses, x => ({ ip: typeof x.ip === 'string' ? x.ip : 'inconnue', echecs: Number(x.echecs) || 0, jusqua: Number(x.jusqua) || 0 })),
+    inconnus: liste(lu.inconnus, x => (typeof x.le === 'string' ? { le: x.le, ip: typeof x.ip === 'string' ? x.ip : 'inconnue' } : undefined)),
+    revoque: lu.revoque === true,
+    heure: Number(lu.heure) || Date.now(),
+  };
+}
+
+/** « Débloquer » : lève le verrou de l'identifiant et la limite des adresses vues. Rend le nombre de verrous levés. */
+export async function debloquerConnexions(maitre: Liaison, compte: string, h?: string, requete: Fetch = fetch): Promise<number> {
+  const reponse = await demander(maitre.relais, `/v10/diagnostic/connexions/${encodeURIComponent(compte)}${h ? `?h=${h}` : ''}`, { methode: 'DELETE', jeton: maitre.jeton }, requete);
+  if (reponse.status === 404) throw new ErreurInvitation('relais-ancien');
+  if (!reponse.ok) throw await causeDe(reponse);
+  return Number((await corps(reponse)).leve) || 0;
 }

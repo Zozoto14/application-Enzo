@@ -16,8 +16,11 @@ import { echec, iso } from './outils.mjs';
 
 /** Règles : nombre d'appels permis par fenêtre (secondes), par clé. */
 export const LIMITES = {
-  // Ouverture de session (chaque appel interroge le relais) : par adresse IP.
-  session: { max: 30, fenetreS: 60 },
+  // Ouverture de session (chaque appel interroge le relais) : par adresse IP. Large : tout un club sur le
+  // même Wi-Fi (ou la même antenne 4G) partage une adresse, et chaque appareil ouvre une session à chaque
+  // chargement et toutes les heures (30 par minute bloquait des membres aux heures d'entraînement).
+  // Le relais protège, lui, contre les jetons faux (anti-force brute par adresse et par identifiant).
+  session: { max: 240, fenetreS: 60 },
   // Création (ou changement) du profil Esport : « création de compte », par IP et par compte.
   profil_ip: { max: 20, fenetreS: 3600 },
   profil: { max: 10, fenetreS: 3600 },

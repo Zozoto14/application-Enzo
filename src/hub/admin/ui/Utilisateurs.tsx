@@ -47,7 +47,8 @@ import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS,
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type NiveauAcces, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
 import { ID_ESPORT, aAccesEsport, perimetreEsportSeul } from '../../../esport/acces';
-import { pousserLangueEsport, retirerCompteEsport } from '../../../esport/synchroAdmin';
+import { pousserLangueEsport, pseudosEsport, retirerCompteEsport } from '../../../esport/synchroAdmin';
+import { LIBELLES_SOURCE_NOM, candidatsNoms, causeProbable, estBloque, libelleIssue, nomAffiche, type DiagnosticConnexion } from '../diagnostic';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 import { Glyphe } from '../../../ui/icones';
 import { Icone } from '../../../ui/icones';
@@ -144,6 +145,30 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const [identifiants, setIdentifiants] = useState<Identifiants | undefined>();
   const [invitationsGroupe, setInvitationsGroupe] = useState<Array<{ id: string; nom: string; invitation: InvitationAffichee }> | undefined>();
   const gestionnaire = outils.role === 'gestionnaire';
+  // Prénoms perdus (« (prénom inconnu) ») : pseudo Esport ou e-mail masqué en attendant la réparation.
+  const inconnus = tous.filter(p => p.nomInconnu);
+  const [pseudos, setPseudos] = useState<Record<string, string>>({});
+  const auMoinsUnInconnu = inconnus.length > 0;
+  useEffect(() => {
+    if (!auMoinsUnInconnu || gestionnaire) return;
+    let actif = true;
+    void pseudosEsport().then(p => actif && setPseudos(p));
+    return () => {
+      actif = false;
+    };
+  }, [auMoinsUnInconnu, gestionnaire]);
+  const affiche = (p: Profil) => nomAffiche(p, { pseudo: pseudos[p.id], email: outils.donnees.contacts[p.id]?.email });
+  const reparer = () =>
+    outils.agir('Réparation des prénoms', async () => {
+      const ids = inconnus.map(p => p.id);
+      const frais = Object.keys(pseudos).length > 0 ? pseudos : await pseudosEsport();
+      const { repares, restants } = await controle.onReparerNoms!(candidatsNoms(ids, outils.donnees.journal, frais));
+      const n = Object.keys(repares).length;
+      if (n > 0) outils.journaliser({ type: 'compte', action: `Prénoms réparés (${n}) : ${Object.values(repares).join(', ')}` });
+      return n === 0
+        ? `Aucun prénom retrouvé avec certitude (${restants.length} compte${restants.length > 1 ? 's' : ''}). Ouvrez chaque fiche et saisissez son prénom (celui de son identifiant de connexion).`
+        : `${n} prénom${n > 1 ? 's' : ''} retrouvé${n > 1 ? 's' : ''} et vérifié${n > 1 ? 's' : ''}.${restants.length ? ` Reste${restants.length > 1 ? 'nt' : ''} ${restants.length} à saisir dans la fiche.` : ''}`;
+    });
   // Une app qui choisit elle-même à qui elle s'ouvre (Tâches) n'a pas de case ici.
   const attribuables = registre.filter(a => !a.adminSeulement && !a.attribueeParApp);
   const liste = filtrerComptes(tous, { recherche, statut, app: app === 'toutes' ? undefined : app, tri, role: roleFiltre }, registre, maintenant);
@@ -176,7 +201,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
       }}
     />
   ) : profil ? (
-    <Fiche key={profil.id} outils={outils} profil={profil} apps={attribuables} onIdentifiants={(nom, valeurs) => setIdentifiants({ nom, valeurs, id: profil.id })} onSupprime={() => setChoisi(undefined)} />
+    <Fiche key={profil.id} outils={outils} profil={profil} pseudo={pseudos[profil.id]} apps={attribuables} onIdentifiants={(nom, valeurs) => setIdentifiants({ nom, valeurs, id: profil.id })} onSupprime={() => setChoisi(undefined)} />
   ) : (
     <Panneau theme={theme}>
       <Text style={attenue}>
@@ -252,6 +277,22 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
 
       {barreGroupee}
 
+      {auMoinsUnInconnu && !gestionnaire ? (
+        <Panneau theme={theme} testID="admin-noms-inconnus">
+          <Intertitre theme={theme}>{`${inconnus.length} compte${inconnus.length > 1 ? 's' : ''} sans prénom lisible`}</Intertitre>
+          <Text style={attenue}>
+            Le bloc chiffré qui garde les prénoms n’a pas pu être relu en entier (corrigé dans cette version). Le pseudo Esport ou l’adresse e-mail (masquée) s’affiche en
+            attendant. « Réparer les prénoms » les retrouve dans votre journal et dans l’Esport, et ne garde que ceux qui correspondent EXACTEMENT au compte. Les
+            invitations et la régénération des identifiants attendent la réparation.
+          </Text>
+          {controle.onReparerNoms ? (
+            <View style={commun.actions}>
+              <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Réparer les prénoms" onPress={reparer} desactive={Boolean(outils.enCours)} testID="admin-reparer-noms" />
+            </View>
+          ) : null}
+        </Panneau>
+      ) : null}
+
       {invitationsGroupe ? (
         <Panneau theme={theme} testID="admin-groupe-invitations">
           <View style={[commun.ligne, { justifyContent: 'space-between', paddingVertical: 0, flexWrap: 'wrap' }]}>
@@ -295,6 +336,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
           {liste.map((p, index) => {
             const s = statutCompte(p, maintenant);
             const actif = p.id === choisi && !creation;
+            const vu = affiche(p);
             return (
               <View
                 key={p.id}
@@ -304,25 +346,28 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                   index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne },
                   actif && { backgroundColor: teinteTransparente(theme.teintes.admin, 0.12) },
                 ]}>
-                {!actionnable(p) ? <View style={{ width: 22 }} /> : <Case theme={theme} coche={selection.includes(p.id)} libelle={`Sélectionner ${p.nom}`} onChanger={v => basculer(p.id, v)} testID={`admin-case-${p.id}`} />}
+                {!actionnable(p) ? <View style={{ width: 22 }} /> : <Case theme={theme} coche={selection.includes(p.id)} libelle={`Sélectionner ${vu.nom}`} onChanger={v => basculer(p.id, v)} testID={`admin-case-${p.id}`} />}
                 <Pressable
                   testID={`admin-ligne-${p.id}`}
                   accessibilityRole="button"
                   accessibilityState={{ selected: actif }}
-                  accessibilityLabel={`Ouvrir la fiche de ${p.nom}`}
+                  accessibilityLabel={`Ouvrir la fiche de ${vu.nom}`}
                   onPress={() => {
                     setCreation(false);
                     setChoisi(p.id);
                   }}
                   style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 }}>
                   <View style={[commun.carre, { width: 32, height: 32, backgroundColor: p.admin ? theme.teintes.admin : teinteTransparente(theme.teintes.admin, 0.18), borderRadius: theme.rayonGrand ? 16 : 0 }]}>
-                    <Text style={{ color: p.admin ? theme.surAccent : theme.teintes.admin, fontWeight: '700' }}>{p.nom.slice(0, 1).toUpperCase()}</Text>
+                    <Text style={{ color: p.admin ? theme.surAccent : theme.teintes.admin, fontWeight: '700' }} testID={`admin-initiale-${p.id}`}>
+                      {vu.initiale}
+                    </Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[texte, { fontWeight: '600' }]} numberOfLines={1}>
-                      {p.nom}
+                    <Text style={[texte, { fontWeight: '600' }, vu.source !== 'prenom' && { fontStyle: 'italic' }]} numberOfLines={1} testID={`admin-nom-${p.id}`}>
+                      {vu.nom}
                     </Text>
                     <Text style={[attenue, { fontSize: 12 }]} numberOfLines={1}>
+                      {vu.source !== 'prenom' ? `${LIBELLES_SOURCE_NOM[vu.source]} · ` : ''}
                       {p.admin
                         ? 'Toutes les apps'
                         : registre
@@ -528,19 +573,22 @@ function ActionsGroupees({
 function Fiche({
   outils,
   profil,
+  pseudo,
   apps,
   onIdentifiants,
   onSupprime,
 }: {
   outils: OutilsAdmin;
   profil: Profil;
+  /** Pseudo Esport du compte (nom de repli quand son prénom manque). */
+  pseudo?: string;
   apps: AppHub[];
   onIdentifiants(nom: string, valeurs: IdentifiantsAmi): void;
   onSupprime(): void;
 }) {
   const { theme, controle, registre, donnees } = outils;
   const maintenant = outils.maintenant();
-  const [nom, setNom] = useState(profil.nom);
+  const [nom, setNom] = useState(profil.nomInconnu ? '' : profil.nom);
   const [note, setNote] = useState(donnees.notes[profil.id] ?? '');
   const [suspension, setSuspension] = useState('7');
   const [expiration, setExpiration] = useState(profil.expireLe ? profil.expireLe.slice(0, 10) : '');
@@ -569,6 +617,7 @@ function Fiche({
     };
   }, [controle, profil.id]);
   const statut = statutCompte(profil, maintenant);
+  const vu = nomAffiche(profil, { pseudo, email: contact?.email });
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const niveaux = niveauxProfil(profil, registre);
@@ -732,9 +781,15 @@ function Fiche({
   return (
     <Panneau theme={theme} testID="admin-detail">
       <View style={[commun.ligne, { paddingVertical: 0, flexWrap: 'wrap' }]}>
-        <Text style={[styleTitre(theme), { fontSize: 22, flex: 1 }]}>{profil.nom}</Text>
+        <Text style={[styleTitre(theme), { fontSize: 22, flex: 1 }]}>{vu.nom}</Text>
         <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleurStatut(theme, statut)} testID="admin-fiche-statut" />
       </View>
+      {vu.source !== 'prenom' ? (
+        <Text style={[attenue, { fontSize: 13 }]} testID="admin-fiche-nom-inconnu">
+          Prénom à réparer : saisissez ci-dessous le prénom de son identifiant de connexion (ou utilisez « Réparer les prénoms » en haut de la liste). En attendant,
+          aucune invitation n’est envoyée à ce compte.
+        </Text>
+      ) : null}
       {!gestionnaire && profil.creePar ? (
         <Text style={[attenue, { fontSize: 13 }]} testID="admin-fiche-cree-par">
           Créé par {outils.tous.find(p => p.id === profil.creePar)?.nom ?? 'un compte inconnu (rang retiré ou compte supprimé)'}.
@@ -1127,6 +1182,7 @@ function Fiche({
               Les invitations partent de l’appareil du Fondateur principal (relié au relais avec le code maître).
             </Text>
           )}
+          {controle.diagnosticConnexion ? <DiagnosticConnexionFiche outils={outils} profil={profil} nom={vu.nom} /> : null}
           {controle.onRevoquerConnexion ? (
             <View style={commun.actions}>
               {revoqueRelais ? (
@@ -1545,4 +1601,89 @@ export function etatAcces(profil: Profil, maintenant: number): string {
       : `Invité : invitation valable jusqu’au ${dateLisible(profil.invitationExpireLe, true)}, pas encore utilisée.`;
   }
   return profil.anterieur ? 'Compte d’avant le suivi des connexions.' : 'En attente : jamais connecté.';
+}
+
+// --- Diagnostic des connexions --------------------------------------------------------
+
+/**
+ * Pourquoi ce membre n'arrive pas à se connecter : ses dernières tentatives relevées par le relais
+ * (réussite, mauvais mot de passe, compte introuvable, verrouillé, invitation expirée…), sans mot de
+ * passe ni adresse complète ; « Débloquer » quand un verrou est en cours.
+ */
+export function DiagnosticConnexionFiche({ outils, profil, nom }: { outils: OutilsAdmin; profil: Profil; nom: string }) {
+  const { theme, controle } = outils;
+  const [diag, setDiag] = useState<DiagnosticConnexion | undefined>();
+  const [etat, setEtat] = useState<'ferme' | 'charge' | 'pret' | 'ancien' | 'erreur'>('ferme');
+  const [erreur, setErreur] = useState<string | undefined>();
+  const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
+  const texte = { color: theme.texte, ...police(theme.policeTexte) };
+  const charger = () => {
+    setEtat('charge');
+    controle.diagnosticConnexion!(profil.id).then(
+      d => {
+        setDiag(d);
+        setEtat(d ? 'pret' : 'ancien');
+      },
+      e => {
+        setErreur(e instanceof Error ? e.message : String(e));
+        setEtat('erreur');
+      },
+    );
+  };
+  const debloquer = () =>
+    outils.agir(`Déblocage de ${nom}`, async () => {
+      const n = await controle.onDebloquerConnexion!(profil.id);
+      outils.journaliser({ type: 'compte', cible: profil.id, nomCible: nom, action: `Connexion de ${nom} débloquée (${n} verrou${n > 1 ? 's' : ''} levé${n > 1 ? 's' : ''})` });
+      charger();
+      return n > 0 ? `${nom} est débloqué : il peut réessayer tout de suite.` : `Aucun verrou en cours pour ${nom}.`;
+    });
+  const cause = causeProbable(diag);
+  return (
+    <View style={{ gap: 6 }} testID="admin-diagnostic-connexion">
+      <Intertitre theme={theme}>Diagnostic de connexion</Intertitre>
+      {etat === 'ferme' ? (
+        <View style={commun.actions}>
+          <BoutonHub theme={theme} titre="Voir les dernières tentatives" onPress={charger} testID="admin-diagnostic-voir" />
+        </View>
+      ) : null}
+      {etat === 'charge' ? <Text style={attenue}>Lecture du serveur…</Text> : null}
+      {etat === 'ancien' ? <Text style={attenue}>Le serveur (relais) doit être mis à jour pour ce diagnostic.</Text> : null}
+      {etat === 'erreur' ? <Text style={[attenue, { color: theme.alerte }]}>{erreur}</Text> : null}
+      {etat === 'pret' && diag ? (
+        <>
+          {cause ? (
+            <Text style={[texte, { fontWeight: '600' }]} testID="admin-diagnostic-cause">
+              {cause}
+            </Text>
+          ) : null}
+          {diag.tentatives.length === 0 ? <Text style={attenue}>Aucune tentative relevée ces 90 derniers jours.</Text> : null}
+          {diag.tentatives.slice(0, 12).map((t, i) => (
+            <Text key={`${t.le}-${i}`} style={[attenue, { fontSize: 12 }]} testID={`admin-diagnostic-tentative-${i}`}>
+              {dateLisible(t.le, true)} · {libelleIssue(t.issue)} · connexion {t.ip}
+            </Text>
+          ))}
+          {diag.verrou && diag.verrou.echecs > 0 ? (
+            <Text style={[attenue, { fontSize: 12 }]}>
+              Identifiant : {diag.verrou.echecs} échec{diag.verrou.echecs > 1 ? 's' : ''} récent{diag.verrou.echecs > 1 ? 's' : ''}
+              {diag.verrou.jusqua > diag.heure ? `, verrouillé jusqu’à ${new Date(diag.verrou.jusqua).toLocaleTimeString('fr-FR')}` : ''}.
+            </Text>
+          ) : null}
+          {diag.adresses
+            .filter(a => a.jusqua > diag.heure)
+            .map(a => (
+              <Text key={a.ip} style={[attenue, { fontSize: 12 }]}>
+                Connexion Internet {a.ip} bloquée jusqu’à {new Date(a.jusqua).toLocaleTimeString('fr-FR')} ({a.echecs} échecs, tous comptes confondus).
+              </Text>
+            ))}
+          <Text style={[attenue, { fontSize: 11 }]}>Ni mot de passe ni adresse complète ne sont gardés : seulement la date, la cause et le début de l’adresse.</Text>
+          <View style={commun.actions}>
+            <BoutonHub theme={theme} titre="Actualiser" onPress={charger} testID="admin-diagnostic-actualiser" />
+            {controle.onDebloquerConnexion && (estBloque(diag) || (diag.verrou?.echecs ?? 0) > 0) ? (
+              <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Débloquer" onPress={debloquer} desactive={Boolean(outils.enCours)} testID="admin-diagnostic-debloquer" />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+    </View>
+  );
 }

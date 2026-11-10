@@ -98,7 +98,15 @@ export interface Profil {
   titulaire?: 'actif' | 'en-attente';
   /** Vue de l'administrateur : identifiant du gestionnaire qui a créé ce compte, s'il y en a un. */
   creePar?: string;
+  /**
+   * Vue de l'administrateur : le prénom de ce compte manque dans le bloc privé (illisible, perdu) ;
+   * `nom` vaut alors `NOM_INCONNU`. Ce texte n'est JAMAIS enregistré comme prénom (annuaire.ts).
+   */
+  nomInconnu?: boolean;
 }
+
+/** Texte affiché à la place d'un prénom que l'administrateur ne peut pas relire (jamais enregistré). */
+export const NOM_INCONNU = '(prénom inconnu)';
 
 const PRINCIPAL: Profil = { id: ID_PRINCIPAL, nom: 'Moi', admin: true, creeLe: '' };
 const MOTIF_ID = /^[a-z0-9]{6,16}$/;
@@ -285,7 +293,13 @@ export function renommerProfil(profils: readonly Profil[], id: string, nom: stri
   if (profils.some(p => p.id !== id && p.nom.toLowerCase() === propre.toLowerCase())) {
     throw new ErreurProfil(`Un profil « ${propre} » existe déjà.`);
   }
-  return profils.map(p => (p.id === id ? { ...p, nom: propre } : p));
+  return profils.map(p => {
+    if (p.id !== id) return p;
+    // Un prénom saisi remplace le texte de remplacement : le compte est rescellé avec lui.
+    const renomme: Profil = { ...p, nom: propre };
+    delete renomme.nomInconnu;
+    return renomme;
+  });
 }
 
 /** Change les apps ouvertes à un ami ; l'administrateur, lui, voit tout. */

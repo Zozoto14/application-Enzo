@@ -66,6 +66,8 @@ import { routeCoffre } from './coffres.mjs';
 import { PAS_SONDAGE_S, modeTempsReel } from './avis.mjs';
 import { lireA2f, routeA2f, verifierCodeConnexion } from './a2f.mjs';
 import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme, selLeurre } from './sessions.mjs';
+import { attenteApres, attenteIp as attenteIpPartagee, echecIp as echecIpPartage, noterTentative } from './connexions.mjs';
+import { routeDiagnosticConnexions } from './diagnostic.mjs';
 
 export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
@@ -485,9 +487,8 @@ const DUREE_MAX_INVITATION_MS = 90 * 86_400_000;
 const GARDE_TOMBE_S = 30 * 86_400;
 const ESSAIS_LIBRES_IDENTIFIANT = 5;
 const ATTENTE_MAX_IDENTIFIANT_S = 3600;
-const ESSAIS_LIBRES_IP = 10;
-const ATTENTE_MAX_IP_S = 900;
-const limitesIp = new Map();
+/** Une heure sans échec sur un identifiant : son compteur repart de zéro (une faute de frappe par jour ne s'accumule plus). */
+const OUBLI_IDENTIFIANT_MS = 3600_000;
 
 /** Adresse IP du client, posée par le pont HTTP du serveur Node (esport/serveur/commun.mjs). */
 export const ENTETE_ADRESSE_CLIENT = 'X-Adresse-Client';
@@ -496,28 +497,11 @@ export function adresseIp(requete) {
   return requete.headers.get(ENTETE_ADRESSE_CLIENT) ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue');
 }
 
-/** Délai à attendre (secondes) après `echecs` échecs, au-delà de `libres` essais. */
-export function attenteApres(echecs, libres, max, base = 30) {
-  if (echecs < libres) return 0;
-  return Math.min(max, base * 2 ** (echecs - libres));
-}
+export { attenteApres };
 
-function attenteIp(ip, maintenant) {
-  const l = limitesIp.get(ip);
-  return l && l.jusqua > maintenant ? Math.ceil((l.jusqua - maintenant) / 1000) : 0;
-}
-
-function echecIp(ip, maintenant) {
-  if (limitesIp.size > 5000) limitesIp.clear();
-  const l = limitesIp.get(ip) ?? { echecs: 0, jusqua: 0 };
-  // Un quart d'heure sans échec : on repart de zéro.
-  if (l.dernier && maintenant - l.dernier > 900_000) l.echecs = 0;
-  l.echecs++;
-  l.dernier = maintenant;
-  const attente = attenteApres(l.echecs, ESSAIS_LIBRES_IP, ATTENTE_MAX_IP_S, 5);
-  l.jusqua = attente > 0 ? maintenant + attente * 1000 : 0;
-  limitesIp.set(ip, l);
-}
+// Limites par adresse IP et journal des tentatives : dans la boîte (tous les processus), voir connexions.mjs.
+const attenteIp = (env, ip, maintenant) => attenteIpPartagee(env, ip, maintenant);
+const echecIp = (env, ip, maintenant) => echecIpPartage(env, ip, maintenant);
 
 function tropDeTentatives(attenteS) {
   const r = reponse({ erreur: 'Trop de tentatives : réessayez plus tard.', motif: 'trop-de-tentatives', attente: attenteS }, 429);
@@ -539,6 +523,16 @@ async function empreinteHex(texte) {
 async function lireJsonKv(env, cle) {
   try {
     const brut = await env.BOITE.get(cle);
+    return brut ? JSON.parse(brut) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Comme lireJsonKv, mais une panne de la boîte LÈVE (seul un contenu illisible vaut « absent »). */
+async function lireJsonKvStrict(env, cle) {
+  const brut = await env.BOITE.get(cle);
+  try {
     return brut ? JSON.parse(brut) : undefined;
   } catch {
     return undefined;
@@ -617,16 +611,18 @@ async function invitations(requete, env, portee, id, action) {
 
   // Routes publiques : l'ami n'a pas encore de jeton.
   const ip = adresseIp(requete);
-  const attente = attenteIp(ip, maintenant);
+  const attente = await attenteIp(env, ip, maintenant);
   if (attente > 0) return tropDeTentatives(attente);
   const lue = await lireJsonKv(env, `inv:${id}`);
   if (!lue) {
-    echecIp(ip, maintenant);
+    await echecIp(env, ip, maintenant);
     return reponse({ erreur: 'Invitation introuvable.', motif: 'inconnue' }, 404);
   }
   const principale = lue.alias ? await lireJsonKv(env, `inv:${lue.alias}`) : lue;
   const etat = principale ? etatInvitation(principale, maintenant) : 'revoquee';
   if (etat !== 'active') {
+    // Diagnostic du Fondateur : une invitation expirée ou déjà servie explique un « ça ne marche pas ».
+    if (lue.profil) await noterTentative(env, lue.profil, `invitation-${etat === 'utilisee' ? 'utilisee' : etat === 'expiree' ? 'expiree' : 'revoquee'}`, ip, maintenant);
     return reponse({ erreur: MOTIFS_INVITATION[etat], motif: etat }, 410);
   }
   if (action === undefined && requete.method === 'GET') {
@@ -636,7 +632,7 @@ async function invitations(requete, env, portee, id, action) {
     const corps = await corpsJson(requete);
     const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
     if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), lue.verif)) {
-      echecIp(ip, maintenant);
+      await echecIp(env, ip, maintenant);
       return reponse({ erreur: 'Preuve refusée.', motif: 'preuve' }, 403);
     }
     if (await env.BOITE.get(`revoque:${principale.profil}`)) return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
@@ -646,10 +642,11 @@ async function invitations(requete, env, portee, id, action) {
     const corps = await corpsJson(requete);
     const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
     if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), lue.verif)) {
-      echecIp(ip, maintenant);
+      await echecIp(env, ip, maintenant);
       return reponse({ erreur: 'Preuve refusée.', motif: 'preuve' }, 403);
     }
     const idPrincipal = lue.alias ?? id;
+    await noterTentative(env, principale.profil, 'invitation-ouverte', ip, maintenant);
     const tombe = { ...principale, etat: 'utilisee', utiliseeLe: maintenant };
     delete tombe.charge;
     await ecrireInvitation(env, idPrincipal, tombe, maintenant);
@@ -713,10 +710,10 @@ const MOTIF_COMPTE_OU_PRINCIPAL = /^(principal|[a-z0-9]{6,16})$/;
 
 /** Échec de preuve (mot de passe faux OU identifiant inconnu : même réponse, mêmes délais). */
 async function echecPreuve(env, h, ip, maintenant, limite) {
-  echecIp(ip, maintenant);
+  await echecIp(env, ip, maintenant);
   const echecs = limite.echecs + 1;
   const attenteS = attenteApres(echecs, ESSAIS_LIBRES_IDENTIFIANT, ATTENTE_MAX_IDENTIFIANT_S);
-  await env.BOITE.put(`limite:acces:${h}`, JSON.stringify({ echecs, jusqua: attenteS > 0 ? maintenant + attenteS * 1000 : 0 }), { expirationTtl: 86_400 });
+  await env.BOITE.put(`limite:acces:${h}`, JSON.stringify({ echecs, jusqua: attenteS > 0 ? maintenant + attenteS * 1000 : 0, dernier: maintenant }), { expirationTtl: 86_400 });
   return reponse({ erreur: 'Identifiant ou mot de passe incorrect.', motif: 'mot-de-passe', ...(attenteS > 0 ? { attente: attenteS } : { restants: ESSAIS_LIBRES_IDENTIFIANT - echecs }) }, 403);
 }
 
@@ -767,9 +764,14 @@ async function acces(requete, env, portee, h, action) {
   }
 
   const ip = adresseIp(requete);
-  const attente = attenteIp(ip, maintenant);
-  if (attente > 0) return tropDeTentatives(attente);
-  const depot = await lireJsonKv(env, `acces:${h}`);
+  const attente = await attenteIp(env, ip, maintenant);
+  // Lecture STRICTE : une panne de la base (délai dépassé, connexions épuisées) n'est pas « identifiant
+  // inconnu » — avant, elle répondait « mot de passe incorrect » et comptait un échec (verrou au hasard).
+  const depot = await lireJsonKvStrict(env, `acces:${h}`);
+  if (attente > 0) {
+    if (action === 'ouvrir' || action === 'secours') await noterTentative(env, depot?.compte ?? `h:${h}`, 'adresse-limitee', ip, maintenant);
+    return tropDeTentatives(attente);
+  }
   if (action === undefined && requete.method === 'GET') {
     // Identifiant inconnu : sels stables tirés du jeton maître, même forme de réponse (pas d'énumération).
     if (!depot) {
@@ -781,11 +783,17 @@ async function acces(requete, env, portee, h, action) {
   if ((action === 'ouvrir' || action === 'secours') && requete.method === 'POST') {
     const limite = (await lireJsonKv(env, `limite:acces:${h}`)) ?? { echecs: 0, jusqua: 0 };
     if (limite.jusqua > maintenant) {
+      await noterTentative(env, depot?.compte ?? `h:${h}`, 'verrouille', ip, maintenant);
       return tropDeTentatives(Math.ceil((limite.jusqua - maintenant) / 1000));
     }
+    // Une heure sans échec : le compteur de l'identifiant repart de zéro.
+    if (limite.echecs > 0 && limite.dernier && maintenant - Number(limite.dernier) > OUBLI_IDENTIFIANT_MS) limite.echecs = 0;
     const corps = await corpsJson(requete);
     const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
-    if (!depot || !/^[0-9a-f]{64}$/.test(preuve)) return echecPreuve(env, h, ip, maintenant, limite);
+    if (!depot || !/^[0-9a-f]{64}$/.test(preuve)) {
+      await noterTentative(env, depot?.compte ?? `h:${h}`, depot ? 'mauvais-mot-de-passe' : 'compte-introuvable', ip, maintenant);
+      return echecPreuve(env, h, ip, maintenant, limite);
+    }
     const empreinte = await empreinteHex(preuve);
     let charge;
     let indexSecours;
@@ -795,9 +803,13 @@ async function acces(requete, env, portee, h, action) {
       indexSecours = (depot.secours?.entrees ?? []).findIndex(e => egal(empreinte, e.verif));
       if (indexSecours >= 0) charge = depot.secours.entrees[indexSecours].charge;
     }
-    if (!charge) return echecPreuve(env, h, ip, maintenant, limite);
+    if (!charge) {
+      await noterTentative(env, depot.compte, 'mauvais-mot-de-passe', ip, maintenant);
+      return echecPreuve(env, h, ip, maintenant, limite);
+    }
     // Compte révoqué : annoncé seulement après une preuve juste.
     if (depot.compte !== 'principal' && (await env.BOITE.get(`revoque:${depot.compte}`))) {
+      await noterTentative(env, depot.compte, 'revoque', ip, maintenant);
       return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
     }
     // Validation en deux étapes (version 10, relais/a2f.mjs) : le code est vérifié ICI, avant de rendre
@@ -807,14 +819,16 @@ async function acces(requete, env, portee, h, action) {
       if (a2f) {
         const v = await verifierCodeConnexion(env, depot.compte, a2f, typeof corps?.code === 'string' ? corps.code : '', maintenant);
         if (!v.ok) {
-          if (v.corps.motif === 'a2f-code') echecIp(ip, maintenant);
+          await noterTentative(env, depot.compte, v.corps.motif === 'a2f-requis' ? 'a2f-requis' : 'a2f-code', ip, maintenant);
+          if (v.corps.motif === 'a2f-code') await echecIp(env, ip, maintenant);
           const r = reponse(v.corps, v.statut);
           if (v.attente) r.headers.set('Retry-After', String(v.attente));
           return r;
         }
       }
     }
-    if (limite.echecs > 0) await env.BOITE.delete(`limite:acces:${h}`);
+    if (limite.echecs > 0 || limite.dernier) await env.BOITE.delete(`limite:acces:${h}`);
+    await noterTentative(env, depot.compte, indexSecours !== undefined ? 'succes-secours' : 'succes', ip, maintenant);
     // Le Fondateur reçoit un jeton de SESSION (le jeton maître ne quitte jamais le serveur).
     const jeton = depot.compte === 'principal' ? await creerSession(env.BOITE, 'principal', maintenant) : undefined;
     return reponse({ compte: depot.compte, charge, ...(jeton ? { jeton } : {}), ...(indexSecours !== undefined ? { secours: indexSecours } : {}) });
@@ -862,16 +876,20 @@ async function verifierJeton(requete, env, portee) {
   // L'adresse vue est celle du serveur Esport : celui-ci transmet celle du navigateur dans
   // X-Forwarded-For, prise ici en premier (sinon tous les comptes partageraient un compteur).
   const ip = (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || adresseIp(requete);
-  const attente = attenteIp(ip, maintenant);
+  const attente = await attenteIp(env, ip, maintenant);
   if (attente > 0) return tropDeTentatives(attente);
   if (!portee) {
-    echecIp(ip, maintenant);
+    await echecIp(env, ip, maintenant);
+    // Jeton de profil illisible ou signé par un autre jeton maître : noté au compte qu'il annonce (diagnostic).
+    const annonce = /^Bearer\s+p1\.([a-z0-9]{6,16})\./i.exec(requete.headers.get('Authorization') ?? '');
+    if (annonce) await noterTentative(env, annonce[1], 'jeton-refuse', ip, maintenant);
     return reponse({ valide: false, revoque: false, version: VERSION_RELAIS });
   }
   if (portee.maitre) {
     return reponse({ valide: true, revoque: false, compte: 'principal', maitre: true, version: VERSION_RELAIS });
   }
   const revoque = Boolean(env.BOITE && (await env.BOITE.get(`revoque:${portee.profil}`)));
+  if (revoque) await noterTentative(env, portee.profil, 'revoque', ip, maintenant);
   return reponse({ valide: true, revoque, compte: portee.profil, maitre: false, version: VERSION_RELAIS });
 }
 
@@ -961,9 +979,15 @@ export async function traiterRequete(requete, env, ctx) {
     if (portee?.profil && (await env.BOITE.get(`revoque:${portee.profil}`))) {
       return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
     }
-    return routeInvitation
-      ? invitations(requete, env, portee, routeInvitation[1], routeInvitation[2])
-      : acces(requete, env, portee, routeAcces[1], routeAcces[2]);
+    if (routeInvitation) return invitations(requete, env, portee, routeInvitation[1], routeInvitation[2]);
+    try {
+      return await acces(requete, env, portee, routeAcces[1], routeAcces[2]);
+    } catch (e) {
+      // Panne (base indisponible, délai dépassé) : notée pour le diagnostic, et dite comme telle à l'appareil.
+      if (/^[0-9a-f]{64}$/.test(routeAcces[1]) && routeAcces[2]) await noterTentative(env, `h:${routeAcces[1]}`, 'erreur-serveur', adresseIp(requete));
+      console.error('[relais] connexion : erreur serveur', e?.message ?? e);
+      return reponse({ erreur: 'Erreur du serveur pendant la connexion : réessayez dans un instant.', motif: 'erreur-serveur' }, 503);
+    }
   }
 
   // Vérification de jeton (version 7) : répond aussi pour un jeton refusé ou révoqué.
@@ -1016,6 +1040,12 @@ export async function traiterRequete(requete, env, ctx) {
   }
   // Jeton de profil d'un compte (Fondateur : jeton maître ou SESSION) : un navigateur connecté par
   // identifiant n'a pas le jeton maître et ne peut pas le calculer lui-même.
+  // Diagnostic des connexions d'un compte (Fondateur) : dernières tentatives, verrou, « Débloquer ».
+  const routeDiagnostic = /^\/v10\/diagnostic\/connexions\/([^/]+)\/?$/.exec(pathname);
+  if (routeDiagnostic) {
+    if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+    return routeDiagnosticConnexions(requete, env, portee, decodeURIComponent(routeDiagnostic[1]), { reponse, erreur });
+  }
   const routeJetonProfil = /^\/v10\/jeton-profil\/([^/]+)\/?$/.exec(pathname);
   if (routeJetonProfil) {
     if (requete.method !== 'GET') return erreur('Méthode non autorisée.', 405);

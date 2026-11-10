@@ -56,10 +56,10 @@ test('jeton faux, forgé ou absent : non valide, sans compte', async () => {
   }
 });
 
-test('anti-force brute : trop d’échecs depuis une adresse → 429', async () => {
+test('anti-force brute : trop d’échecs depuis une adresse → 429 (seuil large : adresses partagées)', async () => {
   const env = { JETON, BOITE: kv() };
   let dernier;
-  for (let i = 0; i < 12; i++) dernier = await verifier(env, `faux-jeton-${i}-0123456789abcdef`, { adresse: '203.0.113.250' });
+  for (let i = 0; i < 36; i++) dernier = await verifier(env, `faux-jeton-${i}-0123456789abcdef`, { adresse: '203.0.113.250' });
   assert.equal(dernier.statut, 429);
   // Une autre adresse n'est pas touchée.
   assert.equal((await verifier(env, JETON, { adresse: '203.0.113.251' })).corps.valide, true);

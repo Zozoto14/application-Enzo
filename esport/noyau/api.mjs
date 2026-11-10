@@ -109,6 +109,14 @@ function reponseErreur(e) {
   return reponseJson({ erreur: 'Erreur interne du serveur Esport.', code: 'interne' }, 500);
 }
 
+/** Adresse lisible mais pas identifiante (journal du serveur) : IPv4 sans son dernier octet. */
+export function masquerAdresse(ip) {
+  const a = String(ip ?? '').replace(/^::ffff:/i, '');
+  const v4 = /^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/.exec(a);
+  if (v4) return `${v4[1]}.x`;
+  return a.includes(':') ? `${a.split(':').slice(0, 3).join(':')}:…` : 'inconnue';
+}
+
 export function adresseIp(requete) {
   return requete.headers.get('X-Adresse-Client') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || null);
 }
@@ -338,12 +346,19 @@ export function creerApi({
     if (partage !== undefined) return partage;
     if (chemin === '/session' && m === 'POST') {
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
-      await limite('session', ip);
-      const qui = await verifierJeton(jetonPorteur(requete), ip);
+      let qui;
+      try {
+        await limite('session', ip);
+        qui = await verifierJeton(jetonPorteur(requete), ip);
+      } catch (e) {
+        // Journal du serveur (diagnostic des connexions, docs/diagnostic-comptes.md) : code et adresse masquée, jamais le jeton.
+        console.warn(`[esport] session refusée : ${e?.code ?? 'erreur'} (adresse ${masquerAdresse(ip)})`);
+        throw e;
+      }
       // Compte pré-enregistré par le Fondateur : sa première session (jeton validé par le relais) l'active.
       await cp.activer(qui.compte);
       const { jeton, expire } = await creerSession(cleSession, qui, maintenant());
-      return { session: jeton, expire: new Date(expire).toISOString(), fonctions: FONCTIONS, ...(await s.moi(qui)) };
+      return { session: jeton, expire: new Date(expire).toISOString(), heure: maintenant(), fonctions: FONCTIONS, ...(await s.moi(qui)) };
     }
 
     // ---- Tout le reste : session Esport obligatoire (`acteurImpose` : contrôle d'accès du temps réel).

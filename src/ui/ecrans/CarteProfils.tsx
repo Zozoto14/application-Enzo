@@ -130,6 +130,18 @@ export interface ControleProfils {
   /** État de l'accès sur le relais (révoqué ?), pour la fiche. */
   etatConnexion?(id: string): Promise<{ revoque?: boolean }>;
   /**
+   * Diagnostic (Fondateur) : dernières tentatives de connexion du compte relevées par le relais
+   * (codes d'issue, adresses masquées), verrous en cours. `undefined` : relais trop ancien.
+   */
+  diagnosticConnexion?(id: string): Promise<import('../../hub/admin/diagnostic').DiagnosticConnexion | undefined>;
+  /** « Débloquer » : lève le verrou de l'identifiant du compte et la limite des adresses vues. Rend le nombre de verrous levés. */
+  onDebloquerConnexion?(id: string): Promise<number>;
+  /**
+   * Répare les prénoms perdus (« (prénom inconnu) ») à partir de candidats (journal, pseudos Esport),
+   * chacun vérifié contre l'empreinte du compte. Rend les prénoms retrouvés et les comptes restants.
+   */
+  onReparerNoms?(candidats: Readonly<Record<string, readonly string[]>>): Promise<{ repares: Record<string, string>; restants: string[] }>;
+  /**
    * Compte d'un ami ouvert sur un navigateur relié : de quoi connecter un AUTRE
    * appareil (lien à scanner, qui ne porte que l'accès à SON compte ; il faudra
    * encore son prénom et son mot de passe), et le lien de connexion par identifiant.

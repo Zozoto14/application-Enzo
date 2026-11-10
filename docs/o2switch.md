@@ -954,6 +954,7 @@ seulement après une semaine sans souci ici.
 
 | Ce que vous voyez | Que faire |
 | --- | --- |
+| Des membres n'arrivent pas à se connecter avec le bon mot de passe, ou « (prénom inconnu) » dans l'Administration | [diagnostic-comptes.md](diagnostic-comptes.md) : Administration › Utilisateurs › fiche › « Diagnostic de connexion » (et « Débloquer ») ; dans le terminal : `node relais/serveur/diagnostic-connexions.mjs` (après le `source …/activate`) et `grep -hF "[relais] connexion" ~/logs/relais-passenger.log \| tail -n 50`. |
 | Page « We're sorry, but something went wrong » ou erreur 503 sur esport./relais. | Lisez le journal de l'app : `tail -n 50 ~/logs/esport-passenger.log` (ou `relais-passenger.log`). Sans réglage de journal, Passenger écrit dans `stderr.log` du dossier de l'app (`~/application-enzo/esport/stderr.log`). Redémarrer : **Setup Node.js App** › l'app › **Restart**, ou `touch ~/application-enzo/esport/tmp/restart.txt`. |
 | Tickets Discord : « Connexion Discord : Hors ligne » | Ouvrez **Tickets › Configuration › Connexion** : le **diagnostic** dit quelle condition manque (jeton, serveur, catégorie, activation, app arrêtée, `URL_PUBLIQUE`, tâche cron jamais vue, avec la commande à copier). Détails : [esport/tickets.md](esport/tickets.md). |
 | `/sante` répond « Serveur Esport pas encore configuré » avec une liste de problèmes | Le fichier `~/.appdashboard/esport.env` manque une valeur (la liste dit laquelle). Corrigez, puis redémarrez l'app. |

@@ -77,6 +77,7 @@ import {
   appliquerAccesGeres,
   compteGere,
   roleDuCompte,
+  reparerNomsAdmin,
 } from '../src/profils/annuaire';
 import { changerDEspace } from '../src/profils/espace';
 import {
@@ -171,7 +172,7 @@ import {
   type LienInvitation,
   type PolitiqueMdp,
 } from '../src/profils/invitation';
-import { activerA2f, compteRevoque, desactiverA2f, etatA2f, lireThemePublic, publierThemePublic, revoquerCompte, supprimerAcces, versionRelais } from '../src/sync/relais/connexionAmis';
+import { activerA2f, compteRevoque, debloquerConnexions, desactiverA2f, diagnosticConnexions, etatA2f, lireThemePublic, publierThemePublic, revoquerCompte, supprimerAcces, versionRelais } from '../src/sync/relais/connexionAmis';
 import { genererSecretTotp, uriOtpauth } from '../src/securite/totp';
 import type { ServicesA2f } from '../src/hub/ReglageA2f';
 import { espacesDuRelais } from '../src/sync/relais/espaces';
@@ -1842,6 +1843,8 @@ function Racine() {
         const ami = profils.find(p => p.id === id && !p.admin);
         if (!ami) throw new Error('Compte introuvable.');
         exiger(profil, 'regenerer-identifiants', ami);
+        // Son identifiant de connexion EST son prénom : jamais d'invitation au nom du texte de remplacement.
+        if (ami.nomInconnu) throw new Error('Le prénom de ce compte est à réparer d’abord (bouton « Réparer les prénoms » en haut de la liste).');
         const maitre = await liaisonMaitre();
         if (!maitre) throw new Error('Cet appareil ne connaît pas encore le serveur (connectez-vous avec votre identifiant) : l’invitation passe par lui.');
         // Le coffre le plus récent de l'ami (s'il a changé de mot de passe ailleurs) avant de le réinitialiser.
@@ -1901,6 +1904,31 @@ function Racine() {
         const maitre = await liaisonMaitre();
         return maitre ? { revoque: await compteRevoque(maitre, id) } : {};
       },
+      diagnosticConnexion: async (id: string) => {
+        exigerAdmin();
+        const ami = profils.find(p => p.id === id && !p.admin);
+        if (!ami) throw new Error('Compte introuvable.');
+        const maitre = await liaisonMaitre();
+        if (!maitre) throw new Error('Cet appareil ne connaît pas encore le serveur (connectez-vous avec votre identifiant).');
+        return diagnosticConnexions(maitre, id, ami.nomInconnu ? undefined : empreinteIdentifiant(ami.nom));
+      },
+      onDebloquerConnexion: async (id: string) => {
+        exigerAdmin();
+        const ami = profils.find(p => p.id === id && !p.admin);
+        if (!ami) throw new Error('Compte introuvable.');
+        exiger(profil, 'etat-ami', ami);
+        const maitre = await liaisonMaitre();
+        if (!maitre) throw new Error('Cet appareil ne connaît pas encore le serveur (connectez-vous avec votre identifiant).');
+        return debloquerConnexions(maitre, id, ami.nomInconnu ? undefined : empreinteIdentifiant(ami.nom));
+      },
+      onReparerNoms: async (candidats: Readonly<Record<string, readonly string[]>>) => {
+        exigerAdmin();
+        return avecCles(async (cles, annuaire) => {
+          const bilan = reparerNomsAdmin(annuaire, cles, candidats);
+          if (Object.keys(bilan.repares).length > 0) await rafraichirAdmin(bilan.annuaire, true);
+          return { repares: bilan.repares, restants: bilan.restants };
+        });
+      },
       onRegenerer: async (id: string) => {
         exigerAdmin();
         const ami = profils.find(p => p.id === id);
@@ -1908,6 +1936,7 @@ function Racine() {
           throw new Error('Profil introuvable.');
         }
         exiger(profil, 'regenerer-identifiants', ami);
+        if (ami.nomInconnu) throw new Error('Le prénom de ce compte est à réparer d’abord (bouton « Réparer les prénoms » en haut de la liste).');
         await effacerFichiers(id);
         // Nouvelle clé maîtresse : l'ancien coffre serveur de ce compte ne s'ouvrirait plus, il est effacé.
         const maitreRegen = await liaisonMaitre();

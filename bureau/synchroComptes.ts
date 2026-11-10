@@ -86,6 +86,8 @@ export const CLES_MEMOIRE = {
   /** Ancienne clé (liaison de l'administrateur en attente, voir actif.ts). */
   liaisonHistorique: 'applibourse.liaison',
   annuaire: 'applibourse.synchro.annuaire',
+  /** Blocs privés de l'annuaire écartés sans clés (avant déverrouillage), scellés, à réunir au prochain tour déverrouillé. */
+  privesEcartes: 'applibourse.synchro.privesEcartes',
   admin: 'applibourse.synchro.admin',
   fichiers: 'applibourse.synchro.fichiers',
   /** Par compte : empreinte de la projection publiée / date de la projection et du retour lus. */
@@ -307,9 +309,10 @@ export async function synchroniserAnnuaire(o: OptionsAnnuaireAdmin): Promise<{ a
   const document = dateDistante ? await lireDocument(espaces, ESPACE_ADMIN, 'annuaire') : undefined;
   const distant = document ? lireDocumentLww(document.brut) : undefined;
   const cles = o.cles?.();
+  const ecartes = lireJson<unknown[]>(o.memoire, CLES_MEMOIRE.privesEcartes, []).filter((b): b is string => typeof b === 'string');
   let fusion;
   try {
-    fusion = fusionnerAnnuaire(local, etat, distant, maintenant, cles);
+    fusion = fusionnerAnnuaire(local, etat, distant, maintenant, cles, undefined, ecartes);
   } finally {
     if (cles) {
       cles.annuaire.fill(0);
@@ -330,6 +333,7 @@ export async function synchroniserAnnuaire(o: OptionsAnnuaireAdmin): Promise<{ a
     etatSuivant = { ...etatSuivant, distantLu: document.date };
   }
   ecrireJson(o.memoire, CLES_MEMOIRE.annuaire, etatSuivant);
+  if (fusion.privesEcartes.length > 0 || ecartes.length > 0) ecrireJson(o.memoire, CLES_MEMOIRE.privesEcartes, fusion.privesEcartes);
   return { annuaire: fusion.changeIci ? fusion.annuaire : local, change: fusion.changeIci, depose, retires: fusion.comptesRetires };
 }
 

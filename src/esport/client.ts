@@ -725,6 +725,8 @@ export interface ConfigEsport {
  * `surcharge` : le serveur annonce « surcharge-methode » (réponse de /session).
  */
 const sessions = new Map<string, { session: string; expire: number; surcharge: boolean; fonctions?: string[] }>();
+/** Ouvertures de session en cours, par adresse et jeton du relais (une seule à la fois). */
+const ouvertures = new Map<string, Promise<string>>();
 
 /**
  * « Le premier qui enregistre a la main » (docs/esport/temps-reel.md) : version d'un objet lue par un écran
@@ -770,6 +772,7 @@ const STATUTS_FRONTAL = [403, 405, 406, 411, 501];
 
 export function oublierSessions(): void {
   sessions.clear();
+  ouvertures.clear();
 }
 
 /** Écouteurs des appels d'écriture réussis (statistiques d'usage : actions clés), voir src/esport/usage. */
@@ -986,25 +989,44 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     return lu as T;
   }
 
-  async function session(forcer = false): Promise<string> {
+  async function session(forcer = false, perimee?: string): Promise<string> {
     const connue = sessions.get(cle);
     if (!forcer && connue && connue.expire - 60_000 > maintenant()) return connue.session;
-    const r = await brut<Moi & { session: string; expire: string; fonctions?: unknown }>('/session', 'POST', {}, config.jetonRelais);
-    const fonctions = Array.isArray(r.fonctions) ? r.fonctions.filter((f): f is string => typeof f === 'string') : [];
-    sessions.set(cle, { session: r.session, expire: Date.parse(r.expire), surcharge: fonctions.includes(FONCTION_SURCHARGE), fonctions });
-    return r.session;
+    // Une session neuve vient d'arriver pendant qu'une requête échouait avec l'ancienne : on la reprend.
+    if (forcer && perimee !== undefined && connue && connue.session !== perimee && connue.expire > maintenant()) return connue.session;
+    // Une seule ouverture à la fois : les requêtes lancées ensemble (chargement d'une page, session expirée)
+    // attendent la même réponse au lieu d'ouvrir chacune une session (rafale de POST /session : limite de
+    // débit atteinte pour tout le réseau du club, « Trop de demandes » au hasard).
+    const enVol = ouvertures.get(cle);
+    if (enVol) return enVol;
+    const ouverture = (async () => {
+      const r = await brut<Moi & { session: string; expire: string; fonctions?: unknown }>('/session', 'POST', {}, config.jetonRelais);
+      const fonctions = Array.isArray(r.fonctions) ? r.fonctions.filter((f): f is string => typeof f === 'string') : [];
+      // Échéance relative : une horloge d'appareil décalée ne fait ni garder une session expirée, ni en rouvrir sans cesse.
+      const restant = Date.parse(r.expire) - (typeof (r as { heure?: unknown }).heure === 'number' ? ((r as { heure?: number }).heure as number) : Date.parse(r.expire) - 3_600_000);
+      const expire = maintenant() + Math.max(60_000, Math.min(Number.isFinite(restant) ? restant : 3_600_000, 3_600_000));
+      sessions.set(cle, { session: r.session, expire, surcharge: fonctions.includes(FONCTION_SURCHARGE), fonctions });
+      return r.session;
+    })();
+    ouvertures.set(cle, ouverture);
+    try {
+      return await ouverture;
+    } finally {
+      if (ouvertures.get(cle) === ouverture) ouvertures.delete(cle);
+    }
   }
 
   async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4]): Promise<T> {
     let r: T;
+    let jetonUtilise: string | undefined;
     const surcharge = () => sessions.get(cle)?.surcharge ?? false;
     try {
-      const jeton = await session();
-      r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge());
+      jetonUtilise = await session();
+      r = await brut<T>(chemin, methode, corps, jetonUtilise, binaire, surcharge());
     } catch (e) {
-      // Session expirée (ou serveur redémarré avec une nouvelle clé) : une nouvelle, une fois.
+      // Session expirée (ou serveur redémarré avec une nouvelle clé) : une nouvelle, une fois (partagée par les requêtes en cours).
       if (e instanceof ErreurEsport && e.code === 'session') {
-        const jeton = await session(true);
+        const jeton = await session(true, jetonUtilise);
         r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge());
       } else throw e;
     }

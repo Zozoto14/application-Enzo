@@ -85,7 +85,7 @@ export function comptesHubSansEsport(comptes: readonly CompteEsport[], profils: 
   if (!profils || !complete) return [];
   const connus = new Set(comptes.map(c => c.compte));
   return profils
-    .filter(p => p.id !== 'principal' && !p.admin && p.actif !== false && aAccesEsport(p) && !connus.has(p.id))
+    .filter(p => p.id !== 'principal' && !p.admin && !p.nomInconnu && p.actif !== false && aAccesEsport(p) && !connus.has(p.id))
     .map(p => ({
       compte: p.id,
       pseudo: p.nom,
@@ -99,4 +99,25 @@ export function comptesHubSansEsport(comptes: readonly CompteEsport[], profils: 
       horsEsport: true,
     }))
     .sort((a, b) => a.pseudo.localeCompare(b.pseudo, 'fr'));
+}
+
+/**
+ * Pseudos Esport des comptes, par identifiant (Fondateur : tous les comptes connus du serveur Esport).
+ * Sert à nommer les comptes dont le prénom manque dans l'Administration, et de candidat à la
+ * réparation (vérifié contre l'empreinte du compte, rien n'est deviné). Vide si l'Esport est
+ * inactif ou injoignable : jamais bloquant.
+ */
+export async function pseudosEsport(): Promise<Record<string, string>> {
+  try {
+    const { config } = await trouverConfig(fabrique.relais());
+    if (!config) return {};
+    const annuaire = await fabrique.client(config).annuaire();
+    const sortie: Record<string, string> = {};
+    for (const c of annuaire.comptes ?? []) {
+      if (c && typeof c.compte === 'string' && typeof c.pseudo === 'string' && c.pseudo.trim()) sortie[c.compte] = c.pseudo.trim().slice(0, 30);
+    }
+    return sortie;
+  } catch {
+    return {};
+  }
 }

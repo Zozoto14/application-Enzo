@@ -111,7 +111,7 @@ test('force brute sur les invitations : délai progressif par adresse IP', async
   const env = { JETON, BOITE: kv() };
   const ip = nouvelleIp();
   let statut = 0;
-  for (let i = 0; i < 12; i++) statut = (await appel(env, `/invitations/${hex(31, 'e')}${i.toString(16)}`, { ip })).status;
+  for (let i = 0; i < 36; i++) statut = (await appel(env, `/invitations/${hex(30, 'e')}${i.toString(16).padStart(2, '0')}`, { ip })).status;
   assert.equal(statut, 429);
   const r = await appel(env, `/invitations/${ID}`, { ip });
   assert.equal(r.status, 429);
