@@ -83,9 +83,9 @@ export async function salonsAvecOccupant(base, userId) {
   return lignes.map(salonLu).filter(s => s.occupants.some(o => o.id === userId));
 }
 
-/** Salons (hors salons d'équipe de tournoi) dont cette personne est propriétaire. */
+/** Salons des hubs ordinaires (hors salons des hubs d'événement) dont cette personne est propriétaire. */
 export async function salonsDuProprietaire(base, guildId, userId) {
-  return (await base.tous('SELECT * FROM vocaux_salons WHERE guild_id = ? AND proprietaire_id = ? AND equipe_id IS NULL ORDER BY cree_le', [guildId, userId])).map(salonLu);
+  return (await base.tous('SELECT * FROM vocaux_salons WHERE guild_id = ? AND proprietaire_id = ? AND equipe_id IS NULL AND tournoi_id IS NULL ORDER BY cree_le', [guildId, userId])).map(salonLu);
 }
 
 /** Enregistre les champs modifiables d'un salon. */
@@ -112,9 +112,15 @@ export const supprimerLigne = (base, salonId) => base.executer('DELETE FROM voca
 
 /**
  * Surcharges du salon, recalculées depuis son état. `ctx` : `guildId`, `botId`, `rolesStaff`, `rolesEquipe` (rôle de
- * l'équipe et rôles autorisés du hub, salon de tournoi).
+ * l'équipe et rôles autorisés du hub, salon de tournoi), `visibleNonJoignable` (option du hub).
+ *
+ * Salon VERROUILLÉ (dont tout salon d'équipe) : les personnes sans accès (@everyone et les rôles des surcharges de
+ * départ, celles du hub) ont « Se connecter » refusé ; « Voir le salon » leur est REFUSÉ (salon caché, par défaut) ou,
+ * avec l'option « visibles mais pas joignables », ACCORDÉ — sauf si le hub le refusait déjà à @everyone (catégorie
+ * privée : on n'élargit pas). Rôles autorisés, propriétaire, amis, staff, rôle de l'équipe et bot : voir et se
+ * connecter. Salon ouvert : surcharges du hub, plus le propriétaire et le bot.
  */
-export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquipe = [] }) {
+export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquipe = [], visibleNonJoignable = false }) {
   const m = new Map();
   for (const o of s.basePermissions ?? []) {
     if (!o?.id) continue;
@@ -127,8 +133,15 @@ export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquip
     m.set(id, o);
   };
   if (s.verrouille) {
-    regler(guildId, 0, 0n, PV.CONNECTER);
-    for (const r of [...rolesStaff, ...rolesEquipe]) if (r && r !== guildId) regler(r, 0, ENTRER);
+    const admis = new Set([...rolesStaff, ...rolesEquipe].filter(Boolean));
+    const cachePrive = ((m.get(guildId)?.deny ?? 0n) & PV.VOIR) !== 0n;
+    const sansAcces = id => {
+      if (visibleNonJoignable && !cachePrive) regler(id, 0, PV.VOIR, PV.CONNECTER);
+      else regler(id, 0, 0n, PV.VOIR | PV.CONNECTER);
+    };
+    sansAcces(guildId);
+    for (const o of [...m.values()]) if (o.type === 0 && o.id !== guildId && !admis.has(o.id)) sansAcces(o.id);
+    for (const r of admis) if (r !== guildId) regler(r, 0, ENTRER);
     for (const a of s.amis ?? []) regler(a.id, 1, ENTRER);
   }
   if (s.proprietaireId) regler(s.proprietaireId, 1, ENTRER);
@@ -148,18 +161,21 @@ function refusDiscord(r, { renommage = false } = {}) {
  * `mode` (langue des messages des tickets), `rolesEquipe(s)` (async : rôles de l'équipe d'un salon de tournoi).
  */
 async function rolesEquipeDe(ctx, s) {
-  return s.equipeId && ctx.rolesEquipe ? await ctx.rolesEquipe(s) : [];
+  return (s.equipeId || s.tournoiId) && ctx.rolesEquipe ? await ctx.rolesEquipe(s) : [];
 }
 
+/** Option « visibles mais pas joignables » du hub d'un salon. */
+export const visibleDe = (reglages, s) => Boolean(reglages?.hubs?.find(h => h.id === s.hubId)?.visibleNonJoignable);
+
 export async function appliquerSurcharges(ctx, s) {
-  const surcharges = surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe: await rolesEquipeDe(ctx, s) });
+  const surcharges = surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe: await rolesEquipeDe(ctx, s), visibleNonJoignable: visibleDe(ctx.reglages, s) });
   const r = await rest(ctx.fetch, ctx.jetonBot, 'PATCH', `/channels/${s.salonId}`, { permission_overwrites: surcharges }, { raison: 'Esport HQ : salon vocal temporaire' });
   if (!r.ok) throw refusDiscord(r);
   return surcharges;
 }
 
 export async function verrouiller(ctx, s, verrou) {
-  if (s.tournoiId && !verrou) throw new RefusVocal('tournoi_verrou');
+  if (s.equipeId && !verrou) throw new RefusVocal('tournoi_verrou');
   const suivant = { ...s, verrouille: Boolean(verrou) };
   await appliquerSurcharges(ctx, suivant);
   await ecrireSalon(ctx.base, suivant, ctx.maintenant());
@@ -167,7 +183,7 @@ export async function verrouiller(ctx, s, verrou) {
 }
 
 export async function renommer(ctx, s, nom) {
-  if (s.tournoiId) throw new RefusVocal('tournoi_nom');
+  if (s.equipeId) throw new RefusVocal('tournoi_nom');
   const propre = nettoyerNom(nom);
   if (!propre) throw new RefusVocal('nom_invalide');
   const r = await rest(ctx.fetch, ctx.jetonBot, 'PATCH', `/channels/${s.salonId}`, { name: propre }, { raison: 'Esport HQ : renommé par son propriétaire' });
@@ -252,7 +268,9 @@ const bouton = (style, id, cle, opts, desactive = false) => ({ type: 2, style, c
 export function chargePanneau(s, { mode = 'auteur', langue = 'fr', equipe = '' } = {}) {
   const o = { mode, langue };
   const deux = cle => libelleVocal(cle, o);
-  const tournoi = Boolean(s.tournoiId);
+  // Salon d'équipe (événement) : ni renommer, ni déverrouiller, ni liste d'amis. Salon du staff d'un hub d'événement :
+  // contrôles ordinaires.
+  const tournoi = Boolean(s.equipeId);
   const description = tournoi ? tv2('panneau_tournoi', { proprietaire: `<@${s.proprietaireId}>`, equipe }, { ...o, max: 1500 }) : tv2('panneau_texte', { proprietaire: `<@${s.proprietaireId}>` }, { ...o, max: 1500 });
   const amis = s.amis.length ? s.amis.slice(0, 15).map(a => `<@${a.id}>`).join(' ') : deux('aucun');
   return {

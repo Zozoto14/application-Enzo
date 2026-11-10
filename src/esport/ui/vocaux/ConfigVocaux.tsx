@@ -23,6 +23,7 @@ import { Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '..
 import { Badge, ESP, LARGEUR_CONTENU, Squelette, attenue, texte, type Ton } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import type { ContexteBot } from '../bot/sections';
+import { OptionsHub } from './OptionsHub';
 import { SelecteurRepliable, optionsRoles, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -32,7 +33,7 @@ const entier = (v: string): number => {
 };
 const AUCUN = '-';
 
-const hubVide = (modele: string): Hub => ({ id: '', nom: '', categorieId: null, modeleNom: modele, limite: 0, verrouille: false, tournoiId: null, rolesAutorises: [] });
+const hubVide = (modele: string): Hub => ({ id: '', nom: '', categorieId: null, modeleNom: modele, limite: 0, verrouille: false, tournoiId: null, rolesAutorises: [], placerSousHub: true, visibleNonJoignable: false, masquerHub: false, rolesHub: [] });
 
 /** Réglages sous la carte « Salons vocaux temporaires » de l'onglet Bot Esport HQ (registre des fonctionnalités). */
 export function ReglagesVocaux(ctx: ContexteBot) {
@@ -201,6 +202,7 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
                     <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_verrouille')}</Text>
                     <Interrupteur theme={theme} libelle={trVc('hub_verrouille')} valeur={h.verrouille} onChanger={verrouille => hub(i, { verrouille })} testID={`esport-vc-hub-${i}-verrouille`} />
                   </View>
+                  <OptionsHub theme={theme} hub={h} onChanger={m => hub(i, m)} evenement={false} roles={roles} max={conf.choix.limites.roles} testID={`esport-vc-hub-${i}-options`} />
                   <BoutonHub
                     theme={theme}
                     variante="danger"

@@ -603,3 +603,33 @@ test('supprimer un événement sans hub vocal : message général seulement (pas
   expect(screen.queryByTestId('esport-ev-supprimer-hubs')).toBeNull();
   expect(screen.queryByTestId('esport-ev-supprimer-desactive')).toBeNull();
 });
+
+test('rôles staff supplémentaires : lus sur le serveur, choisis (rôle du bot exclu), enregistrés avec l’événement', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-staff-roles-sup-lire'));
+  await deplier('esport-ev-staff-roles-sup');
+  expect(screen.queryByTestId('esport-ev-staff-roles-sup-720000000000000002')).toBeNull();
+  await choisirDans('esport-ev-staff-roles-sup', '720000000000000001');
+  await fireEvent.press(screen.getByTestId('esport-ev-enregistrer'));
+  expect(await screen.findByText('Enregistré.')).toBeTruthy();
+  const patch = appels.filter(a => a.chemin === '/evenements/ev1' && a.methode === 'PATCH').at(-1)!.corps as { discord: { staffRolesSup: string[] } };
+  expect(patch.discord.staffRolesSup).toEqual(['720000000000000001']);
+});
+
+test('vocaux de l’événement : options du hub (sous le hub, visibles mais pas joignables, hub caché par défaut) et nom du salon du staff envoyés', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-voc-ajouter'));
+  expect(screen.getByTestId('esport-ev-voc-options-placer').props.value).toBe(true);
+  expect(screen.getByTestId('esport-ev-voc-options-visible').props.value).toBe(false);
+  expect(screen.getByTestId('esport-ev-voc-options-masquer').props.value).toBe(true);
+  expect(screen.queryByTestId('esport-ev-voc-options-roles-hub-selecteur')).toBeNull();
+  await choisirDans('esport-ev-voc-salon', '752');
+  await fireEvent(screen.getByTestId('esport-ev-voc-options-visible'), 'valueChange', true);
+  await fireEvent(screen.getByTestId('esport-ev-voc-options-placer'), 'valueChange', false);
+  await fireEvent.changeText(screen.getByTestId('esport-ev-voc-modele-staff'), 'Régie {pseudo}');
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
+  expect(await screen.findByTestId('esport-ev-voc-hub-752')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/vocaux' && a.methode === 'POST')!.corps).toMatchObject({ id: '752', placerSousHub: false, visibleNonJoignable: true, masquerHub: true, modeleStaff: 'Régie {pseudo}' });
+});

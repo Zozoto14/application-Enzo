@@ -17,6 +17,16 @@ export interface Hub {
   verrouille: boolean;
   tournoiId: string | null;
   rolesAutorises: string[];
+  /** Salons créés rangés juste sous le hub (oui par défaut). */
+  placerSousHub?: boolean;
+  /** Salons verrouillés visibles mais pas joignables pour les personnes sans accès (sinon cachés ; non par défaut). */
+  visibleNonJoignable?: boolean;
+  /** Hub caché aux personnes sans accès (oui par défaut pour un hub d'événement). */
+  masquerHub?: boolean;
+  /** Hub ordinaire : rôles qui peuvent l'utiliser (exigés pour le cacher). */
+  rolesHub?: string[];
+  /** Hub d'événement : modèle du nom du salon du staff ({pseudo}). */
+  modeleStaff?: string;
 }
 
 export interface ReglagesVocaux {

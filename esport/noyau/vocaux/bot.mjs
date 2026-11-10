@@ -4,7 +4,7 @@
  * Aucun compte Esport lié n'est demandé : tout membre du serveur du club peut gérer SON salon.
  *
  * Qui peut agir sur un salon : son propriétaire, ou le staff (un des rôles du staff réglés, ou un administrateur du
- * serveur). Les autres reçoivent un refus éphémère. Salon d'équipe de tournoi : ni renommer, ni déverrouiller.
+ * serveur). Les autres reçoivent un refus éphémère. Salon d'équipe d'un événement : ni renommer, ni déverrouiller (le salon du staff d'un hub d'événement, si).
  *
  * Identifiants (`custom_id`) : `vc:<action>:<salon>` — `r` (renommer → fenêtre `vc:rm:`), `l` / `u` (verrouiller,
  * déverrouiller), `n` (limite → fenêtre `vc:nm:`), `k` (expulser → menu `vc:ks:`), `a` (liste d'amis → menus `vc:aa:`
@@ -124,7 +124,7 @@ export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fet
     const autres = s.occupants.filter(o => o.id !== acteur(i) && o.id !== ctx.botId);
     switch (action) {
       case 'r':
-        if (s.tournoiId) throw new RefusVocal('tournoi_nom');
+        if (s.equipeId) throw new RefusVocal('tournoi_nom');
         return fenetre(`vc:rm:${s.salonId}`, tv(langue, 'fenetre_renommer'), [{ type: 4, custom_id: 'nom', style: 1, label: tv(langue, 'champ_nom').slice(0, 45), required: true, min_length: 1, max_length: 100, value: s.nom.slice(0, 100) }]);
       case 'l':
         return ok(ctx, await verrouiller(ctx, s, true), tv(langue, 'verrouille_ok'));
@@ -138,7 +138,7 @@ export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fet
       case 'ks':
         return faireExpulser(i, ctx, s, String(i.data?.values?.[0] ?? ''), langue);
       case 'a': {
-        if (s.tournoiId) throw new RefusVocal('tournoi_verrou');
+        if (s.equipeId) throw new RefusVocal('tournoi_verrou');
         const composants = [{ type: 5, custom_id: `vc:aa:${s.salonId}`, placeholder: tv(langue, 'choisir_ami').slice(0, 100), min_values: 1, max_values: 10 }];
         if (s.amis.length) composants.push({ type: 3, custom_id: `vc:ar:${s.salonId}`, placeholder: tv(langue, 'choisir_retirer_ami').slice(0, 100), options: s.amis.slice(0, 25).map(a => ({ label: (a.nom || a.id).slice(0, 100), value: a.id })) });
         return menu(tv(langue, 'amis_aide'), composants);
@@ -223,7 +223,7 @@ export function creerBotVocaux({ base, maintenant = () => Date.now(), fetch: fet
       case 'expulser':
         return faireExpulser(i, ctx, s, membre, langue);
       case 'ami-ajouter': {
-        if (s.tournoiId) throw new RefusVocal('tournoi_verrou');
+        if (s.equipeId) throw new RefusVocal('tournoi_verrou');
         const suivant = await ajouterAmis(ctx, s, [{ id: membre, nom: nomCible, bot: Boolean(u?.bot) }]);
         return ok(ctx, suivant, tv(langue, 'amis_ajoutes', { membres: nomCible }));
       }

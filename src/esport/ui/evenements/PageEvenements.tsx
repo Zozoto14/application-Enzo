@@ -55,6 +55,7 @@ import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { PositionRoles } from './PositionRoles';
 import { ChampDate } from '../../../ui/dates';
+import { optionsRoles } from '../../../ui/selecteurs/SelecteurRepliable';
 
 const AUCUN = '-';
 const TON: Record<StatutEvenement, Ton> = {
@@ -80,6 +81,7 @@ type Formulaire = {
   categorieTicketId: string | null;
   categoriesTickets: string[];
   staffModele: string;
+  staffRolesSup: string[];
   rolesAuto: boolean;
   modeleRole: string;
   couleur: string;
@@ -97,6 +99,7 @@ const formulaireDe = (e?: Evenement, choix?: ChoixEvenements): Formulaire => ({
   categorieTicketId: e?.categorieTicketId ?? null,
   categoriesTickets: e?.categoriesTickets ?? [],
   staffModele: e?.discord.staffModele ?? 'Staff {evenement}',
+  staffRolesSup: e?.discord.staffRolesSup ?? [],
   rolesAuto: e?.discord.rolesAuto ?? true,
   modeleRole: e?.discord.modeleRole ?? choix?.modeleDefaut ?? '{tag} {nom}',
   couleur: e?.discord.couleur ?? '',
@@ -117,6 +120,7 @@ const saisieDe = (f: Formulaire): SaisieEvenement => ({
   categoriesTickets: f.categoriesTickets,
   discord: {
     staffModele: f.staffModele,
+    staffRolesSup: f.staffRolesSup,
     rolesAuto: f.rolesAuto,
     modeleRole: f.modeleRole,
     couleur: f.couleur || null,
@@ -302,6 +306,23 @@ function Editeur({
       />
       <Text style={attenue(theme)}>{trEv('suppression_aide')}</Text>
       <Champ theme={theme} libelle={trEv('staff.modele')} valeur={f.staffModele} onChanger={staffModele => setF({ ...f, staffModele })} maxLength={90} testID="esport-ev-staff-modele" />
+      {/* Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés). */}
+      {roles?.roles.length ? (
+        <ChoixMultiple
+          theme={theme}
+          libelle={trEv('staff.roles_sup')}
+          valeurs={f.staffRolesSup}
+          options={optionsRoles(roles.roles.filter(r => !r.gere && !r.bot && r.id !== fiche?.evenement.discord.staffRoleId))}
+          onChanger={staffRolesSup => setF({ ...f, staffRolesSup })}
+          max={20}
+          testID="esport-ev-staff-roles-sup"
+        />
+      ) : (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <BoutonHub theme={theme} titre={trEv('staff.roles_sup_lire')} onPress={onLireRoles} desactive={lectureRoles} testID="esport-ev-staff-roles-sup-lire" />
+        </View>
+      )}
+      <Text style={attenue(theme)}>{trEv('staff.roles_sup_aide')}</Text>
     </View>
   );
 }

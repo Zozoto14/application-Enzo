@@ -144,6 +144,27 @@ test('hubs ordinaires : pas d’option d’événement ; repliés avec résumé 
   expect(screen.queryByTestId('esport-vc-hub-3-evenement')).toBeNull();
 });
 
+test('options d’un hub ordinaire : placé sous le hub (oui), visibles mais pas joignables (non), cacher le hub seulement avec des rôles ; enregistrées', async () => {
+  const { client, appels } = fauxClient(configDe());
+  await render(<ConfigVocaux theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-vc-hub-ajouter'));
+  await choisirDans('esport-vc-hub-0-salon', '751');
+  expect(screen.getByTestId('esport-vc-hub-0-options-placer').props.value).toBe(true);
+  expect(screen.getByTestId('esport-vc-hub-0-options-visible').props.value).toBe(false);
+  // Sans rôle choisi : l'option « cacher le hub » est grisée.
+  const masquer = screen.getByTestId('esport-vc-hub-0-options-masquer');
+  expect([masquer.props.value, masquer.props.disabled]).toEqual([false, true]);
+  expect(screen.getByText('Choisissez d’abord les rôles qui peuvent utiliser ce hub.')).toBeTruthy();
+  await choisirDans('esport-vc-hub-0-options-roles-hub', '720');
+  expect(screen.getByTestId('esport-vc-hub-0-options-masquer').props.disabled).toBe(false);
+  await fireEvent(screen.getByTestId('esport-vc-hub-0-options-masquer'), 'valueChange', true);
+  await fireEvent(screen.getByTestId('esport-vc-hub-0-options-visible'), 'valueChange', true);
+  await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
+  await screen.findByText('Enregistré.');
+  const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as { hubs: unknown[] };
+  expect(put.hubs[0]).toMatchObject({ id: '751', placerSousHub: true, visibleNonJoignable: true, masquerHub: true, rolesHub: ['720'] });
+});
+
 test('commandes /voc : désactiver une sous-commande, la réserver à un rôle ; enregistré', async () => {
   const { client, appels } = fauxClient(configDe());
   await render(<ConfigVocaux theme={theme} client={client} large />);

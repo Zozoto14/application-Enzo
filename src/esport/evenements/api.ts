@@ -24,6 +24,8 @@ export interface DiscordEvenement {
   staffRoleId: string | null;
   /** Nom du rôle staff créé (tel que le bot l'a nommé). */
   staffRoleNom?: string | null;
+  /** Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés). */
+  staffRolesSup?: string[];
 }
 
 export interface Evenement {
@@ -202,7 +204,7 @@ export type SaisieEvenement = Partial<
   discord?: Partial<
     Pick<
       DiscordEvenement,
-      'rolesAuto' | 'modeleRole' | 'couleur' | 'roleAncreId' | 'suppressionH' | 'staffModele'
+      'rolesAuto' | 'modeleRole' | 'couleur' | 'roleAncreId' | 'suppressionH' | 'staffModele' | 'staffRolesSup'
     >
   >;
 };
@@ -218,11 +220,11 @@ export interface VocauxEvenement {
   staffRole: { id: string; nom: string } | null;
   /** Créer, modifier, retirer : permission vocaux.configurer en plus d'evenements.gerer. */
   peutModifier: boolean;
-  choix: { limites: { hubs: number; roles: number; places: number; modele: number }; modeleDefaut: string };
+  choix: { limites: { hubs: number; roles: number; places: number; modele: number }; modeleDefaut: string; /** Salon du staff dans le hub : modèle par défaut (« Staff — {pseudo} »). */ modeleStaffDefaut?: string };
 }
 
 /** Champs d'un hub d'événement saisis dans la fiche (l'événement et le verrouillage sont imposés par le serveur). */
-export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises'>>;
+export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises' | 'placerSousHub' | 'visibleNonJoignable' | 'masquerHub' | 'modeleStaff'>>;
 
 export function apiEvenements(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) =>

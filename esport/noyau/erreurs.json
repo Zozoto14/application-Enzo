@@ -937,6 +937,7 @@
   "64 équipes au plus par événement.": "64 teams at most per event.",
   "L’événement est terminé ou annulé : ses rôles ne sont plus créés.": "The event is finished or cancelled: its roles are no longer created.",
   "Catégories de tickets : 10 au plus.": "Ticket categories: 10 at most.",
+  "Rôles staff supplémentaires : 20 rôles Discord au plus.": "Extra staff roles: 20 Discord roles at most.",
   "50 personnes au plus dans le staff.": "50 people at most in the staff."
  },
  "motifs": [

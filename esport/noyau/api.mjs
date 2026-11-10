@@ -269,7 +269,7 @@ export function creerApi({
   // panneau de contrôle / commandes du bot ; les arrivées dans un hub sont vues par la Gateway du superviseur.
   const vc = servicesVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, serveurTickets: ticketsServeur });
   // Événements organisés par le club et rôles Discord de leurs équipes (migration 0064) : Administration › Événements.
-  const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot });
+  const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Rôles Discord temporaires des teams (migration 0066, docs/esport/bot-discord.md) : /role-temp et réglages de la team.
   const rt = servicesRolesTemp({ base, maintenant, noyau: s, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, botId: configBot.applicationId || null });

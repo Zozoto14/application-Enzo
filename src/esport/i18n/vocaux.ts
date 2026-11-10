@@ -92,6 +92,15 @@ const fr = {
   hub_evenement_staff: 'Rôle staff « {nom} » · inclus automatiquement',
   hub_evenement_staff_absent: 'Rôle staff de l’événement · inclus automatiquement',
   hub_evenement_ouvrir: 'Ouvrir l’événement',
+  opt_placer: 'Placer les salons créés juste sous le salon de création',
+  opt_placer_aide: 'Discord met souvent un nouveau salon en bas de la catégorie : le bot le remonte juste sous le hub (le plus récent en premier), après y avoir déplacé le membre.',
+  opt_visible: 'Les personnes sans accès voient les salons créés mais ne peuvent pas les rejoindre',
+  opt_visible_aide: 'Salons verrouillés : sans cette option, ils sont cachés aux personnes qui n’y ont pas accès.',
+  opt_masquer: 'Cacher le salon de création aux personnes sans permission',
+  opt_masquer_aide_evenement: 'Seuls les rôles des équipes, le staff de l’événement, les rôles autorisés en plus et les rôles du staff des salons vocaux voient le hub. Ses permissions d’origine sont gardées et rendues si l’option est coupée ou le hub retiré.',
+  opt_masquer_aide: 'Seuls les rôles ci-dessous et les rôles du staff des salons vocaux voient le hub. Ses permissions d’origine sont gardées et rendues si l’option est coupée ou le hub retiré.',
+  opt_masquer_sans_roles: 'Choisissez d’abord les rôles qui peuvent utiliser ce hub.',
+  opt_roles_hub: 'Rôles qui peuvent utiliser ce hub',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -180,6 +189,15 @@ const en: Record<keyof typeof fr, string> = {
   hub_evenement_staff: 'Staff role “{nom}” · included automatically',
   hub_evenement_staff_absent: 'Event staff role · included automatically',
   hub_evenement_ouvrir: 'Open the event',
+  opt_placer: 'Place created channels right below the creation channel',
+  opt_placer_aide: 'Discord often puts a new channel at the bottom of the category: the bot moves it right below the hub (newest first), after moving the member into it.',
+  opt_visible: 'People without access can see the created channels but cannot join them',
+  opt_visible_aide: 'Locked channels: without this option, they are hidden from people without access.',
+  opt_masquer: 'Hide the creation channel from people without permission',
+  opt_masquer_aide_evenement: 'Only the team roles, the event staff, the extra allowed roles and the voice channel staff roles can see the hub. Its original permissions are kept and restored if the option is turned off or the hub removed.',
+  opt_masquer_aide: 'Only the roles below and the voice channel staff roles can see the hub. Its original permissions are kept and restored if the option is turned off or the hub removed.',
+  opt_masquer_sans_roles: 'First choose the roles that can use this hub.',
+  opt_roles_hub: 'Roles that can use this hub',
 };
 
 export type CleVc = keyof typeof fr;

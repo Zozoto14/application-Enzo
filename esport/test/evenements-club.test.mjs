@@ -1167,7 +1167,7 @@ test('application : hubs d’événement créés seulement dans la fiche de l’
   });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   // L'événement et le verrouillage sont imposés ; modèle par défaut des équipes.
-  assert.deepEqual(r.corps.hubs, [{ id: HUB_T, nom: 'Vocal équipe', categorieId: CAT, modeleNom: '{tag} — {nom}', limite: 5, verrouille: true, tournoiId: k.id, rolesAutorises: [CASTER] }]);
+  assert.deepEqual(r.corps.hubs, [{ id: HUB_T, nom: 'Vocal équipe', categorieId: CAT, modeleNom: '{tag} — {nom}', limite: 5, verrouille: true, tournoiId: k.id, rolesAutorises: [CASTER], placerSousHub: true, visibleNonJoignable: false, masquerHub: true, rolesHub: [], modeleStaff: 'Staff — {pseudo}' }]);
   // Même stockage : les réglages des salons vocaux le montrent.
   const c = await k.api('/vocaux/config');
   assert.deepEqual(c.corps.reglages.hubs.map(h => [h.id, h.tournoiId]), [[HUB_T, k.id]]);
@@ -1363,4 +1363,56 @@ test('suppression d’un événement : ses hubs vocaux retirés (même stockage)
   const conf2 = (await k.api('/vocaux/config')).corps.reglages;
   assert.deepEqual([conf2.actif, conf2.hubs], [false, []]);
   assert.equal((await k.api(`/evenements/${e2}`)).statut, 404);
+});
+
+test('hub de l’événement : le staff (rôle staff, rôles staff supplémentaires, rôles autorisés, staff des salons vocaux) a son propre salon ; équipe prioritaire ; les autres refusés ; nettoyé à la fin', async () => {
+  const k = await monterHub();
+  const STAFF_EVT = '720000000000000500';
+  const SUP = '720000000000000501';
+  await k.base.executer("UPDATE club_evenements SET staff_role_id = ?, staff_role_nom = 'Staff The Nuke End', staff_roles_sup = ? WHERE id = ?", [STAFF_EVT, JSON.stringify([SUP]), TOURNOI]);
+  const ZED = '810000000000000401';
+  // Rôle staff de l'événement : salon « Staff — Zed », verrouillé sur le staff (pas sur les équipes).
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(ZED, HUB_T, 'Zed', [STAFF_EVT]));
+  await k.moteur.attendre();
+  const [c] = creationsT(k.rest);
+  assert.equal(c.corps.name, 'Staff — Zed');
+  const de = id => c.corps.permission_overwrites.find(o => o.id === id);
+  assert.equal(BigInt(de(GUILD).deny) & PV_CONNECT, PV_CONNECT);
+  for (const id of [STAFF_EVT, SUP, CASTER, STAFF, ZED]) assert.equal(BigInt(de(id).allow) & PV_CONNECT, PV_CONNECT, id);
+  assert.ok(!de(R1) && !de(R2), 'les rôles des équipes n’y entrent pas');
+  const salon = [...k.rest.etat.salons.values()].find(s => s.name === 'Staff — Zed').id;
+  const ligne = await k.base.premier('SELECT tournoi_id, equipe_id, proprietaire_id FROM vocaux_salons WHERE salon_id = ?', [salon]);
+  assert.deepEqual([ligne.tournoi_id, ligne.equipe_id, ligne.proprietaire_id], [TOURNOI, null, ZED]);
+  // Contrôles ordinaires : renommer et déverrouiller possibles, liste d'amis présente.
+  const boutons = k.rest.etat.messages.get(salon)[0].components.flatMap(r => r.components);
+  assert.ok(!boutons.find(b => b.custom_id === `vc:r:${salon}`).disabled);
+  assert.ok(boutons.some(b => b.custom_id === `vc:a:${salon}`));
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(ZED, salon, 'Zed', [STAFF_EVT]));
+  // Revenir par le hub : ramené dans son salon (un seul par personne).
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(ZED, HUB_T, 'Zed', [STAFF_EVT]));
+  await k.moteur.attendre();
+  assert.equal(creationsT(k.rest).length, 1);
+  assert.deepEqual(k.rest.appels.filter(a => a.chemin === `/guilds/${GUILD}/members/${ZED}`).at(-1).corps, { channel_id: salon });
+  // Rôle staff supplémentaire, rôle autorisé du hub (caster), staff des salons vocaux : leur salon aussi.
+  for (const [id, nom, role] of [['810000000000000402', 'Sup', SUP], ['810000000000000403', 'Cas', CASTER], ['810000000000000404', 'Mod', STAFF]]) {
+    await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(id, HUB_T, nom, [role]));
+    await k.moteur.attendre();
+    assert.equal(creationsT(k.rest).at(-1).corps.name, `Staff — ${nom}`, nom);
+  }
+  // Rôle d'une équipe ET du staff : l'équipe passe d'abord.
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J1, HUB_T, 'Kira', [R1, STAFF_EVT]));
+  await k.moteur.attendre();
+  assert.equal(creationsT(k.rest).at(-1).corps.name, 'LZ0 — Ligne Zéro');
+  // Ni équipe ni staff : refusé, MP qui mentionne le staff.
+  const n = creationsT(k.rest).length;
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J3, HUB_T, 'Intrus', ['720000000000000999']));
+  await k.moteur.attendre();
+  assert.equal(creationsT(k.rest).length, n);
+  assert.match(k.rest.etat.mp.at(-1).content, /et à son staff/);
+  // Fin de l'événement : salons d'équipe et du staff supprimés ensemble.
+  const { nettoyerEvenement } = await import('../noyau/evenements-club/discord.mjs');
+  await nettoyerEvenement({ base: k.base, fetch: k.rest.fetch, jetonBot: 'jeton-bot-de-test-jamais-reel', guildId: GUILD, maintenant: () => Date.now() }, TOURNOI);
+  assert.ok(k.rest.appels.some(a => a.methode === 'DELETE' && a.chemin === `/channels/${salon}`));
+  assert.equal((await k.base.tous('SELECT * FROM vocaux_salons WHERE tournoi_id = ?', [TOURNOI])).length, 0);
+  k.moteur.arreter();
 });

@@ -34,8 +34,9 @@
 import { iso, jsonOu } from '../outils.mjs';
 import { rest } from '../tickets/discord.mjs';
 import { lireGeneral } from '../tickets/reglages.mjs';
-import { lireVocaux, nomSalon } from './reglages.mjs';
+import { hubMasque, lireVocaux, nomSalon } from './reglages.mjs';
 import { gererHubTournoi, rolesEquipe } from './tournoi.mjs';
+import { lireOrigines, placerSousHub } from './hubs.mjs';
 import {
   annoncerProprietaire,
   chargePanneau,
@@ -345,7 +346,8 @@ export function creerMoteurVocaux({
     }
     const parent = hub.categorieId ?? hubSalon.parent_id ?? null;
     // Surcharges de départ : celles du hub (en général synchronisées sur sa catégorie), ou de la catégorie choisie.
-    const source = hub.categorieId && hub.categorieId !== hubSalon.parent_id ? await salonDiscord(hub.categorieId) : hubSalon;
+    // Hub caché par le bot (hubs.mjs) : ses surcharges d'ORIGINE (pas celles qui le cachent).
+    const source = hub.categorieId && hub.categorieId !== hubSalon.parent_id ? await salonDiscord(hub.categorieId) : hubMasque(hub) ? { permission_overwrites: (await lireOrigines(base))[hub.id] ?? hubSalon.permission_overwrites } : hubSalon;
     const basePermissions = (source?.permission_overwrites ?? []).map(o => ({ id: String(o.id), type: Number(o.type) === 1 ? 1 : 0, allow: String(o.allow ?? '0'), deny: String(o.deny ?? '0') }));
     const nom = options.nom ?? nomSalon(hub.modeleNom, { pseudo: membre.nom || membre.id });
     const s = {
@@ -364,7 +366,7 @@ export function creerMoteurVocaux({
       equipeId: options.equipeId ?? null,
       videDepuis: iso(t),
     };
-    const rolesEquipe = s.equipeId && ctx.rolesEquipe ? await ctx.rolesEquipe(s) : [];
+    const rolesEquipe = (s.equipeId || s.tournoiId) && ctx.rolesEquipe ? await ctx.rolesEquipe(s) : [];
     const corps = {
       name: nom,
       type: VOCAL,
@@ -372,7 +374,7 @@ export function creerMoteurVocaux({
       // Dans le corps de la création (aucun PATCH de position ensuite).
       position: Number(hubSalon.position ?? 0) + 1,
       ...(s.limite ? { user_limit: s.limite } : {}),
-      permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe }),
+      permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe, visibleNonJoignable: hub.visibleNonJoignable === true }),
     };
     m.envoi = horloge();
     const r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${ctx.guildId}/channels`, corps, { raison: `Esport HQ : salon vocal temporaire de ${membre.nom || membre.id}`.slice(0, 200) });
@@ -408,6 +410,12 @@ export function creerMoteurVocaux({
           if (p.ok && p.corps?.id && enregistre) await noterPanneau(base, s.salonId, String(p.corps.id), ctx.maintenant());
         })(),
         noter({ dernierSalon: { le: iso(t), ok: true }, derniereCreation: { le: iso(t), ...mesure } }, t),
+        // Discord ignore souvent `position` à la création : salons du hub rangés juste sous lui (hubs.mjs).
+        (async () => {
+          if (hub.placerSousHub === false || !enregistre) return;
+          const p = await placerSousHub(ctx, cache, hub);
+          if (!p.ok && p.statut) await noterErreur('position', p, t);
+        })(),
         journaliser(ctx, 'j_cree', { salon: `<#${s.salonId}>`, membre: membre.nom || membre.id }),
       ]).then(res => {
         for (const x of res) if (x.status === 'rejected') erreur('après la création', x.reason);

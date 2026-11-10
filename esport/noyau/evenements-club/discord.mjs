@@ -21,6 +21,21 @@ import { lireGeneral } from '../tickets/reglages.mjs';
 import { rest } from '../tickets/discord.mjs';
 import { salonsDuServeur, supprimerLigne } from '../vocaux/salons.mjs';
 import { nomRole } from './inscriptions.mjs';
+import { lireVocaux } from '../vocaux/reglages.mjs';
+import { resynchroniserHubsEvenement } from '../vocaux/hubs.mjs';
+
+/**
+ * Hubs cachés de l'événement (vocaux/hubs.mjs) : leurs surcharges suivent les rôles des équipes, le rôle staff et les
+ * rôles autorisés. Appelé après chaque changement de rôles ; au mieux (journal du serveur).
+ */
+export async function resynchroniserHubs(ctx, evenementId) {
+  try {
+    return await resynchroniserHubsEvenement(ctx, await lireVocaux(ctx.base), evenementId);
+  } catch (e) {
+    ctx.journal?.warn?.('[esport] événement : hubs vocaux non resynchronisés', e?.message ?? e);
+    return null;
+  }
+}
 
 const nomEquipe = e => `${e.tag} ${e.nom}`.trim();
 
@@ -399,6 +414,7 @@ export async function synchroniser(
       evt,
       crees ? null : serveur.erreur ? null : serveur,
     );
+  await resynchroniserHubs(ctx, evt.id);
   return bilan;
 }
 
@@ -449,7 +465,10 @@ export async function supprimerRoleEquipe(ctx, e) {
       { raison: 'Esport HQ : équipe retirée de l’événement' },
     );
     role = r.ok || r.statut === 404;
+    // Rôle supprimé : oublié tout de suite (les hubs cachés de l'événement ne l'admettent plus).
+    if (role) await ctx.base.executer('UPDATE club_evenement_equipes SET role_id = NULL, role_nom = NULL WHERE id = ?', [e.id]);
   }
+  if (e.evenement_id) await resynchroniserHubs(ctx, e.evenement_id);
   return { role, salons: s.n };
 }
 
@@ -513,6 +532,8 @@ export async function nettoyerEvenement(ctx, evenementId) {
       'UPDATE club_evenements SET roles_supprimes_le = ?, maj_le = ? WHERE id = ?',
       [iso(ctx.maintenant()), iso(ctx.maintenant()), evenementId],
     );
+  await accesStaffSup(ctx, { id: evenementId }, { fin: true });
+  await resynchroniserHubs(ctx, evenementId);
   return { roles, salons: s.n, echecs };
 }
 
@@ -574,6 +595,70 @@ async function accesTickets(ctx, roleId, categories) {
   return n;
 }
 
+/** Rôles staff supplémentaires d'un événement (rôles Discord existants), vides une fois l'événement nettoyé. */
+export function rolesStaffSup(evt) {
+  if (!evt || evt.roles_supprimes_le) return [];
+  return listeJson(evt.staff_roles_sup);
+}
+
+const objetJson = v => {
+  try {
+    const x = JSON.parse(v || '{}');
+    return x && typeof x === 'object' && !Array.isArray(x) ? x : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Rôles staff SUPPLÉMENTAIRES (rôles Discord existants, jamais créés ni supprimés par le bot) : mêmes droits que le rôle
+ * staff. Ajoutés aux rôles qui traitent les tickets des catégories de l'événement (seulement là où ils n'y étaient pas :
+ * ces ajouts sont notés dans `staff_sup_ajouts`), ouverts sur les tickets ouverts de ces catégories et sur les salons
+ * vocaux de l'événement. Un rôle retiré de la liste, une catégorie retirée de l'événement, ou `fin` (fin ou suppression
+ * de l'événement) : seuls les ajouts de l'événement sont défaits (rôle retiré de la catégorie et de ses tickets
+ * ouverts, surcharge retirée des salons vocaux de l'événement). Rend `{ roles, categories, vocaux }`.
+ */
+export async function accesStaffSup(ctx, evtLigne, { fin = false, retires = [] } = {}) {
+  const { base } = ctx;
+  const evt = (await base.premier('SELECT * FROM club_evenements WHERE id = ?', [evtLigne.id])) ?? evtLigne;
+  const sup = fin ? [] : rolesStaffSup(evt);
+  const categories = fin ? [] : listeJson(evt.categories_tickets);
+  const ajouts = objetJson(evt.staff_sup_ajouts);
+  const b = { roles: sup.length, categories: 0, vocaux: 0 };
+  const salonsEvt = ctx.guildId ? (await salonsDuServeur(base, ctx.guildId)).filter(x => x.tournoiId === evt.id) : [];
+  const ouverts = async c => base.tous("SELECT salon_id FROM tickets WHERE categorie_id = ? AND statut <> 'ferme' AND salon_id IS NOT NULL", [c]);
+  // Défaire ce qui n'a plus lieu d'être.
+  for (const [roleId, cats] of Object.entries(ajouts)) {
+    const garder = sup.includes(roleId) ? (cats ?? []).filter(c => categories.includes(c)) : [];
+    for (const c of (cats ?? []).filter(x => !garder.includes(x))) {
+      const l = await base.premier('SELECT roles_discord FROM tickets_categories WHERE id = ?', [c]);
+      if (l) await base.executer('UPDATE tickets_categories SET roles_discord = ?, maj_le = ? WHERE id = ?', [JSON.stringify(listeJson(l.roles_discord).filter(r => r !== roleId)), iso(ctx.maintenant()), c]);
+      for (const t of await ouverts(c)) await rest(ctx.fetch, ctx.jetonBot, 'DELETE', `/channels/${t.salon_id}/permissions/${roleId}`, undefined, { raison: 'Esport HQ : staff de l’événement' });
+    }
+    if (garder.length) ajouts[roleId] = garder;
+    else delete ajouts[roleId];
+  }
+  // Rôles retirés de la liste (`retires`), ou tous à la fin : surcharges des salons vocaux de l'événement retirées.
+  for (const roleId of fin ? listeJson(evt.staff_roles_sup) : retires.filter(r => !sup.includes(r)))
+    for (const x of salonsEvt) await rest(ctx.fetch, ctx.jetonBot, 'DELETE', `/channels/${x.salonId}/permissions/${roleId}`, undefined, { raison: 'Esport HQ : staff de l’événement' });
+  // Ajouter.
+  for (const roleId of sup) {
+    for (const c of categories) {
+      const l = await base.premier('SELECT roles_discord FROM tickets_categories WHERE id = ?', [c]);
+      if (!l) continue;
+      const roles = listeJson(l.roles_discord);
+      if (roles.includes(roleId)) continue; // déjà là (par l'événement ou avant lui)
+      await base.executer('UPDATE tickets_categories SET roles_discord = ?, maj_le = ? WHERE id = ?', [JSON.stringify([...roles, roleId]), iso(ctx.maintenant()), c]);
+      ajouts[roleId] = [...new Set([...(ajouts[roleId] ?? []), c])];
+      b.categories++;
+      for (const t of await ouverts(c)) await rest(ctx.fetch, ctx.jetonBot, 'PUT', `/channels/${t.salon_id}/permissions/${roleId}`, { type: 0, allow: PERM_TICKET, deny: '0' }, { raison: 'Esport HQ : staff de l’événement' });
+    }
+    if (ctx.guildId) b.vocaux += await accesVocaux(ctx, evt.id, roleId);
+  }
+  await base.executer('UPDATE club_evenements SET staff_sup_ajouts = ? WHERE id = ?', [JSON.stringify(ajouts), evt.id]);
+  return b;
+}
+
 /** Ouvre les salons vocaux des équipes de l'événement au rôle staff (voir, se connecter). */
 async function accesVocaux(ctx, evenementId, roleId) {
   let n = 0;
@@ -590,9 +675,11 @@ async function accesVocaux(ctx, evenementId, roleId) {
  * de tickets de l'événement et aux salons vocaux des équipes. Rend `{ cree, attribues, retires, absents, refus,
  * categories, vocaux, roleId }`, ou null s'il n'y a rien à faire.
  */
-export async function synchroniserStaff(ctx, evtLigne, { retirer = [] } = {}) {
+export async function synchroniserStaff(ctx, evtLigne, { retirer = [], supRetires = [] } = {}) {
   const { base } = ctx;
   const evt = (await base.premier('SELECT * FROM club_evenements WHERE id = ?', [evtLigne.id])) ?? evtLigne;
+  // Rôles staff supplémentaires (rôles existants) : tickets, salons vocaux ; hubs cachés resynchronisés plus bas.
+  const sup = await accesStaffSup(ctx, evt, { retires: supRetires });
   const staff = await base.tous('SELECT * FROM club_evenement_staff WHERE evenement_id = ? ORDER BY position, cree_le', [evt.id]);
   const categories = listeJson(evt.categories_tickets);
   const b = { cree: false, attribues: 0, retires: 0, absents: [], refus: [], categories: 0, vocaux: 0, roleId: evt.staff_role_id ?? null };
@@ -603,7 +690,11 @@ export async function synchroniserStaff(ctx, evtLigne, { retirer = [] } = {}) {
       if (r.ok) b.retires++;
     }
   }
-  if (!roleId && !staff.length && !categories.length) return retirer.length ? b : null;
+  if (!roleId && !staff.length && !categories.length) {
+    await resynchroniserHubs(ctx, evt.id);
+    return retirer.length || sup.roles || supRetires.length ? { ...b, sup } : null;
+  }
+  b.sup = sup;
   const t = iso(ctx.maintenant());
   const nom = nomRoleStaff(evt.staff_modele, evt.nom);
   if (!roleId) {
@@ -641,6 +732,7 @@ export async function synchroniserStaff(ctx, evtLigne, { retirer = [] } = {}) {
   // salons créés ensuite l'ont dès leur création (vocaux/tournoi.mjs, `rolesEquipe`).
   b.vocaux = await accesVocaux(ctx, evt.id, roleId);
   if (b.cree && evt.role_ancre_id) b.position = await placerRoles(ctx, evt);
+  await resynchroniserHubs(ctx, evt.id);
   return b;
 }
 

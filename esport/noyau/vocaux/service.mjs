@@ -15,9 +15,10 @@ import { instructionReglage, lireGeneral } from '../tickets/reglages.mjs';
 import { diagnosticConnexion } from '../tickets/superviseur.mjs';
 import { permissionsMembre, rest } from '../tickets/discord.mjs';
 import { FONCTIONNALITES_PERMISSIONS, entierPermissions, lienInvitationBot } from '../discord/permissions-bot.mjs';
-import { COMMANDES_VOCAUX, LIMITES_VOCAUX, MODELE_DEFAUT, MODELE_TOURNOI_DEFAUT, MODES_PROPRIETAIRE, lireCommandesVocaux, lireVocaux, validerCommandesVocaux, validerVocaux } from './reglages.mjs';
+import { COMMANDES_VOCAUX, LIMITES_VOCAUX, MODELE_DEFAUT, MODELE_STAFF_DEFAUT, MODELE_TOURNOI_DEFAUT, MODES_PROPRIETAIRE, lireCommandesVocaux, lireVocaux, validerCommandesVocaux, validerVocaux } from './reglages.mjs';
 import { lireEtatVocaux } from './moteur.mjs';
 import { salonsDuServeur } from './salons.mjs';
+import { apresReglages } from './hubs.mjs';
 
 export const PERMISSION_VOCAUX = 'vocaux.configurer';
 const PERMISSION_EVENEMENTS = 'evenements.gerer';
@@ -25,7 +26,18 @@ const PERMISSION_EVENEMENTS = 'evenements.gerer';
 export const PERMISSIONS_VOCAUX = Object.freeze(FONCTIONNALITES_PERMISSIONS.find(f => f.id === 'vocaux').permissions);
 const manquantesVocaux = p => PERMISSIONS_VOCAUX.filter(cle => (p & entierPermissions([cle])) === 0n);
 
-export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fetchDiscord, jetonBot, applicationId = '', serveurTickets = {} }) {
+export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fetchDiscord, jetonBot, applicationId = '', serveurTickets = {}, journal = console }) {
+  /** Hubs cachés ou rendus, salons ouverts recalculés après un enregistrement (au mieux : jamais d'échec rendu). */
+  async function apres(avant, reglages) {
+    try {
+      const general = await lireGeneral(base);
+      return await apresReglages({ base, fetch: fetchDiscord, jetonBot, guildId: general.guildId, botId: applicationId || null, maintenant, journal }, avant, reglages);
+    } catch (e) {
+      journal.warn?.('[esport] vocaux : hubs non synchronisés', e?.message ?? e);
+      return null;
+    }
+  }
+
   async function exiger(acteur) {
     if (!(await aGlobale(base, acteur, PERMISSION_VOCAUX))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
   }
@@ -85,6 +97,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     }
     const t = maintenant();
     await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux' }, maintenant: t })]);
+    await apres(actuel, reglages);
     return config(acteur);
   }
 
@@ -119,7 +132,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       actif: reglages.actif,
       staffRole: evt.staff_role_id ? { id: evt.staff_role_id, nom: evt.staff_role_nom ?? '' } : null,
       peutModifier: await aGlobale(base, acteur, PERMISSION_VOCAUX),
-      choix: { limites: LIMITES_VOCAUX, modeleDefaut: MODELE_TOURNOI_DEFAUT },
+      choix: { limites: LIMITES_VOCAUX, modeleDefaut: MODELE_TOURNOI_DEFAUT, modeleStaffDefaut: MODELE_STAFF_DEFAUT },
     };
   }
 
@@ -129,6 +142,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     const reglages = validerVocaux({ hubs, ...(hubs.length ? {} : { actif: false }) }, actuel);
     const t = maintenant();
     await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux', evenement: hubs.find(h => h.tournoiId)?.tournoiId ?? null }, maintenant: t })]);
+    await apres(actuel, reglages);
   }
 
   /** Champs d'un hub saisis dans la fiche de l'événement (l'événement et le verrouillage sont imposés). */
@@ -142,6 +156,10 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       modeleNom: champ('modeleNom', avant.modeleNom ?? MODELE_TOURNOI_DEFAUT),
       limite: champ('limite', avant.limite ?? 0),
       rolesAutorises: champ('rolesAutorises', avant.rolesAutorises ?? []),
+      placerSousHub: champ('placerSousHub', avant.placerSousHub ?? true),
+      visibleNonJoignable: champ('visibleNonJoignable', avant.visibleNonJoignable ?? false),
+      masquerHub: champ('masquerHub', avant.masquerHub ?? true),
+      modeleStaff: champ('modeleStaff', avant.modeleStaff ?? MODELE_STAFF_DEFAUT),
       verrouille: true,
       tournoiId: evtId,
     };

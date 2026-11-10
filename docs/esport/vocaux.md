@@ -38,6 +38,8 @@ Permission du club **`vocaux.configurer`** (le Fondateur l'a d'office ; le Secon
   défaut), modèle du nom (`{pseudo}`), places par défaut, salons verrouillés à la création. Les **hubs d'événement** ne
   se créent pas ici : ils sont listés en ligne compacte en lecture seule (voir « Hub vocal d'un événement ») ;
 - **Rôles du staff** : entrent partout, utilisent les contrôles de tout salon ;
+- **options de chaque hub** : salons placés sous le hub, visibles mais pas joignables, hub caché (voir « Options de
+  chaque hub ») ;
 - **Suppression d'un salon vide après** (secondes), **salons par membre**, **départ du propriétaire**, **salon des
   journaux** (facultatif : création, suppression, refus de Discord) ;
 - **Salons temporaires ouverts** : nom, propriétaire, présents, verrouillé ;
@@ -156,8 +158,18 @@ absents du corps ou renvoyés par une copie ancienne de l'écran), et un hub d'�
 `vocaux_salons.tournoi_id` : l'identifiant de l'événement). Code : `esport/noyau/vocaux/tournoi.mjs` (salons),
 `esport/noyau/vocaux/service.mjs` (`hubsEvenement`, `ajouterHubEvenement`…, routes `/evenements/:id/vocaux`).
 
-- Seuls les membres qui ont le **rôle d'une équipe** de l'événement peuvent s'en servir : les autres sont
-  **déconnectés** du hub et reçoivent un **MP** qui explique pourquoi.
+- Qui peut s'en servir, dans cet ordre :
+  1. le **rôle d'une équipe** de l'événement → le salon de son équipe (ci-dessous ; l'équipe passe avant le staff) ;
+  2. sinon le **staff** : rôle staff de l'événement, **rôles staff supplémentaires** de l'événement, **rôles autorisés
+     en plus** du hub, ou **rôles du staff** des salons vocaux → **son propre salon** (modèle « Nom du salon du staff »,
+     `Staff — {pseudo}` par défaut), dans la même catégorie, rangé sous le hub, dont il est **propriétaire** avec les
+     contrôles habituels (renommer, verrouiller / déverrouiller, expulser, liste d'amis, transférer). Créé
+     **verrouillé** sur le staff (rôle staff, rôles staff supplémentaires, rôles autorisés, rôles du staff ; les rôles
+     des équipes n'y entrent pas, sauf invités en amis) ; l'option « visibles mais pas joignables » s'y applique. **Un
+     salon par personne** (repasser par le hub y ramène) ; supprimé une fois vide, et à la fin ou à la suppression de
+     l'événement avec les salons d'équipe ;
+  3. sinon **refus** : déconnecté du hub, et un **MP** (français / anglais) explique que le hub est réservé aux équipes
+     de l'événement **et à son staff**.
 - Le salon créé porte le nom de l'équipe (`{tag} — {nom}` par défaut) et reste **verrouillé sur son rôle** :
   « Se connecter » refusé à @everyone, accordé au rôle de l'équipe, au **rôle staff de l'événement** (d'office, sans le
   régler : [evenements.md](evenements.md#rôle-staff-de-lévénement) ; réappliqué aux salons déjà ouverts à chaque
@@ -169,6 +181,21 @@ absents du corps ou renvoyés par une copie ancienne de l'écran), et un hub d'�
 - **Événement supprimé** : ses hubs sont retirés automatiquement des réglages (la suppression n'est plus bloquée par un
   hub lié), ses salons d'équipe et ses rôles supprimés au mieux ; s'il ne reste aucun hub, les salons vocaux
   temporaires sont désactivés (la confirmation l'annonce). Voir [evenements.md](evenements.md#supprimer-un-événement).
+
+## Options de chaque hub
+
+Pour **tous** les hubs (ordinaires dans le Bot Esport HQ, d'événement dans la fiche de l'événement), interrupteurs
+(texte français / anglais) :
+
+| Option | Défaut | Effet |
+| --- | --- | --- |
+| **Placer les salons créés juste sous le salon de création** (*Place created channels right below the creation channel*) | oui | Discord ignore souvent `position` à la création et met le salon en bas de la catégorie. Après le déplacement du membre (le chemin critique création → déplacement ne change pas), le bot envoie **un** `PATCH /guilds/{serveur}/channels` qui range les salons temporaires du hub **juste sous lui, du plus récent au plus ancien** (le nouveau tout de suite sous le hub), dans la catégorie du hub. Positions lues dans le **cache de la Gateway** (mis à jour ensuite) ; seuls les salons dont la position change sont envoyés (ceux au-dessus du hub ne bougent jamais, ceux en dessous gardent leur ordre). Limite de débit (429) : un seul nouvel essai après le délai annoncé (5 s au plus) ; un refus est noté dans l'état (« dernière erreur : position »). |
+| **Les personnes sans accès voient les salons créés mais ne peuvent pas les rejoindre** (*People without access can see the created channels but cannot join them*) | non | Salons **verrouillés** (salons d'équipe et du staff compris) : coupée, ils sont **cachés** (« Voir le salon » et « Se connecter » refusés à @everyone et aux rôles des surcharges du hub) ; activée, ils sont **visibles** (« Voir » accordé, « Se connecter » refusé). Hub dans une catégorie privée (@everyone sans « Voir ») : jamais élargi à tout le serveur. Rôles autorisés, propriétaire, amis, staff, rôle de l'équipe et bot : voir et se connecter. Salons ouverts : rien ne change. Réappliquée au verrouillage / déverrouillage, et aux salons verrouillés déjà ouverts quand l'option change. |
+| **Cacher le salon de création aux personnes sans permission** (*Hide the creation channel from people without permission*) | oui pour un hub d'événement, non pour un hub ordinaire | Le bot gère les surcharges du **salon du hub** : @everyone sans « Voir » ; admis (voir, se connecter) : hub d'événement → rôles des équipes, rôle staff de l'événement, rôles staff supplémentaires, rôles autorisés en plus ; hub ordinaire → **« Rôles qui peuvent utiliser ce hub »** (sélecteur repliable ; sans rôle, l'option est grisée et sans effet) ; dans les deux cas les rôles du staff des salons vocaux, et le bot (voir, se connecter, déplacer, gérer). Les surcharges **d'origine** du hub sont gardées (`tickets_reglages`, clé `vocaux_hubs_origine`) à l'activation et **rendues** quand l'option est coupée, le hub retiré ou changé de salon, ou l'événement supprimé ; les salons créés partent de ces surcharges d'origine. Resynchronisé à chaque enregistrement des réglages et quand les rôles d'un événement changent (équipe ajoutée ou retirée, rôle staff créé ou changé, rôles staff supplémentaires, fin de l'événement). |
+
+Code : `esport/noyau/vocaux/hubs.mjs`. Au mieux : un refus de Discord est noté au journal du serveur, l'enregistrement
+n'est pas bloqué. Les hubs d'événement déjà enregistrés sont **cachés par défaut** dès le prochain enregistrement ou
+la prochaine synchronisation de leurs rôles (couper l'option dans la fiche pour l'éviter).
 
 ## Données
 

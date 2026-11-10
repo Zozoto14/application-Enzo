@@ -20,6 +20,8 @@ export const MODES_PROPRIETAIRE = Object.freeze(['transferer', 'garder']);
 export const LIMITES_VOCAUX = Object.freeze({ hubs: 10, roles: 20, amis: 25, places: 99, delaiMinS: 5, delaiMaxS: 300, parMembreMax: 5, modele: 90 });
 export const MODELE_DEFAUT = 'Salon de {pseudo}';
 export const MODELE_TOURNOI_DEFAUT = '{tag} — {nom}';
+/** Salon du staff dans un hub d'événement. */
+export const MODELE_STAFF_DEFAUT = 'Staff — {pseudo}';
 
 export const VOCAUX_DEFAUT = Object.freeze({
   actif: false,
@@ -66,8 +68,20 @@ export function hubPropre(h) {
     verrouille: h.verrouille === true,
     tournoiId: h.tournoiId ?? null,
     rolesAutorises: Array.isArray(h.rolesAutorises) ? h.rolesAutorises.filter(x => ID.test(String(x))) : [],
+    // Placer chaque salon créé juste sous le hub (PATCH des positions après le déplacement) : oui par défaut.
+    placerSousHub: h.placerSousHub !== false,
+    // Salon verrouillé : visible mais pas joignable pour les personnes sans accès (sinon caché) : non par défaut.
+    visibleNonJoignable: h.visibleNonJoignable === true,
+    // Hub caché aux personnes sans accès (surcharges du salon du hub gérées par le bot) : oui par défaut pour un hub
+    // d'événement, non pour un hub ordinaire (qui demande alors des « rôles qui peuvent utiliser ce hub »).
+    masquerHub: typeof h.masquerHub === 'boolean' ? h.masquerHub : Boolean(h.tournoiId),
+    rolesHub: Array.isArray(h.rolesHub) ? h.rolesHub.filter(x => ID.test(String(x))) : [],
+    modeleStaff: typeof h.modeleStaff === 'string' && h.modeleStaff.trim() ? h.modeleStaff : MODELE_STAFF_DEFAUT,
   };
 }
+
+/** Le hub est-il caché par le bot ? Hub d'événement : selon l'option ; hub ordinaire : l'option ET des rôles choisis. */
+export const hubMasque = h => Boolean(h?.masquerHub) && (Boolean(h.tournoiId) || (h.rolesHub ?? []).length > 0);
 
 export async function lireVocaux(base) {
   const v = await lire(base, 'vocaux');
@@ -84,6 +98,12 @@ export async function lireCommandesVocaux(base) {
 }
 
 const MOTIF_TOURNOI = /^[0-9a-f-]{36}$/;
+
+function modeleStaff(v) {
+  const m = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
+  if (m.length > LIMITES_VOCAUX.modele) throw echec(400, 'vocaux-modele', 'Modèle du nom : 90 caractères au plus.');
+  return m;
+}
 
 function validerHub(h, i) {
   if (!h || typeof h !== 'object') throw echec(400, 'vocaux-hub', 'Hub illisible.');
@@ -106,6 +126,11 @@ function validerHub(h, i) {
     verrouille: tournoiId ? true : h.verrouille === true,
     tournoiId,
     rolesAutorises: ids(h.rolesAutorises, LIMITES_VOCAUX.roles, 'vocaux-roles'),
+    placerSousHub: h.placerSousHub !== false,
+    visibleNonJoignable: h.visibleNonJoignable === true,
+    masquerHub: typeof h.masquerHub === 'boolean' ? h.masquerHub : Boolean(tournoiId),
+    rolesHub: tournoiId ? [] : ids(h.rolesHub, LIMITES_VOCAUX.roles, 'vocaux-roles-hub'),
+    modeleStaff: modeleStaff(h.modeleStaff),
   });
 }
 

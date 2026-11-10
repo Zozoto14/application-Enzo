@@ -21,6 +21,7 @@ import { BoutonConfirme, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { SelecteurRepliable, optionsRoles, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
+import { OptionsHub } from '../vocaux/OptionsHub';
 
 type Api = ReturnType<typeof apiEvenements>;
 const AUCUN = '-';
@@ -64,7 +65,7 @@ export function VocauxEvenement({ theme, api, client, fiche }: { theme: ThemeHub
   const categories = [{ id: AUCUN, nom: trEv('voc.categorie_meme') }, ...optionsSalons(salons, ['categorie'])];
   const ouvrir = (h?: Hub) => {
     setEdite(h ? h.id : NOUVEAU);
-    setSaisie(h ? { ...h } : { id: '', nom: '', categorieId: null, modeleNom: v.choix.modeleDefaut, limite: 0, verrouille: true, tournoiId: id, rolesAutorises: [] });
+    setSaisie(h ? { ...h } : { id: '', nom: '', categorieId: null, modeleNom: v.choix.modeleDefaut, limite: 0, verrouille: true, tournoiId: id, rolesAutorises: [], placerSousHub: true, visibleNonJoignable: false, masquerHub: true, modeleStaff: v.choix.modeleStaffDefaut });
   };
   const fermer = () => {
     setEdite(undefined);
@@ -73,7 +74,7 @@ export function VocauxEvenement({ theme, api, client, fiche }: { theme: ThemeHub
   const enregistrer = () =>
     void agir('enregistrer', async () => {
       if (!saisie?.id) throw new Error(trEv('voc.salon_requis'));
-      const c: SaisieHubEvenement = { id: saisie.id, nom: salons.find(s => s.id === saisie.id)?.nom ?? saisie.nom, categorieId: saisie.categorieId, modeleNom: saisie.modeleNom, limite: saisie.limite, rolesAutorises: saisie.rolesAutorises };
+      const c: SaisieHubEvenement = { id: saisie.id, nom: salons.find(s => s.id === saisie.id)?.nom ?? saisie.nom, categorieId: saisie.categorieId, modeleNom: saisie.modeleNom, limite: saisie.limite, rolesAutorises: saisie.rolesAutorises, placerSousHub: saisie.placerSousHub !== false, visibleNonJoignable: saisie.visibleNonJoignable === true, masquerHub: saisie.masquerHub !== false, modeleStaff: saisie.modeleStaff ?? v.choix.modeleStaffDefaut };
       setV(edite === NOUVEAU || !edite ? await api.ajouterHub(id, c) : await api.modifierHub(id, edite, c));
       fermer();
       return trEv('voc.enregistre');
@@ -94,6 +95,9 @@ export function VocauxEvenement({ theme, api, client, fiche }: { theme: ThemeHub
         <ChoixMultiple theme={theme} libelle={trEv('voc.roles')} valeurs={h.rolesAutorises} options={roles.filter(o => o.id !== v.staffRole?.id)} onChanger={rolesAutorises => maj({ rolesAutorises })} max={v.choix.limites.roles} testID="esport-ev-voc-roles" />
         <PuceStaffAuto theme={theme} role={v.staffRole} testID="esport-ev-voc-staff-puce" />
         <Text style={attenue(theme)}>{trEv('voc.verrou')}</Text>
+        <Champ theme={theme} libelle={trEv('voc.modele_staff')} valeur={h.modeleStaff ?? v.choix.modeleStaffDefaut ?? ''} onChanger={modeleStaff => maj({ modeleStaff })} maxLength={v.choix.limites.modele} testID="esport-ev-voc-modele-staff" />
+        <Text style={attenue(theme)}>{trEv('voc.modele_staff_aide')}</Text>
+        <OptionsHub theme={theme} hub={h} onChanger={maj} evenement roles={roles} max={v.choix.limites.roles} testID="esport-ev-voc-options" />
         <View style={styles.ligne}>
           <BoutonHub theme={theme} variante="plein" titre={trEv('voc.enregistrer')} onPress={enregistrer} desactive={enCours === 'enregistrer'} testID="esport-ev-voc-enregistrer" />
           <BoutonHub theme={theme} titre={trEv('voc.annuler')} onPress={fermer} testID="esport-ev-voc-annuler" />

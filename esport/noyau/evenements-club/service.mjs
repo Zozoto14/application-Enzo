@@ -23,6 +23,7 @@ import { instructionReglage, lireGeneral } from '../tickets/reglages.mjs';
 import { rest } from '../tickets/discord.mjs';
 import { lireVocaux, validerVocaux } from '../vocaux/reglages.mjs';
 import { evenement as evenementBus } from '../evenements.mjs';
+import { rendreHubs } from '../vocaux/hubs.mjs';
 import { nomMembre } from '../vocaux/salons.mjs';
 import {
   LIMITES_EQUIPES,
@@ -39,6 +40,7 @@ import {
   supprimerRoleEquipe,
   synchroniser,
   synchroniserStaff,
+  accesStaffSup,
   retirerDesCategories,
   verifierAncre,
 } from './discord.mjs';
@@ -149,6 +151,7 @@ const resume = l => ({
     staffModele: l.staff_modele || STAFF_MODELE_DEFAUT,
     staffRoleId: l.staff_role_id ?? null,
     staffRoleNom: l.staff_role_nom ?? null,
+    staffRolesSup: jsonOu(l.staff_roles_sup, []),
   },
   categoriesTickets: jsonOu(l.categories_tickets, []),
   creeLe: l.cree_le,
@@ -160,6 +163,7 @@ export function servicesEvenements({
   maintenant = () => Date.now(),
   fetch: fetchDiscord,
   jetonBot,
+  botId = null,
   journal = console,
 }) {
   async function exiger(acteur) {
@@ -182,6 +186,8 @@ export function servicesEvenements({
       jetonBot,
       guildId: general.guildId,
       maintenant,
+      botId: botId || null,
+      journal,
       erreur: null,
     };
   }
@@ -314,6 +320,7 @@ export function servicesEvenements({
           suppression_h: SUPPRESSION_DEFAUT_H,
           staff_modele: STAFF_MODELE_DEFAUT,
           categories_tickets: '[]',
+          staff_roles_sup: '[]',
         };
     if (c.nom !== undefined || !actuel)
       s.nom = texte(c.nom, LIMITES_EVENEMENTS.nom, 'evenement-nom', {
@@ -369,6 +376,11 @@ export function servicesEvenements({
     if (d.staffModele !== undefined) {
       const m = texte(d.staffModele, 90, 'evenement-staff-modele');
       s.staff_modele = m || STAFF_MODELE_DEFAUT;
+    }
+    if (d.staffRolesSup !== undefined) {
+      // Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés).
+      if (!Array.isArray(d.staffRolesSup) || d.staffRolesSup.length > 20 || d.staffRolesSup.some(x => typeof x !== 'string' || !ID_ROLE.test(x))) throw echec(400, 'evenement-staff-roles', 'Rôles staff supplémentaires : 20 rôles Discord au plus.');
+      s.staff_roles_sup = JSON.stringify([...new Set(d.staffRolesSup)]);
     }
     if (d.rolesAuto !== undefined) s.roles_auto = d.rolesAuto === false ? 0 : 1;
     if (d.modeleRole !== undefined) {
@@ -447,7 +459,7 @@ export function servicesEvenements({
     const id = nouvelId();
     const t = iso(maintenant());
     await base.executer(
-      'INSERT INTO club_evenements (id, nom, jeu, debut, fin, statut, description, categorie_ticket_id, roles_auto, modele_role, couleur, role_ancre_id, suppression_h, staff_modele, categories_tickets, cree_par, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO club_evenements (id, nom, jeu, debut, fin, statut, description, categorie_ticket_id, roles_auto, modele_role, couleur, role_ancre_id, suppression_h, staff_modele, categories_tickets, staff_roles_sup, cree_par, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         id,
         s.nom,
@@ -464,6 +476,7 @@ export function servicesEvenements({
         s.suppression_h,
         s.staff_modele,
         s.categories_tickets,
+        s.staff_roles_sup,
         acteur.compte ?? null,
         t,
         t,
@@ -479,7 +492,7 @@ export function servicesEvenements({
     if (s.role_ancre_id !== avant.role_ancre_id)
       await verifierRepere(s.role_ancre_id);
     await base.executer(
-      'UPDATE club_evenements SET nom = ?, jeu = ?, debut = ?, fin = ?, statut = ?, description = ?, categorie_ticket_id = ?, roles_auto = ?, modele_role = ?, couleur = ?, role_ancre_id = ?, suppression_h = ?, staff_modele = ?, categories_tickets = ?, maj_le = ? WHERE id = ?',
+      'UPDATE club_evenements SET nom = ?, jeu = ?, debut = ?, fin = ?, statut = ?, description = ?, categorie_ticket_id = ?, roles_auto = ?, modele_role = ?, couleur = ?, role_ancre_id = ?, suppression_h = ?, staff_modele = ?, categories_tickets = ?, staff_roles_sup = ?, maj_le = ? WHERE id = ?',
       [
         s.nom,
         s.jeu,
@@ -495,6 +508,7 @@ export function servicesEvenements({
         s.suppression_h,
         s.staff_modele,
         s.categories_tickets,
+        s.staff_roles_sup,
         iso(maintenant()),
         id,
       ],
@@ -530,10 +544,12 @@ export function servicesEvenements({
     }
     // Rôle staff : catégories de tickets, nom de l'événement ou modèle changés (ou rôle déjà là) : mis à jour.
     let staff = null;
-    const staffChange = evt.categories_tickets !== avant.categories_tickets || evt.staff_modele !== avant.staff_modele || evt.nom !== avant.nom;
-    if (staffChange && (evt.staff_role_id || auto(evt))) {
+    const supChange = (evt.staff_roles_sup ?? '[]') !== (avant.staff_roles_sup ?? '[]');
+    const staffChange = supChange || evt.categories_tickets !== avant.categories_tickets || evt.staff_modele !== avant.staff_modele || evt.nom !== avant.nom;
+    if (staffChange && (evt.staff_role_id || auto(evt) || supChange)) {
       const c = await discordCtx();
-      if (!c.erreur) staff = await synchroniserStaff(c, evt);
+      const supRetires = jsonOu(avant.staff_roles_sup, []).filter(r => !jsonOu(evt.staff_roles_sup, []).includes(r));
+      if (!c.erreur) staff = await synchroniserStaff(c, evt, { supRetires });
     }
     return lire(acteur, id, discord || staff ? { discord: { erreur: null, bilan: discord, staff } } : {});
   }
@@ -643,7 +659,11 @@ export function servicesEvenements({
       nettoyage.erreur = c.erreur;
       const evt = await base.premier('SELECT staff_role_id FROM club_evenements WHERE id = ?', [id]);
       if (evt?.staff_role_id) await retirerDesCategories(base, evt.staff_role_id, null, maintenant);
+      // Rôles staff supplémentaires : seuls les ajouts de l'événement aux catégories de tickets sont défaits.
+      await accesStaffSup({ base, fetch: fetchDiscord, jetonBot: null, guildId: null, maintenant }, { id }, { fin: true });
     } else {
+      // Hubs retirés : leurs surcharges d'origine rendues s'ils étaient cachés par le bot.
+      if (hubs.length) await rendreHubs(c, hubs.map(h => h.id)).catch(e => journal.warn?.('[esport] événement supprimé : hubs non rendus', e?.message ?? e));
       try {
         nettoyage = { ...(await nettoyerEvenement(c, id)), erreur: null };
       } catch (e) {

@@ -85,7 +85,18 @@ placé avec le même réglage « juste en dessous du rôle… » (au-dessus des 
   **réappliqué** aux salons d'équipe déjà ouverts (un `PUT` de surcharge « voir, se connecter » par salon, sans effet
   s'il y est déjà). Inutile donc de l'ajouter aux « Rôles autorisés en plus » d'un hub : la fiche et le Bot Esport HQ
   l'affichent comme une puce **« inclus automatiquement »**.
-- **Fin** : supprimé avec les rôles des équipes (bouton, cron) et retiré des rôles du staff des catégories de tickets.
+- **Hub de l'événement** : le staff qui passe par le hub a **son propre salon** (voir « Vocaux de l'événement ») et
+  voit le hub caché.
+- **Rôles staff supplémentaires** (champ de la fiche, sélecteur repliable des rôles du serveur dans l'ordre de la
+  hiérarchie, après « Lire les rôles du serveur » ; 20 au plus) : des rôles Discord **existants** reçoivent exactement
+  les mêmes droits que le rôle staff : hub et salon du staff, surcharges « voir, se connecter » de tous les salons
+  vocaux de l'événement, rôles qui traitent les tickets des catégories de l'événement, hub caché. Le bot ne les **crée
+  ni ne les supprime** : il n'ajoute un rôle à une catégorie que là où il n'y était pas, note ces ajouts
+  (`club_evenements.staff_sup_ajouts`, migration 0067) et ne défait que ceux-là (rôle retiré de la liste, catégorie
+  retirée de l'événement, fin ou suppression de l'événement) ; un rôle qui traitait déjà une catégorie y reste.
+  Changer la liste resynchronise les salons ouverts, les surcharges du hub et les catégories de tickets.
+- **Fin** : supprimé avec les rôles des équipes (bouton, cron) et retiré des rôles du staff des catégories de tickets ;
+  les rôles staff supplémentaires restent sur Discord, seuls leurs accès ajoutés par l'événement sont retirés.
 - Données : `club_evenement_staff` (Discord ID, nom, compte lié) suit l'export ; RGPD : retiré du staff.
 
 ## Import depuis les tickets
@@ -131,6 +142,13 @@ retirent ici, et seulement ici**. Un membre qui a le rôle d'une équipe rejoint
   sont pas proposés), **catégorie des salons créés** (celle du hub par défaut), **modèle du nom** (`{tag} — {nom}` par
   défaut), **places par défaut** (0 : illimité), **rôles autorisés en plus** (casters, admins). Le verrouillage est
   implicite (toujours verrouillé).
+- **Salon du staff** : le staff (rôle staff, rôles staff supplémentaires, rôles autorisés en plus, rôles du staff des
+  salons vocaux) qui passe par le hub a son propre salon, nommé d'après **« Nom du salon du staff »** (`Staff —
+  {pseudo}` par défaut), verrouillé sur le staff, avec les contrôles habituels ; une personne qui a aussi le rôle d'une
+  équipe va dans le salon de son équipe. Les autres sont refusés (MP).
+- **Options du hub** (interrupteurs, comme pour les hubs ordinaires : [vocaux.md](vocaux.md#options-de-chaque-hub)) :
+  placer les salons créés juste sous le hub (oui), visibles mais pas joignables (non), **cacher le hub** aux personnes
+  sans permission (**oui par défaut** : seuls les équipes, le staff et les rôles autorisés le voient).
 - Lignes en lecture seule : « Le rôle staff de l'événement « … » a accès automatiquement à tous les vocaux d'équipe »
   (ou qu'il l'aura dès sa création), et chaque salon est verrouillé sur le rôle de son équipe ; sous les rôles
   autorisés, la puce du rôle staff « inclus automatiquement ».
