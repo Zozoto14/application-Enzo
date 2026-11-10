@@ -11,6 +11,7 @@ import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { ErreurEsport } from '../client';
 import { ESP, TYPO, ombre, rayonCarte, titre as styleTitreEsport } from './design';
 import { tr } from '../i18n';
+import { SelecteurRepliable, type NatureSelecteur } from '../../ui/selecteurs/SelecteurRepliable';
 
 export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -132,7 +133,13 @@ export function BoutonConfirme({
   );
 }
 
-/** Choix dans une courte liste (rôles…), en pastilles qui passent à la ligne. */
+/** Au-delà, une liste de pastilles se replie (sélecteur avec résumé et recherche). */
+export const SEUIL_REPLIABLE = 8;
+
+/**
+ * Choix dans une courte liste (rôles…), en pastilles qui passent à la ligne. Une longue liste (plus de
+ * `SEUIL_REPLIABLE` éléments : membres, salons…) devient un sélecteur repliable, sauf `repliable={false}`.
+ */
 export function Choix<T extends string>({
   theme,
   libelle,
@@ -140,6 +147,8 @@ export function Choix<T extends string>({
   options,
   onChoisir,
   testID,
+  repliable,
+  nature,
 }: {
   theme: ThemeHub;
   libelle: string;
@@ -147,7 +156,12 @@ export function Choix<T extends string>({
   options: ReadonlyArray<{ id: T; nom: string; couleur?: string; desactive?: boolean }>;
   onChoisir(v: T): void;
   testID: string;
+  repliable?: boolean;
+  nature?: NatureSelecteur;
 }) {
+  if (repliable ?? options.length > SEUIL_REPLIABLE) {
+    return <SelecteurRepliable theme={theme} libelle={libelle} valeur={valeur} options={options} onChoisir={id => onChoisir(id as T)} testID={testID} nature={nature} />;
+  }
   return (
     <View style={{ gap: 6 }}>
       <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{libelle}</Text>

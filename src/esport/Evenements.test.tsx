@@ -18,6 +18,7 @@ import type {
   FicheEvenement,
   PropositionEquipe,
 } from './evenements/api';
+import { choisirDans, deplier } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
 afterEach(() => definirLangue('fr'));
@@ -355,6 +356,7 @@ test('rôle repère : hiérarchie du serveur, rôle du bot grisé ; « juste en 
   await fireEvent.press(await screen.findByTestId('esport-ev-ev1'));
   expect(await screen.findByTestId('esport-ev-hubs')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-ev-position-lire'));
+  await deplier('esport-ev-position');
   const bot = await screen.findByTestId(
     'esport-ev-position-720000000000000002',
   );
@@ -458,7 +460,7 @@ test('staff de l’événement : catégories de tickets de l’événement et no
   const { client, appels } = fauxClient(ficheDe());
   await render(<PageEvenements theme={theme} client={client} large />);
   await fireEvent.press(await screen.findByTestId('esport-ev-ev1'));
-  await fireEvent.press(await screen.findByTestId('esport-ev-categories-cat1'));
+  await choisirDans('esport-ev-categories', 'cat1');
   await fireEvent.changeText(screen.getByTestId('esport-ev-staff-modele'), 'Staff {evenement} 2026');
   await fireEvent.press(screen.getByTestId('esport-ev-enregistrer'));
   await screen.findByText('Enregistré.');

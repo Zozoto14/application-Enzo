@@ -14,6 +14,7 @@ import { ConfigVocaux, ReglagesVocaux } from './ui/vocaux/ConfigVocaux';
 import { fonctionnalitesBot } from './ui/bot/sections';
 import type { EtatBotAdmin } from './bot/api';
 import type { ConfigVocaux as Config } from './vocaux/api';
+import { choisirDans } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
 afterEach(() => definirLangue('fr'));
@@ -76,17 +77,17 @@ test('hubs : ajout, salon, catégorie, modèle, limite, verrouillage ; staff, d�
   const { client, appels } = fauxClient(configDe());
   await render(<ConfigVocaux theme={theme} client={client} large />);
   await fireEvent.press(await screen.findByTestId('esport-vc-hub-ajouter'));
-  await fireEvent.press(await screen.findByTestId('esport-vc-hub-0-salon-751'));
-  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-categorie-750'));
+  await choisirDans('esport-vc-hub-0-salon', '751');
+  await choisirDans('esport-vc-hub-0-categorie', '750');
   expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('Salon de {pseudo}');
   await fireEvent.changeText(screen.getByTestId('esport-vc-hub-0-modele'), 'Vocal de {pseudo}');
   await fireEvent.changeText(screen.getByTestId('esport-vc-hub-0-limite'), '5');
   await fireEvent(screen.getByTestId('esport-vc-hub-0-verrouille'), 'valueChange', true);
   await fireEvent(screen.getByTestId('esport-vc-actif'), 'valueChange', true);
-  await fireEvent.press(screen.getByTestId('esport-vc-staff-720'));
+  await choisirDans('esport-vc-staff', '720');
   await fireEvent.changeText(screen.getByTestId('esport-vc-delai'), '30');
   await fireEvent.press(screen.getByTestId('esport-vc-proprietaire-garder'));
-  await fireEvent.press(screen.getByTestId('esport-vc-journaux-713'));
+  await choisirDans('esport-vc-journaux', '713');
   await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
   await screen.findByText('Enregistré.');
   const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as Record<string, unknown>;
@@ -103,7 +104,7 @@ test('hub d’événement : option toujours visible, événement lié, modèle d
   const { client, appels } = fauxClient(conf);
   await render(<ConfigVocaux theme={theme} client={client} large />);
   await fireEvent.press(await screen.findByTestId('esport-vc-hub-ajouter'));
-  await fireEvent.press(await screen.findByTestId('esport-vc-hub-0-salon-751'));
+  await choisirDans('esport-vc-hub-0-salon', '751');
   expect(screen.getByTestId('esport-vc-hub-0-verrouille')).toBeTruthy();
   await fireEvent(screen.getByTestId('esport-vc-hub-0-evenement'), 'valueChange', true);
   // Plusieurs événements : il faut en choisir un avant d'enregistrer.
@@ -113,7 +114,7 @@ test('hub d’événement : option toujours visible, événement lié, modèle d
   expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('{tag} — {nom}');
   expect(screen.queryByTestId('esport-vc-hub-0-verrouille')).toBeNull();
   expect(screen.getByText(/reste verrouillé sur son rôle/)).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-roles-720'));
+  await choisirDans('esport-vc-hub-0-roles', '720');
   await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
   await screen.findByText('Enregistré.');
   const puts = appels.filter(a => a.chemin === '/vocaux/config' && a.methode === 'PUT');
@@ -155,7 +156,7 @@ test('commandes /voc : désactiver une sous-commande, la réserver à un rôle ;
   await render(<ConfigVocaux theme={theme} client={client} large />);
   expect(await screen.findByText('/voc renommer : renommer son salon')).toBeTruthy();
   await fireEvent(screen.getByTestId('esport-vc-cmd-renommer-actif'), 'valueChange', false);
-  await fireEvent.press(await screen.findByTestId('esport-vc-cmd-verrouiller-roles-720'));
+  await choisirDans('esport-vc-cmd-verrouiller-roles', '720');
   await fireEvent.press(screen.getByTestId('esport-vc-cmd-enregistrer'));
   await screen.findByText('Enregistré.');
   const put = appels.find(a => a.chemin === '/vocaux/config/commandes' && a.methode === 'PUT')!.corps as Record<string, { actif: boolean; roles: string[] }>;

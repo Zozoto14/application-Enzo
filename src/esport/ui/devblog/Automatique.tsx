@@ -19,6 +19,7 @@ import { Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte } from '../design';
 import { ApercuDiscord } from './Contenu';
 import { ChampDateHeure, ChampHeure } from '../../../ui/dates';
+import { SelecteurRepliable } from '../../../ui/selecteurs/SelecteurRepliable';
 
 /** Date et heure lisibles dans la langue du compte, à l'heure de Paris. */
 export function dateHeureClub(isoUtc: string): string {
@@ -34,21 +35,23 @@ function demain18h(): string {
   return `${p} 18:00`;
 }
 
-/** Cases des salons Discord (club, teams). */
+/** Salons Discord (club, teams) : sélecteur repliable, groupé club / teams. */
 export function ChoixSalons({ theme, salons, choisis, onChanger, prefixe }: { theme: ThemeHub; salons: SalonDevblog[]; choisis: string[]; onChanger(c: string[]): void; prefixe: string }) {
   if (!salons.length) return <Text style={attenue(theme, 13)}>{trDv('discord_salons_aucun')}</Text>;
+  // Identifiants de test sans « : » (« club-annonces »), comme les anciennes cases.
+  const id = (cle: string) => cle.replace(':', '-');
+  const cle = new Map(salons.map(s => [id(s.cle), s.cle]));
   return (
-    <View style={{ gap: 2 }}>
-      {salons.map(s => (
-        <View key={s.cle} style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, minHeight: 44 }}>
-          <Case theme={theme} coche={choisis.includes(s.cle)} libelle={s.nom} onChanger={v => onChanger(v ? [...new Set([...choisis, s.cle])] : choisis.filter(x => x !== s.cle))} testID={`${prefixe}-${s.cle.replace(':', '-')}`} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={texte(theme, 14)} numberOfLines={1}>{`${s.genre === 'club' ? trDv('discord_club') : trDv('discord_team')} · ${s.nom}`}</Text>
-            <Text style={attenue(theme, 12)} numberOfLines={1}>{[s.detail, s.invalide ? trDv('discord_invalide') : ''].filter(Boolean).join(' · ')}</Text>
-          </View>
-        </View>
-      ))}
-    </View>
+    <SelecteurRepliable
+      theme={theme}
+      multiple
+      nature="salon"
+      libelle={trDv('discord_salons')}
+      valeurs={choisis.map(id)}
+      options={salons.map(s => ({ id: id(s.cle), nom: s.nom, groupe: s.genre === 'club' ? trDv('discord_club') : trDv('discord_team'), detail: [s.detail, s.invalide ? trDv('discord_invalide') : ''].filter(Boolean).join(' · ') }))}
+      onChanger={v => onChanger(v.map(x => cle.get(x) ?? x))}
+      testID={prefixe}
+    />
   );
 }
 
@@ -100,7 +103,6 @@ export function ToutPublier({ theme, client, entree, modifie, onPublie }: { them
       ) : (
         <View style={{ gap: ESP.s }} testID="esport-devblog-tout-panneau">
           <Text style={texte(theme, 14)}>{`✓ ${entree.statut === 'publie' ? trDv('tout_publier_deja_app') : trDv('tout_publier_app')}`}</Text>
-          <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{trDv('discord_salons')}</Text>
           <ChoixSalons theme={theme} salons={salons} choisis={choisis} onChanger={setChoisis} prefixe="esport-devblog-tout-salon" />
           {choisis.length === 0 ? <Text style={attenue(theme, 13)}>{trDv('tout_publier_salons_aucun')}</Text> : null}
           <LigneCase theme={theme} coche={here} libelle={trDv('discord_here')} onChanger={setHere} testID="esport-devblog-tout-here" />
@@ -157,8 +159,7 @@ export function Programmation({ theme, client, entree, modifie, onChange }: { th
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-programmation" />
       {prog ? <Badge theme={theme} texte={trDv('prog_le', { date: dateHeureClub(prog.le) })} ton="accent" testID="esport-devblog-programmation-etat" /> : null}
       {modifie ? <Text style={{ ...attenue(theme, 13), color: theme.alerte }}>{trDv('enregistrer_d_abord')}</Text> : null}
-      <ChampDateHeure theme={theme} fuseau="Europe/Paris" libelle={trDv('prog_champ')} valeur={quand} onChanger={setQuand} testID="esport-devblog-programmation-quand" style={{ maxWidth: 260 }} />
-      <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{trDv('discord_salons')}</Text>
+      <ChampDateHeure theme={theme} fuseau="Europe/Paris" libelle={trDv('prog_champ')} valeur={quand} onChanger={setQuand} testID="esport-devblog-programmation-quand" style={{ maxWidth: 340 }} />
       <ChoixSalons theme={theme} salons={salons} choisis={choisis} onChanger={setChoisis} prefixe="esport-devblog-programmation-salon" />
       <LigneCase theme={theme} coche={here} libelle={trDv('discord_here')} onChanger={setHere} testID="esport-devblog-programmation-here" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>

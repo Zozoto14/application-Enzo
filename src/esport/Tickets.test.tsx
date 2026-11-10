@@ -16,6 +16,7 @@ import { ConfigTickets } from './ui/tickets/ConfigTickets';
 import type { Categorie, ChargeDiscord, ConfigTickets as Config, DetailTicket, ListeAvis, ModeleCategorie, ModelePanneau, Panneau, ResumeTicket } from './tickets/api';
 import { AvisTicketsPage } from './ui/tickets/AvisTickets';
 import { ListeTickets } from './ui/tickets/TicketsStaff';
+import { choisirDans } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
 afterEach(() => definirLangue('fr'));
@@ -97,7 +98,7 @@ test('catégorie : création avec un champ de formulaire, rôles de l’app', as
   await fireEvent.press(screen.getByTestId('esport-tk-cat-nouvelle'));
   await fireEvent.changeText(screen.getByTestId('esport-tk-cat-nom-fr'), 'Recrutement');
   await fireEvent.changeText(screen.getByTestId('esport-tk-cat-nom-en'), 'Recruitment');
-  await fireEvent.press(screen.getByTestId('esport-tk-cat-roles-app-club:r1'));
+  await choisirDans('esport-tk-cat-roles-app', 'club:r1');
   await fireEvent.press(screen.getByTestId('esport-tk-cat-champ-ajouter'));
   await fireEvent.changeText(screen.getByTestId('esport-tk-cat-champ-0-libelle-fr'), 'Ton rang');
   await fireEvent.press(screen.getByTestId('esport-tk-cat-enregistrer'));
@@ -160,8 +161,8 @@ test('panneau : aperçu comme sur Discord, puis publication', async () => {
   await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-panneaux'));
   await fireEvent.press(screen.getByTestId('esport-tk-pan-nouveau'));
   await fireEvent.changeText(screen.getByTestId('esport-tk-pan-titre-fr'), 'Support du club');
-  await waitFor(() => expect(screen.getByTestId('esport-tk-pan-salon-713')).toBeTruthy());
-  await fireEvent.press(screen.getByTestId('esport-tk-pan-salon-713'));
+  await screen.findByTestId('esport-tk-pan-salon-modifier');
+  await choisirDans('esport-tk-pan-salon', '713');
   await fireEvent.press(screen.getByTestId('esport-tk-pan-apercu'));
   await screen.findByTestId('esport-tk-apercu');
   expect(screen.getByText('Help · Aide')).toBeTruthy();
@@ -333,15 +334,15 @@ test('Général : choisir le serveur montre ses catégories sans enregistrer ; s
   expect(screen.getByTestId('esport-tk-general-manque')).toBeTruthy();
   // Le serveur est choisi : ses catégories sont lues TOUT DE SUITE (aucun enregistrement avant).
   await fireEvent.press(await screen.findByTestId('esport-tk-general-serveur-700'));
-  await screen.findByTestId('esport-tk-general-ouverts-710');
+  await screen.findByTestId('esport-tk-general-ouverts-modifier');
   expect(appels.some(a => a.chemin === '/tickets/config/discord?serveur=700')).toBe(true);
   expect(appels.some(a => a.methode === 'PUT')).toBe(false);
   expect(screen.queryByText('Choisissez d’abord le serveur.')).toBeNull();
   expect(screen.getByTestId('esport-tk-general-non-enregistre')).toBeTruthy();
   expect(screen.getByText(/catégorie Discord des tickets ouverts\.$/)).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('esport-tk-general-ouverts-710'));
-  await fireEvent.press(screen.getByTestId('esport-tk-general-archives-711'));
-  await fireEvent.press(screen.getByTestId('esport-tk-general-journaux-713'));
+  await choisirDans('esport-tk-general-ouverts', '710');
+  await choisirDans('esport-tk-general-archives', '711');
+  await choisirDans('esport-tk-general-journaux', '713');
   expect(screen.queryByTestId('esport-tk-general-manque')).toBeNull();
   // Tickets supprimés : lisibles 30 jours par défaut, réglable.
   expect(screen.getByTestId('esport-tk-general-retentionSuppressionJours').props.value).toBe('30');
@@ -786,8 +787,8 @@ test('Bienvenue : rôle, salon et message choisis, activation enregistrée ; tit
   await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-bienvenue'));
   expect(screen.getByText(/Server Members Intent/)).toBeTruthy();
   await fireEvent(screen.getByTestId('esport-tk-bv-actif'), 'valueChange', true);
-  await fireEvent.press(await screen.findByTestId('esport-tk-bv-role-720'));
-  await fireEvent.press(screen.getByTestId('esport-tk-bv-salon-713'));
+  await choisirDans('esport-tk-bv-role', '720');
+  await choisirDans('esport-tk-bv-salon', '713');
   await fireEvent.changeText(screen.getByTestId('esport-tk-bv-message'), 'Bienvenue {membre} dans {role} 💥');
   expect(screen.getByTestId('esport-tk-bv-suppression').props.value).toBe('10');
   await fireEvent.changeText(screen.getByTestId('esport-tk-bv-suppression'), '5');

@@ -16,6 +16,7 @@ import { documentVide } from './strats/document';
 import { lireTags } from './strats/libelles';
 import { PageTeam, entreesBarre } from './ui/PageTeam';
 import { fournirAssets } from './ui/strats/commun';
+import { choisirDans } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
 const TOUS = ['activity_log', 'strat_editor', 'playbook'];
@@ -226,7 +227,7 @@ describe('strats', () => {
     expect((await screen.findByTestId('esport-strat-partage-url')).props.children).toBe('https://esport.test/partage/strats/sp1.x');
     await fireEvent.press(screen.getByTestId('esport-strats-nouvelle'));
     await fireEvent.changeText(await screen.findByTestId('esport-strats-titre'), 'Retake B');
-    await fireEvent.press(screen.getByTestId('esport-strats-carte-bind'));
+    await choisirDans('esport-strats-carte', 'bind');
     await fireEvent.press(screen.getByTestId('esport-strats-side-defense'));
     await fireEvent.press(screen.getByTestId('esport-strats-type-retake'));
     await fireEvent.press(screen.getByTestId('esport-strats-creer'));

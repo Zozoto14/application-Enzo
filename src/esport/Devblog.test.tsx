@@ -18,6 +18,7 @@ import { PageDevblog } from './ui/devblog/PageDevblog';
 // Rendu du serveur (référence) : l'aperçu local doit être identique.
 import * as serveur from '../../esport/noyau/devblog/regles.mjs';
 import * as premier from '../../esport/noyau/devblog/premier.mjs';
+import { deplier } from '../ui/selecteurs/deplier';
 
 const theme = themeHub('nuit');
 const relaisReel = fabrique.relais;
@@ -239,6 +240,7 @@ describe('publication en un clic, programmée, automatique', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('esport-devblog-tout-ouvrir'));
     });
+    await deplier('esport-devblog-tout-salon');
     await waitFor(() => expect(screen.getByTestId('esport-devblog-tout-salon-salon-s1').props.accessibilityState.checked).toBe(true));
     expect(screen.getByTestId('esport-devblog-tout-here').props.accessibilityState.checked).toBe(true);
     expect(screen.getByTestId('esport-devblog-tout-apercu-en-0')).toBeTruthy();
@@ -270,6 +272,7 @@ describe('publication en un clic, programmée, automatique', () => {
   it('programmation (téléphone) : date et heure de Paris, salons par défaut, puis annulation', async () => {
     const requete = serveurAuto();
     await ouvrirBrouillon(requete, 'telephone');
+    await deplier('esport-devblog-programmation-salon');
     await waitFor(() => expect(screen.getByTestId('esport-devblog-programmation-salon-salon-s1').props.accessibilityState.checked).toBe(true));
     await fireEvent.changeText(screen.getByTestId('esport-devblog-programmation-quand'), '2026-10-31 18:00');
     await act(async () => {

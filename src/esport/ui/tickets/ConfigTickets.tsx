@@ -20,6 +20,7 @@ import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from 
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
 import { ChampHeure } from '../../../ui/dates';
+import { SelecteurRepliable, optionsRoles, optionsSalons, type NatureSelecteur } from '../../../ui/selecteurs/SelecteurRepliable';
 
 export type SectionConfigTickets = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
 type Section = SectionConfigTickets;
@@ -45,36 +46,27 @@ export function PastilleConnexion({ theme, connexion, actif }: { theme: ThemeHub
 }
 
 /** Choix multiple en pastilles (rôles, catégories) ; aussi utilisé par Administration › Bot Esport HQ › Fonctionnalités. */
-export function ChoixMultiple({ theme, libelle, valeurs, options, onChanger, max, testID }: { theme: ThemeHub; libelle: string; valeurs: string[]; options: ReadonlyArray<{ id: string; nom: string; couleur?: string | null }>; onChanger(v: string[]): void; max?: number; testID: string }) {
-  return (
-    <View style={{ gap: 6 }}>
-      <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{libelle}</Text>
-      <View style={styles.ligne}>
-        {options.map(o => {
-          const coche = valeurs.includes(o.id);
-          const plein = !coche && max !== undefined && valeurs.length >= max;
-          return (
-            <Pressable
-              key={o.id}
-              testID={`${testID}-${o.id}`}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: coche, disabled: plein }}
-              accessibilityLabel={`${libelle} : ${o.nom}`}
-              disabled={plein}
-              onPress={() => onChanger(coche ? valeurs.filter(v => v !== o.id) : [...valeurs, o.id])}
-              style={[styles.choix, { borderColor: coche ? (o.couleur ?? theme.accent) : theme.ligne, backgroundColor: coche ? teinteTransparente(o.couleur ?? theme.accent, 0.2) : theme.surface, borderRadius: 10, opacity: plein ? 0.4 : 1, maxWidth: '100%' }]}
-            >
-              <Text style={{ ...texte(theme, 13), fontWeight: coche ? '700' : '500', flexShrink: 1 }} numberOfLines={1}>
-                {coche ? '✓ ' : ''}
-                {o.nom}
-              </Text>
-            </Pressable>
-          );
-        })}
-        {!options.length ? <Text style={attenue(theme)}>{trTk('rien')}</Text> : null}
-      </View>
-    </View>
-  );
+/** Choix de plusieurs éléments (rôles, catégories…) : sélecteur repliable avec résumé, recherche et « Tout / Aucun ». */
+export function ChoixMultiple({
+  theme,
+  libelle,
+  valeurs,
+  options,
+  onChanger,
+  max,
+  testID,
+  nature = 'role',
+}: {
+  theme: ThemeHub;
+  libelle: string;
+  valeurs: string[];
+  options: ReadonlyArray<{ id: string; nom: string; couleur?: string | null; groupe?: string; desactive?: boolean }>;
+  onChanger(v: string[]): void;
+  max?: number;
+  testID: string;
+  nature?: NatureSelecteur;
+}) {
+  return <SelecteurRepliable theme={theme} multiple libelle={libelle} valeurs={valeurs} options={options} onChanger={onChanger} max={max} testID={testID} nature={nature} vide={trTk('rien')} />;
 }
 
 function DeuxChamps({ theme, cle, vars, valeur, onChanger, multiligne, max, testID }: { theme: ThemeHub; cle: [CleTk, CleTk]; vars?: Record<string, string>; valeur: DeuxLangues; onChanger(v: DeuxLangues): void; multiligne?: boolean; max?: number; testID: string }) {
@@ -344,8 +336,8 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
   };
   const duServeur = lu && lu.serveur?.id === g.guildId && !lu.erreur;
   const salons = duServeur ? (lu.salons ?? []) : [];
-  const categoriesDiscord = salons.filter(s => s.type === 'categorie').map(s => ({ id: s.id, nom: s.nom }));
-  const textes = salons.filter(s => s.type === 'texte').map(s => ({ id: s.id, nom: `#${s.nom}` }));
+  const categoriesDiscord = optionsSalons(salons, ['categorie']);
+  const textes = optionsSalons(salons, ['texte'], s => `#${s.nom}`);
   const erreurDiscord = lu && (!g.guildId || lu.serveur?.id === g.guildId || lu.erreur === 'discord-app' || lu.erreurDetail?.etape === 'serveurs') ? (lu.erreur === 'discord-app' ? ((lu as ServeurDiscord & { message?: string }).message ?? trTk('erreur.erreur')) : texteErreurDiscord(lu)) : null;
   const manque = g.actif ? (!g.guildId ? trTk('general.manque_serveur') : !g.categorieOuverts ? trTk('general.manque_categorie') : null) : null;
   const nombre = (cle: keyof General, libelle: CleTk) => <Champ theme={theme} libelle={trTk(libelle)} valeur={String(g[cle] ?? '')} onChanger={v => setG({ ...g, [cle]: entier(v) })} clavier="number-pad" maxLength={4} testID={`esport-tk-general-${cle}`} />;
@@ -374,9 +366,9 @@ function SectionGeneral({ theme, api, conf, setConf, serveur, onServeur, onEnreg
       {g.guildId && g.guildId !== enregistre.guildId && duServeur ? <Text style={attenue(theme)} testID="esport-tk-general-non-enregistre">{trTk('general.non_enregistre')}</Text> : null}
       {salons.length ? (
         <>
-          <Choix theme={theme} libelle={trTk('general.categorie_ouverts')} valeur={g.categorieOuverts ?? undefined} options={categoriesDiscord} onChoisir={id => setG({ ...g, categorieOuverts: id })} testID="esport-tk-general-ouverts" />
-          <Choix theme={theme} libelle={trTk('general.categorie_archives')} valeur={g.categorieArchives ?? ''} options={[{ id: '', nom: trTk('rien') }, ...categoriesDiscord]} onChoisir={id => setG({ ...g, categorieArchives: id || null })} testID="esport-tk-general-archives" />
-          <Choix theme={theme} libelle={trTk('general.salon_journaux')} valeur={g.salonJournaux ?? ''} options={[{ id: '', nom: trTk('rien') }, ...textes]} onChoisir={id => setG({ ...g, salonJournaux: id || null })} testID="esport-tk-general-journaux" />
+          <SelecteurRepliable theme={theme} nature="categorie" libelle={trTk('general.categorie_ouverts')} valeur={g.categorieOuverts ?? undefined} options={categoriesDiscord} onChoisir={id => setG({ ...g, categorieOuverts: id })} testID="esport-tk-general-ouverts" />
+          <SelecteurRepliable theme={theme} nature="categorie" libelle={trTk('general.categorie_archives')} valeur={g.categorieArchives ?? ''} options={[{ id: '', nom: trTk('rien') }, ...categoriesDiscord]} onChoisir={id => setG({ ...g, categorieArchives: id || null })} testID="esport-tk-general-archives" />
+          <SelecteurRepliable theme={theme} nature="salon" libelle={trTk('general.salon_journaux')} valeur={g.salonJournaux ?? ''} options={[{ id: '', nom: trTk('rien') }, ...textes]} onChoisir={id => setG({ ...g, salonJournaux: id || null })} testID="esport-tk-general-journaux" />
         </>
       ) : null}
       <Choix theme={theme} libelle={trTk('general.langue')} valeur={g.langue} options={conf.choix.langues.map(l => ({ id: l, nom: trTk(`langue.${l}` as CleTk) }))} onChoisir={(langue: ModeLangue) => setG({ ...g, langue })} testID="esport-tk-general-langue" />
@@ -590,7 +582,7 @@ function EditeurCategorie({ theme, api, conf, agir, roles, categorie, onFermer, 
   const [jours, setJours] = useState(categorie?.fermetureAutoH ? joursDeHeures(categorie.fermetureAutoH) : '7');
   const { erreur, agir: agirLocal } = useAgir();
   const champ = (i: number, maj: Partial<ChampFormulaire>) => setC({ ...c, formulaire: c.formulaire.map((x, j) => (j === i ? { ...x, ...maj } : x)) });
-  const rolesDiscord = roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }));
+  const rolesDiscord = optionsRoles(roles);
   const enregistrer = () =>
     agirLocal('enregistrer', async () => {
       const fermetureAutoH = heuresPourMode(modeFerm, jours);
@@ -828,7 +820,7 @@ function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, o
   const [apercu, setApercu] = useState<ChargeDiscord | undefined>();
   const [drive, setDrive] = useState(false);
   const { erreur, avis, agir } = useAgir();
-  const textes = salons.filter(x => x.type === 'texte').map(x => ({ id: x.id, nom: `#${x.nom}` }));
+  const textes = optionsSalons(salons, ['texte'], x => `#${x.nom}`);
   const enregistrer = async () => {
     const r = panneau ? await api.modifierPanneau(panneau.id, s) : await api.creerPanneau(s);
     onMaj(r);
@@ -845,7 +837,7 @@ function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, o
         <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: /^#[0-9a-fA-F]{6}$/.test(s.couleur) ? s.couleur : theme.ligne, marginBottom: 6 }} />
       </View>
       <Choix theme={theme} libelle={trTk('pan.style')} valeur={s.style} options={[{ id: 'boutons', nom: trTk('pan.boutons') }, { id: 'menu', nom: trTk('pan.menu') }]} onChoisir={(style: 'boutons' | 'menu') => setS({ ...s, style })} testID="esport-tk-pan-style" />
-      <ChoixMultiple theme={theme} libelle={trTk('pan.categories')} valeurs={s.categories} options={conf.categories.map(c => ({ id: c.id, nom: c.nom.fr || c.nom.en, couleur: c.couleur }))} onChanger={categories => setS({ ...s, categories })} max={25} testID="esport-tk-pan-categories" />
+      <ChoixMultiple theme={theme} nature="categorie" libelle={trTk('pan.categories')} valeurs={s.categories} options={conf.categories.map(c => ({ id: c.id, nom: c.nom.fr || c.nom.en, couleur: c.couleur }))} onChanger={categories => setS({ ...s, categories })} max={25} testID="esport-tk-pan-categories" />
       {s.style === 'boutons'
         ? s.categories.map(id => {
             const c = conf.categories.find(x => x.id === id);
@@ -854,7 +846,7 @@ function EditeurPanneau({ theme, api, conf, salons, client, panneau, onFermer, o
             return <DeuxChamps key={id} theme={theme} cle={['pan.libelle_fr', 'pan.libelle_en']} vars={{ nom }} valeur={s.libelles[id] ?? VIDE} onChanger={v => setS({ ...s, libelles: { ...s.libelles, [id]: v } })} max={80} testID={`esport-tk-pan-libelle-${id}`} />;
           })
         : null}
-      {textes.length ? <Choix theme={theme} libelle={trTk('pan.salon')} valeur={s.salonId ?? undefined} options={textes} onChoisir={salonId => setS({ ...s, salonId })} testID="esport-tk-pan-salon" /> : <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text>}
+      {textes.length ? <SelecteurRepliable theme={theme} nature="salon" libelle={trTk('pan.salon')} valeur={s.salonId ?? undefined} options={textes} onChoisir={salonId => setS({ ...s, salonId })} testID="esport-tk-pan-salon" /> : <Text style={attenue(theme)}>{trTk('general.aucun_salon')}</Text>}
       <Avis theme={theme} genre="info" texte={trTk('pan.lecture_seule')} testID="esport-tk-pan-lecture-seule" />
       <View style={styles.ligne}>
         <Text style={texte(theme)}>{s.imageElementId ? trTk('pan.image_choisie') : trTk('pan.image')}</Text>
@@ -998,7 +990,7 @@ function SectionHoraires({ theme, api, conf, setConf, agir }: PropsSection) {
 
 function SectionCommandes({ theme, api, conf, setConf, agir, roles }: PropsSection) {
   const [c, setC] = useState(conf.commandes);
-  const rolesDiscord = roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }));
+  const rolesDiscord = optionsRoles(roles);
   return (
     <Bloc theme={theme} testID="esport-tk-conf-commandes">
       <Text style={attenue(theme)}>{trTk('cmd.aide')}</Text>
@@ -1022,8 +1014,8 @@ function SectionCommandes({ theme, api, conf, setConf, agir, roles }: PropsSecti
 function SectionBienvenue({ theme, api, conf, setConf, agir, roles, salons }: PropsSection) {
   const [b, setB] = useState(conf.bienvenue);
   const etat = conf.bienvenueEtat ?? {};
-  const textes = salons.filter(x => x.type === 'texte').map(x => ({ id: x.id, nom: `# ${x.nom}` }));
-  const optionsRoles = roles.map(x => ({ id: x.id, nom: x.nom }));
+  const textes = optionsSalons(salons, ['texte'], x => `# ${x.nom}`);
+  const choixRoles = optionsRoles(roles);
   const enregistrer = () =>
     void agir('bienvenue', async () => {
       const roleNom = roles.find(x => x.id === b.roleId)?.nom ?? b.roleNom;
@@ -1048,8 +1040,8 @@ function SectionBienvenue({ theme, api, conf, setConf, agir, roles, salons }: Pr
         <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trTk('bv.actif')}</Text>
         <Interrupteur theme={theme} libelle={trTk('bv.actif')} valeur={b.actif} onChanger={actif => setB({ ...b, actif })} testID="esport-tk-bv-actif" />
       </View>
-      <Choix theme={theme} libelle={trTk('bv.role')} valeur={b.roleId ?? undefined} options={optionsRoles} onChoisir={id => setB({ ...b, roleId: id, roleNom: roles.find(x => x.id === id)?.nom ?? '' })} testID="esport-tk-bv-role" />
-      <Choix theme={theme} libelle={trTk('bv.salon')} valeur={b.salonId ?? undefined} options={textes} onChoisir={id => setB({ ...b, salonId: id })} testID="esport-tk-bv-salon" />
+      <SelecteurRepliable theme={theme} nature="role" libelle={trTk('bv.role')} valeur={b.roleId ?? undefined} options={choixRoles} onChoisir={id => setB({ ...b, roleId: id, roleNom: roles.find(x => x.id === id)?.nom ?? '' })} testID="esport-tk-bv-role" />
+      <SelecteurRepliable theme={theme} nature="salon" libelle={trTk('bv.salon')} valeur={b.salonId ?? undefined} options={textes} onChoisir={id => setB({ ...b, salonId: id })} testID="esport-tk-bv-salon" />
       <Champ theme={theme} libelle={trTk('bv.message')} valeur={b.message} onChanger={message => setB({ ...b, message })} multiligne maxLength={1800} testID="esport-tk-bv-message" />
       <Text style={attenue(theme)}>{trTk('bv.variables')}</Text>
       <Champ theme={theme} libelle={trTk('bv.suppression')} valeur={String(b.supprimerApresS ?? 0)} onChanger={v => setB({ ...b, supprimerApresS: entier(v) })} maxLength={4} testID="esport-tk-bv-suppression" />

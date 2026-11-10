@@ -229,6 +229,8 @@ export interface SalonDiscord {
   nom: string;
   type: 'categorie' | 'texte';
   parent: string | null;
+  /** Position Discord (ordre d’affichage). */
+  position?: number;
 }
 export interface VerifSalon {
   id: string;

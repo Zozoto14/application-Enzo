@@ -233,7 +233,7 @@ function Editeur({
           ) : null}
           {fiche.categoriesTickets.length ? (
             <>
-              <ChoixMultiple theme={theme} libelle={trEv('categories_evenement')} valeurs={f.categoriesTickets} options={fiche.categoriesTickets.map(c => ({ id: c.id, nom: nomCategorie(c) }))} onChanger={categoriesTickets => setF({ ...f, categoriesTickets })} max={10} testID="esport-ev-categories" />
+              <ChoixMultiple theme={theme} nature="categorie" libelle={trEv('categories_evenement')} valeurs={f.categoriesTickets} options={fiche.categoriesTickets.map(c => ({ id: c.id, nom: nomCategorie(c) }))} onChanger={categoriesTickets => setF({ ...f, categoriesTickets })} max={10} testID="esport-ev-categories" />
               <Text style={attenue(theme)}>{trEv('categories_evenement_aide')}</Text>
             </>
           ) : null}

@@ -21,6 +21,7 @@ import { Choix, Intertitre, Panneau as Bloc, Retours, styles, useAgir } from '..
 import { Badge, ESP, LARGEUR_CONTENU, Squelette, attenue, texte, type Ton } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import type { ContexteBot } from '../bot/sections';
+import { SelecteurRepliable, optionsRoles, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
 const entier = (v: string): number => {
@@ -68,10 +69,10 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
   }, [agir, api, recevoir]);
   if (!conf || !r) return <Squelette theme={theme} lignes={5} testID="esport-vc-chargement" />;
   const salons = serveur?.salons ?? [];
-  const vocaux = salons.filter(s => s.type === 'vocal').map(s => ({ id: s.id, nom: s.nom }));
-  const categories = [{ id: AUCUN, nom: trVc('hub_categorie_meme') }, ...salons.filter(s => s.type === 'categorie').map(s => ({ id: s.id, nom: s.nom }))];
-  const textes = [{ id: AUCUN, nom: trVc('sans_journaux') }, ...salons.filter(s => s.type === 'texte').map(s => ({ id: s.id, nom: `# ${s.nom}` }))];
-  const roles = (serveur?.roles ?? []).map(x => ({ id: x.id, nom: x.nom, couleur: x.couleur }));
+  const vocaux = optionsSalons(salons, ['vocal']);
+  const categories = [{ id: AUCUN, nom: trVc('hub_categorie_meme') }, ...optionsSalons(salons, ['categorie'])];
+  const textes = [{ id: AUCUN, nom: trVc('sans_journaux') }, ...optionsSalons(salons, ['texte'], s => `# ${s.nom}`)];
+  const roles = optionsRoles(serveur?.roles ?? []);
   const mode = conf.connexion?.mode ?? 'hors_ligne';
   const ton: Ton = mode === 'direct' ? 'ok' : mode === 'secours' ? 'alerte' : 'critique';
   const hub = (i: number, maj: Partial<Hub>) => setR({ ...r, hubs: r.hubs.map((h, j) => (j === i ? { ...h, ...maj } : h)) });
@@ -174,8 +175,8 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
               </Pressable>
               {ouvert ? (
                 <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-details`}>
-                  {vocaux.length ? <Choix theme={theme} libelle={trVc('hub_salon')} valeur={h.id || undefined} options={vocaux} onChoisir={id => hub(i, { id })} testID={`esport-vc-hub-${i}-salon`} /> : <Text style={attenue(theme)}>{h.nom || h.id || trVc('rien')}</Text>}
-                  {categories.length > 1 ? <Choix theme={theme} libelle={trVc('hub_categorie')} valeur={h.categorieId ?? AUCUN} options={categories} onChoisir={id => hub(i, { categorieId: id === AUCUN ? null : id })} testID={`esport-vc-hub-${i}-categorie`} /> : null}
+                  {vocaux.length ? <SelecteurRepliable theme={theme} nature="salon" libelle={trVc('hub_salon')} valeur={h.id || undefined} options={vocaux} onChoisir={id => hub(i, { id })} testID={`esport-vc-hub-${i}-salon`} /> : <Text style={attenue(theme)}>{h.nom || h.id || trVc('rien')}</Text>}
+                  {categories.length > 1 ? <SelecteurRepliable theme={theme} nature="categorie" libelle={trVc('hub_categorie')} valeur={h.categorieId ?? AUCUN} options={categories} onChoisir={id => hub(i, { categorieId: id === AUCUN ? null : id })} testID={`esport-vc-hub-${i}-categorie`} /> : null}
                   <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
                     <Champ theme={theme} libelle={trVc('hub_modele')} valeur={h.modeleNom} onChanger={modeleNom => hub(i, { modeleNom })} maxLength={conf.choix.limites.modele} testID={`esport-vc-hub-${i}-modele`} style={{ flexGrow: 2, flexBasis: 220, minWidth: 0 }} />
                     <Champ theme={theme} libelle={trVc('hub_limite')} valeur={String(h.limite)} onChanger={v => hub(i, { limite: entier(v) })} maxLength={2} clavier="number-pad" testID={`esport-vc-hub-${i}-limite`} style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
@@ -237,7 +238,7 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
           <Champ theme={theme} libelle={trVc('par_membre')} valeur={String(r.maxParMembre)} onChanger={v => setR({ ...r, maxParMembre: entier(v) })} maxLength={1} clavier="number-pad" testID="esport-vc-par-membre" style={{ flexGrow: 1, flexBasis: 200, minWidth: 0 }} />
         </View>
         <Choix theme={theme} libelle={trVc('proprietaire_part')} valeur={r.quandProprietairePart} options={conf.choix.modesProprietaire.map(m => ({ id: m, nom: trVc(`mode.${m}` as CleVc) }))} onChoisir={quandProprietairePart => setR({ ...r, quandProprietairePart })} testID="esport-vc-proprietaire" />
-        {textes.length > 1 ? <Choix theme={theme} libelle={trVc('journaux')} valeur={r.salonJournaux ?? AUCUN} options={textes} onChoisir={id => setR({ ...r, salonJournaux: id === AUCUN ? null : id })} testID="esport-vc-journaux" /> : null}
+        {textes.length > 1 ? <SelecteurRepliable theme={theme} nature="salon" libelle={trVc('journaux')} valeur={r.salonJournaux ?? AUCUN} options={textes} onChoisir={id => setR({ ...r, salonJournaux: id === AUCUN ? null : id })} testID="esport-vc-journaux" /> : null}
         <BoutonHub theme={theme} variante="plein" titre={trVc('enregistrer')} onPress={enregistrer} desactive={enCours === 'enregistrer'} testID="esport-vc-enregistrer" />
       </Bloc>
 

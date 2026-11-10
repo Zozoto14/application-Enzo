@@ -6,12 +6,16 @@
  */
 
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Avis, BoutonHub } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import { trEv } from '../../i18n/evenements';
 import type { RolesServeur } from '../../evenements/api';
-import { ESP, attenue, texte } from '../design';
+import { ESP, attenue } from '../design';
+import { SelecteurRepliable } from '../../../ui/selecteurs/SelecteurRepliable';
+
+/** « Tout en bas » de la hiérarchie (pas de rôle repère). */
+const BAS = 'bas';
 
 export function PositionRoles({
   theme,
@@ -30,87 +34,11 @@ export function PositionRoles({
   lecture: boolean;
 }) {
   const choisi = valeur ? serveur?.roles.find(r => r.id === valeur) : undefined;
-  const option = (
-    id: string | null,
-    nom: string,
-    opts: { couleur?: string | null; desactive?: boolean; note?: string } = {},
-  ) => {
-    const actif = valeur === id;
-    return (
-      <Pressable
-        key={id ?? 'bas'}
-        onPress={opts.desactive ? undefined : () => onChoisir(id)}
-        disabled={opts.desactive}
-        accessibilityRole="radio"
-        accessibilityState={{
-          checked: actif,
-          disabled: Boolean(opts.desactive),
-        }}
-        accessibilityLabel={nom}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: ESP.xs,
-          paddingVertical: 6,
-          paddingHorizontal: ESP.xs,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: actif ? theme.accent : theme.ligne,
-          opacity: opts.desactive ? 0.5 : 1,
-        }}
-        testID={`esport-ev-position-${id ?? 'bas'}`}
-      >
-        <View
-          style={{
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            borderWidth: 2,
-            borderColor: actif ? theme.accent : theme.attenue,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {actif ? (
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: theme.accent,
-              }}
-            />
-          ) : null}
-        </View>
-        {opts.couleur ? (
-          <View
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: opts.couleur,
-            }}
-          />
-        ) : null}
-        <Text
-          style={{ ...texte(theme), flex: 1, minWidth: 0 }}
-          numberOfLines={1}
-        >
-          {nom}
-        </Text>
-        {opts.note ? <Text style={attenue(theme)}>{opts.note}</Text> : null}
-      </Pressable>
-    );
-  };
   return (
     <View
       style={{ gap: ESP.xs }}
       testID="esport-ev-position"
-      accessibilityRole="radiogroup"
     >
-      <Text style={{ ...texte(theme, 13), fontWeight: '700' }}>
-        {trEv('position')}
-      </Text>
       <Text style={attenue(theme)}>{trEv('position_aide')}</Text>
       {valeur ? (
         <Text style={attenue(theme)} testID="esport-ev-position-choisi">
@@ -137,20 +65,24 @@ export function PositionRoles({
           testID="esport-ev-position-erreur"
         />
       ) : (
-        <View style={{ gap: 4 }}>
-          {serveur.roles.map(r =>
-            option(r.id, r.nom, {
+        <SelecteurRepliable
+          theme={theme}
+          nature="role"
+          libelle={trEv('position')}
+          valeur={valeur ?? BAS}
+          options={[
+            ...serveur.roles.map(r => ({
+              id: r.id,
+              nom: r.nom,
               couleur: r.couleur,
               desactive: !r.utilisable,
-              note: r.bot
-                ? trEv('position_bot')
-                : !r.utilisable
-                ? trEv('position_au_dessus')
-                : undefined,
-            }),
-          )}
-          {option(null, trEv('position_bas'))}
-        </View>
+              detail: r.bot ? trEv('position_bot') : !r.utilisable ? trEv('position_au_dessus') : undefined,
+            })),
+            { id: BAS, nom: trEv('position_bas') },
+          ]}
+          onChoisir={id => onChoisir(id === BAS ? null : id)}
+          testID="esport-ev-position"
+        />
       )}
     </View>
   );
