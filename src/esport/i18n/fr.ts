@@ -1563,6 +1563,12 @@ export const fr = {
   'cat.poste.flex': 'Flex',
   'cat.poste.igl': 'IGL',
   'cat.jeu.autre': 'Autre jeu',
+  'cat.jeu.communication': 'Communication',
+  'teamCm.genre': 'Team CM : communication',
+  'teamCm.espace_titre': 'Espace CM du club',
+  'teamCm.espace_texte': 'Contenus, réseaux, Drive, réunions et équipe CM : tout l’espace CM, réservé aux membres de la Team CM.',
+  'teamCm.espace_ouvrir': 'Ouvrir l’espace CM',
+  'teamCm.badge': 'CM',
   // ---- compléments (pluriels, formats)
   'fmt.suite': ' : {texte}',
   'accueilPhase3.taches_en_retard': 'Tâches en retard',

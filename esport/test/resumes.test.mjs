@@ -225,7 +225,7 @@ test('isolation : la team A n’accède jamais aux dépôts, résumés ni PDF de
   assert.equal((await b.appel(`/resumes/boite?team=${B.teamId}`, { jeton: A.sessions.max12345 })).statut, 404);
   // Le Fondateur (rédacteur partout) voit les deux teams.
   const tout = (await b.appel('/resumes/boite', { jeton: f })).corps;
-  assert.deepEqual(tout.teams.map(t => t.nom).sort(), ['Team A', 'Team B']);
+  assert.deepEqual(tout.teams.map(t => t.nom).sort(), ['Team A', 'Team B', 'Team CM']);
 });
 
 test('visibilité par type : « staff » réservé au staff (et au déposant) ; « team » ouvert aux lecteurs', async () => {

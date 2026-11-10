@@ -426,7 +426,8 @@ test('« Ouvrir en review vidéo » : crée la review YouTube une fois, puis la 
 test('publication multi-teams (Fondateur) : tout ou rien, catégorie retrouvée ou créée ; un coach ne publie pas chez les autres', async () => {
   const { b, A, B, s, api } = await preparer();
   const teams = (await api('/ressources/teams', s.fondateur)).corps.teams;
-  assert.deepEqual(teams.map(t => t.id).sort(), [A.teamId, B.teamId].sort());
+  // + la Team CM (migration 0068 : module Ressources activé).
+  assert.deepEqual(teams.map(t => t.id).sort(), [A.teamId, B.teamId, '00000000-0000-4000-8000-00000000c0de'].sort());
   assert.deepEqual((await api('/ressources/teams', s.coach123)).corps.teams.map(t => t.id), [A.teamId]);
   assert.deepEqual((await api('/ressources/teams', s.lea12345)).corps.teams, []);
   const multi = await api('/ressources/multi', s.fondateur, { methode: 'POST', corps: { teams: [A.teamId, B.teamId], genre: 'youtube', url: 'https://youtu.be/dQw4w9WgXcQ', titre: 'Masterclass Sova', categorie: { cleDefaut: 'videos_pros' }, tags: ['sova'] } });

@@ -57,7 +57,7 @@ export async function exportCm(base, compte) {
 /** Instructions d'effacement (à mettre dans le lot de la suppression du compte). */
 export async function effacementCm(base, compte) {
   const lot = [
-    { sql: 'DELETE FROM cm_affectations WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_affectations_directes WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_preferences WHERE compte_id = ?', params: [compte] },
     // Accès nominatifs aux tableaux restreints (migration 0046).
     { sql: "DELETE FROM cm_tableau_acces WHERE genre = 'compte' AND cible = ?", params: [compte] },
@@ -75,7 +75,7 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_tableaux SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_imports SET importe_par = NULL WHERE importe_par = ?', params: [compte] },
     { sql: 'UPDATE cm_reglages SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
-    { sql: 'UPDATE cm_affectations SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_affectations_directes SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_charte SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     { sql: 'UPDATE cm_modeles SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
     { sql: 'UPDATE cm_modeles SET maj_par = NULL WHERE maj_par = ?', params: [compte] },

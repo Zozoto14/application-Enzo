@@ -15,7 +15,7 @@ import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { apiTrombi, filtrerCartes, postesAffiches, type CarteTrombi, type FiltresTrombi, type Trombinoscope as Donnees } from '../../trombi/api';
 import { trTb, trnTb, type CleTb } from '../../i18n/trombi';
-import { Choix, Retours, useAgir } from '../commun';
+import { Choix, PastilleRole, Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_CONTENU, Pliable, SqueletteCartes, Volet, attenue, couleurTeam, texte, useDensite, type EtatPresse } from '../design';
 import { FicheTrombi } from './FicheTrombi';
 import { GestionBadges } from './GestionBadges';
@@ -200,8 +200,10 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
 function CarteJoueur({ theme, carte: c, large, selection, onOuvrir }: { theme: ThemeHub; carte: CarteTrombi; large: boolean; selection?: { coche: boolean; basculer(v: boolean): void }; onOuvrir(): void }) {
   const t0 = c.teams[0];
   const couleur = t0 ? couleurTeam(t0.slug) : theme.accent;
-  const ligneTeams = c.teams.map(t => `${t.nom} · ${t.jeuNom}`).join(' / ');
-  const postes = [...new Set(c.teams.flatMap(postesAffiches))];
+  // Team CM : son rôle CM (Responsable CM, Correspondant CM…) à la place du jeu.
+  const ligneTeams = c.teams.map(t => `${t.nom} · ${t.genre === 'cm' ? t.role.nom : t.jeuNom}`).join(' / ');
+  const postes = [...new Set(c.teams.filter(t => t.genre !== 'cm').flatMap(postesAffiches))];
+  const rolesCm = c.teams.filter(t => t.genre === 'cm').map(t => t.role);
   return (
     <Pressable
       testID={`esport-trombi-carte-${c.compte}`}
@@ -241,10 +243,13 @@ function CarteJoueur({ theme, carte: c, large, selection, onOuvrir }: { theme: T
         </View>
       ) : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xxs, paddingHorizontal: ESP.xxs }}>
+        {rolesCm.map(r => (
+          <PastilleRole key={r.nom} theme={theme} nom={r.nom} couleur={r.couleur} testID={`esport-trombi-carte-${c.compte}-role-cm`} />
+        ))}
         {postes.slice(0, 3).map(p => (
           <Badge key={p} theme={theme} texte={p} />
         ))}
-        {c.elo ? <Badge theme={theme} ton="accent" texte={[c.elo.rang, c.elo.valeur].filter(Boolean).join(' · ')} testID={`esport-trombi-carte-${c.compte}-elo`} /> : null}
+        {c.elo && !c.staff ? <Badge theme={theme} ton="accent" texte={[c.elo.rang, c.elo.valeur].filter(Boolean).join(' · ')} testID={`esport-trombi-carte-${c.compte}-elo`} /> : null}
       </View>
       <View style={{ flex: 1 }} />
       {c.reseaux.length || c.palmares ? (

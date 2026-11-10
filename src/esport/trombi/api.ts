@@ -25,6 +25,8 @@ export interface TeamFiche {
   logoUrl: string | null;
   jeu: string;
   jeuNom: string;
+  /** « cm » : la Team CM (team de staff, sans profil de jeu : ni postes, ni elo). */
+  genre?: 'jeu' | 'cm';
   role: { nom: string; couleur: string; cle: string | null };
   postes: ElementCle[];
   personnages: ElementCle[];
@@ -143,6 +145,8 @@ export interface CarteTrombi {
   /** L'acteur peut-il lui attribuer des badges (jamais à soi-même, sauf le Fondateur) ? */
   peutBadges?: boolean;
   moi: boolean;
+  /** Membre du staff seulement (toutes ses teams sont la Team CM) : pas d'elo ni de postes de jeu sur la carte. */
+  staff?: boolean;
 }
 export interface JeuTrombi {
   cle: string;
@@ -152,7 +156,7 @@ export interface JeuTrombi {
 export interface Trombinoscope {
   droits: { voir: 'club' | 'teams' | 'equipe'; editer: boolean; badges: DroitsBadges };
   badges: BadgeCatalogue[];
-  teams: Array<{ id: string; nom: string; slug: string; jeu: string; jeuNom: string; logoUrl: string | null }>;
+  teams: Array<{ id: string; nom: string; slug: string; jeu: string; jeuNom: string; genre?: 'jeu' | 'cm'; logoUrl: string | null }>;
   jeux: JeuTrombi[];
   fiches: CarteTrombi[];
 }
@@ -165,6 +169,8 @@ export interface FicheTrombi {
   version: number;
   majLe: string | null;
   teams: TeamFiche[];
+  /** Membre du staff seulement (Team CM) : elo et postes de jeu masqués s'il n'en a pas saisi. */
+  staff?: boolean;
   badges?: BadgeAffiche[];
   attribution?: AttributionBadges;
   photo: { url: string; type: string; cote: number; majLe: string } | null;
@@ -253,7 +259,7 @@ export function filtrerCartes(cartes: readonly CarteTrombi[], f: FiltresTrombi):
     if (f.poste !== 'tous' && !teams.some(t => t.postes.some(p => p.cle === f.poste))) return false;
     if (f.badge && f.badge !== 'tous' && !(c.badges ?? []).some(b => b.id === f.badge)) return false;
     if (!q) return true;
-    const texte = [c.pseudo, ...(c.badges ?? []).map(b => b.nom), ...c.teams.flatMap(t => [t.nom, t.jeuNom, t.posteLibre ?? '', ...t.postes.map(p => p.nom), ...t.personnages.map(p => p.nom)]), c.elo?.valeur ?? '', c.elo?.rang ?? ''].join(' ');
+    const texte = [c.pseudo, ...(c.badges ?? []).map(b => b.nom), ...c.teams.flatMap(t => [t.nom, t.jeuNom, t.role?.nom ?? '', t.posteLibre ?? '', ...t.postes.map(p => p.nom), ...t.personnages.map(p => p.nom)]), c.elo?.valeur ?? '', c.elo?.rang ?? ''].join(' ');
     return texte.toLocaleLowerCase('fr').includes(q);
   });
 }

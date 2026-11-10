@@ -16,7 +16,7 @@ Migration `0033_roles_globaux.sql`, code serveur `esport/noyau/roles/`, écran `
 | Section | Rôles | Où ils valent | Qui les donne |
 | --- | --- | --- | --- |
 | **Club** | « **Second CEO** » (rôle système) et rôles du club personnalisés | tout le club : permissions transverses, et permissions CM du club | la page (section Club › « Qui a ce rôle ») |
-| **CM** | « Responsable CM », « Correspondant CM » (système) et rôles CM personnalisés | section CM, Drive, Sponsors, trombinoscope ([cm.md](cm.md)) | **Espace CM › Équipe CM** (club ou team) |
+| **CM** | « Responsable CM », « Correspondant CM » (système) et rôles CM personnalisés — ce sont aussi les rôles de la **Team CM** | section CM, Drive, Sponsors, trombinoscope ([cm.md](cm.md)) | **Membres** (ajout à la Team CM avec ce rôle), **Espace CM › Équipe CM** (club ou team) |
 | **Teams** | Propriétaire, Manager, Coach, Analyste, Joueur, Remplaçant (système) et rôles de team personnalisés | une team | la team (**Paramètres › Membres et rôles**) |
 
 Les permissions CM d'un rôle de **team** (`cm.voir`, `cm.deposer`, `cm.clips.proposer`) ne valent que dans l'onglet CM
@@ -92,6 +92,15 @@ Section **Teams** : choisir « **Modèle des nouvelles teams** » ou une team.
 - **Une team** : seulement les teams où vous avez `roles.manage` (le Fondateur : toutes ; le Second CEO : toutes). Mêmes
   règles que dans la team ([README.md](README.md), « Rôles modifiables ») : Propriétaire verrouillé, pas de rôle égal ou
   supérieur au sien, anti-escalade, au moins un gestionnaire des rôles.
+
+### Team CM (migration 0068)
+
+La Team CM ([cm.md](cm.md), « La Team CM ») apparaît dans la section **Teams** comme les autres ; ses rôles sont les
+rôles CM. Ici (section **CM**) : leurs **permissions CM**, leur nom et leur couleur, créer ou supprimer un rôle CM (le
+rôle de la Team CM suit). Dans la team (**Paramètres › Membres et rôles**, ou la section Teams de cette page) : leurs
+**permissions de team** seulement (planning, dispos, membres…) ; créer, renommer ou supprimer un rôle de la Team CM y
+est refusé (409 `roles-cm`). Attribuer un rôle de la Team CM demande ses permissions de team et ses permissions CM
+(anti-escalade).
 
 ## Garde-fous
 

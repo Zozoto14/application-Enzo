@@ -133,14 +133,17 @@ export function AjoutTeams({
                   onChoisir={roleId => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], roleId } }))}
                   testID={`esport-ajout-role-${compte.compte}-${t.slug}`}
                 />
-                <Champ
-                  theme={theme}
-                  libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
-                  valeur={c.poste}
-                  onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
-                  maxLength={30}
-                  testID={`esport-ajout-poste-${compte.compte}-${t.slug}`}
-                />
+                {/* Team CM : pas de poste en jeu (team de staff). */}
+                {t.genre === 'cm' ? null : (
+                  <Champ
+                    theme={theme}
+                    libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
+                    valeur={c.poste}
+                    onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
+                    maxLength={30}
+                    testID={`esport-ajout-poste-${compte.compte}-${t.slug}`}
+                  />
+                )}
               </View>
             ) : null}
           </View>

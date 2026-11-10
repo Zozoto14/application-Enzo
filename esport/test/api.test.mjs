@@ -412,7 +412,9 @@ test('admin : export JSON de toute la base, import dans une base vide (identique
   assert.equal((await b.appel('/admin/export', { jeton: sessions.max12345 })).statut, 403);
   const exp = (await b.appel('/admin/export', { jeton: sessions.fondateur })).corps;
   assert.equal(exp.format, 'applibourse-esport');
-  assert.equal(exp.tables.teams.length, 1);
+  // + la Team CM (migration 0068).
+  assert.equal(exp.tables.teams.filter(t => t.genre !== 'cm').length, 1);
+  assert.equal(exp.tables.teams.length, 2);
   assert.equal(exp.tables.membres.length, 4);
   assert.equal((await b.appel('/admin/import', { methode: 'POST', jeton: sessions.fondateur, corps: exp })).statut, 409);
   const neuve = await baseMigree();

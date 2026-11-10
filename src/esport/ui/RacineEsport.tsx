@@ -708,7 +708,7 @@ export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub;
 }
 
 /** Carte d'une team (page Teams) : logo et couleur, rôle, effectif, sections. */
-function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: TeamListee; onOuvrir(): void }) {
+export function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: TeamListee; onOuvrir(): void }) {
   const couleur = couleurTeam(t.slug);
   const jeu = nomJeu(t.jeu, t.jeuNom);
   // Sections de la team, d'après ses modules (comme la navigation dans la team).
@@ -737,6 +737,8 @@ function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: T
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
         {t.role ? <PastilleRole theme={theme} nom={nomRole(t.role.nom)} couleur={t.role.couleur} /> : <Badge theme={theme} texte={tr('pageTeam.super_admin')} ton="accent" />}
         {t.suspendu ? <Badge theme={theme} texte={tr('racineEsport.acces_suspendu')} ton="critique" /> : null}
+        {/* Team CM (migration 0068) : sa page d'accueil ouvre l'espace CM du club. */}
+        {t.genre === 'cm' ? <Badge theme={theme} texte={tr('teamCm.espace_titre')} ton="accent" testID={`esport-team-${t.slug}-cm`} /> : null}
         {groupes.map(g => (
           <Badge key={g.id} theme={theme} texte={g.libelle} />
         ))}

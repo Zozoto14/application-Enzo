@@ -289,7 +289,7 @@ export function PageTeam({
         <EtatVide theme={theme} glyphe="◔" titre={tr('pageTeam.bientot_disponible', { nom: module ? nomModule(module.cle) : cle })} texte={tr('pageTeam.module_a_venir', { description: module ? descriptionModule(module.cle) : '', phase: module?.phase ?? '?' })} />
       </Carte>
     );
-  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} large={large} onAller={aller} />;
+  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} large={large} onAller={aller} onOuvrirCm={onOuvrirCm} />;
 
   const sousOnglets =
     groupe && groupe.entrees.length > 1 ? (
@@ -404,12 +404,24 @@ export function PageTeam({
   );
 }
 
-function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void }) {
+/** Team CM (migration 0068) : entrée de l'espace « CM du club » sur l'accueil de la team (mêmes droits que la tuile). */
+export function EntreeEspaceCm({ theme, onOuvrir }: { theme: ThemeHub; onOuvrir(): void }) {
+  return (
+    <Carte theme={theme} accent={COULEUR_CM_CLUB} testID="esport-accueil-espace-cm">
+      <TitreCarte theme={theme} titre={tr('teamCm.espace_titre')} />
+      <Text style={styleAttenue(theme)}>{tr('teamCm.espace_texte')}</Text>
+      <BoutonHub theme={theme} titre={tr('teamCm.espace_ouvrir')} variante="plein" onPress={onOuvrir} testID="esport-accueil-espace-cm-ouvrir" />
+    </Carte>
+  );
+}
+
+function AccueilTeam({ theme, client, detail, large, onAller, onOuvrirCm }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void; onOuvrirCm?(): void }) {
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
   const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);
   const couleur = couleurTeam(detail.team.slug);
   const colonneDroite = (
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
+      {detail.team.genre === 'cm' && onOuvrirCm ? <EntreeEspaceCm theme={theme} onOuvrir={onOuvrirCm} /> : null}
       <Carte theme={theme} testID="esport-accueil-equipe">
         <TitreCarte theme={theme} titre={tr('objectifs.l_equipe')} droite={detail.moi.permissions.includes('members.view') ? <BoutonHub theme={theme} titre={tr('pageTeam.voir')} onPress={() => onAller('membres')} testID="esport-accueil-membres" /> : undefined} />
         <View style={{ flexDirection: 'row', gap: ESP.l, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -518,7 +530,8 @@ function Parametres({
           <TitreCarte theme={theme} titre={tr('pageTeam.la_team')} sous={tr('pageTeam.nom_et_description_visibles')} />
           <Champ theme={theme} libelle={tr('pageTeam.nom')} valeur={nom} onChanger={setNom} maxLength={60} testID="esport-parametres-nom" />
           <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
-          {jeux && jeux.length > 1 ? (
+          {/* Team CM : pas de profil de jeu (le serveur refuse de le changer). */}
+          {jeux && jeux.length > 1 && detail.team.genre !== 'cm' ? (
             <>
               <Choix<string> theme={theme} libelle={tr('pageTeam.jeu_de_la_team')} valeur={jeu} options={jeux} onChoisir={setJeu} testID="esport-parametres-jeu" />
               {jeu !== detail.team.jeu ? <Text style={styleAttenue(theme, 12)}>{tr('pageTeam.jeu_change_aide')}</Text> : null}
@@ -612,7 +625,7 @@ function Parametres({
       {peut('team.manage') && detail.modules.some(m => m.cle === 'meeting_summaries' && m.active) ? <ReglagesTranscriptionTeam theme={theme} client={client} teamId={detail.team.id} /> : null}
       {peut('team.manage') ? <EspaceTeam theme={theme} client={client} teamId={detail.team.id} /> : null}
       <MonProfil theme={theme} client={client} onExporter={onExporter} />
-      {peut('team.delete') ? (
+      {peut('team.delete') && detail.team.genre !== 'cm' ? (
         <Panneau theme={theme} style={{ borderColor: teinteTransparente(theme.critique, 0.5) }}>
           <TitreCarte theme={theme} titre={tr('pageTeam.zone_sensible')} sous={tr('pageTeam.la_suppression_est_definitive')} />
           <BoutonConfirme

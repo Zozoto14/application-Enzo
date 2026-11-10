@@ -6,6 +6,11 @@
  * AFFECTATION donne un rôle à un compte pour tout le club, ou pour une team (le compte doit en être membre
  * actif : c'est le correspondant de la team).
  *
+ * Team CM (migration 0068, cm/teamCm.mjs) : chaque rôle CM a son rôle dans la Team CM (créé, renommé, supprimé avec
+ * lui). Une affectation « club » EST une appartenance à la Team CM : l'affecter ajoute le compte à la team avec ce
+ * rôle ; s'il en est déjà membre avec un autre rôle, c'est un « rôle CM supplémentaire » (`cm_affectations_directes`).
+ * La vue `cm_affectations` réunit les deux ; les écritures vont dans `cm_affectations_directes` ou `membres`.
+ *
  * Gestion : cm.gerer au niveau du club (le Fondateur l'a toujours). Anti-escalade comme pour les rôles de
  * team : hors Fondateur, on n'ajoute à un rôle, et on n'attribue, que des permissions que l'on a soi-même.
  */
@@ -20,6 +25,7 @@ import { permissionsGlobalesDe } from '../roles/globales.mjs';
 import { droitsReunions } from './reunions/service.mjs';
 import { horsTableauxInterdits, lecteurTableaux } from './acces.mjs';
 import { lecteurLiens } from './liensAcces.mjs';
+import { PERMISSIONS_TEAM_CM_BASE, TEAM_CM_ID, membreTeamCm, roleTeamCm } from './teamCm.mjs';
 
 /** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive ; 0030 : trombinoscope ; 0032 : badges ; 0039 : réunions). */
 export const ROLES_CM_SYSTEME = Object.freeze({
@@ -128,6 +134,9 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     await base.lot([
       { sql: 'INSERT INTO cm_roles (id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le) VALUES (?, NULL, ?, ?, 0, ?, ?, ?)', params: [id, nom, couleur.toLowerCase(), Number(pos?.p ?? 0) + 1, iso(t), iso(t)] },
       ...permissions.map(p => ({ sql: 'INSERT INTO cm_role_permissions (role_id, permission) VALUES (?, ?)', params: [id, p] })),
+      // Son rôle dans la Team CM (même identifiant), avec les permissions de team d'un correspondant.
+      { sql: 'INSERT INTO roles (id, team_id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le, cm_role_id) VALUES (?, ?, NULL, ?, ?, 0, ?, ?, ?, ?)', params: [id, TEAM_CM_ID, nom, couleur.toLowerCase(), Number(pos?.p ?? 0) + 1, iso(t), iso(t), id] },
+      ...PERMISSIONS_TEAM_CM_BASE.map(p => ({ sql: 'INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)', params: [id, p] })),
       evenement('cm.role_cree', { acteur: acteur.compte, entiteType: 'cm_role', entiteId: id, charge: { nom, permissions }, maintenant: t }),
     ]);
     return rolePublic(await roleLigne(id));
@@ -149,6 +158,8 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     }
     if (corps?.couleur !== undefined && !MOTIF_COULEUR.test(corps.couleur)) throw echec(400, 'couleur', 'Couleur : #RRGGBB.');
     lot.push({ sql: 'UPDATE cm_roles SET nom = ?, couleur = ?, maj_le = ? WHERE id = ?', params: [nom, corps?.couleur !== undefined ? corps.couleur.toLowerCase() : r.couleur, iso(t), r.id] });
+    // Le rôle de la Team CM suit (nom et couleur).
+    lot.push({ sql: 'UPDATE roles SET nom = ?, couleur = ?, maj_le = ? WHERE team_id = ? AND cm_role_id = ?', params: [nom, corps?.couleur !== undefined ? corps.couleur.toLowerCase() : r.couleur, iso(t), TEAM_CM_ID, r.id] });
     let ajoutees = [];
     let retirees = [];
     if (corps?.permissions !== undefined) {
@@ -186,12 +197,25 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     if (Number(r.systeme) === 1) throw echec(403, 'role-systeme', 'Un rôle système ne se supprime pas.');
     antiEscalade(ctx, await permissionsDuRole(r.id));
     const t = maintenant();
+    // Ses affectations disparaissent, comme avant : les membres de la Team CM qui ont ce rôle quittent la team (un rôle
+    // CM supplémentaire qu'ils auraient prend alors la place du rôle de team : voir retirerDeTeamCm).
+    const lie = await roleTeamCm(base, r.id);
+    const membresLies = lie ? await base.tous('SELECT compte_id FROM membres WHERE team_id = ? AND role_id = ?', [TEAM_CM_ID, lie.id]) : [];
     await base.lot([
-      { sql: 'DELETE FROM cm_affectations WHERE role_id = ?', params: [r.id] },
+      { sql: 'DELETE FROM cm_affectations_directes WHERE role_id = ?', params: [r.id] },
+      ...(lie
+        ? [
+            { sql: 'DELETE FROM membres WHERE team_id = ? AND role_id = ?', params: [TEAM_CM_ID, lie.id] },
+            { sql: 'DELETE FROM invitations WHERE role_id = ?', params: [lie.id] },
+            { sql: 'DELETE FROM role_permissions WHERE role_id = ?', params: [lie.id] },
+            { sql: 'DELETE FROM roles WHERE id = ?', params: [lie.id] },
+          ]
+        : []),
       { sql: 'DELETE FROM cm_role_permissions WHERE role_id = ?', params: [r.id] },
       { sql: 'DELETE FROM cm_roles WHERE id = ?', params: [r.id] },
       evenement('cm.role_supprime', { acteur: acteur.compte, entiteType: 'cm_role', entiteId: r.id, charge: { nom: r.nom }, maintenant: t }),
     ]);
+    for (const { compte_id: compte } of membresLies) await promouvoirSupplementaire(compte, t);
     return { ok: true };
   }
 
@@ -231,8 +255,26 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     antiEscalade(ctx, await permissionsDuRole(r.id));
     const t = maintenant();
     const id = nouvelId();
+    if (portee === PORTEE_CLUB) {
+      // Affectation « club » = appartenance à la Team CM (rôle de team lié au rôle CM).
+      const membre = await membreTeamCm(base, compte);
+      const lie = await roleTeamCm(base, r.id);
+      if (!membre && lie) {
+        await base.lot([
+          { sql: "INSERT INTO membres (id, team_id, compte_id, role_id, poste_jeu, statut, rejoint_le, maj_le) VALUES (?, ?, ?, ?, NULL, 'actif', ?, ?)", params: [id, TEAM_CM_ID, compte, lie.id, iso(t), iso(t)] },
+          evenement('member.added', { teamId: TEAM_CM_ID, acteur: acteur.compte, entiteType: 'membre', entiteId: id, charge: { compte, role: r.nom }, maintenant: t }),
+          evenement('cm.affectation_ajoutee', { teamId: null, acteur: acteur.compte, entiteType: 'cm_affectation', entiteId: id, charge: { compte, role: r.nom, portee }, maintenant: t }),
+        ]);
+        return affectations(acteur);
+      }
+      // Déjà membre avec ce rôle : rien à faire (suspendu : il est réactivé).
+      if (membre && membre.cm_role_id === r.id) {
+        if (membre.statut !== 'actif') await base.executer("UPDATE membres SET statut = 'actif', maj_le = ? WHERE id = ?", [iso(t), membre.id]);
+        return affectations(acteur);
+      }
+    }
     const res = await base.lot([
-      { sql: 'INSERT INTO cm_affectations (id, compte_id, role_id, portee, team_id, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING', params: [id, compte, r.id, portee, teamDePortee(portee), acteur.compte, iso(t)] },
+      { sql: 'INSERT INTO cm_affectations_directes (id, compte_id, role_id, portee, team_id, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING', params: [id, compte, r.id, portee, teamDePortee(portee), acteur.compte, iso(t)] },
     ]);
     if (res[0].changements === 1) {
       await base.lot([evenement('cm.affectation_ajoutee', { teamId: teamDePortee(portee), acteur: acteur.compte, entiteType: 'cm_affectation', entiteId: id, charge: { compte, role: r.nom, portee }, maintenant: t })]);
@@ -247,11 +289,33 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     if (!a) throw echec(404, 'affectation-introuvable', 'Affectation introuvable.');
     antiEscalade(ctx, await permissionsDuRole(a.role_id));
     const t = maintenant();
+    const directe = await base.premier('SELECT id FROM cm_affectations_directes WHERE id = ?', [a.id]);
     await base.lot([
-      { sql: 'DELETE FROM cm_affectations WHERE id = ?', params: [a.id] },
+      // Affectation directe (correspondant d'une team, rôle supplémentaire) ; sinon appartenance à la Team CM.
+      directe ? { sql: 'DELETE FROM cm_affectations_directes WHERE id = ?', params: [a.id] } : { sql: 'DELETE FROM membres WHERE id = ? AND team_id = ?', params: [a.id, TEAM_CM_ID] },
+      ...(directe ? [] : [evenement('member.removed', { teamId: TEAM_CM_ID, acteur: acteur.compte, entiteType: 'membre', entiteId: a.id, charge: { compte: a.compte_id }, maintenant: t })]),
       evenement('cm.affectation_retiree', { teamId: a.team_id ?? null, acteur: acteur.compte, entiteType: 'cm_affectation', entiteId: a.id, charge: { compte: a.compte_id, role: a.role_nom, portee: a.portee }, maintenant: t }),
     ]);
+    if (!directe) await promouvoirSupplementaire(a.compte_id, t);
     return affectations(acteur);
+  }
+
+  /**
+   * Le compte n'est plus membre de la Team CM mais garde un rôle CM « club » supplémentaire : celui-ci devient son
+   * appartenance à la Team CM (même identifiant), pour que la team reste la source unique.
+   */
+  async function promouvoirSupplementaire(compte, t) {
+    if (await membreTeamCm(base, compte)) return;
+    const reste = await base.premier(
+      "SELECT a.* FROM cm_affectations_directes a JOIN cm_roles c ON c.id = a.role_id WHERE a.compte_id = ? AND a.portee = 'club' ORDER BY c.systeme DESC, c.position, a.cree_le, a.id LIMIT 1",
+      [compte],
+    );
+    const lie = reste ? await roleTeamCm(base, reste.role_id) : null;
+    if (!reste || !lie || !(await base.premier('SELECT id FROM comptes WHERE id = ?', [compte]))) return;
+    await base.lot([
+      { sql: "INSERT INTO membres (id, team_id, compte_id, role_id, poste_jeu, statut, rejoint_le, maj_le) VALUES (?, ?, ?, ?, NULL, 'actif', ?, ?)", params: [reste.id, TEAM_CM_ID, compte, lie.id, reste.cree_le, iso(t)] },
+      { sql: 'DELETE FROM cm_affectations_directes WHERE id = ?', params: [reste.id] },
+    ]);
   }
 
   /** `GET /cm/comptes` : comptes Esport (profil), avec leurs teams actives (choix d'une affectation). */

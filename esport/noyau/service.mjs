@@ -44,6 +44,7 @@ import { effacementDevblog, exportDevblog } from './devblog/rgpd.mjs';
 import { effacementTickets, exportTickets } from './tickets/rgpd.mjs';
 import { effacementCentre, exportCentre, personnellesVisibles } from './notifications/centre.mjs';
 import { PERMISSION_DEVBLOG } from './devblog/regles.mjs';
+import { MODULES_INTERDITS_TEAM_CM, estTeamCm } from './cm/teamCm.mjs';
 
 /**
  * Permission du club « Accès à toutes les teams » (rôle Second CEO, migration 0033) : les droits du Propriétaire
@@ -149,7 +150,20 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
    * rôle Propriétaire, sauf pour un Propriétaire ou le super admin.
    */
   async function exigerRoleGerable(ctx, role, message) {
-    if (ctx.acteur.superAdmin || ctx.role?.cle_systeme === CLE_PROPRIETAIRE) return;
+    if (ctx.acteur.superAdmin) return;
+    // Rôle de la Team CM lié à un rôle CM (migration 0068) : l'attribuer donne aussi les permissions CM du rôle ; on ne
+    // le fait qu'avec ces permissions-là au niveau du club (anti-escalade, comme dans Équipe CM).
+    if (role.cm_role_id) {
+      const cm = (await base.tous('SELECT permission FROM cm_role_permissions WHERE role_id = ?', [role.cm_role_id])).map(l => l.permission);
+      const club = new Set((await base.tous('SELECT DISTINCT permission FROM permissions_club WHERE compte_id = ?', [ctx.acteur.compte])).map(l => l.permission));
+      const manquantes = cm.filter(p => !club.has(p));
+      if (manquantes.length > 0) {
+        const e = echec(403, 'escalade', message ?? 'Vous ne pouvez pas accorder une permission que vous n’avez pas.');
+        e.details = { manquantes };
+        throw e;
+      }
+    }
+    if (ctx.role?.cle_systeme === CLE_PROPRIETAIRE) return;
     const perms = await permissionsDuRole(role);
     if (permissionsManquantes(ctx.permissions, perms).length === 0) return;
     if (Number(role.systeme) === 1 && Number(ctx.role?.systeme) === 1 && Number(role.position) > Number(ctx.role.position)) return;
@@ -187,6 +201,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       position: Number(role.position),
       permissions,
       ...rolesParDefaut(role, permissions),
+      // Team CM (migration 0068) : rôle lié à un rôle CM (nom, couleur et permissions CM : page Rôles et permissions).
+      ...(role.cm_role_id ? { cmRoleId: role.cm_role_id } : {}),
     };
   };
 
@@ -205,7 +221,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     nom: t.nom,
     slug: t.slug,
     jeu: t.jeu,
-    ...(jeux ? { jeuNom: jeux.get(t.jeu)?.nom ?? t.jeu, jeuCouleur: jeux.get(t.jeu)?.couleur ?? null } : {}),
+    // « jeu » (team de jeu) ou « cm » (Team CM, migration 0068 : pas de profil de jeu, modules de jeu coupés).
+    genre: t.genre === 'cm' ? 'cm' : 'jeu',
+    ...(jeux ? { jeuNom: jeux.get(t.jeu)?.nom ?? (t.genre === 'cm' ? 'Communication' : t.jeu), jeuCouleur: jeux.get(t.jeu)?.couleur ?? null } : {}),
     description: t.description,
     logoUrl: t.logo_url ?? null,
     fuseau: t.fuseau,
@@ -421,7 +439,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       champs.push('description');
       valeurs.push(texteLong(corps.description, 500));
     }
-    if (corps?.jeu !== undefined) {
+    if (corps?.jeu !== undefined && estTeamCm(ctx.team)) {
+      if (corps.jeu !== ctx.team.jeu) throw echec(409, 'team-cm', 'La Team CM n’a pas de profil de jeu.');
+    } else if (corps?.jeu !== undefined) {
       champs.push('jeu');
       valeurs.push(await jeuValidePourTeam(base, corps.jeu, { actuel: ctx.team.jeu }));
     }
@@ -447,6 +467,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   async function supprimerTeam(acteur, teamId) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'team.delete');
+    if (estTeamCm(ctx.team)) throw echec(409, 'team-cm', 'La Team CM ne se supprime pas : c’est l’équipe de l’espace CM du club.');
     const t = maintenant();
     await base.lot([
       { sql: 'UPDATE teams SET supprimee_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), teamId] },
@@ -465,6 +486,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const desactives = [];
     for (const [cle, active] of Object.entries(demandes)) {
       if (!moduleConnu(cle)) throw echec(400, 'module-inconnu', `Module inconnu : ${String(cle).slice(0, 40)}`);
+      if (active && estTeamCm(ctx.team) && MODULES_INTERDITS_TEAM_CM.includes(cle)) throw echec(409, 'team-cm', 'La Team CM a l’espace CM du club : pas d’onglet CM de team.');
       const deja = ctx.modules.has(cle);
       if (active && !deja) actives.push(cle);
       if (!active && deja) desactives.push(cle);
@@ -526,9 +548,15 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     }
   }
 
+  /** Rôles de la Team CM : créés, renommés et supprimés avec les rôles CM (page Rôles et permissions › CM). */
+  function exigerHorsTeamCm(ctx) {
+    if (estTeamCm(ctx.team)) throw echec(409, 'roles-cm', 'Les rôles de la Team CM se créent, se renomment et se suppriment dans Rôles et permissions (rôles CM).');
+  }
+
   async function creerRole(acteur, teamId, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'roles.manage');
+    exigerHorsTeamCm(ctx);
     const saisi = lireRoleSaisi(corps);
     exigerSousEnsemble(ctx, saisi.permissions);
     await nomDeRoleLibre(teamId, saisi.nom);
@@ -602,6 +630,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     exiger(ctx, 'roles.manage');
     const role = await roleDeTeam(teamId, roleId);
     const systeme = Number(role.systeme) === 1;
+    if (role.cm_role_id && (corps?.nom !== undefined || corps?.couleur !== undefined)) exigerHorsTeamCm(ctx);
     if (systeme && role.cle_systeme !== CLE_PROPRIETAIRE && (corps?.nom !== undefined || corps?.couleur !== undefined)) {
       throw echec(403, 'role-systeme', 'Le nom et la couleur d’un rôle système ne changent pas : seules ses permissions se modifient.');
     }
@@ -626,6 +655,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'roles.manage');
     const role = await roleDeTeam(teamId, roleId);
+    if (role.cm_role_id) exigerHorsTeamCm(ctx);
     if (Number(role.systeme) === 1) throw echec(403, 'role-systeme', 'Un rôle système ne se supprime pas.');
     exigerSousEnsemble(ctx, await permissionsDuRole(role), 'Ce rôle a des permissions que vous n’avez pas : vous ne pouvez pas le supprimer.');
     const n = await base.premier('SELECT COUNT(*) AS n FROM membres WHERE role_id = ?', [roleId]);

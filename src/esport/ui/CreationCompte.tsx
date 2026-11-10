@@ -24,10 +24,14 @@ import { ChampDiscordId } from './DiscordId';
 
 type Choisie = { roleId: string; poste: string };
 
-/** Rôle proposé par défaut : Joueur s'il est attribuable, sinon le dernier rôle attribuable. */
+/** Rôle « Correspondant CM » de la Team CM (identifiant fixe, migration 0068). */
+export const ROLE_CORRESPONDANT_CM = '00000000-0000-4000-8000-00000000c002';
+
+/** Rôle proposé par défaut : Joueur (Team CM : Correspondant CM) s'il est attribuable, sinon le dernier rôle attribuable. */
 export function roleParDefaut(team: TeamAnnuaire): string | undefined {
   const possibles = team.roles.filter(r => r.attribuable);
-  return (possibles.find(r => r.cle === 'joueur') ?? possibles[possibles.length - 1])?.id;
+  const prefere = team.genre === 'cm' ? possibles.find(r => r.id === ROLE_CORRESPONDANT_CM) : possibles.find(r => r.cle === 'joueur');
+  return (prefere ?? possibles[possibles.length - 1])?.id;
 }
 
 export function CreationCompte({
@@ -171,6 +175,7 @@ export function CreationCompte({
                 testID={`esport-compte-team-${t.slug}`}
               />
               <Text style={[texte, { fontWeight: '700' }]}>{t.nom}</Text>
+              {t.genre === 'cm' ? <Text style={attenue} testID={`esport-compte-team-${t.slug}-cm`}>{tr('teamCm.genre')}</Text> : null}
             </View>
             {c ? (
               <View style={{ gap: 8, paddingLeft: 30 }}>
@@ -182,15 +187,18 @@ export function CreationCompte({
                   onChoisir={roleId => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], roleId } }))}
                   testID={`esport-compte-role-${t.slug}`}
                 />
-                <Champ
-                  theme={theme}
-                  libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
-                  valeur={c.poste}
-                  onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
-                  maxLength={30}
-                  placeholder={tr('creationCompte.ex_duelliste_igl')}
-                  testID={`esport-compte-poste-${t.slug}`}
-                />
+                {/* Team CM : pas de poste en jeu (team de staff). */}
+                {t.genre === 'cm' ? null : (
+                  <Champ
+                    theme={theme}
+                    libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
+                    valeur={c.poste}
+                    onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
+                    maxLength={30}
+                    placeholder={tr('creationCompte.ex_duelliste_igl')}
+                    testID={`esport-compte-poste-${t.slug}`}
+                  />
+                )}
               </View>
             ) : null}
           </View>

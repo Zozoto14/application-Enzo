@@ -68,7 +68,7 @@ test('catalogue : module cm, permissions de team (voir, déposer, proposer des c
   assert.ok(permissionsRoleSysteme('joueur').includes('cm.clips.proposer'));
   assert.ok(!permissionsRoleSysteme('joueur').includes('cm.voir'));
   assert.ok(permissionsRoleSysteme('manager').includes('cm.deposer'));
-  for (const t of ['cm_roles', 'cm_affectations', 'cm_tableaux', 'cm_cartes', 'cm_clips', 'cm_fichiers', 'cm_pieces', 'cm_commentaires']) assert.ok(TABLES.some(([n]) => n === t), `export : ${t}`);
+  for (const t of ['cm_roles', 'cm_affectations_directes', 'cm_tableaux', 'cm_cartes', 'cm_clips', 'cm_fichiers', 'cm_pieces', 'cm_commentaires']) assert.ok(TABLES.some(([n]) => n === t), `export : ${t}`);
 });
 
 // ------------------------------------------------------------------ Migration

@@ -148,7 +148,7 @@ test('migration sur une base existante : les teams sont rattachées (valorant, a
     await base.executer('INSERT INTO teams (id, nom, slug, jeu, cree_par, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, id, id, jeu, 'principal', d, d]);
   }
   assert.deepEqual(await appliquerMigrations(base, toutes), toutes.filter(m => m.nom >= '0021').map(m => m.nom));
-  const jeux = await base.tous('SELECT id, jeu FROM teams ORDER BY id', []);
+  const jeux = await base.tous("SELECT id, jeu FROM teams WHERE genre <> 'cm' ORDER BY id", []);
   assert.deepEqual(jeux.map(t => [t.id, t.jeu]), [['t1', 'valorant'], ['t2', 'autre'], ['t3', 'valorant'], ['t4', 'valorant']]);
 });
 

@@ -380,7 +380,8 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
     setConfirmer(false);
     setEdition(e);
   };
-  const editionDe = (r: Role): EditionRole => ({ id: r.id, systeme: r.systeme, nom: r.nom, couleur: r.couleur, permissions: [...r.permissions], origine: [...r.permissions], nomOrigine: r.nom, couleurOrigine: r.couleur });
+  // Rôle de la Team CM lié à un rôle CM : comme un rôle système ici (permissions de team seulement).
+  const editionDe = (r: Role): EditionRole => ({ id: r.id, systeme: r.systeme || Boolean(r.cmRoleId), nom: r.nom, couleur: r.couleur, permissions: [...r.permissions], origine: [...r.permissions], nomOrigine: r.nom, couleurOrigine: r.couleur });
 
   const enregistrer = () =>
     void agir('role', async () => {
@@ -523,8 +524,8 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
             )
           ) : (
             <>
-              <BoutonHub theme={theme} titre={tr('membresRoles.nouveau_role')} onPress={() => editer({ nom: '', couleur: couleursRole()[4][0], permissions: ['members.view'], origine: [], nomOrigine: '', couleurOrigine: '' })} testID="esport-role-nouveau" />
-              {role ? (
+              {detail.team.genre === 'cm' ? null : <BoutonHub theme={theme} titre={tr('membresRoles.nouveau_role')} onPress={() => editer({ nom: '', couleur: couleursRole()[4][0], permissions: ['members.view'], origine: [], nomOrigine: '', couleurOrigine: '' })} testID="esport-role-nouveau" />}
+              {role && detail.team.genre !== 'cm' ? (
                 <BoutonHub
                   theme={theme}
                   titre={tr('membresRoles.dupliquer')}
@@ -536,7 +537,7 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
                 />
               ) : null}
               {role && modifiable ? (
-                <BoutonHub theme={theme} titre={role.systeme ? tr('membresRoles.modifier_permissions') : tr('membresRoles.modifier')} onPress={() => editer(editionDe(role))} testID="esport-role-modifier" />
+                <BoutonHub theme={theme} titre={role.systeme || role.cmRoleId ? tr('membresRoles.modifier_permissions') : tr('membresRoles.modifier')} onPress={() => editer(editionDe(role))} testID="esport-role-modifier" />
               ) : null}
               {role && modifiable && role.systeme && role.modifie ? (
                 <BoutonConfirme
@@ -553,7 +554,7 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
                   testID="esport-role-retablir"
                 />
               ) : null}
-              {role && !role.systeme && modifiable ? (
+              {role && !role.systeme && !role.cmRoleId && modifiable ? (
                 <BoutonConfirme
                   theme={theme}
                   titre={tr('discord.supprimer')}

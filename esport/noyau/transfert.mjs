@@ -8,6 +8,7 @@
  */
 
 import { echec, iso } from './outils.mjs';
+import { TEAM_CM_ID, reprendreTeamCm } from './cm/teamCm.mjs';
 
 export const FORMAT_EXPORT = 'applibourse-esport';
 export const VERSION_EXPORT = 1;
@@ -117,7 +118,10 @@ export const TABLES = [
   // l'export), affectations, réglages, tableaux, listes, étiquettes, cartes et leurs détails, fichiers, clips, imports.
   ['cm_roles', 'id'],
   ['cm_role_permissions', 'role_id, permission'],
-  ['cm_affectations', 'id'],
+  // Team CM (migration 0068) : affectations directes (correspondants de team, rôles CM supplémentaires) ; les
+  // affectations « club » sont les membres de la Team CM (tables teams, roles, membres). Un export antérieur a encore
+  // `cm_affectations` : ses lignes sont reprises dans `cm_affectations_directes`, puis changées en membres (reprise).
+  ['cm_affectations_directes', 'id'],
   ['cm_reglages', 'cle'],
   ['cm_tableaux', 'id'],
   // Accès restreint des tableaux (migration 0046) : personnes et rôles qui voient un tableau restreint.
@@ -268,10 +272,13 @@ export async function exporterBase(base, maintenant = Date.now()) {
 }
 
 export async function baseVide(base) {
-  for (const table of ['comptes', 'teams', 'journal']) {
+  for (const table of ['comptes', 'journal']) {
     const l = await base.premier(`SELECT COUNT(*) AS n FROM ${table}`, []);
     if (Number(l?.n ?? 0) > 0) return false;
   }
+  // La Team CM posée par la migration 0068 ne compte pas : elle est remplacée par celle de l'export.
+  const teams = await base.premier('SELECT COUNT(*) AS n FROM teams WHERE id <> ?', [TEAM_CM_ID]);
+  if (Number(teams?.n ?? 0) > 0) return false;
   return true;
 }
 
@@ -309,7 +316,7 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
   if (!donnees || donnees.format !== FORMAT_EXPORT || donnees.version !== VERSION_EXPORT || typeof donnees.tables !== 'object') {
     throw echec(400, 'format', 'Ce fichier n’est pas un export Esport (version 1).');
   }
-  donnees = { ...donnees, tables: reprendreTablesTournoi(donnees.tables) };
+  donnees = { ...donnees, tables: reprendreAffectationsCm(reprendreTablesTournoi(donnees.tables)) };
   for (const nom of Object.keys(donnees.tables)) {
     if (!NOMS_TABLES.includes(nom)) throw echec(400, 'table-inconnue', `Table inconnue dans l’export : ${String(nom).slice(0, 40)}`);
   }
@@ -334,6 +341,13 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
       await base.executer('DELETE FROM roles_globaux_permissions', []);
       await base.executer('DELETE FROM roles_globaux', []);
     }
+    // Team CM posée par la migration 0068 : remplacée par celle de l'export s'il en a une (même identifiant).
+    if (table === 'teams' && lignes.some(l => l?.id === TEAM_CM_ID)) {
+      await base.executer('DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE team_id = ?)', [TEAM_CM_ID]);
+      await base.executer('DELETE FROM roles WHERE team_id = ?', [TEAM_CM_ID]);
+      await base.executer('DELETE FROM team_modules WHERE team_id = ?', [TEAM_CM_ID]);
+      await base.executer('DELETE FROM teams WHERE id = ?', [TEAM_CM_ID]);
+    }
     if (table === 'sp_etapes' && lignes.length > 0) await base.executer('DELETE FROM sp_etapes', []);
     if (table === 'jeux' && lignes.length > 0) {
       await base.executer('DELETE FROM jeu_versions', []);
@@ -357,5 +371,14 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
     }
     if (lot.length > 0) await base.lot(lot);
   }
+  // Export antérieur à la migration 0068 : rôles CM créés depuis et affectations « club » → Team CM (sans effet sinon).
+  await reprendreTeamCm(base);
   return bilan;
+}
+
+/** Export antérieur à la migration 0068 : la table `cm_affectations` devient `cm_affectations_directes`. */
+export function reprendreAffectationsCm(tables) {
+  if (!('cm_affectations' in tables)) return tables;
+  const { cm_affectations: anciennes, ...reste } = tables;
+  return { ...reste, cm_affectations_directes: [...(Array.isArray(reste.cm_affectations_directes) ? reste.cm_affectations_directes : []), ...(Array.isArray(anciennes) ? anciennes : [])] };
 }

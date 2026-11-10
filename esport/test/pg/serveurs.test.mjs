@@ -102,7 +102,8 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
     const team = await api(esport.url, '/teams', { methode: 'POST', jeton: f, corps: { nom: 'Team o2switch', jeu: 'valorant', preset: 'valorant_complet' } });
     assert.equal(team.statut, 200, JSON.stringify(team.corps));
     const teamId = team.corps.team.id;
-    assert.deepEqual((await api(esport.url, '/teams', { jeton: f })).corps.teams.map(t => t.nom), ['Team o2switch']);
+    // + la Team CM posée par la migration 0068.
+    assert.deepEqual((await api(esport.url, '/teams', { jeton: f })).corps.teams.map(t => t.nom), ['Team CM', 'Team o2switch']);
 
     // Dépôt d'une réunion puis de son résumé PDF : fichier sur le disque, hors de tout dossier public.
     const depot = await api(esport.url, `/teams/${teamId}/resumes`, { methode: 'POST', jeton: f, corps: { lien: 'https://youtu.be/abc123', typeId: HEBDO, dateReunion: '2026-10-19', titre: 'Réunion du lundi' } });
@@ -229,7 +230,7 @@ test('o2switch : migration d’un ancien serveur (base et fichiers) vers Postgre
     assert.match(lu, /^RELAIS_URL=/m);
     assert.equal(statSync(fichierEnv).mode & 0o777, 0o600);
     assert.ok(existsSync(`${fichierEnv}.avant-import`));
-    assert.equal((await cible.base.premier('SELECT nom FROM teams', [])).nom, 'Team Ancienne');
+    assert.equal((await cible.base.premier("SELECT nom FROM teams WHERE genre <> 'cm'", [])).nom, 'Team Ancienne');
     const cle = (await cible.base.premier('SELECT cle_stockage FROM fichiers', [])).cle_stockage;
     assert.deepEqual(new Uint8Array(readFileSync(join(nouveauDossier, cle))), PDF);
     // Rejouer : refusé (base non vide) ; reprise des fichiers seulement : rien à recopier.
@@ -241,7 +242,7 @@ test('o2switch : migration d’un ancien serveur (base et fichiers) vers Postgre
     const nouveau = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: cible.base, stockage: await stockageDisque(nouveauDossier), config: configEsport(relais.url, nouveauDossier) });
     try {
       const f2 = await sessionFondateur(nouveau.url);
-      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Ancienne']);
+      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Ancienne', 'Team CM']);
       // Sans l'option, jamais de clé exportée.
       assert.equal((await api(nouveau.url, '/admin/secrets', { jeton: f2 })).statut, 404);
       // Une session ouverte sur l'ancien serveur reste valable (même CLE_ESPORT).

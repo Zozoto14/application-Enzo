@@ -166,7 +166,9 @@ test('notifications : une personne sans accès au tableau (assignation ancienne)
   await ok(`/cm/cartes/${a.id}`, s.cm123456, { methode: 'PATCH', corps: { membres: ['red12345', 'aut12345'] } });
   tic();
   // Aude perd son accès au CM : elle reste assignée, mais le tableau lui est fermé.
-  await b.base.executer("DELETE FROM cm_affectations WHERE compte_id = 'aut12345'", []);
+  await b.base.executer("DELETE FROM cm_affectations_directes WHERE compte_id = 'aut12345'", []);
+  // Team CM (migration 0068) : son affectation « club » est son appartenance à la Team CM.
+  await b.base.executer("DELETE FROM membres WHERE compte_id = 'aut12345' AND team_id = ?", ['00000000-0000-4000-8000-00000000c0de']);
   await drapeau(s.cm123456, a.id, 'critique');
   assert.equal((await notifs(s.red12345)).length, 1);
   assert.equal((await notifs(s.aut12345)).length, 0);

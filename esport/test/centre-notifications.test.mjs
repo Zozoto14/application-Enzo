@@ -123,7 +123,8 @@ test('visibilité : le joueur voit le planning, jamais les notes du staff ni les
   const f = await centre('fondateur');
   for (const t of ['player_note.created', 'sponsors.prospect_cree', 'event.created']) assert.ok(f.liste.some(n => n.evenement === t), t);
   assert.ok(f.liste.some(n => n.team?.id === B.teamId));
-  assert.deepEqual(new Set(f.teams.map(t => t.id)), new Set([A.teamId, B.teamId]));
+  // + la Team CM (migration 0068).
+  assert.deepEqual(new Set(f.teams.map(t => t.id)), new Set([A.teamId, B.teamId, '00000000-0000-4000-8000-00000000c0de']));
   assert.deepEqual(new Set((await centre('lea12345')).teams.map(t => t.id)), new Set([A.teamId]), 'filtre des teams : les siennes');
   // Compte sans team ni rôle : rien.
   assert.deepEqual((await centre('grimm123')).liste, []);

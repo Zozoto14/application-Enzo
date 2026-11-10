@@ -75,7 +75,7 @@ export async function demarrerServeurEsport({
   }
   if (graines) {
     const { semer } = await import('./graines.mjs');
-    const existe = await base.premier('SELECT id FROM teams LIMIT 1', []);
+    const existe = await base.premier("SELECT id FROM teams WHERE genre <> 'cm' LIMIT 1", []);
     if (!existe) await semer(base, { stockage });
   }
   const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias, ...(transcriptionServeur ? { transcriptionServeur } : {}), apercuLiens: apercuLiens ?? { telecharger: telechargeurNode() }, ia });

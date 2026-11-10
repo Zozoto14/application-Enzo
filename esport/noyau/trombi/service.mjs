@@ -37,6 +37,8 @@ import {
 import { PORTEE_CLUB, badgesAffiches, libelleBadge, servicesBadges } from './badges.mjs';
 
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
+/** Nom affiché du « jeu » d'une team sans profil de jeu : la Team CM (migration 0068) est « Communication ». */
+const nomSansProfil = l => (l.genre === 'cm' ? 'Communication' : l.jeu);
 
 /** Champs modifiables de la fiche (corps de PATCH) et le champ de visibilité qui les protège. */
 const CHAMPS_FICHE = Object.freeze({ nomReel: 'nomReel', presentation: 'presentation', elos: 'elos', palmares: 'palmares', structures: 'structures', reseaux: 'reseaux', postes: null });
@@ -106,7 +108,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
   /** Appartenances actives (teams non supprimées), filtrées par les teams parcourues ; `compte` : un seul joueur. */
   async function appartenances(teams, compte) {
     const lignes = await base.tous(
-      `SELECT m.compte_id, m.team_id, m.poste_jeu, m.rejoint_le, r.nom AS role_nom, r.couleur AS role_couleur, r.cle_systeme, t.nom AS team_nom, t.slug, t.jeu, t.logo_url, t.archivee_le, c.pseudo, c.pseudo_cle
+      `SELECT m.compte_id, m.team_id, m.poste_jeu, m.rejoint_le, r.nom AS role_nom, r.couleur AS role_couleur, r.cle_systeme, t.nom AS team_nom, t.slug, t.jeu, t.genre, t.logo_url, t.archivee_le, c.pseudo, c.pseudo_cle
          FROM membres m JOIN teams t ON t.id = m.team_id AND t.supprimee_le IS NULL JOIN roles r ON r.id = m.role_id JOIN comptes c ON c.id = m.compte_id
         WHERE m.statut = 'actif' ${compte ? 'AND m.compte_id = ?' : ''} ORDER BY c.pseudo_cle, t.nom`,
       compte ? [compte] : [],
@@ -146,7 +148,9 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
         slug: a.slug,
         logoUrl: a.logo_url ?? null,
         jeu: a.jeu,
-        jeuNom: jeu?.nom ?? a.jeu,
+        jeuNom: jeu?.nom ?? nomSansProfil(a),
+        // « cm » : Team CM (migration 0068), team de staff sans profil de jeu (ni postes, ni personnages).
+        genre: a.genre === 'cm' ? 'cm' : 'jeu',
         role: { nom: a.role_nom, couleur: a.role_couleur, cle: a.cle_systeme ?? null },
         postes: (p.postes ?? []).map(c => ({ cle: c, nom: nom(jeu?.rolesJoueurs, c) })),
         personnages: (p.personnages ?? []).map(c => ({ cle: c, nom: nom(jeu?.personnages, c) })),
@@ -156,6 +160,9 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
       };
     });
   }
+
+  /** Carte d'un membre du staff seulement (toutes ses teams sont la Team CM) : elo, palmarès de jeu et postes masqués dans l'app. */
+  const staffSeulement = lignes => lignes.length > 0 && lignes.every(l => l.genre === 'cm');
 
   const avecNomJeu = (elos, jeux) => elos.map(e => ({ ...e, jeuNom: jeux.get(e.jeu)?.nom ?? e.jeu }));
 
@@ -194,7 +201,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
     const cartes = [];
     for (const compte of comptes) {
       const ls = parCompte.get(compte) ?? [];
-      for (const l of ls) teams.set(l.team_id, { id: l.team_id, nom: l.team_nom, slug: l.slug, jeu: l.jeu, jeuNom: jeux.get(l.jeu)?.nom ?? l.jeu, logoUrl: l.logo_url ?? null });
+      for (const l of ls) teams.set(l.team_id, { id: l.team_id, nom: l.team_nom, slug: l.slug, jeu: l.jeu, jeuNom: jeux.get(l.jeu)?.nom ?? nomSansProfil(l), genre: l.genre === 'cm' ? 'cm' : 'jeu', logoUrl: l.logo_url ?? null });
       const niveau = niveauSur(acteur, d, compte, ls.map(l => l.team_id));
       if (!niveau) continue;
       const fiche = fiches.get(compte) ?? ficheDe(null);
@@ -216,6 +223,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
         peutEditer: niveau === 'moi' || niveau === 'editeur',
         peutBadges: peutAttribuer(acteur, droitsBadges, compte, ls.map(l => l.team_id)),
         moi: compte === acteur.compte,
+        staff: staffSeulement(ls),
       });
     }
     return {
@@ -312,6 +320,7 @@ export function servicesTrombi({ base, maintenant = () => Date.now() }) {
       version: fiche.version,
       majLe: fiche.majLe,
       teams,
+      staff: staffSeulement(ctx.toutes),
       badges: b.affiches,
       ...(peutBadges
         ? {

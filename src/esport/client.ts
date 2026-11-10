@@ -81,8 +81,10 @@ export interface Team {
   id: string;
   nom: string;
   slug: string;
-  /** Clé du profil de jeu de la team (src/esport/jeux). */
+  /** Clé du profil de jeu de la team (src/esport/jeux) ; « communication » pour la Team CM. */
   jeu: string;
+  /** « jeu » (team de jeu) ou « cm » : la Team CM (migration 0068), équipe de l'espace CM du club. */
+  genre?: 'jeu' | 'cm';
   /** Nom et couleur du profil de jeu (serveurs avec profils de jeu). */
   jeuNom?: string;
   jeuCouleur?: string | null;
@@ -123,6 +125,8 @@ export interface Role {
   modifie?: boolean;
   /** Propriétaire : verrouillé (toujours toutes les permissions). */
   verrouille?: boolean;
+  /** Team CM : rôle lié à un rôle CM (nom, couleur, création et suppression dans Rôles et permissions). */
+  cmRoleId?: string;
 }
 export interface Membre {
   id: string;
@@ -192,6 +196,8 @@ export interface TeamAnnuaire {
   nom: string;
   slug: string;
   jeu: string;
+  /** « cm » : la Team CM (rôles : Responsable CM, Correspondant CM, rôles CM créés). */
+  genre?: 'jeu' | 'cm';
   archivee: boolean;
   /** `demander` : permission « Créer des membres » (demande de compte au Fondateur, ajout d'un compte Esport existant). */
   droits: { ajouter: boolean; demander?: boolean; roles: boolean; retirer: boolean };

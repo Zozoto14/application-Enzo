@@ -457,9 +457,9 @@ export function EditeurFiche({ theme, api, fiche: f, onFini, sansAnnuler }: { th
         {champ('nomReel') ? <Champ theme={theme} libelle={trTb('nom_reel')} valeur={nomReel} onChanger={setNomReel} maxLength={80} testID="esport-trombi-nom-reel" /> : null}
         {champ('presentation') ? <Champ theme={theme} libelle={trTb('presentation')} valeur={presentation} onChanger={setPresentation} maxLength={500} multiligne testID="esport-trombi-presentation" /> : null}
       </Section>
-      {f.teams.length ? (
+      {f.teams.some(t => t.genre !== 'cm') ? (
         <Section theme={theme} titre={trTb('section.postes')} testID="esport-trombi-editeur-postes">
-          {f.teams.map(t => {
+          {f.teams.filter(t => t.genre !== 'cm').map(t => {
             const profil = f.saisie?.profils?.find(p => p.teamId === t.id);
             const v = postes[t.id] ?? { postes: [], personnages: [] };
             return (
@@ -478,7 +478,7 @@ export function EditeurFiche({ theme, api, fiche: f, onFini, sansAnnuler }: { th
           })}
         </Section>
       ) : null}
-      {champ('elos') ? (
+      {champ('elos') && (!f.staff || elos.length > 0) ? (
         <Section theme={theme} titre={trTb('section.elo')} testID="esport-trombi-editeur-elos" droite={<BoutonHub theme={theme} titre={trTb('ajouter')} desactive={elos.length >= 10} onPress={() => setElos([...elos, avecCle({ jeu: f.teams.find(t => !elos.some(e => e.jeu === t.jeu))?.jeu ?? jeux[0]?.cle ?? '', valeur: '', rang: '', pic: '' })])} testID="esport-trombi-elo-ajouter" />}>
           {elos.map((e, i) => (
             <BlocLigne key={e.cle} theme={theme} onRetirer={() => setElos(elos.filter(x => x.cle !== e.cle))} testID={`esport-trombi-elo-${i}`}>

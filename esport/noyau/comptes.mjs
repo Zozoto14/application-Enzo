@@ -331,6 +331,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
           nom: ctx.team.nom,
           slug: ctx.team.slug,
           jeu: ctx.team.jeu,
+          genre: ctx.team.genre === 'cm' ? 'cm' : 'jeu',
           archivee: Boolean(ctx.team.archivee_le),
           droits: { ajouter: p('members.invite'), demander: p('members.create'), roles: p('members.assign_role'), retirer: p('members.remove') },
           roles: sien,
@@ -346,7 +347,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
           const attribuable = await roleInvitable(r);
           sien.push({ id: r.id, nom: r.nom, couleur: r.couleur, cle: r.cle_systeme ?? null, position: Number(r.position), systeme: Number(r.systeme) === 1, attribuable });
         }
-        teams.push({ id: t.id, nom: t.nom, slug: t.slug, jeu: t.jeu, archivee: Boolean(t.archivee_le), droits: { ajouter: true, demander: true, roles: false, retirer: false }, roles: sien });
+        teams.push({ id: t.id, nom: t.nom, slug: t.slug, jeu: t.jeu, genre: t.genre === 'cm' ? 'cm' : 'jeu', archivee: Boolean(t.archivee_le), droits: { ajouter: true, demander: true, roles: false, retirer: false }, roles: sien });
       }
     }
     const lignes =
