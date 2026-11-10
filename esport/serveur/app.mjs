@@ -17,6 +17,7 @@ import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
 import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
+import { compresser } from '../../relais/serveur/compression.mjs';
 import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
 import { etatAdministration } from './transcription/moteur.mjs';
@@ -118,7 +119,10 @@ export async function demarrer({ port, hote, ...options } = {}) {
   const esport = await preparerEsport(options);
   // Corps de requête borné : un morceau de vidéo (ESPORT_TAILLE_MORCEAU) passe, avec de la marge ; au moins 25 Mo (import, PDF).
   const tailleMax = Math.max(25 * 1024 * 1024, (esport.config.medias?.tailleMorceau ?? 0) + 1024 * 1024);
-  const serveur = creerServeurHttp(esport.traiter, { urlPublique: esport.config.urlPublique, tailleMax });
+  // Réponses JSON compressées (gzip, comme le relais) quand l'appareil l'accepte : listes du planning, de la CM, des
+  // tickets plusieurs fois plus légères en 4G. Jamais les flux (SSE, attente longue : X-Accel-Buffering), ni les fichiers.
+  const traiterCompresse = async (requete, options) => compresser(requete, await esport.traiter(requete, options));
+  const serveur = creerServeurHttp(traiterCompresse, { urlPublique: esport.config.urlPublique, tailleMax });
   const url = await ecouter(serveur, { port, hote });
   return {
     url,

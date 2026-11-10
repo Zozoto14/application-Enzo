@@ -688,15 +688,23 @@ export function adresseDepuisRelais(relais: string | undefined): string | undefi
 }
 
 /** Adresse publiée avec le site (`esport.json`), si elle existe et est valide. */
+/** esport.json déjà lu par cette page (il ne change qu'avec un déploiement du site, qui recharge la page). */
+const adressesLues = new WeakMap<object, string>();
+
 export async function adressePubliee(requete: Fetch | undefined): Promise<string | undefined> {
   const est = (globalThis as { location?: { protocol?: string } }).location?.protocol;
   if (!requete || (est !== 'http:' && est !== 'https:')) return undefined;
+  // Une requête de moins (un aller-retour) à chaque ouverture de l'Esport.
+  const deja = adressesLues.get(requete);
+  if (deja) return deja;
   try {
     const r = await auPlus(requete('esport.json', { headers: { Accept: 'application/json' } }), 4000);
     if (!r.ok) return undefined;
     const lu = (await r.json()) as { esport?: unknown };
     const adresse = typeof lu?.esport === 'string' ? lu.esport.trim().replace(/\/+$/, '') : undefined;
-    return adresseValide(adresse) ? adresse : undefined;
+    if (!adresseValide(adresse)) return undefined;
+    adressesLues.set(requete, adresse!);
+    return adresse;
   } catch {
     return undefined;
   }
@@ -733,6 +741,12 @@ export interface ConfigEsport {
 const sessions = new Map<string, { session: string; expire: number; surcharge: boolean; fonctions?: string[] }>();
 /** Ouvertures de session en cours, par adresse et jeton du relais (une seule à la fois). */
 const ouvertures = new Map<string, Promise<string>>();
+/**
+ * Profil rendu par POST /session (le serveur y joint exactement GET /moi) : repris par `ouvrir()` s'il a moins de
+ * 30 s, une seule fois. L'ouverture de l'Esport fait alors un aller-retour de moins (docs/performance.md).
+ */
+const moisFrais = new Map<string, { moi: Moi; le: number }>();
+export const FRAICHEUR_MOI_MS = 30_000;
 
 /**
  * « Le premier qui enregistre a la main » (docs/esport/temps-reel.md) : version d'un objet lue par un écran
@@ -779,6 +793,7 @@ const STATUTS_FRONTAL = [403, 405, 406, 411, 501];
 export function oublierSessions(): void {
   sessions.clear();
   ouvertures.clear();
+  moisFrais.clear();
 }
 
 /** Écouteurs des appels d'écriture réussis (statistiques d'usage : actions clés), voir src/esport/usage. */
@@ -1012,6 +1027,9 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       const restant = Date.parse(r.expire) - (typeof (r as { heure?: unknown }).heure === 'number' ? ((r as { heure?: number }).heure as number) : Date.parse(r.expire) - 3_600_000);
       const expire = maintenant() + Math.max(60_000, Math.min(Number.isFinite(restant) ? restant : 3_600_000, 3_600_000));
       sessions.set(cle, { session: r.session, expire, surcharge: fonctions.includes(FONCTION_SURCHARGE), fonctions });
+      const moi: Record<string, unknown> = { ...r };
+      for (const champ of ['session', 'expire', 'heure', 'fonctions']) delete moi[champ];
+      if (typeof moi.compte === 'string') moisFrais.set(cle, { moi: moi as unknown as Moi, le: maintenant() });
       return r.session;
     })();
     ouvertures.set(cle, ouverture);
@@ -1052,6 +1070,9 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     sante: () => brut('/sante'),
     ouvrir: async () => {
       await session();
+      const frais = moisFrais.get(cle);
+      moisFrais.delete(cle);
+      if (frais && maintenant() - frais.le < FRAICHEUR_MOI_MS) return frais.moi;
       return appel<Moi>('/moi');
     },
     moi: () => appel('/moi'),

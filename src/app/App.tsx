@@ -188,6 +188,7 @@ import { PageMisesAJour, ReglageMajAuto } from '../hub/maj/PageMisesAJour';
 import { useEtatDeploiement } from '../hub/maj/deploiement';
 import { majAutoDisponible } from '../hub/maj/version';
 import { aAccesEsport } from '../esport/acces';
+import { prechaufferEsport } from '../esport/prechauffage';
 import type { IdReglage, IdSection } from '../hub/recensement';
 import { CLE_CACHE_AFFICHAGE, lireAffichageMemorise, memoriserAffichage, migrerThemeUnique, stockageLocalAppareil } from '../hub/themeUnique';
 import { GardeErreur } from '../ui/GardeErreur';
@@ -2382,6 +2383,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   useEffect(() => {
     if (!hubAffiche) return;
     const ids = signaturePermises ? signaturePermises.split(',') : [];
+    // Esport : session ouverte tout de suite en arrière-plan (réveille le serveur, ouverture plus rapide).
+    if (ids.includes('esport')) void prechaufferEsport();
     const racines: unknown[] = REGISTRE.filter(app => ids.includes(app.id)).map(app => (app.id === ID_PORTEFEUILLE ? Portefeuille : app.Racine));
     const aPrecharger = racines.map(r => (r as { precharger?: () => Promise<unknown> } | undefined)?.precharger).filter(
       (f): f is () => Promise<unknown> => typeof f === 'function',
@@ -2396,7 +2399,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         if (!annule) void aPrecharger[i]().then(() => suivant(i + 1));
       });
     };
-    const minuterie = setTimeout(() => suivant(0), 4_000);
+    // Une seule app (membre « Esport seulement ») : il va l'ouvrir, son code est demandé tout de suite.
+    const minuterie = setTimeout(() => suivant(0), aPrecharger.length === 1 ? 0 : 4_000);
     return () => {
       annule = true;
       clearTimeout(minuterie);

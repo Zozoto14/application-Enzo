@@ -145,6 +145,35 @@ function prendreVerrou(chemin) {
   }
 }
 
+/** Au-delà, un appel /sante est noté « lent » : l'app dormait (démarrage à froid de Passenger). */
+export const SEUIL_EVEIL_LENT_MS = 3_000;
+
+/**
+ * Garde le serveur Esport et le relais éveillés (docs/performance.md) : Passenger arrête une app restée quelques
+ * minutes sans requête, et le premier visiteur suivant attend son redémarrage (Node, connexions à PostgreSQL) :
+ * « des fois le site met du temps à charger ». Le cron passe toutes les 5 minutes : un GET /sante de chaque serveur
+ * suffit. Rend une ligne de rapport par serveur (durée ; « lent » si l'app venait de redémarrer).
+ */
+export async function garderEveilles(config, { fetch = globalThis.fetch, maintenant = () => Date.now() } = {}) {
+  const cibles = [
+    ['esport', config.urlPublique],
+    ['relais', config.relais],
+  ].filter(([, u]) => typeof u === 'string' && /^https?:\/\//.test(u));
+  return Promise.all(
+    cibles.map(async ([nom, u]) => {
+      const debut = maintenant();
+      try {
+        const r = await fetch(`${String(u).replace(/\/+$/, '')}/sante`, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+        await r.arrayBuffer?.().catch(() => undefined);
+        const ms = maintenant() - debut;
+        return { tache: `éveil ${nom}`, ok: r.status < 500, ms, ...(ms >= SEUIL_EVEIL_LENT_MS ? { lent: true } : {}), ...(r.status >= 500 ? { erreur: `HTTP ${r.status}` } : {}) };
+      } catch (e) {
+        return { tache: `éveil ${nom}`, ok: false, ms: maintenant() - debut, erreur: String(e?.message ?? e) };
+      }
+    }),
+  );
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const config = chargerConfigEsport();
   const verrou = join(homedir(), '.appdashboard', 'esport-cron.verrou');
@@ -154,7 +183,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   try {
-    const rapport = await executerCron(base, config);
+    // Réveil des deux serveurs en même temps que les tâches (premier visiteur jamais face à une app endormie).
+    const [rapport, eveils] = await Promise.all([executerCron(base, config), garderEveilles(config)]);
+    rapport.push(...eveils);
+    const lents = eveils.filter(e => e.lent).map(e => `${e.tache.replace('éveil ', '')} ${e.ms} ms`);
+    if (lents.length) console.log(`${new Date().toISOString()} cron Esport : serveur réveillé (démarrage à froid) : ${lents.join(', ')}`);
     const echecs = rapport.filter(r => !r.ok);
     // La décision de la transcription est toujours écrite (« lancé », « déjà en cours (pid …) », « rien à faire »…) :
     // une réunion qui reste « en file d'attente » se comprend à la lecture de ce journal.

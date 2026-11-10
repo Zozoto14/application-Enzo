@@ -59,6 +59,36 @@ react-native-web, cryptographie) qui ne change presque jamais et reste donc en c
 - Polices : déjà en `font-display: swap`, découpées par alphabet (seul le latin est téléchargé) ; images : deux
   icônes de 3 et 7 Ko. Rien à gagner de ce côté.
 
+## Ouverture de l'Esport et serveur endormi
+
+« Des fois le site met du temps à charger » : le serveur n'est pas chargé (il ne consomme presque rien), mais
+**Passenger arrête une app Node restée quelques minutes sans requête** ; le visiteur suivant attend alors son
+redémarrage (Node, connexion à PostgreSQL, puis le relais pour valider le jeton), souvent plusieurs secondes.
+
+| Ouverture de l'Esport (requêtes qui bloquent l'écran) | Avant | Après |
+| --- | --- | --- |
+| Lecture de `esport.json` (adresse du serveur) | à chaque ouverture | une fois par page |
+| `POST /session` (le serveur Esport interroge le relais) | à l'ouverture | faite pendant l'affichage du hub |
+| `GET /moi` | après la session | inutile : le profil vient avec la session (moins de 30 s) |
+| Code de l'Esport (compte « Esport seulement ») | à l'ouverture | demandé dès l'affichage du hub |
+| Serveur Esport / relais endormis | premier visiteur attend le réveil | réveillés par le cron toutes les 5 min |
+
+- `src/esport/prechauffage.ts` : dès que le hub s'affiche pour un compte qui a l'Esport, la session est ouverte en
+  arrière-plan (cela réveille aussi les deux serveurs s'ils dormaient). Une seule app permise : son code est
+  téléchargé tout de suite au lieu d'attendre 4 s.
+- `src/esport/client.ts` : `ouvrir()` reprend le profil joint à `POST /session` (le serveur y met exactement
+  `GET /moi`), une seule fois et s'il a moins de 30 s ; `esport.json` n'est lu qu'une fois par page.
+- `esport/serveur/cron.mjs` (`garderEveilles`) : à chaque passage du cron (5 min), `GET /sante` du serveur Esport et
+  du relais. Un réveil de plus de 3 s (l'app dormait) est écrit dans `~/logs/esport-cron.log` :
+  « serveur réveillé (démarrage à froid) : relais 4200 ms ».
+- `esport/serveur/app.mjs` : réponses JSON compressées en gzip (comme le relais) ; jamais les flux temps réel ni
+  les fichiers. Les listes (planning, CM, tickets) sont plusieurs fois plus légères en 4G.
+- `bureau/index.html` : connexions ouvertes d'avance (`preconnect`) vers le relais et le serveur Esport.
+
+Base de données : le Fondateur confirme que le serveur ne manque pas de ressources ; les tables listées (membres,
+teams, cartes CM, tickets, notifications, événements, disponibilités) ont déjà leurs index sur les colonnes filtrées
+(revue des migrations 0001 à 0068). Pas de nouvelle migration.
+
 ## « Des fois il bug » : ce qui a été vérifié ou corrigé
 
 - **Après un déploiement** : les anciens fichiers de `assets/` restent 7 jours sur le serveur (`deployer.sh`), un
@@ -82,5 +112,8 @@ react-native-web, cryptographie) qui ne change presque jamais et reste donc en c
    fichier principal : passer par les fichiers `…Differe(e)s.tsx` / `.web.tsx` ci-dessus.
 2. **« Ça bugue »** : `tail -n 100 ~/logs/esport.log | grep "erreur client"` (Terminal de cPanel), ou la page
    Statistiques de l'Esport (erreurs JS, regroupées par empreinte).
-3. **Un écran reste sur « Une nouvelle version est disponible »** : le déploiement n'a pas fini de copier
+3. **Premier chargement lent après une pause** : `grep "démarrage à froid" ~/logs/esport-cron.log`. S'il revient
+   souvent, l'app s'endort entre deux passages du cron : passer la tâche cron à toutes les 3 minutes
+   (`*/3 * * * *`, cPanel › Tâches cron), ou demander à o2switch un délai d'inactivité Passenger plus long.
+4. **Un écran reste sur « Une nouvelle version est disponible »** : le déploiement n'a pas fini de copier
    `assets/` ; recharger après 5 minutes.

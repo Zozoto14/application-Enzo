@@ -105,6 +105,13 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
     // + le CM du club posée par la migration 0068.
     assert.deepEqual((await api(esport.url, '/teams', { jeton: f })).corps.teams.map(t => t.nom), ['CM du club', 'Team o2switch']);
 
+    // Réponses JSON compressées (gzip) pour un appareil qui l'accepte (docs/performance.md) ; jamais sans Accept-Encoding.
+    const gz = await fetch(`${esport.url}/teams/${teamId}`, { headers: { Authorization: `Bearer ${f}`, 'Accept-Encoding': 'gzip' } });
+    assert.equal(gz.status, 200);
+    assert.equal(gz.headers.get('content-encoding'), 'gzip');
+    assert.match(gz.headers.get('vary') ?? '', /Accept-Encoding/);
+    assert.equal((await gz.json()).team?.id ?? teamId, teamId);
+
     // Dépôt d'une réunion puis de son résumé PDF : fichier sur le disque, hors de tout dossier public.
     const depot = await api(esport.url, `/teams/${teamId}/resumes`, { methode: 'POST', jeton: f, corps: { lien: 'https://youtu.be/abc123', typeId: HEBDO, dateReunion: '2026-10-19', titre: 'Réunion du lundi' } });
     assert.equal(depot.statut, 200, JSON.stringify(depot.corps));
