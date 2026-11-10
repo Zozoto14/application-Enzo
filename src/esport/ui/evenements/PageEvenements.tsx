@@ -32,7 +32,6 @@ import {
   type StatutEvenement,
 } from '../../evenements/api';
 import {
-  BoutonConfirme,
   Choix,
   Intertitre,
   Panneau as Bloc,
@@ -327,6 +326,7 @@ export function PageEvenements({
   const [fiche, setFiche] = useState<FicheEvenement | undefined>();
   const [f, setF] = useState<Formulaire>(formulaireDe());
   const [roles, setRoles] = useState<RolesServeur | undefined>();
+  const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const { erreur, avis, agir, enCours } = useAgir();
   const relire = useCallback(
     () => agir('charger', async () => setListe(await api.lister())),
@@ -356,6 +356,7 @@ export function PageEvenements({
       setOuvert(id);
     });
   const retour = () => {
+    setConfirmerSuppression(false);
     setOuvert(undefined);
     setFiche(undefined);
     void relire();
@@ -565,21 +566,50 @@ export function PageEvenements({
             categorieId={fiche.evenement.categorieTicketId}
           />
 
-          <View style={{ alignSelf: 'flex-start' }}>
-            <BoutonConfirme
-              theme={theme}
-              titre={trEv('supprimer')}
-              confirmation={trEv('supprimer_confirmer')}
-              onConfirme={() =>
-                void agir('supprimer', async () => {
-                  await api.supprimer(fiche.evenement.id);
-                  retour();
-                  return trEv('supprime');
-                })
-              }
-              testID="esport-ev-supprimer"
-            />
-          </View>
+          {/* Suppression : confirmation qui dit ce qui part avec l'événement (hubs vocaux, salons, rôles ; salons
+              vocaux désactivés s'il ne reste aucun hub). La fiche est relue d'abord (hubs changés entre-temps). */}
+          {confirmerSuppression ? (
+            <Bloc theme={theme} testID="esport-ev-supprimer-dialogue">
+              <Text style={{ ...texte(theme), fontWeight: '700' }}>{trEv('supprimer_confirmer')}</Text>
+              <Avis theme={theme} genre="critique" texte={trEv('supprimer_discord')} testID="esport-ev-supprimer-message" />
+              {fiche.suppression?.hubs ? <Text style={attenue(theme)} testID="esport-ev-supprimer-hubs">{trEv('supprimer_hubs', { n: String(fiche.suppression.hubs) })}</Text> : null}
+              {fiche.suppression?.desactiveVocaux ? <Avis theme={theme} genre="alerte" texte={trEv('supprimer_desactive')} testID="esport-ev-supprimer-desactive" /> : null}
+              <View style={styles.ligne}>
+                <BoutonHub
+                  theme={theme}
+                  variante="danger"
+                  titre={trEv('supprimer_bouton')}
+                  desactive={enCours === 'supprimer'}
+                  onPress={() =>
+                    void agir('supprimer', async () => {
+                      const r = await api.supprimer(fiche.evenement.id);
+                      setConfirmerSuppression(false);
+                      retour();
+                      return r?.nettoyage && (r.nettoyage.erreur || r.nettoyage.echecs?.length) ? trEv('supprime_incomplet') : trEv('supprime');
+                    })
+                  }
+                  testID="esport-ev-supprimer-confirmer"
+                />
+                <BoutonHub theme={theme} titre={trEv('annuler')} onPress={() => setConfirmerSuppression(false)} testID="esport-ev-supprimer-annuler" />
+              </View>
+            </Bloc>
+          ) : (
+            <View style={{ alignSelf: 'flex-start' }}>
+              <BoutonHub
+                theme={theme}
+                variante="danger"
+                titre={trEv('supprimer')}
+                desactive={enCours === 'relire'}
+                onPress={() =>
+                  void agir('relire', async () => {
+                    recevoir(await api.lire(fiche.evenement.id));
+                    setConfirmerSuppression(true);
+                  })
+                }
+                testID="esport-ev-supprimer"
+              />
+            </View>
+          )}
         </>
       ) : (
         <Squelette theme={theme} lignes={4} />

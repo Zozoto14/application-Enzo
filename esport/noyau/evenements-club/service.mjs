@@ -19,9 +19,10 @@
 import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import { aGlobale } from '../roles/globales.mjs';
 import { droitsTickets, voitCategorie } from '../tickets/acces.mjs';
-import { lireGeneral } from '../tickets/reglages.mjs';
+import { instructionReglage, lireGeneral } from '../tickets/reglages.mjs';
 import { rest } from '../tickets/discord.mjs';
-import { lireVocaux } from '../vocaux/reglages.mjs';
+import { lireVocaux, validerVocaux } from '../vocaux/reglages.mjs';
+import { evenement as evenementBus } from '../evenements.mjs';
 import { nomMembre } from '../vocaux/salons.mjs';
 import {
   LIMITES_EQUIPES,
@@ -38,6 +39,7 @@ import {
   supprimerRoleEquipe,
   synchroniser,
   synchroniserStaff,
+  retirerDesCategories,
   verifierAncre,
 } from './discord.mjs';
 
@@ -158,6 +160,7 @@ export function servicesEvenements({
   maintenant = () => Date.now(),
   fetch: fetchDiscord,
   jetonBot,
+  journal = console,
 }) {
   async function exiger(acteur) {
     if (!(await aGlobale(base, acteur, PERMISSION_EVENEMENTS)))
@@ -285,6 +288,7 @@ export function servicesEvenements({
       },
       bot: Boolean(jetonBot),
       choix: await choix(),
+      suppression: await suppressionDe(id),
       ...extra,
     };
   }
@@ -596,29 +600,61 @@ export function servicesEvenements({
     return { erreur: null, staff: await synchroniserStaff(c, evt) };
   }
 
+  /**
+   * Ce que la suppression de l'événement emporte (fiche : texte de la confirmation) : ses hubs vocaux, et si les
+   * salons vocaux temporaires se désactivent faute d'autre hub.
+   */
+  async function suppressionDe(id) {
+    const v = await lireVocaux(base);
+    const hubs = v.hubs.filter(h => h.tournoiId === id).length;
+    return { hubs, desactiveVocaux: hubs > 0 && v.actif && hubs === v.hubs.length };
+  }
+
+  /**
+   * Supprime l'événement et tout ce qu'il a créé, au mieux :
+   *  1. ses hubs vocaux retirés des réglages des salons vocaux (même stockage ; le dernier hub retiré désactive les
+   *     salons vocaux, comme depuis la fiche ou le Bot Esport HQ) ;
+   *  2. le nettoyage de fin d'événement (salons d'équipe supprimés sur Discord, rôles des équipes et rôle staff
+   *     supprimés, rôle staff retiré des catégories de tickets) ; un refus de Discord ou l'absence de bot n'empêche
+   *     pas la suppression : il est noté dans le journal du serveur et rendu dans `nettoyage` ;
+   *  3. l'événement, ses équipes, ses membres et son staff.
+   */
   async function supprimer(acteur, id) {
     await exiger(acteur);
     await ligne(id);
-    const hub = (await lireVocaux(base)).hubs.find(h => h.tournoiId === id);
-    if (hub)
-      throw echec(
-        409,
-        'evenement-hub',
-        'Un hub vocal est lié à cet événement : retirez-le d’abord (section « Vocaux de l’événement » de sa fiche).',
-      );
-    const aDesRoles =
-      (await base.premier('SELECT id FROM club_evenement_equipes WHERE evenement_id = ? AND role_id IS NOT NULL LIMIT 1', [id])) ||
-      (await base.premier('SELECT id FROM club_evenements WHERE id = ? AND staff_role_id IS NOT NULL', [id]));
-    if (aDesRoles) {
-      const c = await exigerDiscord();
-      const r = await nettoyerEvenement(c, id);
-      if (r.echecs.length)
-        throw echec(
-          502,
-          'evenement-roles',
-          'Discord a refusé de supprimer certains rôles : réessayez, ou supprimez-les à la main.',
-        );
+    const t = maintenant();
+    // 1. Hubs vocaux de l'événement.
+    const vocaux = await lireVocaux(base);
+    const hubs = vocaux.hubs.filter(h => h.tournoiId === id);
+    let vocauxDesactives = false;
+    if (hubs.length) {
+      const restants = vocaux.hubs.filter(h => h.tournoiId !== id);
+      vocauxDesactives = vocaux.actif && !restants.length;
+      const reglages = validerVocaux({ hubs: restants, ...(restants.length ? {} : { actif: false }) }, vocaux);
+      await base.lot([
+        instructionReglage('vocaux', reglages, acteur.compte, t),
+        evenementBus('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux', evenement: id, suppression: true }, maintenant: t }),
+      ]);
     }
+    // 2. Nettoyage Discord (au mieux).
+    let nettoyage = { roles: 0, salons: 0, echecs: [], erreur: null };
+    const c = await discordCtx();
+    if (c.erreur) {
+      nettoyage.erreur = c.erreur;
+      const evt = await base.premier('SELECT staff_role_id FROM club_evenements WHERE id = ?', [id]);
+      if (evt?.staff_role_id) await retirerDesCategories(base, evt.staff_role_id, null, maintenant);
+    } else {
+      try {
+        nettoyage = { ...(await nettoyerEvenement(c, id)), erreur: null };
+      } catch (e) {
+        nettoyage.erreur = 'discord';
+        journal.warn?.('[esport] événement supprimé : nettoyage Discord interrompu', e?.message ?? e);
+      }
+    }
+    if (nettoyage.erreur || nettoyage.echecs.length)
+      journal.warn?.(`[esport] événement ${id} supprimé : nettoyage Discord incomplet (${nettoyage.erreur ?? `${nettoyage.echecs.length} refus`}) ; rôles ou salons restants à supprimer à la main`, JSON.stringify(nettoyage.echecs));
+    // Salons d'équipe encore connus (refus de Discord, pas de bot) : oubliés avec l'événement.
+    await base.executer('DELETE FROM vocaux_salons WHERE tournoi_id = ?', [id]);
     const equipes = (
       await base.tous(
         'SELECT id FROM club_evenement_equipes WHERE evenement_id = ?',
@@ -641,7 +677,7 @@ export function servicesEvenements({
       { sql: 'DELETE FROM club_evenement_staff WHERE evenement_id = ?', params: [id] },
       { sql: 'DELETE FROM club_evenements WHERE id = ?', params: [id] },
     ]);
-    return { ok: true };
+    return { ok: true, hubs: hubs.length, vocauxDesactives, nettoyage };
   }
 
   async function ecrireMembres(equipeId, membres) {
@@ -1002,7 +1038,7 @@ export function servicesEvenements({
  * Routes (branchées par api.mjs, après l'authentification) :
  *   GET|POST            /evenements                      liste ; créer
  *   GET                 /evenements/roles-serveur        rôles du serveur Discord (repère de position)
- *   GET|PATCH|DELETE    /evenements/:id                  fiche ; modifier ; supprimer (rôles et salons aussi)
+ *   GET|PATCH|DELETE    /evenements/:id                  fiche ; modifier ; supprimer (hubs, salons, rôles aussi)
  *   POST                /evenements/:id/equipes          { equipes: [...] } ajout (rôles automatiques)
  *   PATCH|DELETE        /evenements/:id/equipes/:e       modifier ; retirer (rôle et salon supprimés)
  *   GET                 /evenements/staff-candidats?q=   comptes de l'app (Discord lié) et membres du serveur

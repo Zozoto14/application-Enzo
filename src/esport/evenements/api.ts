@@ -141,6 +141,8 @@ export interface FicheEvenement {
     suppression?: { role: boolean; salons: number };
   };
   nettoyage?: { roles: number; salons: number; echecs: unknown[] };
+  /** Ce que la suppression emporte : hubs vocaux de l'événement ; salons vocaux désactivés faute d'autre hub. */
+  suppression?: { hubs: number; desactiveVocaux: boolean };
 }
 
 export interface PropositionEquipe {
@@ -235,7 +237,7 @@ export function apiEvenements(client: ClientEsport) {
     lire: (id: string) => r<FicheEvenement>(un(id)),
     modifier: (id: string, c: SaisieEvenement) =>
       r<FicheEvenement>(un(id), 'PATCH', c),
-    supprimer: (id: string) => r<{ ok: boolean }>(un(id), 'DELETE'),
+    supprimer: (id: string) => r<{ ok: boolean; hubs: number; vocauxDesactives: boolean; nettoyage: { roles: number; salons: number; echecs: unknown[]; erreur: string | null } }>(un(id), 'DELETE'),
     ajouter: (id: string, equipes: SaisieEquipe[]) =>
       r<FicheEvenement>(`${un(id)}/equipes`, 'POST', { equipes }),
     modifierEquipe: (id: string, equipeId: string, c: Partial<SaisieEquipe>) =>

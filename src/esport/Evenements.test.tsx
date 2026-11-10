@@ -244,6 +244,7 @@ function fauxClient(
         ],
       };
     if (chemin === '/evenements/ev1' && !methode) return fiche;
+    if (chemin === '/evenements/ev1' && methode === 'DELETE') return { ok: true, hubs: fiche.suppression?.hubs ?? 0, vocauxDesactives: Boolean(fiche.suppression?.desactiveVocaux), nettoyage: { roles: 2, salons: 1, echecs: [], erreur: null } };
     if (chemin === '/evenements/ev1' && methode === 'PATCH')
       return {
         ...fiche,
@@ -570,4 +571,35 @@ test('vocaux de l’événement : lecture seule sans vocaux.configurer (pas d’
   expect(screen.queryByTestId('esport-ev-voc-ajouter')).toBeNull();
   expect(screen.queryByTestId('esport-ev-voc-hub-751-retirer')).toBeNull();
   expect(appels.some(a => a.chemin === '/vocaux/discord')).toBe(false);
+});
+
+test('supprimer un événement : la confirmation annonce hubs vocaux, salons d’équipe et rôles supprimés, et la désactivation des salons vocaux s’il ne reste aucun hub', async () => {
+  const fiche = { ...ficheDe(), suppression: { hubs: 1, desactiveVocaux: true } };
+  const { client, appels } = fauxClient(fiche);
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-supprimer'));
+  // La fiche est relue avant d'afficher la confirmation (hubs à jour).
+  expect((await screen.findByTestId('esport-ev-supprimer-message')).props.children).toBe('Les hubs vocaux, les salons d’équipe et les rôles Discord de l’événement seront aussi supprimés.');
+  expect(screen.getByTestId('esport-ev-supprimer-hubs').props.children).toBe('1 hub(s) vocal(aux) de l’événement retiré(s) des salons vocaux temporaires.');
+  expect(screen.getByText('C’est le seul hub du serveur : les salons vocaux temporaires seront désactivés.')).toBeTruthy();
+  // Annuler : rien n'est supprimé.
+  await fireEvent.press(screen.getByTestId('esport-ev-supprimer-annuler'));
+  expect(screen.queryByTestId('esport-ev-supprimer-message')).toBeNull();
+  expect(appels.some(a => a.methode === 'DELETE' && a.chemin === '/evenements/ev1')).toBe(false);
+  // Confirmer : supprimé, retour à la liste.
+  await fireEvent.press(screen.getByTestId('esport-ev-supprimer'));
+  await fireEvent.press(await screen.findByTestId('esport-ev-supprimer-confirmer'));
+  expect(await screen.findByText('Événement supprimé.')).toBeTruthy();
+  expect(appels.some(a => a.methode === 'DELETE' && a.chemin === '/evenements/ev1')).toBe(true);
+  expect(await screen.findByTestId('esport-ev-nouveau')).toBeTruthy();
+});
+
+test('supprimer un événement sans hub vocal : message général seulement (pas de désactivation annoncée)', async () => {
+  const fiche = { ...ficheDe(), suppression: { hubs: 0, desactiveVocaux: false } };
+  const { client } = fauxClient(fiche);
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-supprimer'));
+  expect(await screen.findByTestId('esport-ev-supprimer-message')).toBeTruthy();
+  expect(screen.queryByTestId('esport-ev-supprimer-hubs')).toBeNull();
+  expect(screen.queryByTestId('esport-ev-supprimer-desactive')).toBeNull();
 });

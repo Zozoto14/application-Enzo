@@ -166,6 +166,9 @@ absents du corps ou renvoyés par une copie ancienne de l'écran), et un hub d'�
 - **Un salon par équipe** à la fois : un coéquipier qui passe par le hub est déplacé dans le salon existant.
 - Le salon est supprimé une fois vide (comme les autres), quand l'équipe est retirée de l'événement, et à la **fin de
   l'événement** avec les rôles.
+- **Événement supprimé** : ses hubs sont retirés automatiquement des réglages (la suppression n'est plus bloquée par un
+  hub lié), ses salons d'équipe et ses rôles supprimés au mieux ; s'il ne reste aucun hub, les salons vocaux
+  temporaires sont désactivés (la confirmation l'annonce). Voir [evenements.md](evenements.md#supprimer-un-événement).
 
 ## Données
 

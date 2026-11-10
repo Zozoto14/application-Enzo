@@ -102,8 +102,24 @@ une IA.
 Bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par le cron (5 min) dès que
 l'événement passe à **Terminé** ou **Annulé**, ou **N heures après sa date de fin**. Ensuite, plus aucun rôle n'est
 créé automatiquement pour cet événement (« Resynchroniser » reste possible tant qu'il n'est ni terminé ni annulé).
-Supprimer un événement supprime aussi ses rôles et ses équipes ; c'est refusé tant qu'un hub vocal y est lié (le retirer
-dans « Vocaux de l'événement »).
+
+## Supprimer un événement
+
+**Supprimer l'événement** (bas de la fiche) relit la fiche puis demande confirmation : « Les hubs vocaux, les salons
+d'équipe et les rôles Discord de l'événement seront aussi supprimés », avec le nombre de hubs vocaux retirés et, si ce
+sont les seuls hubs du serveur, « les salons vocaux temporaires seront désactivés ». Confirmé, dans l'ordre :
+
+1. **ses hubs vocaux** sont retirés des réglages des salons vocaux (même stockage, journal `tickets.config_modifiee`) ;
+   s'il ne reste aucun hub, les salons vocaux temporaires sont désactivés (comme quand on retire le dernier hub) ;
+2. le **nettoyage de fin d'événement**, au mieux : salons vocaux des équipes supprimés sur Discord, rôles des équipes et
+   rôle staff supprimés, rôle staff retiré des rôles du staff des catégories de tickets. Un refus de Discord (ou
+   l'absence de bot ou de serveur) **n'empêche pas** la suppression : il est noté dans le journal du serveur
+   (`[esport] événement … supprimé : nettoyage Discord incomplet`), l'écran dit de supprimer à la main ce qui reste,
+   et le rôle staff est quand même retiré des catégories de tickets ;
+3. l'événement, ses équipes, leurs membres et son staff.
+
+La réponse de `DELETE /evenements/:id` : `{ ok, hubs, vocauxDesactives, nettoyage: { roles, salons, echecs, erreur } }`.
+La fiche (`GET`) donne `suppression: { hubs, desactiveVocaux }` pour la confirmation.
 
 ## Vocaux de l'événement
 
@@ -144,7 +160,7 @@ Routes (`evenements.gerer`, 403 sinon) :
 |---|---|
 | `GET /evenements`, `POST /evenements` | Liste ; créer |
 | `GET /evenements/roles-serveur` | Rôles du serveur Discord (hiérarchie, `utilisable` : sous le bot) |
-| `GET`, `PATCH`, `DELETE /evenements/:id` | Fiche ; modifier (réglages Discord compris) ; supprimer |
+| `GET`, `PATCH`, `DELETE /evenements/:id` | Fiche (`suppression` : ce que la suppression emporte) ; modifier (réglages Discord compris) ; supprimer (hubs vocaux, salons d'équipe, rôles : au mieux) |
 | `POST /evenements/:id/equipes` | Ajouter des équipes `{ equipes: [...] }` (rôles automatiques) |
 | `PATCH`, `DELETE /evenements/:id/equipes/:e` | Modifier ; retirer (rôle et salon supprimés) |
 | `GET /evenements/staff-candidats?q=` | Personnes proposées pour le staff (app avec Discord lié, puis serveur) |
