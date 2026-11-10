@@ -24,6 +24,7 @@ import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { sourceGitDepot } from './devblog-source.mjs';
 import { creerServiceDeploiement } from './deploiement.mjs';
 import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
+import { creerFetchDiscordNode } from '../adaptateurs/fetchDiscordNode.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
@@ -84,10 +85,13 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
   // l'app éveillée (Passenger arrête un processus sans requête) : URL_PUBLIQUE/sante toutes les 4 minutes (pas en
   // test : un fetch Discord simulé est alors fourni, aucun réseau réel).
   const reveil = config.urlPublique && !fetchDiscord ? `${String(config.urlPublique).replace(/\/+$/, '')}/sante` : null;
-  const superviseur =
-    demarrerTickets && config.ticketsGateway !== false && config.discordBot?.jetonBot
-      ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, reveil, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...api.ticketsGateway })
-      : null;
+  // Salons vocaux : appels REST du moteur (création du salon, déplacement du membre) sur une connexion persistante
+  // vers discord.com (keep-alive) ; DISCORD_CONNEXION_PERSISTANTE=non revient au fetch global de Node.
+  const avecTickets = demarrerTickets && config.ticketsGateway !== false && config.discordBot?.jetonBot;
+  const fetchRest = avecTickets && !fetchDiscord && !/^(0|non|no|false|off)$/i.test(String(process.env.DISCORD_CONNEXION_PERSISTANTE ?? '').trim()) ? creerFetchDiscordNode() : null;
+  const superviseur = avecTickets
+    ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, reveil, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...(fetchRest ? { fetchRest } : {}), ...api.ticketsGateway })
+    : null;
   superviseur?.demarrer();
   return {
     traiter: api,
@@ -98,6 +102,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     superviseurTickets: superviseur,
     fermer: async () => {
       await superviseur?.arreter();
+      fetchRest?.fermer();
       await api.tempsReel?.fermer();
       if (!base) await b.fermer();
     },

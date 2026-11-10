@@ -12,7 +12,22 @@
  *  - redémarrage : après GUILD_CREATE (nouvelle session), salons connus rapprochés de Discord (disparus oubliés, vides
  *    supprimés, présents et propriétaires resynchronisés) et personnes restées dans un hub servies ; après RESUMED,
  *    Discord rejoue les événements manqués.
- * Les événements sont traités UN PAR UN (file) : deux arrivées rapides dans un hub ne créent pas deux salons.
+ * RAPIDITÉ (docs/esport/vocaux.md, « Rapidité ») : le chemin critique d'une arrivée dans un hub est
+ *   VOICE_STATE_UPDATE reçu → POST du salon → PATCH du membre (déplacement), rien d'autre :
+ *  - salon du hub, catégorie, surcharges et positions lus dans le cache de la Gateway (GUILD_CREATE, CHANNEL_*),
+ *    jamais de GET à Discord sauf s'il manque ;
+ *  - l'enregistrement en base part EN MÊME TEMPS que le déplacement (Promise.all) ; un événement qui a besoin de la
+ *    ligne (l'arrivée du membre dans son salon) attend cette écriture (`insertions`) ;
+ *  - panneau de contrôle, état affiché dans l'app, salon des journaux : APRÈS le déplacement, en parallèle, sans
+ *    bloquer l'événement suivant ;
+ *  - FILE D'ÉTAT unique (cache, présences en base, rapprochement : rapide, sans réseau sauf transfert de propriété),
+ *    et une VOIE PAR MEMBRE pour ce qui parle à Discord (création, déplacement) : deux membres sont servis en
+ *    parallèle ; deux événements du même membre l'un après l'autre (jamais deux salons). Les suppressions de salons
+ *    vides partent aussi hors de la file ;
+ *  - mesures : chaque création note son temps (attente, préparation, création Discord, déplacement) dans l'état
+ *    affiché par l'app (« Dernière création : X ms ») ; journal détaillé avec ESPORT_VOCAUX_MESURES=1 ;
+ *  - transport persistant (adaptateurs/fetchDiscordNode.mjs, keep-alive) gardé chaud par un appel léger toutes les
+ *    50 s tant que les salons vocaux sont activés (`garderChaud`).
  * Salons d'équipe de tournoi (hub lié à un tournoi) : `tournoi.mjs` (`gererHubTournoi`, `rolesEquipe`).
  */
 
@@ -29,6 +44,7 @@ import {
   journaliser,
   lireSalon,
   nomMembre,
+  noterPanneau,
   salonsAvecOccupant,
   salonsDuProprietaire,
   salonsDuServeur,
@@ -37,7 +53,7 @@ import {
   transferer,
 } from './salons.mjs';
 
-/** État affiché dans l'app (`tickets_etat`, clé `vocaux`) : dernière erreur, dernier salon créé. */
+/** État affiché dans l'app (`tickets_etat`, clé `vocaux`) : dernière erreur, dernier salon créé et ses mesures. */
 export async function lireEtatVocaux(base) {
   const l = await base.premier("SELECT valeur, maj_le FROM tickets_etat WHERE cle = 'vocaux'", []);
   return l ? { ...jsonOu(l.valeur, {}), majLe: l.maj_le } : {};
@@ -54,37 +70,140 @@ async function noterEtat(base, morceau, t) {
 
 export { INTENT_VOCAL } from '../tickets/bienvenue.mjs';
 const VOCAL = 2;
+export const INTERVALLE_CHAUD_MS = 50_000;
+
+const drapeau = v => Boolean(v) && !/^(0|non|no|false|off)$/i.test(String(v).trim());
+const ms = v => Math.max(0, Math.round(v));
 
 /**
  * Options : `base`, `fetch`, `jetonBot`, `maintenant`, `journal`, `botId()` (identifiant du bot, connu après READY),
  * `delaiMs` (tests : remplace le délai de suppression réglé), `tournoi` (salons d'équipe : `{ hub(ctx, hub, membre),
- * rolesEquipe(salon) }`).
+ * rolesEquipe(salon) }`), `mesures` (journal détaillé de chaque création ; ESPORT_VOCAUX_MESURES=1 par défaut),
+ * `garderChaud` (transport persistant : appel léger toutes les `intervalleChaudMs` tant que les salons vocaux sont
+ * activés), `horloge` (ms, performance.now par défaut).
  */
-export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, maintenant = () => Date.now(), journal = console, botId = () => null, delaiMs = null, tournoi = { hub: gererHubTournoi, rolesEquipe } } = {}) {
+export function creerMoteurVocaux({
+  base,
+  fetch: fetchDiscord,
+  jetonBot,
+  maintenant = () => Date.now(),
+  journal = console,
+  botId = () => null,
+  delaiMs = null,
+  tournoi = { hub: gererHubTournoi, rolesEquipe },
+  mesures = drapeau(globalThis.process?.env?.ESPORT_VOCAUX_MESURES),
+  garderChaud = false,
+  intervalleChaudMs = INTERVALLE_CHAUD_MS,
+  horloge = () => performance.now(),
+} = {}) {
   const cache = { pret: false, guildId: null, salons: new Map(), vocal: new Map() };
   const minuteries = new Map();
+  /** File d'état (un travail à la fois). */
   let file = Promise.resolve();
+  /** Voie de chaque membre (création, déplacement) : `userId` → dernière promesse. */
+  const voies = new Map();
+  /** Lignes en cours d'écriture : `salonId` → promesse (un événement qui lit la ligne l'attend). */
+  const insertions = new Map();
+  /** Suppressions de salons en cours (hors file) : `salonId` → promesse. */
+  const suppressions = new Map();
+  /** Travaux lancés hors de la file (voies, suites, suppressions) : `attendre()`. */
+  const travaux = new Set();
+  let etatFile = Promise.resolve();
+  let chaud = null;
+  let actifConnu = false;
   let arrete = false;
 
-  /** Ajoute un travail à la file (un à la fois) ; rend sa promesse (erreurs journalisées, jamais propagées). */
-  function enFile(travail) {
-    const p = file.then(() => (arrete ? undefined : travail()));
-    file = p.catch(e => journal.error?.('[esport] vocaux :', e?.message ?? e));
-    return file;
+  const erreur = (quoi, e) => journal.error?.(`[esport] vocaux${quoi ? ` : ${quoi}` : ''} :`, e?.message ?? e);
+
+  /** Suit un travail lancé hors de la file (jamais rejeté). */
+  function suivre(p) {
+    const q = Promise.resolve(p).catch(e => erreur('', e));
+    travaux.add(q);
+    q.finally(() => travaux.delete(q));
+    return q;
   }
 
-  async function contexte() {
+  /**
+   * Ajoute un travail à la file d'état : `travail(apres)` ; `apres` reçoit les travaux lancés hors de la file pendant
+   * ce travail. La promesse rendue se résout quand le travail ET ces travaux sont finis (les tests l'attendent) ; la
+   * file, elle, passe au suivant dès la fin du travail. Erreurs journalisées, jamais propagées.
+   */
+  function enFile(travail) {
+    const apres = [];
+    const p = file.then(() => (arrete ? undefined : travail(apres)));
+    file = p.catch(e => erreur('', e));
+    return file.then(() => Promise.all(apres)).then(() => undefined);
+  }
+
+  /** Lance `travail` hors de la file, rattaché à l'événement en cours (`ctx.apres`). */
+  function differer(ctx, travail) {
+    const p = suivre(Promise.resolve().then(travail));
+    ctx.apres?.push(p);
+    return p;
+  }
+
+  /**
+   * Voie d'un membre : ses travaux l'un après l'autre, en parallèle de ceux des autres. `travail(porteur)` peut poser
+   * `porteur.suite` (ce qui suit le déplacement : la voie est libérée sans l'attendre). Rend une promesse résolue
+   * quand le travail et sa suite sont finis.
+   */
+  function dansVoie(userId, travail) {
+    const porteur = { suite: null };
+    const avant = voies.get(userId) ?? Promise.resolve();
+    const p = avant.then(() => (arrete ? undefined : travail(porteur))).catch(e => erreur('', e));
+    voies.set(userId, p);
+    p.finally(() => {
+      if (voies.get(userId) === p) voies.delete(userId);
+    });
+    return p.then(() => porteur.suite);
+  }
+
+  async function contexte(apres) {
     const reglages = await lireVocaux(base);
     const general = await lireGeneral(base);
-    const ctx = { base, fetch: fetchDiscord, jetonBot, maintenant, botId: botId(), guildId: general.guildId, reglages, general, mode: general.langue ?? 'auteur', journal, cache };
+    actifConnu = Boolean(reglages.actif);
+    const ctx = { base, fetch: fetchDiscord, jetonBot, maintenant, botId: botId(), guildId: general.guildId, reglages, general, mode: general.langue ?? 'auteur', journal, cache, apres };
     if (tournoi?.rolesEquipe) ctx.rolesEquipe = s => tournoi.rolesEquipe(ctx, s);
     return ctx;
   }
 
   const delaiDe = ctx => (delaiMs ?? Math.max(1, Number(ctx.reglages.delaiSuppressionS) || 15) * 1000);
 
-  async function noterErreur(motif, r, t) {
-    await noterEtat(base, { derniereErreur: { motif, statut: r?.statut ?? 0, code: r?.code ?? null, le: iso(t) } }, t).catch(() => undefined);
+  /** État affiché dans l'app : écritures l'une après l'autre (lecture puis fusion). */
+  function noter(morceau, t) {
+    const p = etatFile.then(() => noterEtat(base, morceau, t)).catch(() => undefined);
+    etatFile = p;
+    return p;
+  }
+
+  const noterErreur = (motif, r, t) => noter({ derniereErreur: { motif, statut: r?.statut ?? 0, code: r?.code ?? null, le: iso(t) } }, t);
+
+  /** Ligne d'un salon, après son écriture si elle est en cours. */
+  async function salonConnu(salonId) {
+    const ins = insertions.get(salonId);
+    if (ins) await ins;
+    return lireSalon(base, salonId);
+  }
+
+  // ---------------------------------------------------------------- Connexion gardée chaude
+
+  /** Appel léger (GET /users/@me) : la connexion persistante vers discord.com reste ouverte. */
+  function chauffer() {
+    if (!garderChaud || arrete || !jetonBot) return;
+    void suivre(rest(fetchDiscord, jetonBot, 'GET', '/users/@me'));
+  }
+
+  function demarrerChaud() {
+    if (!garderChaud || chaud || arrete) return;
+    chaud = setInterval(() => {
+      if (cache.pret && actifConnu) chauffer();
+    }, intervalleChaudMs);
+    chaud.unref?.();
+  }
+
+  function arreterChaud() {
+    if (chaud) clearInterval(chaud);
+    chaud = null;
   }
 
   // ---------------------------------------------------------------- Suppression des salons vides
@@ -94,7 +213,7 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
     if (minuteries.has(salonId)) clearTimeout(minuteries.get(salonId));
     const m = setTimeout(() => {
       minuteries.delete(salonId);
-      void enFile(async () => supprimerSiVide(await contexte(), salonId));
+      void enFile(async apres => supprimerSiVide(await contexte(apres), salonId));
     }, attente + 20);
     m.unref?.();
     minuteries.set(salonId, m);
@@ -105,9 +224,13 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
     minuteries.delete(salonId);
   }
 
-  /** Supprime le salon s'il est vide depuis le délai (`force` : tout de suite, rapprochement après redémarrage). */
+  /**
+   * Supprime le salon s'il est vide depuis le délai (`force` : tout de suite, rapprochement après redémarrage). La
+   * décision est prise dans la file ; l'appel à Discord part hors de la file (il ne retarde aucune arrivée).
+   */
   async function supprimerSiVide(ctx, salonId, { force = false } = {}) {
-    const s = await lireSalon(base, salonId);
+    if (suppressions.has(salonId)) return false;
+    const s = await salonConnu(salonId);
     if (!s || (!s.videDepuis && !force) || s.occupants.length) return false;
     const t = ctx.maintenant();
     if (!force && t - Date.parse(s.videDepuis) < delaiDe(ctx) - 50) {
@@ -120,15 +243,20 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
       await ecrireSalon(base, { ...s, occupants: presents.map(([id, v]) => ({ id, nom: v.nom })), videDepuis: null }, t);
       return false;
     }
-    const r = await rest(fetchDiscord, jetonBot, 'DELETE', `/channels/${salonId}`, undefined, { raison: 'Esport HQ : salon vocal temporaire vide' });
-    if (!r.ok && r.statut !== 404 && r.code !== 10003) {
-      await noterErreur('suppression', r, t);
-      return false;
-    }
     annuler(salonId);
-    cache.salons.delete(salonId);
-    await supprimerLigne(base, salonId);
-    await journaliser(ctx, 'j_supprime', { nom: s.nom });
+    const p = (async () => {
+      const r = await rest(fetchDiscord, jetonBot, 'DELETE', `/channels/${salonId}`, undefined, { raison: 'Esport HQ : salon vocal temporaire vide' });
+      if (!r.ok && r.statut !== 404 && r.code !== 10003) {
+        await noterErreur('suppression', r, t);
+        return;
+      }
+      cache.salons.delete(salonId);
+      await supprimerLigne(base, salonId);
+      await journaliser(ctx, 'j_supprime', { nom: s.nom });
+    })();
+    suppressions.set(salonId, p);
+    p.catch(() => undefined).finally(() => suppressions.delete(salonId));
+    differer(ctx, () => p);
     return true;
   }
 
@@ -171,6 +299,7 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
 
   // ---------------------------------------------------------------- Création depuis un hub
 
+  /** Salon Discord : cache de la Gateway d'abord ; GET seulement s'il y manque. */
   async function salonDiscord(id) {
     if (cache.salons.has(id)) return cache.salons.get(id);
     const r = await rest(fetchDiscord, jetonBot, 'GET', `/channels/${id}`);
@@ -181,15 +310,37 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
 
   const deplacer = (ctx, userId, salonId) => rest(fetchDiscord, jetonBot, 'PATCH', `/guilds/${ctx.guildId}/members/${userId}`, { channel_id: salonId }, { raison: 'Esport HQ : salon vocal temporaire' });
 
+  /** Mesures d'une création → état de l'app (et journal détaillé si demandé). */
+  function mesurer(m, hub, r, d) {
+    const o = {
+      totalMs: ms(m.deplace - m.recu),
+      attenteMs: ms(m.debut - m.recu),
+      preparationMs: ms(m.envoi - m.debut),
+      creationMs: ms(m.cree - m.envoi),
+      deplacementMs: ms(m.deplace - m.cree),
+      connexion: r?.connexion ?? null,
+      deplace: Boolean(d?.ok),
+      hubId: hub.id,
+    };
+    if (mesures) {
+      journal.info?.(
+        `[esport] vocaux : salon prêt en ${o.totalMs} ms (attente ${o.attenteMs} ms, préparation ${o.preparationMs} ms, création Discord ${o.creationMs} ms${o.connexion ? ` [connexion ${o.connexion}]` : ''}, déplacement ${o.deplacementMs} ms${d?.ok ? '' : ` refusé ${d?.statut ?? 0}`})`,
+      );
+    }
+    return o;
+  }
+
   /**
    * Crée un salon pour `membre` ({ id, nom }) depuis `hub`. `options` (salon d'équipe) : `{ nom, tournoiId, equipeId,
-   * equipe }`. Rend le salon créé (ou null si Discord refuse).
+   * equipe }`. `porteur` (voie du membre) : `{ recu, suite }` — instant de réception de l'événement, et ce qui suit le
+   * déplacement (panneau, état, journal), posé ici. Rend le salon créé (ou null si Discord refuse).
    */
-  async function creerSalon(ctx, hub, membre, options = {}) {
+  async function creerSalon(ctx, hub, membre, options = {}, porteur = {}) {
     const t = ctx.maintenant();
+    const m = { recu: porteur.recu ?? horloge(), debut: horloge() };
     const hubSalon = await salonDiscord(hub.id);
     if (!hubSalon) {
-      await noterErreur('hub-introuvable', { statut: 404 }, t);
+      porteur.suite = suivre(noterErreur('hub-introuvable', { statut: 404 }, t));
       return null;
     }
     const parent = hub.categorieId ?? hubSalon.parent_id ?? null;
@@ -218,38 +369,59 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
       name: nom,
       type: VOCAL,
       ...(parent ? { parent_id: parent } : {}),
+      // Dans le corps de la création (aucun PATCH de position ensuite).
       position: Number(hubSalon.position ?? 0) + 1,
       ...(s.limite ? { user_limit: s.limite } : {}),
       permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe }),
     };
+    m.envoi = horloge();
     const r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${ctx.guildId}/channels`, corps, { raison: `Esport HQ : salon vocal temporaire de ${membre.nom || membre.id}`.slice(0, 200) });
+    m.cree = horloge();
     if (!r.ok || !r.corps?.id) {
-      await noterErreur('creation', r, t);
-      await journaliser(ctx, 'j_echec', { membre: membre.nom || membre.id, statut: r.code ?? r.statut ?? 0 });
       journal.error?.('[esport] vocaux : création refusée par Discord', r.statut, r.code ?? '');
+      porteur.suite = suivre(Promise.all([noterErreur('creation', r, t), journaliser(ctx, 'j_echec', { membre: membre.nom || membre.id, statut: r.code ?? r.statut ?? 0 })]));
       return null;
     }
     s.salonId = String(r.corps.id);
     cache.salons.set(s.salonId, { ...r.corps, type: VOCAL });
-    await insererSalon(base, s, t);
-    planifier(ctx, s.salonId, s.videDepuis);
-    // Le membre est déplacé dans son salon (son arrivée, VOICE_STATE_UPDATE, le notera présent).
-    const d = await deplacer(ctx, membre.id, s.salonId);
+    // Ligne écrite PENDANT le déplacement ; l'arrivée du membre dans son salon (événement suivant) l'attend.
+    const insertion = insererSalon(base, s, t).then(
+      () => true,
+      e => {
+        erreur('enregistrement du salon', e);
+        return false;
+      },
+    );
+    insertions.set(s.salonId, insertion);
+    void insertion.finally(() => insertions.delete(s.salonId));
+    const [d, enregistre] = await Promise.all([deplacer(ctx, membre.id, s.salonId), insertion]);
+    m.deplace = horloge();
+    // Membre parti entre-temps (ou refus) : le salon reste vide et sera supprimé après le délai.
     if (!d.ok) journal.warn?.('[esport] vocaux : déplacement refusé', d.statut, d.code ?? '');
-    const p = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${s.salonId}/messages`, chargePanneau(s, { mode: ctx.mode, langue: 'fr', equipe: options.equipe ?? '' }));
-    if (p.ok && p.corps?.id) {
-      const lu = await lireSalon(base, s.salonId);
-      if (lu) await ecrireSalon(base, { ...lu, panneauId: String(p.corps.id) }, ctx.maintenant());
-    }
-    await noterEtat(base, { dernierSalon: { le: iso(t), ok: true } }, t).catch(() => undefined);
-    await journaliser(ctx, 'j_cree', { salon: `<#${s.salonId}>`, membre: membre.nom || membre.id });
+    if (enregistre) planifier(ctx, s.salonId, s.videDepuis);
+    const mesure = mesurer(m, hub, r, d);
+    // Après le déplacement, en parallèle : panneau, état de l'app, journal.
+    porteur.suite = suivre(
+      Promise.allSettled([
+        (async () => {
+          const p = await rest(fetchDiscord, jetonBot, 'POST', `/channels/${s.salonId}/messages`, chargePanneau(s, { mode: ctx.mode, langue: 'fr', equipe: options.equipe ?? '' }));
+          if (p.ok && p.corps?.id && enregistre) await noterPanneau(base, s.salonId, String(p.corps.id), ctx.maintenant());
+        })(),
+        noter({ dernierSalon: { le: iso(t), ok: true }, derniereCreation: { le: iso(t), ...mesure } }, t),
+        journaliser(ctx, 'j_cree', { salon: `<#${s.salonId}>`, membre: membre.nom || membre.id }),
+      ]).then(res => {
+        for (const x of res) if (x.status === 'rejected') erreur('après la création', x.reason);
+      }),
+    );
     return s;
   }
 
-  /** Arrivée dans un hub : son salon existant (déplacé dedans), sinon un nouveau. */
-  async function depuisHub(ctx, hub, membre) {
+  /** Arrivée dans un hub (voie du membre) : son salon existant (déplacé dedans), sinon un nouveau. */
+  async function depuisHub(ctx, hub, membre, porteur = {}) {
+    // Le membre a déjà quitté le hub (événement suivant traité entre-temps) : rien à faire.
+    if (cache.vocal.get(membre.id)?.channelId !== hub.id) return;
     if (hub.tournoiId) {
-      if (tournoi?.hub) await tournoi.hub(ctx, hub, membre, { creerSalon, deplacer, lireSalon });
+      if (tournoi?.hub) await tournoi.hub(ctx, hub, membre, { creerSalon: (c, h, mb, o) => creerSalon(c, h, mb, o, porteur), deplacer, lireSalon: salonConnu });
       return;
     }
     const existants = await salonsDuProprietaire(base, ctx.guildId, membre.id);
@@ -263,38 +435,47 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
       }
       // Ses salons ont disparu : on en crée un nouveau.
     }
-    await creerSalon(ctx, hub, membre);
+    await creerSalon(ctx, hub, membre, {}, porteur);
+  }
+
+  /** Arrivée dans un hub confiée à la voie du membre (hors de la file d'état). */
+  function servir(ctx, hub, membre, recu) {
+    differer(ctx, () =>
+      dansVoie(membre.id, porteur => {
+        porteur.recu = recu;
+        return depuisHub(ctx, hub, membre, porteur);
+      }),
+    );
   }
 
   // ---------------------------------------------------------------- Événements
 
-  async function voix(d) {
-    const ctx = await contexte();
+  async function voix(d, apres, recu) {
+    const ctx = await contexte(apres);
     if (!ctx.guildId || d?.guild_id !== ctx.guildId) return;
     const userId = String(d.user_id ?? '');
     if (!/^\d{5,25}$/.test(userId) || userId === ctx.botId || d.member?.user?.bot) return;
     const nom = nomMembre(d.member) || cache.vocal.get(userId)?.nom || userId;
-    const apres = d.channel_id ? String(d.channel_id) : null;
-    if (apres) cache.vocal.set(userId, { channelId: apres, nom, roles: Array.isArray(d.member?.roles) ? d.member.roles : [] });
+    const vers = d.channel_id ? String(d.channel_id) : null;
+    const roles = Array.isArray(d.member?.roles) ? d.member.roles : [];
+    if (vers) cache.vocal.set(userId, { channelId: vers, nom, roles });
     else cache.vocal.delete(userId);
-    for (const s of await salonsAvecOccupant(base, userId)) if (s.salonId !== apres) await quitter(ctx, s, userId);
-    if (!apres) return;
-    const s = await lireSalon(base, apres);
-    if (s) {
-      await entrer(ctx, s, userId, nom);
-      return;
-    }
-    if (!ctx.reglages.actif) return;
-    const hub = ctx.reglages.hubs.find(h => h.id === apres);
-    if (hub) await depuisHub(ctx, hub, { id: userId, nom, roles: Array.isArray(d.member?.roles) ? d.member.roles : [], permissions: d.member?.permissions ?? null });
+    // Arrivée dans un hub : confiée tout de suite à la voie du membre (les présences en base suivent, en parallèle).
+    const hub = vers && ctx.reglages.actif ? ctx.reglages.hubs.find(h => h.id === vers) : null;
+    if (hub) servir(ctx, hub, { id: userId, nom, roles, permissions: d.member?.permissions ?? null }, recu);
+    for (const s of await salonsAvecOccupant(base, userId)) if (s.salonId !== vers) await quitter(ctx, s, userId);
+    if (!vers || hub) return;
+    const s = await salonConnu(vers);
+    if (s) await entrer(ctx, s, userId, nom);
   }
 
   /** Après GUILD_CREATE (ou RESUMED avec un cache complet) : salons connus rapprochés de Discord. */
-  async function rapprocher() {
-    const ctx = await contexte();
+  async function rapprocher(apres) {
+    const ctx = await contexte(apres);
     if (!ctx.guildId || cache.guildId !== ctx.guildId || !cache.pret) return;
     const t = ctx.maintenant();
     for (const s of await salonsDuServeur(base, ctx.guildId)) {
+      if (insertions.has(s.salonId)) continue;
       if (!cache.salons.has(s.salonId)) {
         annuler(s.salonId);
         await supprimerLigne(base, s.salonId);
@@ -313,11 +494,11 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
       await ecrireSalon(base, suivant, t);
       if ((!s.proprietaireId || !ordre.some(o => o.id === s.proprietaireId)) && ctx.reglages.quandProprietairePart === 'transferer') await transmettre(ctx, suivant);
     }
-    // Personnes restées dans un hub pendant que le bot était absent : servies maintenant.
+    // Personnes restées dans un hub pendant que le bot était absent : servies maintenant (chacune dans sa voie).
     if (!ctx.reglages.actif) return;
     for (const [userId, v] of [...cache.vocal.entries()]) {
       const hub = ctx.reglages.hubs.find(h => h.id === v.channelId);
-      if (hub) await depuisHub(ctx, hub, { id: userId, nom: v.nom || userId, roles: v.roles ?? [] });
+      if (hub) servir(ctx, hub, { id: userId, nom: v.nom || userId, roles: v.roles ?? [] }, horloge());
     }
   }
 
@@ -342,22 +523,26 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
         // Nouvelle session : le cache sera rempli par GUILD_CREATE.
         cache.pret = false;
         return;
-      // Tout passe par la file, dans l'ordre d'arrivée (le cache d'un GUILD_CREATE avant les états vocaux suivants).
+      // Tout passe par la file d'état, dans l'ordre d'arrivée (le cache d'un GUILD_CREATE avant les états vocaux).
       case 'GUILD_CREATE':
-        await enFile(async () => {
+        await enFile(async apres => {
           const general = await lireGeneral(base);
           if (!d?.id || String(d.id) !== general.guildId) return;
           guildCreate(d);
-          await rapprocher();
+          // Connexion persistante ouverte tout de suite (la première création n'attend pas le DNS ni le TLS).
+          chauffer();
+          demarrerChaud();
+          await rapprocher(apres);
         });
         return;
       case 'RESUMED':
-        await enFile(async () => {
-          if (cache.pret) await rapprocher();
+        await enFile(async apres => {
+          if (cache.pret) await rapprocher(apres);
         });
         return;
       case 'CHANNEL_CREATE':
       case 'CHANNEL_UPDATE':
+        // Cache du salon d'un hub, de sa catégorie, de leurs surcharges et positions (file : après un GUILD_CREATE).
         await enFile(async () => {
           if (d?.id) cache.salons.set(String(d.id), d);
         });
@@ -367,24 +552,26 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
         cache.salons.delete(String(d.id));
         await enFile(async () => {
           annuler(String(d.id));
-          if (await lireSalon(base, String(d.id))) await supprimerLigne(base, String(d.id));
+          if (await salonConnu(String(d.id))) await supprimerLigne(base, String(d.id));
         });
         return;
-      case 'VOICE_STATE_UPDATE':
-        await enFile(() => voix(d));
+      case 'VOICE_STATE_UPDATE': {
+        const recu = horloge();
+        await enFile(apres => voix(d, apres, recu));
         return;
+      }
       default:
     }
   }
 
   /** Passage du superviseur (toutes les 20 s, meneur) : salons vides arrivés au délai supprimés (rattrapage). */
   async function passage() {
-    await enFile(async () => {
-      const ctx = await contexte();
+    await enFile(async apres => {
+      const ctx = await contexte(apres);
       if (!ctx.guildId) return;
       const t = ctx.maintenant();
       for (const s of await salonsDuServeur(base, ctx.guildId)) {
-        if (s.occupants.length) continue;
+        if (s.occupants.length || insertions.has(s.salonId)) continue;
         if (!s.videDepuis) {
           await ecrireSalon(base, { ...s, videDepuis: iso(t) }, t);
           planifier(ctx, s.salonId, iso(t));
@@ -394,6 +581,16 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
     });
   }
 
+  /** Tout ce qui est en cours (file, voies, suites, suppressions) : fini. */
+  async function attendre() {
+    for (let i = 0; i < 50; i++) {
+      const f = file;
+      await f;
+      await Promise.all([...travaux]);
+      if (f === file && !travaux.size) return;
+    }
+  }
+
   return {
     evenement,
     passage,
@@ -401,17 +598,19 @@ export function creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, mainten
     reinitialiser() {
       for (const m of minuteries.values()) clearTimeout(m);
       minuteries.clear();
+      arreterChaud();
       cache.pret = false;
       cache.vocal = new Map();
     },
     arreter() {
       arrete = true;
+      arreterChaud();
       for (const m of minuteries.values()) clearTimeout(m);
       minuteries.clear();
     },
     /** Tests et diagnostic. */
-    etat: () => ({ pret: cache.pret, vocal: cache.vocal.size, salons: cache.salons.size, minuteries: minuteries.size }),
-    attendre: () => file,
+    etat: () => ({ pret: cache.pret, vocal: cache.vocal.size, salons: cache.salons.size, minuteries: minuteries.size, voies: voies.size, chaud: Boolean(chaud) }),
+    attendre,
     cache,
   };
 }

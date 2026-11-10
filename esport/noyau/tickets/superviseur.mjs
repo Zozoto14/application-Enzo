@@ -114,7 +114,8 @@ export async function releverTickets(ctx, { max = SALONS_PAR_RELEVE } = {}) {
 }
 
 /**
- * Superviseur d'un processus. Options : `base`, `jetonBot`, `fetch`, `WebSocket`, `stockage`, `maintenant`,
+ * Superviseur d'un processus. Options : `base`, `jetonBot`, `fetch`, `fetchRest` (salons vocaux : transport
+ * persistant), `WebSocket`, `stockage`, `maintenant`,
  * `identifiant` (titulaire du bail), `intervalle`, `dureeBail`, `intervalleSecours`, `gateway` (options passées au
  * client : attentes, hasard), `estStaffCompte`, `surNouveau`, `surSalonSupprime`, `journal`.
  */
@@ -138,6 +139,7 @@ export function creerSuperviseurTickets({
   fetchReveil = (...a) => globalThis.fetch(...a),
   intervalleReveil = INTERVALLE_REVEIL_MS,
   vocaux: optionsVocaux = {},
+  fetchRest = null,
   journal = console,
 }) {
   let minuterie = null;
@@ -160,7 +162,9 @@ export function creerSuperviseurTickets({
   const telecharger = telechargeurCdn(fetchDiscord);
   let vocaux = null;
   // Moteur des salons vocaux temporaires (meneur seulement : il ne reçoit que les événements de SA Gateway).
-  const moteur = creerMoteurVocaux({ base, fetch: fetchDiscord, jetonBot, maintenant, journal, botId: () => botId, ...optionsVocaux });
+  // `fetchRest` (serveur Node : adaptateurs/fetchDiscordNode.mjs) : connexion persistante vers discord.com, gardée
+  // chaude par le moteur (création et déplacement sans DNS ni négociation TLS).
+  const moteur = creerMoteurVocaux({ base, fetch: fetchRest ?? fetchDiscord, jetonBot, maintenant, journal, botId: () => botId, garderChaud: Boolean(fetchRest?.persistant), ...optionsVocaux });
 
   const ctx = () => ({ base, stockage, reglages, telecharger, botId, maintenant, estStaffCompte, surNouveau, surSalonSupprime, fetch: fetchDiscord, jetonBot });
 

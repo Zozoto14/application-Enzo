@@ -103,6 +103,11 @@ export async function insererSalon(base, s, t) {
   );
 }
 
+/** Panneau publié : seul `panneau_id` est écrit (les présences, écrites en même temps par la file, restent). */
+export async function noterPanneau(base, salonId, panneauId, t) {
+  await base.executer('UPDATE vocaux_salons SET panneau_id = ?, maj_le = ? WHERE salon_id = ?', [panneauId, iso(t), salonId]);
+}
+
 export const supprimerLigne = (base, salonId) => base.executer('DELETE FROM vocaux_salons WHERE salon_id = ?', [salonId]);
 
 /**

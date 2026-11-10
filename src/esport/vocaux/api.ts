@@ -53,7 +53,7 @@ export interface ConfigVocaux {
   serveur: { id: string; nom: string } | null;
   connexion: Connexion;
   gatewayActivee: boolean;
-  etat: { derniereErreur?: { motif: string; statut: number; code: number | null; le: string }; dernierSalon?: { le: string; ok: boolean } };
+  etat: { derniereErreur?: { motif: string; statut: number; code: number | null; le: string }; dernierSalon?: { le: string; ok: boolean }; derniereCreation?: DerniereCreation };
   salons: SalonTemporaire[];
   choix: { commandes: string[]; modesProprietaire: ModeProprietaire[]; limites: { hubs: number; roles: number; amis: number; places: number; delaiMinS: number; delaiMaxS: number; parMembreMax: number; modele: number }; modeleDefaut: string; modeleTournoiDefaut: string; permissionsBot: string[] };
   bot: boolean;
@@ -165,3 +165,16 @@ export function apiEquipes(client: ClientEsport) {
     supprimerRoles: (t: string, id: string) => r<DiscordTournoi & { nettoyage: { roles: number; salons: number; echecs: unknown[] } }>(`${base(t, id)}/roles/supprimer`, 'POST', {}),
   };
 }
+
+/** Mesures de la dernière création d'un salon (moteur vocal) : durées en millisecondes. */
+export type DerniereCreation = {
+  le: string;
+  totalMs: number;
+  attenteMs: number;
+  preparationMs: number;
+  creationMs: number;
+  deplacementMs: number;
+  connexion: 'reutilisee' | 'neuve' | null;
+  deplace: boolean;
+  hubId: string;
+};

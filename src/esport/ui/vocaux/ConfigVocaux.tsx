@@ -106,6 +106,14 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
           </Text>
         ) : null}
         {conf.etat?.dernierSalon ? <Text style={attenue(theme)}>{trVc('dernier_salon', { le: quand(conf.etat.dernierSalon.le) })}</Text> : null}
+        {conf.etat?.derniereCreation ? (
+          <View testID="esport-vc-derniere-creation">
+            <Text style={texte(theme, 14)}>{trVc('derniere_creation', { total: String(conf.etat.derniereCreation.totalMs), creation: String(conf.etat.derniereCreation.creationMs), deplacement: String(conf.etat.derniereCreation.deplacementMs) })}</Text>
+            <Text style={attenue(theme)}>
+              {trVc('derniere_creation_aide', { attente: String(conf.etat.derniereCreation.attenteMs), preparation: String(conf.etat.derniereCreation.preparationMs), connexion: trVc(`connexion_http.${conf.etat.derniereCreation.connexion ?? 'inconnue'}` as CleVc) })}
+            </Text>
+          </View>
+        ) : null}
         {serveur?.permissions ? (
           <View style={{ gap: ESP.xs }} testID="esport-vc-permissions">
             <Intertitre theme={theme}>{trVc('permissions')}</Intertitre>

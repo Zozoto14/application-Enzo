@@ -56,8 +56,9 @@ les interactions HTTP : ils marchent quel que soit le processus.
 Fonctionnement interne :
 
 - états vocaux mis en cache depuis `GUILD_CREATE` puis `VOICE_STATE_UPDATE` ; salons depuis `GUILD_CREATE` et
-  `CHANNEL_CREATE / UPDATE / DELETE` ; événements traités **un par un** (deux arrivées rapides ne créent pas deux
-  salons) ;
+  `CHANNEL_CREATE / UPDATE / DELETE` ; une **file d'état** (cache, présences en base) et une **voie par membre**
+  pour la création et le déplacement : deux membres sont servis en parallèle, deux événements du même membre l'un
+  après l'autre (jamais deux salons) ; voir « Rapidité » ;
 - l'état utile est **en base** (`vocaux_salons` : propriétaire, liste d'amis, verrouillage, limite, personnes présentes,
   droits du hub, panneau) : les interactions, traitées par n'importe quel processus, le lisent ;
 - verrouiller / déverrouiller **recalcule** toutes les surcharges du salon (une seule requête) ; expulser = `PATCH`
@@ -66,6 +67,33 @@ Fonctionnement interne :
   oubliés, vides supprimés tout de suite, présents et propriétaires resynchronisés) et une personne restée dans un hub
   reçoit son salon ; après `RESUMED`, Discord rejoue ce qui a été manqué ; à chaque passage du superviseur (20 s), les
   salons vides arrivés au délai sont supprimés (minuteries perdues avec un processus remplacé).
+
+## Rapidité
+
+Le chemin critique d'une arrivée dans un hub est : événement `VOICE_STATE_UPDATE` reçu → `POST` du salon → `PATCH`
+du membre (déplacement). Rien d'autre ne s'intercale :
+
+- le salon du hub, sa catégorie, leurs surcharges et positions sont lus dans le **cache de la Gateway** (aucun `GET`
+  à Discord, sauf repli si le salon y manque) ; la position est dans le corps de la création (pas de `PATCH` ensuite) ;
+- la ligne `vocaux_salons` est écrite **pendant** le déplacement ; l'arrivée du membre dans son salon attend cette
+  écriture si besoin ;
+- panneau de contrôle, état affiché dans l'app et message du salon des journaux partent **après** le déplacement, en
+  parallèle, sans retarder l'événement suivant ; les suppressions de salons vides partent hors de la file ;
+- aucune attente fixe : seules les limites annoncées par Discord (`X-RateLimit-*`) font patienter une route épuisée
+  (3 s au plus, sinon échec propre) ;
+- serveur Node (o2switch) : les appels du moteur passent par une **connexion persistante** vers discord.com
+  (`adaptateurs/fetchDiscordNode.mjs`, HTTP/1.1 keep-alive ; le `fetch` de Node referme la sienne après 4 s), ouverte
+  dès la connexion de la Gateway et gardée chaude par un appel léger (`GET /users/@me`) toutes les 50 s tant que les
+  salons vocaux sont activés. `DISCORD_CONNEXION_PERSISTANTE=non` revient au `fetch` global.
+
+Mesures : chaque création note son temps dans l'état affiché par l'app (« Dernière création : X ms (Discord création
+Y ms, déplacement Z ms) », avec l'attente, la préparation et si la connexion était déjà ouverte). Journal détaillé
+de chaque création avec `ESPORT_VOCAUX_MESURES=1` dans l'environnement du serveur.
+
+Salon « prêt à l'avance » (pré-créé caché puis renommé) : **non retenu**. Un membre ne peut pas être déplacé dans un
+salon qu'il ne voit pas encore, donc il faudrait toujours deux appels l'un après l'autre (`PATCH` du salon puis
+déplacement), comme aujourd'hui (`POST` puis déplacement) : gain incertain, pour des salons cachés que les
+administrateurs verraient. À revoir seulement si les mesures montrent une création Discord durablement lente.
 
 ## Permissions du bot
 
