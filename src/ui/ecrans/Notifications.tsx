@@ -21,6 +21,7 @@ import {
 } from '../../notifications/planification';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ChampHeurePortefeuille } from '../dates/portefeuille';
 
 export interface SeuilAffiche {
   titreId: string;
@@ -387,7 +388,7 @@ function ChampHeure({
 
   return (
     <View style={styles.moitie}>
-      <Champ
+      <ChampHeurePortefeuille
         etiquette={etiquette}
         testID={`heure-${jour}-${moment}`}
         value={saisie}
@@ -399,11 +400,8 @@ function ChampHeure({
             onChange(texte);
           }
         }}
-        keyboardType="numbers-and-punctuation"
-        placeholder="HH:MM"
-        maxLength={5}
       />
-      {invalide ? <Alerte message="Format attendu : HH:MM" /> : null}
+      {invalide ? <Alerte message="Heure illisible : choisis-la ou écris par ex. 07:30, 7h30 ou 730." /> : null}
     </View>
   );
 }

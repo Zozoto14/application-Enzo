@@ -13,6 +13,7 @@ import { trRe } from '../../../i18n/reunions';
 import { Retours, styles, useAgir } from '../../commun';
 import { Badge, Carte, ESP, EtatVide, Grille, TitreCarte, Volet, attenue, texte } from '../../design';
 import { ChoixBoutons, jourCourt } from './commun';
+import { ChampDate, ChampHeure } from '../../../../ui/dates';
 
 export function RendezVous({ theme, api, large, moi, fuseau }: { theme: ThemeHub; api: ApiReunions; large: boolean; moi: MoiReunions; fuseau: string }) {
   const [offres, setOffres] = useState<OffreRdv[] | undefined>();
@@ -124,9 +125,9 @@ function NouvelleOffre({ theme, api, fuseau, onFermer, onPublie }: { theme: Them
         </View>
       ))}
       <View style={[styles.ligne, { gap: ESP.xs }]}>
-        <Champ theme={theme} libelle={trRe('form.date')} valeur={plage.date} onChanger={date => setPlage({ ...plage, date })} maxLength={10} testID="esport-cm-rdv-form-date" style={{ minWidth: 130, flexGrow: 1 }} />
-        <Champ theme={theme} libelle={trRe('dispos.debut')} valeur={plage.heureDebut} onChanger={heureDebut => setPlage({ ...plage, heureDebut })} maxLength={5} testID="esport-cm-rdv-form-debut" style={{ minWidth: 90, flexGrow: 1 }} />
-        <Champ theme={theme} libelle={trRe('dispos.fin')} valeur={plage.heureFin} onChanger={heureFin => setPlage({ ...plage, heureFin })} maxLength={5} testID="esport-cm-rdv-form-fin" style={{ minWidth: 90, flexGrow: 1 }} />
+        <ChampDate theme={theme} libelle={trRe('form.date')} valeur={plage.date} onChanger={date => setPlage({ ...plage, date })} testID="esport-cm-rdv-form-date" style={{ minWidth: 130, flexGrow: 1 }} />
+        <ChampHeure theme={theme} libelle={trRe('dispos.debut')} valeur={plage.heureDebut} onChanger={heureDebut => setPlage({ ...plage, heureDebut })} testID="esport-cm-rdv-form-debut" style={{ minWidth: 90, flexGrow: 1 }} />
+        <ChampHeure theme={theme} libelle={trRe('dispos.fin')} valeur={plage.heureFin} onChanger={heureFin => setPlage({ ...plage, heureFin })} testID="esport-cm-rdv-form-fin" style={{ minWidth: 90, flexGrow: 1 }} />
       </View>
       <BoutonHub theme={theme} titre={trRe('rdv.ajouter_plage')} desactive={!dateValide(plage.date) || !heureValide(plage.heureDebut) || !heureValide(plage.heureFin)} onPress={() => setPlages(l => [...l, plage])} testID="esport-cm-rdv-form-plage-ajouter" />
       <BoutonHub

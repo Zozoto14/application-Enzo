@@ -23,6 +23,7 @@ import { SelecteurFuseau, useFuseau } from './commun';
 import { EditeurCreneaux, typesDispo, type TypeDispo } from './EditeurCreneaux';
 import { MaSemaine } from './DisposSemaine';
 import { tr, trn } from '../../i18n';
+import { ChampDate, ChampHeure } from '../../../ui/dates';
 
 /** Saisie : la même semaine type chaque semaine, ou semaine par semaine (migration 0062). */
 type ModeSaisie = 'modele' | 'semaine';
@@ -160,9 +161,9 @@ function MesExceptions({
         </View>
       ))}
       <View style={[styles.ligne, { borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 10 }]}>
-        <Champ theme={theme} libelle={tr('planning.disponibilites.date')} valeur={date} onChanger={setDate} maxLength={10} style={{ width: 130 }} testID="esport-exception-date" />
-        <Champ theme={theme} libelle={tr('planning.disponibilites.de')} valeur={debut} onChanger={setDebut} maxLength={5} style={{ width: 80 }} testID="esport-exception-debut" />
-        <Champ theme={theme} libelle={tr('planning.disponibilites.a')} valeur={fin} onChanger={setFin} maxLength={5} style={{ width: 80 }} testID="esport-exception-fin" />
+        <ChampDate theme={theme} libelle={tr('planning.disponibilites.date')} valeur={date} onChanger={setDate} style={{ width: 190, maxWidth: '100%' }} testID="esport-exception-date" />
+        <ChampHeure theme={theme} libelle={tr('planning.disponibilites.de')} valeur={debut} onChanger={setDebut} style={{ width: 140 }} testID="esport-exception-debut" />
+        <ChampHeure theme={theme} libelle={tr('planning.disponibilites.a')} valeur={fin} onChanger={setFin} style={{ width: 140 }} testID="esport-exception-fin" />
       </View>
       <Segments theme={theme} libelle={tr('resumes.type')} valeur={type} options={typesDispo()} onChoisir={v => setType(v as TypeDispo)} testID="esport-exception-type" />
       <Champ theme={theme} libelle={tr('resumes.note_facultative')} valeur={note} onChanger={setNote} maxLength={120} testID="esport-exception-note" />

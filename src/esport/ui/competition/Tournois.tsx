@@ -25,6 +25,7 @@ import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, Onglets, SqueletteCart
 import type { PropsModule } from '../modules';
 import { BadgeResultat, ChoixAdversaires, Info, LogoAdversaire, Pastille, instantSaisi, montant, murale, nomsAdversaires } from './commun';
 import { useTempsReel } from '../../tempsReel/hooks';
+import { ChampDate, ChampHeure } from '../../../ui/dates';
 
 type Filtre = 'actifs' | 'termines' | 'tous';
 const TON_STATUT: Record<StatutTournoi, Ton> = { a_venir: 'neutre', inscrit: 'accent', en_cours: 'alerte', termine: 'ok', annule: 'critique' };
@@ -488,8 +489,8 @@ function FormulaireMatch({ theme, api, teamId, d, onEnregistrer }: { theme: Them
       {d.tournoi.phases.length ? <Choix<string> theme={theme} libelle={trC('t.champ.phase')} valeur={phase} options={[...d.tournoi.phases.map(p => ({ id: p.cle, nom: p.nom || trC(`t.phase.${p.type}` as 't.phase.poules') })), { id: '', nom: trC('t.sans_phase') }]} onChoisir={setPhase} testID="esport-match-phase" /> : null}
       <Champ theme={theme} libelle={trC('t.champ.tour')} valeur={tour} onChanger={setTour} maxLength={60} placeholder={trC('t.tour_exemple')} testID="esport-match-tour" />
       <View style={[styles.ligne, { gap: ESP.s }]}>
-        <Champ theme={theme} libelle={trC('t.champ.date')} valeur={date} onChanger={setDate} maxLength={10} placeholder="2026-11-08" testID="esport-match-date" style={{ width: 150 }} />
-        <Champ theme={theme} libelle={trC('t.champ.heure')} valeur={heure} onChanger={setHeure} maxLength={5} placeholder="20:00" testID="esport-match-heure" style={{ width: 110 }} />
+        <ChampDate theme={theme} libelle={trC('t.champ.date')} valeur={date} onChanger={setDate} testID="esport-match-date" style={{ width: 190, maxWidth: '100%' }} />
+        <ChampHeure theme={theme} libelle={trC('t.champ.heure')} valeur={heure} onChanger={setHeure} testID="esport-match-heure" style={{ width: 140 }} />
         <Champ theme={theme} libelle={trC('t.champ.duree')} valeur={duree} onChanger={setDuree} maxLength={4} clavier="number-pad" testID="esport-match-duree" style={{ width: 130 }} />
       </View>
       <Text style={attenue(theme, 12)}>{d.modules.planning ? trC('t.aide_planning') : trC('t.aide_sans_planning')}</Text>
@@ -662,8 +663,8 @@ function FormulaireTournoi({
       )}
       {format && format.equipes <= 2 ? <Choix<string> theme={theme} libelle={trC('t.champ.bo')} valeur={bo} options={format.bo.map(b => ({ id: String(b), nom: `BO${b}` }))} onChoisir={setBo} testID="esport-tournoi-bo" /> : null}
       <View style={[styles.ligne, { gap: ESP.s }]}>
-        <Champ theme={theme} libelle={trC('t.champ.debut')} valeur={debut} onChanger={setDebut} maxLength={10} placeholder="2026-11-08" testID="esport-tournoi-debut" style={{ width: 160 }} />
-        <Champ theme={theme} libelle={trC('t.champ.fin')} valeur={fin} onChanger={setFin} maxLength={10} placeholder="2026-11-09" testID="esport-tournoi-fin" style={{ width: 160 }} />
+        <ChampDate theme={theme} fuseau={fuseau} libelle={trC('t.champ.debut')} valeur={debut} onChanger={setDebut} testID="esport-tournoi-debut" style={{ width: 190, maxWidth: '100%' }} />
+        <ChampDate theme={theme} fuseau={fuseau} min={/^\d{4}-\d{2}-\d{2}$/.test(debut) ? debut : undefined} libelle={trC('t.champ.fin')} valeur={fin} onChanger={setFin} testID="esport-tournoi-fin" style={{ width: 190, maxWidth: '100%' }} />
       </View>
       <Choix<'1' | '0'> theme={theme} libelle={trC('t.champ.lieu')} valeur={enLigne ? '1' : '0'} options={[{ id: '1', nom: trC('t.en_ligne') }, { id: '0', nom: trC('t.sur_place') }]} onChoisir={v => setEnLigne(v === '1')} testID="esport-tournoi-en-ligne" />
       {!enLigne ? <Champ theme={theme} libelle={trC('t.champ.adresse')} valeur={lieu} onChanger={setLieu} maxLength={200} testID="esport-tournoi-lieu" /> : null}
@@ -692,15 +693,15 @@ function FormulaireTournoi({
       <Champ theme={theme} libelle={trC('t.champ.cashprize_details')} valeur={cashprizeDetails} onChanger={setCashprizeDetails} maxLength={300} testID="esport-tournoi-cashprize-details" />
       <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{trC('t.champ.inscription_limite')}</Text>
       <View style={[styles.ligne, { gap: ESP.s }]}>
-        <Champ theme={theme} libelle={trC('t.champ.date')} valeur={insDate} onChanger={setInsDate} maxLength={10} placeholder="2026-11-06" testID="esport-tournoi-inscription-date" style={{ width: 150 }} />
-        <Champ theme={theme} libelle={trC('t.champ.heure')} valeur={insHeure} onChanger={setInsHeure} maxLength={5} testID="esport-tournoi-inscription-heure" style={{ width: 110 }} />
+        <ChampDate theme={theme} fuseau={fuseau} libelle={trC('t.champ.date')} valeur={insDate} onChanger={setInsDate} testID="esport-tournoi-inscription-date" style={{ width: 190, maxWidth: '100%' }} />
+        <ChampHeure theme={theme} libelle={trC('t.champ.heure')} valeur={insHeure} onChanger={setInsHeure} testID="esport-tournoi-inscription-heure" style={{ width: 140 }} />
       </View>
       <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{trC('t.champ.checkin')}</Text>
       <View style={[styles.ligne, { gap: ESP.s }]}>
-        <Champ theme={theme} libelle={trC('t.champ.ouverture')} valeur={ckODate} onChanger={setCkODate} maxLength={10} placeholder="2026-11-08" testID="esport-tournoi-checkin-date" style={{ width: 150 }} />
-        <Champ theme={theme} libelle={trC('t.champ.heure')} valeur={ckOHeure} onChanger={setCkOHeure} maxLength={5} placeholder="18:00" testID="esport-tournoi-checkin-heure" style={{ width: 110 }} />
-        <Champ theme={theme} libelle={trC('t.champ.limite')} valeur={ckLDate} onChanger={setCkLDate} maxLength={10} placeholder="2026-11-08" testID="esport-tournoi-checkin-limite-date" style={{ width: 150 }} />
-        <Champ theme={theme} libelle={trC('t.champ.heure')} valeur={ckLHeure} onChanger={setCkLHeure} maxLength={5} placeholder="19:30" testID="esport-tournoi-checkin-limite-heure" style={{ width: 110 }} />
+        <ChampDate theme={theme} fuseau={fuseau} libelle={trC('t.champ.ouverture')} valeur={ckODate} onChanger={setCkODate} testID="esport-tournoi-checkin-date" style={{ width: 190, maxWidth: '100%' }} />
+        <ChampHeure theme={theme} libelle={trC('t.champ.heure')} valeur={ckOHeure} onChanger={setCkOHeure} testID="esport-tournoi-checkin-heure" style={{ width: 140 }} />
+        <ChampDate theme={theme} fuseau={fuseau} libelle={trC('t.champ.limite')} valeur={ckLDate} onChanger={setCkLDate} testID="esport-tournoi-checkin-limite-date" style={{ width: 190, maxWidth: '100%' }} />
+        <ChampHeure theme={theme} libelle={trC('t.champ.heure')} valeur={ckLHeure} onChanger={setCkLHeure} testID="esport-tournoi-checkin-limite-heure" style={{ width: 140 }} />
       </View>
       {existant ? <Choix<StatutTournoi> theme={theme} libelle={trC('t.champ.statut')} valeur={statut} options={STATUTS_TOURNOI.map(s => ({ id: s, nom: nomStatutTournoi(s) }))} onChoisir={setStatut} testID="esport-tournoi-statut-choix" /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s }}>

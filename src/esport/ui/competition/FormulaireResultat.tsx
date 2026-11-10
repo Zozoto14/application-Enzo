@@ -21,6 +21,7 @@ import { trC } from '../../i18n/competition';
 import { Choix, Panneau, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, Volet, attenue, texte } from '../design';
 import { ChoixAdversaires, Pastille, instantSaisi, murale } from './commun';
+import { ChampDate, ChampHeure } from '../../../ui/dates';
 
 type Lien = 'sans' | 'match' | 'evenement';
 type MancheUi = SaisieManche & { detail?: boolean };
@@ -240,8 +241,8 @@ export function FormulaireResultat({
           {lien === 'evenement' ? <Choix<string> theme={theme} libelle={trC('f.evenement')} valeur={evenement} options={f.evenements.map(e => ({ id: e.id, nom: `${e.titre} · ${murale(e.debut, fuseau).date}` }))} onChoisir={choisirEvenement} testID="esport-resultat-evenement" /> : null}
           {lien !== 'match' ? <Choix<GenreResultat> theme={theme} libelle={trC('f.genre')} valeur={genre} options={(['officiel', 'scrim'] as const).map(g => ({ id: g, nom: trC(`r.genre.${g}` as 'r.genre.officiel') }))} onChoisir={setGenre} testID="esport-resultat-genre" /> : null}
           <View style={[styles.ligne, { gap: ESP.s }]}>
-            <Champ theme={theme} libelle={trC('f.date')} valeur={date} onChanger={setDate} maxLength={10} placeholder="2026-10-24" testID="esport-resultat-date" style={{ width: 150 }} />
-            <Champ theme={theme} libelle={trC('f.heure')} valeur={heure} onChanger={setHeure} maxLength={5} placeholder="20:00" testID="esport-resultat-heure" style={{ width: 110 }} />
+            <ChampDate theme={theme} fuseau={fuseau} libelle={trC('f.date')} valeur={date} onChanger={setDate} testID="esport-resultat-date" style={{ width: 190, maxWidth: '100%' }} />
+            <ChampHeure theme={theme} libelle={trC('f.heure')} valeur={heure} onChanger={setHeure} testID="esport-resultat-heure" style={{ width: 140 }} />
           </View>
           {jeu.formats.length > 1 ? <Choix<string> theme={theme} libelle={trC('f.format')} valeur={formatEffectif?.cle ?? ''} options={jeu.formats.map(x => ({ id: x.cle, nom: x.nom === x.libelle ? x.nom : `${x.nom} (${x.libelle})` }))} onChoisir={setFormatCle} testID="esport-resultat-format" /> : null}
           {systeme === 'serie' && boPermis.length > 1 ? <Choix<string> theme={theme} libelle={trC('f.bo')} valeur={String(boEffectif)} options={boPermis.map(b => ({ id: String(b), nom: `BO${b}` }))} onChoisir={v => setBo(Number(v))} testID="esport-resultat-bo" /> : null}

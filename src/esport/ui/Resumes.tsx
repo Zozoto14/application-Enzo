@@ -33,6 +33,7 @@ import { PanneauTranscription, demarrerTranscription, type LangueTranscription }
 import { ChoixModeTranscription, ChoixQualite, modeParDefaut, modesProposes, qualiteRetenue, useReglagesTranscription } from './medias/TranscriptionServeur';
 import type { ModeTranscription, QualiteTranscription } from '../client';
 import { tr, trn } from '../i18n';
+import { ChampDate, ChampPeriode } from '../../ui/dates';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
 
@@ -225,7 +226,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
       <Choix theme={theme} libelle={tr('resumes.type_de_reunion')} valeur={typeId} options={types.map(t => ({ id: t.id, nom: t.visibilite === 'staff' && !/staff/i.test(t.nom) ? tr('resumes.staff_2', { nom: nomTypeReunion(t.nom) }) : nomTypeReunion(t.nom), couleur: t.couleur }))} onChoisir={setTypeId} testID="esport-depot-type" />
       {type?.visibilite === 'staff' ? <Text style={attenue}>{tr('resumes.resume_visible_du_staff')}</Text> : null}
       <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-        <Champ theme={theme} libelle={tr('resumes.date_jj_mm_aaaa')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-depot-date" style={{ minWidth: 160 }} />
+        <ChampDate theme={theme} format="fr" libelle={tr('resumes.date_jj_mm_aaaa')} valeur={date} onChanger={setDate} testID="esport-depot-date" style={{ minWidth: 160 }} />
         <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-depot-titre" style={{ flex: 1, minWidth: 220 }} />
       </View>
       <ChampNote theme={theme} libelle={tr('resumes.note_facultative')} valeur={note} onChanger={setNote} maxLength={2000} testID="esport-depot-note" />
@@ -480,8 +481,7 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
           />
         ) : null}
         <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-          <Champ theme={theme} libelle={tr('journal.du_jj_mm_aaaa')} valeur={du} onChanger={setDu} maxLength={10} testID="esport-boite-du" style={{ width: 150 }} />
-          <Champ theme={theme} libelle={tr('resumes.au')} valeur={au} onChanger={setAu} maxLength={10} testID="esport-boite-au" style={{ width: 150 }} />
+          <ChampPeriode theme={theme} format="fr" libelleDu={tr('journal.du_jj_mm_aaaa')} libelleAu={tr('resumes.au')} du={du} au={au} onDu={setDu} onAu={setAu} testIDDu="esport-boite-du" testIDAu="esport-boite-au" style={{ flexGrow: 1, flexBasis: 360 }} styleChamp={{ maxWidth: 220 }} />
           <BoutonHub theme={theme} titre={tr('resumes.appliquer')} onPress={appliquerDates} testID="esport-boite-dates" />
         </View>
         <View style={styles.ligne}>

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Case, Champ } from '../../../../hub/admin/ui/commun';
+import { BoutonHub, Case } from '../../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../../hub/themes';
 import type { ApiCm, MatchsTeam, Personne, TeamCm } from '../../../cm/api';
 import { refDefaut, type ApiVisuels, type DossierVisuel, type ModeleResume, type Visuel } from '../../../cm/visuels/api';
@@ -21,6 +21,7 @@ import { Choix, Retours, styles, useAgir } from '../../commun';
 import { ESP, Volet, attenue, texte } from '../../design';
 import { Pastilles } from './controles';
 import { optionsDossiers } from './Dossiers';
+import { ChampDate } from '../../../../ui/dates';
 
 const GENRES: readonly GenreSource[] = ['resultat', 'annonce', 'tournoi', 'membre', 'equipe', 'semaine', 'libre'];
 
@@ -177,7 +178,7 @@ export function GenererVisuel({
           <Text style={attenue(theme)}>{matchs || membres ? trVi('generer.aucun_element') : trVi('editeur.chargement')}</Text>
         )
       ) : null}
-      {genre === 'semaine' ? <Champ theme={theme} libelle={trVi('generer.date')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-vi-generer-date" /> : null}
+      {genre === 'semaine' ? <ChampDate theme={theme} libelle={trVi('generer.date')} valeur={date} onChanger={setDate} testID="esport-vi-generer-date" /> : null}
       {dossiers?.length ? <Choix theme={theme} libelle={trVi('dossiers.dossier')} valeur={dossier} options={optionsDossiers(dossiers)} onChoisir={setDossier} testID="esport-vi-generer-dossier" /> : null}
       {progression ? <Text style={attenue(theme)}>{progression}</Text> : null}
       {!renduDisponible ? <Text style={attenue(theme)}>{trVi('generer.pc_requis')}</Text> : null}

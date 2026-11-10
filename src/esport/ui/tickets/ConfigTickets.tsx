@@ -19,6 +19,7 @@ import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, us
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
+import { ChampHeure } from '../../../ui/dates';
 
 export type SectionConfigTickets = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
 type Section = SectionConfigTickets;
@@ -979,8 +980,8 @@ function SectionHoraires({ theme, api, conf, setConf, agir }: PropsSection) {
       {h.plages.map((p, i) => (
         <View key={i} style={[styles.ligne, { alignItems: 'flex-end' }]} testID={`esport-tk-h-plage-${i}`}>
           <Choix theme={theme} libelle={trTk('cat.champ', { n: i + 1 })} valeur={String(p.jour)} options={[1, 2, 3, 4, 5, 6, 7].map(j => ({ id: String(j), nom: trTk(`jour.${j}` as CleTk) }))} onChoisir={j => plage(i, { jour: Number(j) })} testID={`esport-tk-h-plage-${i}-jour`} />
-          <Champ theme={theme} libelle={trTk('h.debut')} valeur={p.debut} onChanger={debut => plage(i, { debut })} maxLength={5} testID={`esport-tk-h-plage-${i}-debut`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
-          <Champ theme={theme} libelle={trTk('h.fin')} valeur={p.fin} onChanger={fin => plage(i, { fin })} maxLength={5} testID={`esport-tk-h-plage-${i}-fin`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
+          <ChampHeure theme={theme} libelle={trTk('h.debut')} valeur={p.debut} onChanger={debut => plage(i, { debut })} testID={`esport-tk-h-plage-${i}-debut`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
+          <ChampHeure theme={theme} libelle={trTk('h.fin')} valeur={p.fin} onChanger={fin => plage(i, { fin })} testID={`esport-tk-h-plage-${i}-fin`} style={{ flexBasis: 110, flexGrow: 1, minWidth: 0 }} />
           <BoutonHub theme={theme} titre={trTk('supprimer')} variante="danger" onPress={() => setH({ ...h, plages: h.plages.filter((_, j) => j !== i) })} testID={`esport-tk-h-plage-${i}-supprimer`} />
         </View>
       ))}

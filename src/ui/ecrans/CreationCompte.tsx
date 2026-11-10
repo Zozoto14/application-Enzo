@@ -19,6 +19,7 @@ import {
   type ErreursCompte,
   type FormulaireCompte,
 } from '../vues/compte';
+import { ChampDatePortefeuille } from '../dates/portefeuille';
 
 export interface CreationCompteProps {
   comptesExistants: readonly Compte[];
@@ -115,14 +116,7 @@ export function CreationCompte({
       />
       {erreurs.nom ? <Alerte message={erreurs.nom} /> : null}
 
-      <Champ
-        etiquette="Date d'ouverture"
-        value={formulaire.dateOuverture}
-        onChangeText={texte => modifier('dateOuverture', texte)}
-        placeholder="JJ/MM/AAAA"
-        keyboardType="numbers-and-punctuation"
-        indication={indicationDate(formulaire.type)}
-      />
+      <ChampDatePortefeuille etiquette="Date d'ouverture" value={formulaire.dateOuverture} onChangeText={texte => modifier('dateOuverture', texte)} indication={indicationDate(formulaire.type)} testID="champ-compte-date" />
       {erreurs.dateOuverture ? <Alerte message={erreurs.dateOuverture} /> : null}
 
       <Champ

@@ -8,12 +8,13 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
+import { BoutonHub } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { nomModule, type ClientEsport, type DetailTeam, type FiltresJournal, type PageJournal, type ReglagesJournal } from '../client';
 import { filtresJournal, aujourdhui, dateCourte, lireDateSaisie, phraseJournal } from '../libelles';
 import { Choix, Retours, TitreSection, useAgir, Intertitre, Panneau } from './commun';
 import { tr, trn } from '../i18n';
+import { ChampPeriode } from '../../ui/dates';
 
 /** Familles d'actions par module (même table que le serveur, esport/noyau/journal.mjs). */
 export const ACTIONS_PAR_MODULE: Record<string, readonly string[]> = {
@@ -133,14 +134,7 @@ export function Journal({
         {membres.length > 1 ? <Choix theme={theme} libelle={tr('journal.membre')} valeur={acteur} options={membres} onChoisir={setActeur} testID="esport-journal-membre" /> : null}
         <Choix theme={theme} libelle={tr('journal.periode')} valeur={periode} options={PERIODES} onChoisir={v => setPeriode(v as Periode)} testID="esport-journal-periode" />
         {periode === 'dates' ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <View style={{ flex: 1, minWidth: 140 }}>
-              <Champ theme={theme} libelle={tr('journal.du_jj_mm_aaaa')} valeur={du} onChanger={setDu} maxLength={10} testID="esport-journal-du" />
-            </View>
-            <View style={{ flex: 1, minWidth: 140 }}>
-              <Champ theme={theme} libelle={tr('journal.au_jj_mm_aaaa')} valeur={au} onChanger={setAu} maxLength={10} testID="esport-journal-au" />
-            </View>
-          </View>
+          <ChampPeriode theme={theme} format="fr" libelleDu={tr('journal.du_jj_mm_aaaa')} libelleAu={tr('journal.au_jj_mm_aaaa')} du={du} au={au} onDu={setDu} onAu={setAu} testIDDu="esport-journal-du" testIDAu="esport-journal-au" />
         ) : null}
         {!bornes ? <Text style={{ color: theme.critique, fontSize: 13 }}>{tr('journal.dates_jj_mm_aaaa')}</Text> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

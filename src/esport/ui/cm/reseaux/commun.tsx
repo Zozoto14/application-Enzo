@@ -12,6 +12,7 @@ import { formaterDate, localeCourante } from '../../../i18n';
 import { trRs, trnRs, type CleRs } from '../../../i18n/reseaux';
 import { Choix, styles } from '../../commun';
 import { ESP, attenue, texte } from '../../design';
+import { ChampDate } from '../../../../ui/dates';
 
 export const nb = (n: number | null | undefined): string => nombreCompact(n, localeCourante());
 export const pct = (n: number | null | undefined): string => pourcentage(n, localeCourante());
@@ -77,7 +78,7 @@ export function FormulaireReleve<C extends string>({
   const largeur = large ? '31%' : '100%';
   return (
     <View style={{ gap: ESP.xs }} testID={testID}>
-      <Champ theme={theme} libelle={trRs('c.jour')} valeur={valeurs.jour ?? ''} onChanger={jour => onChanger({ ...valeurs, jour })} maxLength={10} placeholder="2026-10-27" testID={`${testID}-jour`} />
+      <ChampDate theme={theme} libelle={trRs('c.jour')} valeur={valeurs.jour ?? ''} onChanger={jour => onChanger({ ...valeurs, jour })} testID={`${testID}-jour`} />
       <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'flex-start' }]}>
         {champs.map(c => (
           <Champ key={c} theme={theme} libelle={libelle(c)} valeur={valeurs[c] ?? ''} onChanger={v => onChanger({ ...valeurs, [c]: v })} maxLength={16} testID={`${testID}-${c}`} style={{ width: largeur, minWidth: 140, flexGrow: 1 }} />

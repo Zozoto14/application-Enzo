@@ -7,6 +7,7 @@ import { exporterJournalPar } from '../actions';
 import { LIBELLES_TYPE, TYPES_EVENEMENT, filtrerJournal, type TypeEvenement } from '../journal';
 import { autorise } from '../roles';
 import { Avis, BoutonHub, Champ, Intertitre, Panneau, Segments, commun, dateLisible, type OutilsAdmin } from './commun';
+import { ChampPeriode } from '../../../ui/dates';
 
 const PAGE = 50;
 
@@ -84,11 +85,10 @@ export function Journal({ outils }: { outils: OutilsAdmin }) {
           testID="admin-journal-cible"
         />
         <View style={[commun.grille, { alignItems: 'flex-end' }]}>
-          <Champ theme={theme} libelle="Du (AAAA-MM-JJ)" valeur={du} onChanger={setDu} testID="admin-journal-du" placeholder="2026-01-01" maxLength={10} style={{ flexBasis: 150, flexGrow: 1 }} />
-          <Champ theme={theme} libelle="Au (AAAA-MM-JJ)" valeur={au} onChanger={setAu} testID="admin-journal-au" placeholder="2026-12-31" maxLength={10} style={{ flexBasis: 150, flexGrow: 1 }} />
+          <ChampPeriode theme={theme} du={du} au={au} onDu={setDu} onAu={setAu} testIDDu="admin-journal-du" testIDAu="admin-journal-au" style={{ flexBasis: 360, flexGrow: 2 }} />
           <Champ theme={theme} libelle="Rechercher" valeur={recherche} onChanger={setRecherche} testID="admin-journal-recherche" placeholder="ex. Lucas, désactivé" style={{ flexBasis: 220, flexGrow: 2 }} />
         </View>
-        {(du && !dateValide(du)) || (au && !dateValide(au)) ? <Avis theme={theme} genre="alerte" texte="Date à saisir au format AAAA-MM-JJ." /> : null}
+        {(du && !dateValide(du)) || (au && !dateValide(au)) ? <Avis theme={theme} genre="alerte" texte="Date illisible : choisis-la dans le calendrier ou écris par ex. 09/11/2026." /> : null}
         <View style={commun.actions}>
           {peutExporter ? (
             <>

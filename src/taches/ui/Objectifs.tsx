@@ -12,6 +12,7 @@ import { creerObjectif, LIBELLES_ETAT_OBJECTIF, modifierObjectif, objectifsVivan
 import { projetsDe, tachesVivantes, type Objectif } from '../modele';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, EtatVide, Libelle, Puce, texteDe, titreDe } from './atomes';
+import { BoutonCalendrier, formaterSaisie } from '../../ui/dates';
 
 function couleurEtat(a: Actions, e: EtatObjectif): string {
   return e === 'atteint' ? a.theme.ok : e === 'retard' ? a.theme.critique : e === 'risque' ? a.theme.alerte : a.theme.accent;
@@ -129,7 +130,10 @@ export function DialogueObjectif({ a, id, onFermer, onErreur, onAvis }: { a: Act
       <Champ theme={theme} mobile={a.mobile} value={titre} onChangeText={setTitre} placeholder="Finir la v2 de Tsuzuku" testID="objectif-titre" accessibilityLabel="Nom de l’objectif" />
       <Champ theme={theme} mobile={a.mobile} multiline value={description} onChangeText={setDescription} placeholder="Pourquoi, comment on saura que c’est fini…" testID="objectif-description" accessibilityLabel="Description" />
       <Libelle theme={theme}>ÉCHÉANCE</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={echeance} onChangeText={setEcheance} placeholder="ex. 31/12, dans 3 semaines" testID="objectif-echeance" accessibilityLabel="Échéance de l’objectif" />
+      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Champ theme={theme} mobile={a.mobile} value={echeance} onChangeText={setEcheance} placeholder="ex. 31/12, dans 3 semaines" testID="objectif-echeance" accessibilityLabel="Échéance de l’objectif" style={{ flex: 1, minWidth: 0 }} />
+        <BoutonCalendrier theme={theme} libelle="Échéance de l’objectif" onChoisir={iso => setEcheance(formaterSaisie(iso))} testID="objectif-echeance-calendrier" />
+      </View>
       <Libelle theme={theme}>PROGRESSION</Libelle>
       <View style={styles.rangee}>
         <Puce theme={theme} grand={a.mobile} texte="Calculée avec les tâches" couleur={theme.accent} actif={mode === 'taches'} onPress={() => setMode('taches')} testID="objectif-mode-taches" />

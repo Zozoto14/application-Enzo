@@ -119,6 +119,10 @@ export const TRACES = {
   croix: [['path', { d: 'M18 6 6 18' }], ['path', { d: 'm6 6 12 12' }]],
   horizontal: [['path', { d: 'm18 8 4 4-4 4' }], ['path', { d: 'M2 12h20' }], ['path', { d: 'm6 8-4 4 4 4' }]],
   vertical: [['path', { d: 'M12 2v20' }], ['path', { d: 'm8 18 4 4 4-4' }], ['path', { d: 'm8 6 4-4 4 4' }]],
+  'chevron-gauche': [['path', { d: 'm15 18-6-6 6-6' }]],
+  'chevron-droite': [['path', { d: 'm9 18 6-6-6-6' }]],
+  'chevron-bas': [['path', { d: 'm6 9 6 6 6-6' }]],
+  'chevron-haut': [['path', { d: 'm18 15-6-6-6 6' }]],
   selection: [['path', { d: 'M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z' }]],
 } as const satisfies Record<string, readonly ElementTrace[]>;
 

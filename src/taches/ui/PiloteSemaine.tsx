@@ -19,6 +19,7 @@ import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, EtatVide, Libelle, Options, PastillePriorite, Puce, texteDe, titreDe } from './atomes';
 import { useGlissable, useZoneDepot } from './glisser';
 import { Icone } from '../../ui/icones';
+import { ChampHeure } from '../../ui/dates';
 
 const GENRES: Record<GenreElement, { glyphe: string; nom: string }> = {
   tache: { glyphe: '☑︎', nom: 'Tâche' },
@@ -82,14 +83,14 @@ function DialogueReglages({ a, reglages, onFermer, onEnregistrer }: { a: Actions
       <Libelle theme={theme}>JOUR DE LA PROPOSITION</Libelle>
       <Options theme={theme} testID="pilote-r-jour" valeur={String(brouillon.jour)} onChoisir={v => maj({ jour: Number(v) })} options={JOURS_NOMS.map((n, i) => ({ valeur: String(i + 1), texte: n.charAt(0).toUpperCase() + n.slice(1) }))} />
       <Libelle theme={theme}>HEURE DE LA PROPOSITION</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={brouillon.heure} onChangeText={t => maj({ heure: t })} placeholder="18:00" accessibilityLabel="Heure de la proposition" testID="pilote-r-heure" />
+      <ChampHeure theme={theme} libelle="" valeur={brouillon.heure} onChanger={t => maj({ heure: t })} accessibilityLabel="Heure de la proposition" testID="pilote-r-heure" style={{ maxWidth: 220 }} />
       <Interrupteur a={a} texte="Me prévenir à cette heure" detail="Pastille de Tâches et notification du système." actif={brouillon.notification} onChange={v => maj({ notification: v })} testID="pilote-r-notification" />
       <Libelle theme={theme}>CRÉNEAUX DE TRAVAIL</Libelle>
       {creneaux.map((c, i) => (
         <View key={i} style={styles.rangee}>
-          <Champ theme={theme} mobile={a.mobile} style={{ flex: 1 }} value={c.debut} onChangeText={t => setCreneaux(l => l.map((x, k) => (k === i ? { ...x, debut: t } : x)))} placeholder="09:00" accessibilityLabel={`Créneau ${i + 1}, début`} testID={`pilote-r-debut-${i}`} />
+          <ChampHeure theme={theme} libelle="" style={{ flex: 1 }} valeur={c.debut} onChanger={t => setCreneaux(l => l.map((x, k) => (k === i ? { ...x, debut: t } : x)))} raccourcis={['08:00', '09:00', '13:00', '14:00']} accessibilityLabel={`Créneau ${i + 1}, début`} testID={`pilote-r-debut-${i}`} />
           <Text style={attenueDe(theme)}>à</Text>
-          <Champ theme={theme} mobile={a.mobile} style={{ flex: 1 }} value={c.fin} onChangeText={t => setCreneaux(l => l.map((x, k) => (k === i ? { ...x, fin: t } : x)))} placeholder="12:00" accessibilityLabel={`Créneau ${i + 1}, fin`} testID={`pilote-r-fin-${i}`} />
+          <ChampHeure theme={theme} libelle="" style={{ flex: 1 }} valeur={c.fin} onChanger={t => setCreneaux(l => l.map((x, k) => (k === i ? { ...x, fin: t } : x)))} raccourcis={['12:00', '13:00', '17:00', '18:00', '19:00']} accessibilityLabel={`Créneau ${i + 1}, fin`} testID={`pilote-r-fin-${i}`} />
         </View>
       ))}
       <Libelle theme={theme}>CHARGE MAXIMALE PAR JOUR</Libelle>

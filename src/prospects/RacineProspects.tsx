@@ -56,6 +56,7 @@ import {
   type StatutProspect,
   type TriProspects,
 } from './prospects';
+import { ChampDate } from '../ui/dates';
 
 type Ouvert =
   | { g: 'nouveau' }
@@ -518,8 +519,8 @@ function FormulaireProspect({ theme, mobile, initial, onValider, onAnnuler }: { 
       <ChampP theme={theme} mobile={mobile} libelle="Étiquettes (séparées par des virgules)" valeur={s.etiquettes} onChanger={champ('etiquettes')} testID="prospects-form-etiquettes" />
       <Text style={[styles.etiquette, { color: theme.texte, fontSize: mobile ? TEXTE.legende : 13 }]}>Statut</Text>
       <Puces<StatutProspect> theme={theme} mobile={mobile} libelle="Statut" valeur={s.statut} options={STATUTS.map(x => [x, LIBELLES_STATUT_PROSPECT[x]] as const)} onChoisir={v => setS(x => ({ ...x, statut: v }))} testID="prospects-form-statut" />
-      <ChampP theme={theme} mobile={mobile} libelle="Prochaine relance (JJ/MM/AAAA)" valeur={s.relance} onChanger={champ('relance')} testID="prospects-form-relance" placeholder="Vide : aucune" />
-      {relanceInvalide ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
+      <ChampDate theme={theme} format="fr" libelle="Prochaine relance" valeur={s.relance} onChanger={champ('relance')} testID="prospects-form-relance" placeholder="Vide : aucune" />
+      {relanceInvalide ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date illisible : choisis-la dans le calendrier ou écris par ex. 09/11/2026." /> : null}
       <ChampP theme={theme} mobile={mobile} libelle="Notes" valeur={s.notes} onChanger={champ('notes')} testID="prospects-form-notes" multiligne />
       <Pressable
         testID="prospects-form-ne-plus-contacter"
@@ -585,10 +586,10 @@ function FormulaireContact({ theme, mobile, aujourdhui, onValider, onAnnuler }: 
   const jour = lireJour(date);
   return (
     <View style={styles.formulaire} testID="prospects-contact">
-      <ChampP theme={theme} mobile={mobile} libelle="Date (JJ/MM/AAAA)" valeur={date} onChanger={setDate} testID="prospects-contact-date" />
+      <ChampDate theme={theme} format="fr" libelle="Date" valeur={date} onChanger={setDate} testID="prospects-contact-date" effacable={false} />
       <ChampP theme={theme} mobile={mobile} libelle="Note" valeur={note} onChanger={setNote} testID="prospects-contact-note" multiligne placeholder="Appel, e-mail envoyé, réponse…" />
       <ChampP theme={theme} mobile={mobile} libelle="Relancer dans (jours, 0 : pas de relance)" valeur={relance} onChanger={v => setRelance(v.replace(/[^\d]/g, '').slice(0, 3))} testID="prospects-contact-relance" nature="nombre" />
-      {!jour ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
+      {!jour ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date illisible : choisis-la dans le calendrier ou écris par ex. 09/11/2026." /> : null}
       <View style={mobile ? styles.pileMobile : commun.actions}>
         <Bouton theme={theme} mobile={mobile} variante="plein" titre="Noter le contact" onPress={() => jour && onValider({ date: jour, note, relanceDans: Number(relance) || 0 })} testID="prospects-contact-valider" desactive={!jour} />
         <Bouton theme={theme} mobile={mobile} titre="Annuler" onPress={onAnnuler} testID="prospects-contact-annuler" />

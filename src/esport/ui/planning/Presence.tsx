@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { type ThemeHub } from '../../../hub/themes';
 import { apiPlanning, type AMarquer, type ApiPlanning, type HistoriquePresence, type Occurrence, type ParamsPeriode, type PeriodeStats, type StatsPresence, type TypeEvenement } from '../../planning/api';
 import { TYPES_EVENEMENT, ajouterJours, aujourdhui, dateCourteJour, dateValide, typeEvenement } from '../../planning/libelles';
@@ -33,6 +33,7 @@ import { CarteOccurrence, Pastille } from './commun';
 import { FeuilleAppel } from './FeuilleAppel';
 import { BarreTaux, FichePresenceJoueur, detailCompteurs, pct } from './FichePresence';
 import { tr, trn } from '../../i18n';
+import { ChampPeriode } from '../../../ui/dates';
 
 type Onglet = 'a-marquer' | 'historique' | 'stats' | 'mes-reponses' | 'ma-presence';
 type ChoixPeriode = PeriodeStats | 'perso';
@@ -67,8 +68,7 @@ function Filtres({ theme, f, avecTypes = true }: { theme: ThemeHub; f: ReturnTyp
       <Segments theme={theme} libelle={tr('journal.periode')} valeur={f.periode} options={periodes()} onChoisir={v => f.setPeriode(v)} testID="esport-presence-periode" />
       {f.periode === 'perso' ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.s, alignItems: 'flex-end' }}>
-          <Champ theme={theme} libelle={tr('presence.du')} valeur={f.du} onChanger={f.setDu} maxLength={10} placeholder="2026-09-01" style={{ width: 150 }} testID="esport-presence-du" />
-          <Champ theme={theme} libelle={tr('presence.au')} valeur={f.au} onChanger={f.setAu} maxLength={10} placeholder="2026-10-31" style={{ width: 150 }} testID="esport-presence-au" />
+          <ChampPeriode theme={theme} libelleDu={tr('presence.du')} libelleAu={tr('presence.au')} du={f.du} au={f.au} onDu={f.setDu} onAu={f.setAu} testIDDu="esport-presence-du" testIDAu="esport-presence-au" styleChamp={{ maxWidth: 220 }} />
           {!f.persoValide ? <Text style={{ ...styleAttenue(theme), color: theme.critique }}>{tr('presence.dates_invalides')}</Text> : null}
         </View>
       ) : null}

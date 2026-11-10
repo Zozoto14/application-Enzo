@@ -27,6 +27,7 @@ import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Etoiles } from './AvisTickets';
 import { ComposeurTicket } from './ComposeurTicket';
 import { DialogueMention } from './MentionTicket';
+import { ChampPeriode } from '../../../ui/dates';
 
 const nomCat = (c: { nom: { fr: string; en: string } }) => (langueCourante() === 'en' ? c.nom.en || c.nom.fr : c.nom.fr || c.nom.en);
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -138,10 +139,17 @@ export function ListeTickets({
         <Choix theme={theme} libelle={trTk('f.categorie')} valeur={f.categorie ?? ''} options={[{ id: '', nom: trTk('f.toutes') }, ...(donnees?.categories ?? []).map(c => ({ id: c.id, nom: nomCat(c), couleur: c.couleur }))]} onChoisir={categorie => setF({ ...f, categorie: categorie || undefined })} testID="esport-tk-f-categorie" />
         <Choix theme={theme} libelle={trTk('f.priorite')} valeur={f.priorite ?? ''} options={[{ id: '', nom: trTk('f.toutes') }, ...PRIORITES.map(p => ({ id: p, nom: nomPriorite(p) }))]} onChoisir={priorite => setF({ ...f, priorite: priorite || undefined })} testID="esport-tk-f-priorite" />
         <Choix theme={theme} libelle={trTk('f.responsable')} valeur={f.responsable ?? ''} options={[{ id: '', nom: trTk('f.tous') }, { id: 'moi', nom: trTk('f.moi') }, { id: 'personne', nom: trTk('f.personne') }]} onChoisir={responsable => setF({ ...f, responsable: responsable || undefined })} testID="esport-tk-f-responsable" />
-        <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-          <Champ theme={theme} libelle={trTk('f.du')} valeur={f.du ?? ''} onChanger={du => setF({ ...f, du: /^\d{4}-\d{2}-\d{2}$/.test(du) ? du : undefined })} maxLength={10} testID="esport-tk-f-du" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
-          <Champ theme={theme} libelle={trTk('f.au')} valeur={f.au ?? ''} onChanger={au => setF({ ...f, au: /^\d{4}-\d{2}-\d{2}$/.test(au) ? au : undefined })} maxLength={10} testID="esport-tk-f-au" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
-        </View>
+        <ChampPeriode
+          theme={theme}
+          libelleDu={trTk('f.du')}
+          libelleAu={trTk('f.au')}
+          du={f.du ?? ''}
+          au={f.au ?? ''}
+          onDu={du => setF(x => ({ ...x, du: /^\d{4}-\d{2}-\d{2}$/.test(du) ? du : undefined }))}
+          onAu={au => setF(x => ({ ...x, au: /^\d{4}-\d{2}-\d{2}$/.test(au) ? au : undefined }))}
+          testIDDu="esport-tk-f-du"
+          testIDAu="esport-tk-f-au"
+        />
       </Pliable>
       <Retours theme={theme} erreur={erreur} prefixe="esport-tk-liste" />
       <Retours theme={theme} erreur={suppr.erreur} avis={suppr.avis} prefixe="esport-tk-suppression" />

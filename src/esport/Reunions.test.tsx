@@ -140,7 +140,7 @@ test('nouvelle réunion : « Trouver un créneau » propose les créneaux et rem
   expect(screen.getByText('Tout le monde est libre')).toBeTruthy();
   expect(screen.getByText('Libres : Cora, Rita')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-cm-reunion-proposition-0-choisir'));
-  expect(screen.getByTestId('esport-cm-reunion-form-date').props.value).toBe('2026-12-03');
+  expect(screen.getByTestId('esport-cm-reunion-form-date').props.value).toBe('03/12/2026');
   expect(screen.getByTestId('esport-cm-reunion-form-heure').props.value).toBe('17:00');
 });
 

@@ -6,13 +6,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { RegleDispo } from '../../planning/api';
 import { heureValide, joursCourts, joursSemaine } from '../../planning/libelles';
 import { Retours, styles, useAgir } from '../commun';
 import { Pastille } from './commun';
 import { tr } from '../../i18n';
+import { ChampHeure } from '../../../ui/dates';
 
 export type TypeDispo = 'disponible' | 'indisponible';
 export const typesDispo = (): ReadonlyArray<readonly [TypeDispo, string]> => [
@@ -103,8 +104,8 @@ export function EditeurCreneaux({
             ))}
           </View>
           <View style={styles.ligne}>
-            <Champ theme={theme} libelle={tr('planning.disponibilites.de')} valeur={debut} onChanger={setDebut} maxLength={5} style={{ width: 90 }} testID={`${prefixe}-debut`} />
-            <Champ theme={theme} libelle={tr('planning.disponibilites.a')} valeur={fin} onChanger={setFin} maxLength={5} style={{ width: 90 }} testID={`${prefixe}-fin`} />
+            <ChampHeure theme={theme} libelle={tr('planning.disponibilites.de')} valeur={debut} onChanger={setDebut} style={{ width: 140 }} testID={`${prefixe}-debut`} />
+            <ChampHeure theme={theme} libelle={tr('planning.disponibilites.a')} valeur={fin} onChanger={setFin} style={{ width: 140 }} testID={`${prefixe}-fin`} />
             <Segments theme={theme} libelle={tr('resumes.type')} valeur={type} options={typesDispo()} onChoisir={v => setType(v as TypeDispo)} testID={`${prefixe}-type`} />
           </View>
           <View style={styles.ligne}>

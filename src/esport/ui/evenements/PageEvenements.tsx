@@ -52,6 +52,7 @@ import { EquipesEvenement } from './EquipesEvenement';
 import { StaffEvenement } from './StaffEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { PositionRoles } from './PositionRoles';
+import { ChampDate } from '../../../ui/dates';
 
 const AUCUN = '-';
 const TON: Record<StatutEvenement, Ton> = {
@@ -169,25 +170,22 @@ function Editeur({
         />
       ) : null}
       <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-        <Champ
+        <ChampDate
           theme={theme}
           libelle={trEv('debut')}
           valeur={f.debut}
           onChanger={debut => setF({ ...f, debut })}
-          maxLength={10}
-          placeholder="2026-11-21"
           testID="esport-ev-debut"
-          style={{ flexGrow: 1, flexBasis: 150, minWidth: 0 }}
+          style={{ flexGrow: 1, flexBasis: 190, minWidth: 0 }}
         />
-        <Champ
+        <ChampDate
           theme={theme}
           libelle={trEv('fin')}
           valeur={f.fin}
           onChanger={fin => setF({ ...f, fin })}
-          maxLength={10}
-          placeholder="2026-11-22"
+          min={/^\d{4}-\d{2}-\d{2}$/.test(f.debut) ? f.debut : undefined}
           testID="esport-ev-fin"
-          style={{ flexGrow: 1, flexBasis: 150, minWidth: 0 }}
+          style={{ flexGrow: 1, flexBasis: 190, minWidth: 0 }}
         />
       </View>
       <Choix

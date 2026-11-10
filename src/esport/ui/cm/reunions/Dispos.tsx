@@ -13,6 +13,7 @@ import { trRe, type CleRe } from '../../../i18n/reunions';
 import { Retours, styles, useAgir } from '../../commun';
 import { Carte, ESP, TitreCarte, attenue, texte, type EtatPresse } from '../../design';
 import { ChoixBoutons, jourCourt } from './commun';
+import { ChampHeure, ChampPeriode } from '../../../../ui/dates';
 
 export function DisposCm({ theme, api, large, fuseau, onFuseau }: { theme: ThemeHub; api: ApiReunions; large: boolean; fuseau: string; onFuseau(): void }) {
   const [mes, setMes] = useState<MesDispos | undefined>();
@@ -74,8 +75,8 @@ function MesCreneaux({ theme, api, mes, onChange }: { theme: ThemeHub; api: ApiR
           ))}
         </View>
         <View style={[styles.ligne, { gap: ESP.xs }]}>
-          <Champ theme={theme} libelle={trRe('dispos.debut')} valeur={debut} onChanger={setDebut} maxLength={5} testID="esport-cm-reunions-creneau-debut" style={{ minWidth: 90, flexGrow: 1 }} />
-          <Champ theme={theme} libelle={trRe('dispos.fin')} valeur={fin} onChanger={setFin} maxLength={5} testID="esport-cm-reunions-creneau-fin" style={{ minWidth: 90, flexGrow: 1 }} />
+          <ChampHeure theme={theme} libelle={trRe('dispos.debut')} valeur={debut} onChanger={setDebut} testID="esport-cm-reunions-creneau-debut" style={{ minWidth: 90, flexGrow: 1 }} />
+          <ChampHeure theme={theme} libelle={trRe('dispos.fin')} valeur={fin} onChanger={setFin} testID="esport-cm-reunions-creneau-fin" style={{ minWidth: 90, flexGrow: 1 }} />
         </View>
         <ChoixBoutons theme={theme} libelle="" valeur={type} options={[['disponible', trRe('dispos.type.disponible')], ['indisponible', trRe('dispos.type.indisponible')]]} onChoisir={setType} testID="esport-cm-reunions-creneau-type" />
         <BoutonHub theme={theme} titre={trRe('dispos.ajouter')} desactive={!heureValide(debut) || !heureValide(fin) || !jours.length} onPress={() => setRegles(l => [...l, ...jours.map(jour => ({ jour, debut, fin, type }))])} testID="esport-cm-reunions-creneau-ajouter" />
@@ -104,10 +105,7 @@ function MesAbsences({ theme, api, mes, onChange }: { theme: ThemeHub; api: ApiR
         </View>
       ))}
       <ChoixBoutons theme={theme} libelle="" valeur={type} options={(['conge', 'absence', 'disponible'] as const).map(t => [t, trRe(`absences.type.${t}`)] as const)} onChoisir={setType} testID="esport-cm-reunions-absence-type" />
-      <View style={[styles.ligne, { gap: ESP.xs }]}>
-        <Champ theme={theme} libelle={trRe('absences.du')} valeur={du} onChanger={setDu} maxLength={10} testID="esport-cm-reunions-absence-du" style={{ minWidth: 130, flexGrow: 1 }} />
-        <Champ theme={theme} libelle={trRe('absences.au')} valeur={au} onChanger={setAu} maxLength={10} testID="esport-cm-reunions-absence-au" style={{ minWidth: 130, flexGrow: 1 }} />
-      </View>
+      <ChampPeriode theme={theme} libelleDu={trRe('absences.du')} libelleAu={trRe('absences.au')} du={du} au={au} onDu={setDu} onAu={setAu} periodes={false} testIDDu="esport-cm-reunions-absence-du" testIDAu="esport-cm-reunions-absence-au" style={{ gap: ESP.xs }} />
       <Champ theme={theme} libelle={trRe('absences.note')} valeur={note} onChanger={setNote} maxLength={200} testID="esport-cm-reunions-absence-note" />
       <BoutonHub theme={theme} titre={trRe('absences.ajouter')} desactive={!dateValide(du) || !dateValide(au) || au < du} onPress={() => void agir('', async () => { onChange(await api.ajouterException({ type, jourDebut: du, jourFin: au, fuseau: mes.fuseau, note: note.trim() })); setNote(''); })} testID="esport-cm-reunions-absence-ajouter" />
     </Carte>

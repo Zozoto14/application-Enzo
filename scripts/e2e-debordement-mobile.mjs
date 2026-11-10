@@ -2,7 +2,8 @@
  * Non-régression : aucune page principale de l'Esport ni du hub ne doit défiler horizontalement sur téléphone
  * (390 × 844 et 360 × 800). Parcourt Dashboard, Teams, Membres, Administration (chaque sous-onglet : Tickets et sa
  * configuration, Statistiques, Jeux, Rôles et permissions, Bot Esport HQ et chacune de ses sections, Événements, Devblog), Notifications, l'espace CM (chaque
- * groupe et chaque sous-onglet), la page de la team (chaque section et chaque module), les Réglages de la team
+ * groupe et chaque sous-onglet), la page de la team (chaque section et chaque module ; bulles du calendrier et de l'heure
+ * du formulaire du Planning), les Réglages de la team
  * et ceux du hub. Mesure `document.documentElement.scrollWidth > window.innerWidth` ; en cas d'échec, liste les
  * éléments qui dépassent à droite. Code de sortie 1 au moindre débordement.
  *
@@ -226,6 +227,20 @@ async function parcourir(page, taille) {
     if (await present(page, `esport-onglet-${id}`, 1200)) await page.getByTestId(`esport-onglet-${id}`).first().click();
     else if (groupe !== 'accueil' && !(await present(page, `esport-contenu-${id}`, 800))) continue;
     await controler(page, `team-${id}`, taille);
+    // Planning : formulaire d'un événement, puis les bulles du calendrier et de l'heure (sélecteurs de dates).
+    if (id === 'module-planning' && (await present(page, 'esport-planning-nouveau', 1500))) {
+      await page.getByTestId('esport-planning-nouveau').first().click();
+      if (await present(page, 'esport-formulaire-date-ouvrir', 3000)) {
+        await controler(page, 'team-planning-formulaire', taille);
+        await page.getByTestId('esport-formulaire-date-ouvrir').first().click();
+        await controler(page, 'team-planning-calendrier', taille);
+        await page.getByTestId('esport-formulaire-date-bulle-fermer').first().click();
+        await page.getByTestId('esport-formulaire-debut-ouvrir').first().click();
+        await controler(page, 'team-planning-heure', taille);
+        await page.getByTestId('esport-formulaire-debut-bulle-fermer').first().click();
+      }
+      if (await present(page, 'esport-planning-volet-fermer', 1500)) await page.getByTestId('esport-planning-volet-fermer').first().click();
+    }
     // Disponibilités : aussi le mode « Planning différent chaque semaine » (choix de la semaine, bandeau, actions).
     if (id === 'module-availability' && (await present(page, 'esport-dispos-mode-semaine', 1500))) {
       await page.getByTestId('esport-dispos-mode-semaine').first().click();

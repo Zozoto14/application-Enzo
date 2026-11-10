@@ -19,6 +19,7 @@ import { jourDe } from '../moteur/outils';
 import { useTsuzuku } from './contexte';
 import { ouvrirExterne } from './externe';
 import { Avis, Bouton, Champ, LIBELLE_STATUT, PastilleStatut, Puce, styleAttenue, styleTexte, styleTitre } from './ui';
+import { ChampDate, aujourdhui } from '../../ui/dates';
 
 export interface FicheMin {
   kind: Genre;
@@ -128,7 +129,7 @@ export function BlocVuAilleurs({ fiche, entree }: { fiche: FicheMin; entree: Ent
       </View>
       {ouvert ? (
         <View style={{ gap: 10 }} testID="vu-ailleurs-formulaire" accessibilityLabel="Marquer comme vu ailleurs">
-          <Champ libelle="Date (AAAA-MM-JJ)" valeur={date} onChanger={setDate} testID="vu-ailleurs-date" />
+          <ChampDate theme={theme} libelle="Date" valeur={date} onChanger={setDate} max={aujourdhui()} testID="vu-ailleurs-date" />
           <Champ libelle="Note sur 10 (facultative)" valeur={note} onChanger={setNote} testID="vu-ailleurs-note" />
           {fiche.kind === 'anime' ? <Champ libelle={`Épisodes vus${fiche.totalEpisodes ? ` (sur ${fiche.totalEpisodes})` : ''}, vide = tous`} valeur={episodes} onChanger={setEpisodes} testID="vu-ailleurs-episodes" /> : null}
           <Champ libelle="Commentaire" valeur={commentaire} onChanger={setCommentaire} multiligne testID="vu-ailleurs-commentaire" />

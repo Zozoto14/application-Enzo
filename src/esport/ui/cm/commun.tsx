@@ -6,7 +6,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
-import { Champ } from '../../../hub/admin/ui/commun';
+import {  } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ApiCm, CleListe, EtatCm, GenreDepot, Reseau, StatutClip, StatutPost } from '../../cm/api';
 import { RESEAUX } from '../../cm/reseaux';
@@ -15,6 +15,7 @@ import { trCm, type CleCm } from '../../i18n/cm';
 import { Badge, ESP, rayonControle, texte, type EtatPresse, type Ton } from '../design';
 import { SECOURS_MS, useTempsReel } from '../../tempsReel/hooks';
 import { Glyphe } from '../../../ui/icones';
+import { ChampDate, ChampHeure } from '../../../ui/dates';
 
 export const FUSEAU_CLUB = 'Europe/Paris';
 /** Intervalle du rafraîchissement léger (GET /cm/etat : quelques octets). */
@@ -136,31 +137,28 @@ export function ChampInstant({
     <View style={{ gap: ESP.xxs }}>
       <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{libelle}</Text>
       <View style={{ flexDirection: 'row', gap: ESP.s, flexWrap: 'wrap' }}>
-        <Champ
+        <ChampDate
           theme={theme}
           libelle={trCm('c.date')}
           valeur={date}
-          placeholder="2026-11-03"
-          maxLength={10}
+          fuseau={fuseau}
           onChanger={v => {
             setDate(v);
             transmettre(v, heure);
           }}
           testID={`${testID}-date`}
-          style={{ minWidth: 130, flexGrow: 1 }}
+          style={{ minWidth: 180, flexGrow: 1 }}
         />
-        <Champ
+        <ChampHeure
           theme={theme}
           libelle={trCm('c.heure')}
           valeur={heure}
-          placeholder="18:00"
-          maxLength={5}
           onChanger={v => {
             setHeure(v);
             transmettre(date, v);
           }}
           testID={`${testID}-heure`}
-          style={{ minWidth: 90, flexGrow: 1 }}
+          style={{ minWidth: 130, flexGrow: 1 }}
         />
       </View>
     </View>

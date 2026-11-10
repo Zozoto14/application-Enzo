@@ -14,6 +14,7 @@ import { trRe } from '../../../i18n/reunions';
 import { Retours, styles, useAgir } from '../../commun';
 import { Badge, Carte, ESP, Volet, attenue, texte } from '../../design';
 import { ChoixBoutons, jourCourt } from './commun';
+import { ChampDate, ChampHeure } from '../../../../ui/dates';
 
 const DUREES = [15, 30, 45, 60, 90, 120] as const;
 const RAPPELS = ['', '5', '15', '30', '60', '1440'] as const;
@@ -93,8 +94,8 @@ export function FormReunion({ theme, api, moi, fuseau, reunion, dateInitiale, on
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-reunion-form" />
       <Champ theme={theme} libelle={trRe('form.titre')} valeur={titre} onChanger={setTitre} maxLength={140} testID="esport-cm-reunion-form-titre" />
       <View style={[styles.ligne, { gap: ESP.xs }]}>
-        <Champ theme={theme} libelle={trRe('form.date')} valeur={date} onChanger={setDate} maxLength={10} placeholder="2026-11-05" testID="esport-cm-reunion-form-date" style={{ minWidth: 130, flexGrow: 1 }} />
-        <Champ theme={theme} libelle={trRe('form.heure')} valeur={heure} onChanger={setHeure} maxLength={5} placeholder="18:00" testID="esport-cm-reunion-form-heure" style={{ minWidth: 100, flexGrow: 1 }} />
+        <ChampDate theme={theme} libelle={trRe('form.date')} valeur={date} onChanger={setDate} testID="esport-cm-reunion-form-date" style={{ minWidth: 130, flexGrow: 1 }} />
+        <ChampHeure theme={theme} libelle={trRe('form.heure')} valeur={heure} onChanger={setHeure} testID="esport-cm-reunion-form-heure" style={{ minWidth: 100, flexGrow: 1 }} />
         <Champ theme={theme} libelle={trRe('form.fuseau')} valeur={fuseauSaisi} onChanger={setFuseauSaisi} maxLength={60} testID="esport-cm-reunion-form-fuseau" style={{ minWidth: 160, flexGrow: 2 }} />
       </View>
       <ChoixBoutons theme={theme} libelle={trRe('form.duree')} valeur={String(duree)} options={DUREES.map(d => [String(d), d >= 60 && d % 60 === 0 ? trRe('form.duree_h', { n: d / 60 }) : trRe('form.duree_min', { n: d })] as const)} onChoisir={v => setDuree(Number(v))} testID="esport-cm-reunion-form-duree" />

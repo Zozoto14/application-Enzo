@@ -16,6 +16,7 @@ import { ajouterCommentaire, assignesDe, estTerminee, modifierTache, type Tache 
 import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, Champ, Libelle, Puce, texteDe } from './atomes';
 import { couleurAuteur } from './Vues';
+import { BoutonCalendrier, formaterSaisie } from '../../ui/dates';
 
 export const personnesPour = (a: Actions, projetId: string): Personne[] => personnesDuProjet(a.etat.donnees, projetId, a.etat.noms, { role: a.etat.role, moi: a.etat.moi });
 
@@ -101,8 +102,9 @@ export function SectionChronologie({ a, t, onAjouterDependance, onErreur, onAvis
       onErreur(e);
     }
   };
-  const validerDebut = () => {
-    const texte = debut.trim();
+  const validerDebut = (choisi?: string) => {
+    const texte = (choisi ?? debut).trim();
+    if (choisi !== undefined) setDebut(choisi);
     if (texte === fr(t.debut)) return;
     if (!texte) return essayer(() => a.changer(t.id, { debut: undefined }));
     const lu = lireDateLibre(texte, a.etat.aujourdhui);
@@ -120,7 +122,8 @@ export function SectionChronologie({ a, t, onAjouterDependance, onErreur, onAvis
       <Libelle theme={theme}>CHRONOLOGIE</Libelle>
       <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
         <Text style={[attenueDe(theme), { width: 112 }]}>Début</Text>
-        <Champ theme={theme} mobile={a.mobile} value={debut} editable={m} onChangeText={setDebut} onBlur={validerDebut} onSubmitEditing={validerDebut} placeholder={t.echeance ? 'ex. lundi, 15/11' : 'Donnez aussi une échéance'} style={{ flex: 1 }} testID="detail-debut" accessibilityLabel="Date de début" />
+        <Champ theme={theme} mobile={a.mobile} value={debut} editable={m} onChangeText={setDebut} onBlur={() => validerDebut()} onSubmitEditing={() => validerDebut()} placeholder={t.echeance ? 'ex. lundi, 15/11' : 'Donnez aussi une échéance'} style={{ flex: 1 }} testID="detail-debut" accessibilityLabel="Date de début" />
+        {m ? <BoutonCalendrier theme={theme} libelle="Date de début" max={t.echeance?.jour} onChoisir={iso => validerDebut(formaterSaisie(iso))} testID="detail-debut-calendrier" /> : null}
       </View>
       {b ? <Text style={attenueDe(theme)}>{b.debut === b.fin ? `Le ${fr(b.debut)}` : `Du ${fr(b.debut)} au ${fr(b.fin)}`}</Text> : null}
       <View style={styles.rangee}>

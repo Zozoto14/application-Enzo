@@ -12,8 +12,9 @@ import { APPS_LIEES, changerReglages, projetsDe, type AppLiee } from '../modele'
 import { CANAUX, champPrefs, DELAIS_DEFAUT, enHeuresCalmes, LIBELLES_CANAL, LIBELLES_TYPE, prefsDe, TYPES_NOTIF, type Canal, type PrefsNotif, type TypeNotif } from '../notifications';
 import { libelleDelai } from '../rappels';
 import type { Actions } from './actions';
-import { attenueDe, Bouton, Champ, Dialogue, Libelle, Puce, texteDe } from './atomes';
+import { attenueDe, Bouton, Dialogue, Libelle, Puce, texteDe } from './atomes';
 import { Icone } from '../../ui/icones';
+import { ChampHeure } from '../../ui/dates';
 
 const TYPES_AMI: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'recap', 'journal'];
 const COURTS: Record<Canal, string> = { 'les-deux': 'Les deux', systeme: 'Système', pastille: 'Pastille', aucun: 'Aucune' };
@@ -81,13 +82,13 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
           {p.types.recap !== 'aucun' ? (
             <>
               <Libelle theme={theme}>HEURE DU RÉCAP « MA JOURNÉE »</Libelle>
-              <Champ theme={theme} mobile={a.mobile} value={heureRecap} onChangeText={setHeureRecap} onBlur={() => (heure(heureRecap) ? changer({ heureRecap: heure(heureRecap)! }) : setHeureRecap(p.heureRecap))} placeholder="08:30" testID="notif-heure-recap" accessibilityLabel="Heure du récap quotidien" style={{ maxWidth: 160 }} />
+              <ChampHeure theme={theme} libelle="Heure du récap quotidien" valeur={heureRecap} onChanger={v => (setHeureRecap(v), heure(v) && v.length === 5 && changer({ heureRecap: heure(v)! }))} onBlur={() => (heure(heureRecap) ? changer({ heureRecap: heure(heureRecap)! }) : setHeureRecap(p.heureRecap))} testID="notif-heure-recap" style={{ maxWidth: 220 }} />
             </>
           ) : null}
           {p.types.journal !== 'aucun' ? (
             <>
               <Libelle theme={theme}>HEURE DE L’INVITE DU SOIR (JOURNAL DU JOUR)</Libelle>
-              <Champ theme={theme} mobile={a.mobile} value={heureJournal} onChangeText={setHeureJournal} onBlur={() => (heure(heureJournal) ? changer({ heureJournal: heure(heureJournal)! }) : setHeureJournal(p.heureJournal))} placeholder="18:00" testID="notif-heure-journal" accessibilityLabel="Heure de l’invite du soir" style={{ maxWidth: 160 }} />
+              <ChampHeure theme={theme} libelle="Heure de l’invite du soir" valeur={heureJournal} onChanger={v => (setHeureJournal(v), heure(v) && v.length === 5 && changer({ heureJournal: heure(v)! }))} onBlur={() => (heure(heureJournal) ? changer({ heureJournal: heure(heureJournal)! }) : setHeureJournal(p.heureJournal))} testID="notif-heure-journal" style={{ maxWidth: 220 }} />
             </>
           ) : null}
           <Libelle theme={theme}>HEURES CALMES (NE PAS DÉRANGER)</Libelle>
@@ -95,9 +96,9 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
           {p.calme.actif ? (
             <View style={styles.rangee}>
               <Text style={texteDe(theme)}>De</Text>
-              <Champ theme={theme} mobile={a.mobile} value={debut} onChangeText={setDebut} onBlur={() => (heure(debut) ? changer({ calme: { ...p.calme, debut: heure(debut)! } }) : setDebut(p.calme.debut))} testID="notif-calme-debut" accessibilityLabel="Début des heures calmes" style={{ width: 96 }} />
+              <ChampHeure theme={theme} libelle="" valeur={debut} onChanger={v => (setDebut(v), heure(v) && v.length === 5 && changer({ calme: { ...p.calme, debut: heure(v)! } }))} onBlur={() => (heure(debut) ? changer({ calme: { ...p.calme, debut: heure(debut)! } }) : setDebut(p.calme.debut))} raccourcis={['21:00', '22:00', '23:00', '07:00', '08:00']} accessibilityLabel="Début des heures calmes" testID="notif-calme-debut" style={{ width: 140 }} />
               <Text style={texteDe(theme)}>à</Text>
-              <Champ theme={theme} mobile={a.mobile} value={fin} onChangeText={setFin} onBlur={() => (heure(fin) ? changer({ calme: { ...p.calme, fin: heure(fin)! } }) : setFin(p.calme.fin))} testID="notif-calme-fin" accessibilityLabel="Fin des heures calmes" style={{ width: 96 }} />
+              <ChampHeure theme={theme} libelle="" valeur={fin} onChanger={v => (setFin(v), heure(v) && v.length === 5 && changer({ calme: { ...p.calme, fin: heure(v)! } }))} onBlur={() => (heure(fin) ? changer({ calme: { ...p.calme, fin: heure(fin)! } }) : setFin(p.calme.fin))} raccourcis={['06:00', '07:00', '08:00', '09:00']} accessibilityLabel="Fin des heures calmes" testID="notif-calme-fin" style={{ width: 140 }} />
               <Puce theme={theme} grand={a.mobile} texte="Tout le week-end" couleur={theme.accent} actif={p.calme.weekEnd} onPress={() => changer({ calme: { ...p.calme, weekEnd: !p.calme.weekEnd } })} testID="notif-calme-weekend" />
             </View>
           ) : null}

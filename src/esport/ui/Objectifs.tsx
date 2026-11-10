@@ -20,6 +20,7 @@ import { NoteMarkdown } from './review/Note';
 import { EnTetePage, EtatVide, Volet } from './design';
 import { tr, trn } from '../i18n';
 import { useTempsReel } from '../tempsReel/hooks';
+import { ChampDate } from '../../ui/dates';
 
 const STATUTS: StatutTache[] = ['a_faire', 'en_cours', 'fait'];
 const PRIORITES: Priorite[] = ['basse', 'normale', 'haute', 'urgente'];
@@ -335,7 +336,7 @@ function NouvelObjectif({ theme, client, teamId, membres, onCree }: { theme: The
     <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID="esport-objectif-nouveau">
       <Champ theme={theme} libelle={tr('objectifs.nouvel_objectif_2')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-objectif-titre" />
       <Choix theme={theme} libelle={tr('objectifs.pour')} valeur={pour} options={[{ id: '', nom: tr('objectifs.l_equipe') }, ...membres.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setPour} testID="esport-objectif-pour" />
-      <Champ theme={theme} libelle={tr('objectifs.date_cible_jj_mm')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-objectif-date" />
+      <ChampDate theme={theme} format="fr" libelle={tr('objectifs.date_cible_jj_mm')} valeur={date} onChanger={setDate} testID="esport-objectif-date" />
       <BoutonHub
         theme={theme}
         titre={tr('objectifs.creer_l_objectif')}
@@ -398,7 +399,7 @@ function NouvelleTache({
       <ChampNote theme={theme} libelle={tr('assistant.description_facultative')} valeur={description} onChanger={setDescription} maxLength={2000} testID="esport-tache-description" />
       <Choix theme={theme} libelle={tr('objectifs.assignee_a')} valeur={assigne} options={[{ id: '', nom: tr('planning.convocations.personne') }, ...assignables.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setAssigne} testID="esport-tache-assigne" />
       <Choix theme={theme} libelle={tr('objectifs.priorite')} valeur={priorite} options={PRIORITES.map(p => ({ id: p, nom: LIBELLES_PRIORITE[p], couleur: couleurPriorite(theme, p) }))} onChoisir={v => setPriorite(v as Priorite)} testID="esport-tache-priorite" />
-      <Champ theme={theme} libelle={tr('objectifs.echeance_jj_mm_aaaa')} valeur={echeance} onChanger={setEcheance} maxLength={10} testID="esport-tache-echeance" />
+      <ChampDate theme={theme} format="fr" libelle={tr('objectifs.echeance_jj_mm_aaaa')} valeur={echeance} onChanger={setEcheance} testID="esport-tache-echeance" />
       {objectifs.length > 0 ? (
         <Choix
           theme={theme}

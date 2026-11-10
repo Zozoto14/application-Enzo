@@ -33,6 +33,7 @@ import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './co
 import { AvatarTeam, Badge, COULEUR_CM_CLUB, Carte, Compteur, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
+import { definirLangueDates } from '../../ui/dates/langue';
 import { PublierMulti } from './ressources/PublierMulti';
 import { EspaceCm, PageDevblog, PageTickets } from './differe';
 import type { SectionConfigTickets } from './tickets/ConfigTickets';
@@ -101,7 +102,12 @@ export { fabrique };
 export function Esport(props: PropsRacineApp) {
   const { theme, onRetour, contexte, registre, onOuvrirApp } = props;
   // Abonné à la langue : un changement re-rend toute l'app Esport, sans recharger.
-  useLangue();
+  const langueEsport = useLangue();
+  // Les calendriers des champs de date suivent la langue de l'Esport (le reste du hub est en français).
+  useEffect(() => {
+    definirLangueDates(langueEsport);
+    return () => definirLangueDates('fr');
+  }, [langueEsport]);
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vueDemandee, setVue] = useState<VueDemandee>({ v: 'dashboard' });
   const vue = normaliserVue(vueDemandee);

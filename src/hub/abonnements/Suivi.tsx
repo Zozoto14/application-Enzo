@@ -36,6 +36,7 @@ import { comptesSuivis, exporterPaiementsPar, modifierCompteAboPar, suspendrePou
 import { police } from '../themes';
 import { reactiverPar } from '../admin/actions';
 import { Avis, BoutonHub, Champ, Intertitre, Panneau, Pilule, Segments, commun, type OutilsAdmin } from '../admin/ui/commun';
+import { ChampDate } from '../../ui/dates';
 
 /** Ce que l'app Abonnements fournit à son onglet « Suivi » (sous-ensemble des outils de l'Administration). */
 export type OutilsAbo = Pick<OutilsAdmin, 'theme' | 'donnees' | 'tous' | 'acteur' | 'maintenant' | 'majDonnees' | 'journaliser' | 'agir' | 'services' | 'modifierProfils'>;
@@ -339,7 +340,7 @@ function FormulairePaiement({
     <Formulaire theme={theme} testID={`admin-abo-form-paiement-${ligne.id}`}>
       <Text style={{ color: theme.texte, fontWeight: '700' }}>{partiel ? `Paiement partiel ou remise pour ${ligne.nom}` : `Marquer ${ligne.nom} comme ayant payé`}</Text>
       <View style={commun.grille}>
-        <Champ theme={theme} libelle="Date du paiement" valeur={date} onChanger={setDate} maxLength={10} testID="admin-abo-form-date" style={{ flexBasis: 150, flexGrow: 1 }} />
+        <ChampDate theme={theme} libelle="Date du paiement" valeur={date} onChanger={setDate} testID="admin-abo-form-date" style={{ flexBasis: 150, flexGrow: 1 }} />
         <Champ theme={theme} libelle={`Montant reçu (${reglages.devise})`} valeur={montant} onChanger={setMontant} maxLength={10} testID="admin-abo-form-montant" style={{ flexBasis: 150, flexGrow: 1 }} />
         <Champ theme={theme} libelle={`Remise (${reglages.devise})`} valeur={remise} onChanger={setRemise} maxLength={10} testID="admin-abo-form-remise" style={{ flexBasis: 120, flexGrow: 1 }} />
         <Champ theme={theme} libelle="Moyen de paiement" valeur={moyen} onChanger={setMoyen} maxLength={40} testID="admin-abo-form-moyen" placeholder="virement, espèces…" style={{ flexBasis: 180, flexGrow: 1 }} />
@@ -368,7 +369,7 @@ function FormulaireEcheance({ outils, ligne, onValider }: { outils: OutilsAbo; l
   const [erreur, setErreur] = useState<string | undefined>();
   return (
     <Formulaire theme={theme} testID={`admin-abo-form-echeance-${ligne.id}`}>
-      <Champ theme={theme} libelle="Prochaine échéance (AAAA-MM-JJ)" valeur={date} onChanger={setDate} maxLength={10} testID="admin-abo-form-echeance" style={{ maxWidth: 240 }} />
+      <ChampDate theme={theme} libelle="Prochaine échéance" valeur={date} onChanger={setDate} testID="admin-abo-form-echeance" style={{ maxWidth: 240 }} />
       {erreur ? <Avis theme={theme} genre="critique" texte={erreur} /> : null}
       <View style={commun.actions}>
         <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Enregistrer l’échéance" onPress={() => (dateValide(date) ? onValider(date) : setErreur('Date invalide : AAAA-MM-JJ.'))} testID="admin-abo-form-echeance-valider" />

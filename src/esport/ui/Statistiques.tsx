@@ -24,6 +24,7 @@ import { Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, Onglets, P
 import { BarreH, Chaleur } from './graphiquesUsage/graphiques';
 import { Courbe } from './graphiquesUsage/Courbe';
 import { csv, depuis, duree, libelleAction, libelleAppareil, libelleFonction, libelleLangue, libellePage, libelleRole, tendance } from './graphiquesUsage/format';
+import { ChampPeriode } from '../../ui/dates';
 
 type Periode = '1' | '7' | '30' | '90' | 'perso';
 type Section = 'apercu' | 'utilisateurs' | 'pages' | 'activite' | 'teams' | 'fonctions' | 'qualite';
@@ -212,14 +213,7 @@ export function Statistiques({ theme, client, large, onExporter, maintenant = Da
           testID="esport-stats-periode"
         />
         {periode === 'perso' ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.s }}>
-            <View style={{ flexGrow: 1, flexBasis: 160 }}>
-              <Champ theme={theme} libelle={trStats('statistiques.du')} valeur={du} onChanger={setDu} maxLength={10} testID="esport-stats-du" />
-            </View>
-            <View style={{ flexGrow: 1, flexBasis: 160 }}>
-              <Champ theme={theme} libelle={trStats('statistiques.au')} valeur={au} onChanger={setAu} maxLength={10} testID="esport-stats-au" />
-            </View>
-          </View>
+          <ChampPeriode theme={theme} libelleDu={trStats('statistiques.du')} libelleAu={trStats('statistiques.au')} du={du} au={au} onDu={setDu} onAu={setAu} testIDDu="esport-stats-du" testIDAu="esport-stats-au" style={{ gap: ESP.s }} />
         ) : null}
         <Pliable theme={theme} titre={trStats('statistiques.filtres')} resume={nbFiltres ? trnStats('statistiques.filtres_actifs', nbFiltres) : undefined} testID="esport-stats-filtres">
           <Choix

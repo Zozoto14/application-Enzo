@@ -51,6 +51,7 @@ import { pousserLangueEsport, retirerCompteEsport } from '../../../esport/synchr
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 import { Glyphe } from '../../../ui/icones';
 import { Icone } from '../../../ui/icones';
+import { ChampDate, aujourdhui } from '../../../ui/dates';
 
 type Filtre = StatutCompte | 'tous';
 
@@ -1020,7 +1021,7 @@ function Fiche({
         ) : null}
       </View>
       <View style={[commun.grille, { alignItems: 'flex-end' }]}>
-        <Champ theme={theme} libelle="Fin d’accès (AAAA-MM-JJ, vide : aucune)" valeur={expiration} onChanger={setExpiration} maxLength={10} placeholder="2026-12-31" testID="admin-expiration" style={{ flexBasis: 220, flexGrow: 1 }} />
+        <ChampDate theme={theme} libelle="Fin d’accès (vide : aucune)" valeur={expiration} onChanger={setExpiration} testID="admin-expiration" style={{ flexBasis: 220, flexGrow: 1 }} />
         <BoutonHub
           theme={theme}
           titre="Enregistrer la fin d’accès"
@@ -1429,7 +1430,7 @@ function FormulaireCreation({
       ))}
       <View style={[commun.grille, { alignItems: 'flex-end' }]}>
         <Champ theme={theme} libelle="Invitation valable (jours, 0 : sans limite)" valeur={invitation} onChanger={v => setInvitation(v.replace(/[^\d]/g, ''))} clavier="number-pad" maxLength={3} testID="admin-nouveau-invitation" style={{ flexBasis: 200, flexGrow: 1 }} />
-        <Champ theme={theme} libelle="Fin d’accès (AAAA-MM-JJ, facultatif)" valeur={expiration} onChanger={setExpiration} maxLength={10} testID="admin-nouveau-expiration" style={{ flexBasis: 200, flexGrow: 1 }} />
+        <ChampDate theme={theme} min={aujourdhui()} libelle="Fin d’accès (facultatif)" valeur={expiration} onChanger={setExpiration} testID="admin-nouveau-expiration" style={{ flexBasis: 200, flexGrow: 1 }} />
       </View>
       <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 6 }]} testID="admin-avertissement-transparence">
         <Text style={[texte, { fontWeight: '700' }]}>⚠︎ Les administrateurs et fondateurs peuvent accéder à ce compte.</Text>

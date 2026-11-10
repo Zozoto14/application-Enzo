@@ -11,7 +11,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
+import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport } from '../../client';
 import type { apiPlanning, RegleDispo, SemaineDispos } from '../../planning/api';
@@ -20,6 +20,7 @@ import { BoutonConfirme, Intertitre, Panneau, Retours, styles, useAgir } from '.
 import { Pastille } from './commun';
 import { EditeurCreneaux } from './EditeurCreneaux';
 import { tr } from '../../i18n';
+import { ChampDate } from '../../../ui/dates';
 
 /** Semaines montrées dans le bandeau (à partir de la semaine affichée, ou de la semaine en cours). */
 const BANDEAU = 6;
@@ -107,7 +108,7 @@ export function MaSemaine({
           <BoutonHub theme={theme} titre="" icone="suivant" libelle={tr('planning.disponibilites.semaine_suivante')} onPress={() => setSemaine(s => ajouterJours(s, 7))} testID="esport-semaine-suivante" />
         </View>
         <View style={styles.ligne}>
-          <Champ theme={theme} libelle={tr('planning.semaine.aller_au')} valeur={aller} onChanger={setAller} placeholder={tr('planning.semaine.format_date')} maxLength={10} style={{ width: 130 }} testID="esport-semaine-date" />
+          <ChampDate theme={theme} libelle={tr('planning.semaine.aller_au')} valeur={aller} onChanger={setAller} style={{ width: 190, maxWidth: '100%' }} testID="esport-semaine-date" />
           <BoutonHub
             theme={theme}
             titre={tr('planning.semaine.aller')}

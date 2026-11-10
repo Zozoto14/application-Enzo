@@ -14,6 +14,7 @@ import { formaterMontant } from '../format';
 import { ESPACEMENT, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { repartirVersement, suivreObjectif, type LigneCible, type Objectif } from '../vues/objectifs';
 import type { ReglageVersement } from '../vues/versementMensuel';
+import { ChampDatePortefeuille } from '../dates/portefeuille';
 
 export interface ObjectifsProps {
   objectif?: Objectif;
@@ -97,7 +98,7 @@ export function Objectifs({
           <CarteSection titre="Objectif d’épargne" testID="carte-objectif">
             <LigneChamps>
               <Champ etiquette="Montant visé (€)" value={montant} onChangeText={setMontant} keyboardType="decimal-pad" placeholder="50000" testID="champ-objectif-montant" />
-              <Champ etiquette="Échéance" value={echeance} onChangeText={setEcheance} placeholder="JJ/MM/AAAA" testID="champ-objectif-date" />
+              <ChampDatePortefeuille etiquette="Échéance" value={echeance} onChangeText={setEcheance} testID="champ-objectif-date" />
               <Champ etiquette="Rendement supposé (%/an)" value={rendement} onChangeText={setRendement} keyboardType="decimal-pad" testID="champ-objectif-rendement" />
             </LigneChamps>
             {erreur ? <Alerte message={erreur} /> : null}

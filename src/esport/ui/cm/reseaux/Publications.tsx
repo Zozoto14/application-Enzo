@@ -15,6 +15,7 @@ import { Badge, Carte, ESP, EtatVide, Grille, SqueletteCartes, TitreCarte, Volet
 import { Courbe } from '../../graphiquesUsage/Courbe';
 import { Aide, quand } from '../commun';
 import { Filtres, FormulaireReleve, LigneInterrupteur, Pastille, dureeTexte, jourCourt, nb, nomType, pct } from './commun';
+import { ChampDate } from '../../../../ui/dates';
 
 export function Publications({ theme, api, etat, large, version, onChange }: { theme: ThemeHub; api: ApiReseaux; etat: EtatReseaux; large: boolean; version: number; onChange(): void }) {
   const [filtres, setFiltres] = useState<FiltresReseaux>({});
@@ -92,7 +93,7 @@ export function Publications({ theme, api, etat, large, version, onChange }: { t
           <Champ theme={theme} libelle={trRs('pub.url')} valeur={nouvelle.url} onChanger={url => setNouvelle({ ...nouvelle, url })} maxLength={500} placeholder="https://www.youtube.com/watch?v=…" testID="esport-rs-pub-nouvelle-url" />
           <Champ theme={theme} libelle={trRs('pub.titre')} valeur={nouvelle.titre} onChanger={titre => setNouvelle({ ...nouvelle, titre })} maxLength={200} testID="esport-rs-pub-nouvelle-titre" />
           <Choix theme={theme} libelle={trRs('c.type')} valeur={nouvelle.type} options={etat.typesContenu.map(t => ({ id: t, nom: nomType(t) }))} onChoisir={type => setNouvelle({ ...nouvelle, type })} testID="esport-rs-pub-nouvelle-type" />
-          <Champ theme={theme} libelle={trRs('pub.publie_le')} valeur={nouvelle.publieLe} onChanger={publieLe => setNouvelle({ ...nouvelle, publieLe })} maxLength={10} placeholder="2026-10-27" testID="esport-rs-pub-nouvelle-date" />
+          <ChampDate theme={theme} libelle={trRs('pub.publie_le')} valeur={nouvelle.publieLe} onChanger={publieLe => setNouvelle({ ...nouvelle, publieLe })} testID="esport-rs-pub-nouvelle-date" />
           <Retours theme={theme} erreur={erreur} prefixe="esport-rs-pub-nouvelle" />
           <BoutonHub
             theme={theme}

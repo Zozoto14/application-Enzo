@@ -45,6 +45,7 @@ import { attenueDe, Bouton, Champ, Dialogue, Libelle, Options, Puce, texteDe } f
 import { droitDe, listeMembres, projetPartage } from '../membres';
 import { PartageProjet, ResumePartageMembre } from './Membres';
 import { Icone, type NomIcone } from '../../ui/icones';
+import { BoutonCalendrier, ChampHeure, formaterSaisie } from '../../ui/dates';
 
 type Fermer = () => void;
 
@@ -98,12 +99,14 @@ export function DialogueEcheance({ a, t, onFermer }: { a: Actions; t: Tache; onF
         ))}
       </View>
       <Libelle theme={theme}>DATE</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={texte} onChangeText={setTexte} placeholder="ex. demain, 15/11" autoFocus={!a.mobile} testID="echeance-champ" accessibilityLabel="Date d’échéance" />
+      <View style={styles.rangeeChampDate}>
+        <Champ theme={theme} mobile={a.mobile} value={texte} onChangeText={setTexte} placeholder="ex. demain, 15/11" autoFocus={!a.mobile} testID="echeance-champ" accessibilityLabel="Date d’échéance" style={styles.champDate} />
+        <BoutonCalendrier theme={theme} libelle="Date d’échéance" valeur={lue?.jour} onChoisir={iso => setTexte(formaterSaisie(iso))} onEffacer={() => setTexte('')} testID="echeance-calendrier" />
+      </View>
       <Text style={[attenueDe(theme), { color: texte && !lue ? theme.critique : theme.attenue }]} testID="echeance-lue">
         {lue ? `→ ${jourLisible(lue.jour, auj, true)}` : texte ? 'Date non reconnue' : 'Aucune date'}
       </Text>
-      <Libelle theme={theme}>HEURE (FACULTATIVE)</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={heure} onChangeText={setHeure} placeholder="ex. 14h30" testID="echeance-heure" accessibilityLabel="Heure" />
+      <ChampHeure theme={theme} libelle="Heure (facultative)" valeur={heure} onChanger={setHeure} placeholder="ex. 14h30" testID="echeance-heure" style={{ maxWidth: 220 }} />
       {heureErreur ? <Text style={[attenueDe(theme), { color: theme.critique }]}>Heure non reconnue (ex. 9h, 14:30).</Text> : null}
     </Dialogue>
   );
@@ -553,8 +556,14 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur, o
       <Champ theme={theme} mobile={a.mobile} multiline value={description} onChangeText={setDescription} placeholder="But du projet, liens utiles…" testID="projet-description" accessibilityLabel="Description du projet" />
       <Libelle theme={theme}>DATES (FACULTATIVES)</Libelle>
       <View style={styles.rangee}>
-        <Champ theme={theme} mobile={a.mobile} value={debut} onChangeText={setDebut} placeholder="Début (ex. 01/11)" style={{ flex: 1, minWidth: 140 }} testID="projet-debut" accessibilityLabel="Début du projet" />
-        <Champ theme={theme} mobile={a.mobile} value={fin} onChangeText={setFin} placeholder="Fin (ex. 15/12)" style={{ flex: 1, minWidth: 140 }} testID="projet-fin" accessibilityLabel="Fin du projet" />
+        <View style={[styles.rangeeChampDate, { flex: 1, minWidth: 180 }]}>
+          <Champ theme={theme} mobile={a.mobile} value={debut} onChangeText={setDebut} placeholder="Début (ex. 01/11)" style={styles.champDate} testID="projet-debut" accessibilityLabel="Début du projet" />
+          <BoutonCalendrier theme={theme} libelle="Début du projet" onChoisir={iso => setDebut(formaterSaisie(iso))} testID="projet-debut-calendrier" />
+        </View>
+        <View style={[styles.rangeeChampDate, { flex: 1, minWidth: 180 }]}>
+          <Champ theme={theme} mobile={a.mobile} value={fin} onChangeText={setFin} placeholder="Fin (ex. 15/12)" style={styles.champDate} testID="projet-fin" accessibilityLabel="Fin du projet" />
+          <BoutonCalendrier theme={theme} libelle="Fin du projet" onChoisir={iso => setFin(formaterSaisie(iso))} testID="projet-fin-calendrier" />
+        </View>
       </View>
       <Libelle theme={theme}>ÉTIQUETTES DU PROJET</Libelle>
       <Champ theme={theme} mobile={a.mobile} value={etiquettes} onChangeText={setEtiquettes} placeholder="design, client, urgent" testID="projet-etiquettes" accessibilityLabel="Étiquettes du projet, séparées par des virgules" />
@@ -777,6 +786,8 @@ export function DialogueRappelsRecus({ a, rappels, onOuvrir, onSemaine, onToutLu
 
 
 const styles = StyleSheet.create({
+  rangeeChampDate: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  champDate: { flex: 1, minWidth: 0 },
   rangee: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   ligneProjet: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   point: { width: 12, height: 12, borderRadius: 6 },

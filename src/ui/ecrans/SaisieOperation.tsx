@@ -24,6 +24,7 @@ import {
   type ErreursSaisie,
   type FormulaireOperation,
 } from '../vues/saisie';
+import { ChampDatePortefeuille } from '../dates/portefeuille';
 
 export interface SaisieOperationProps {
   comptes: readonly Compte[];
@@ -141,13 +142,7 @@ export function SaisieOperation({
 
       <LigneChamps>
       <>
-      <Champ
-        etiquette="Date"
-        value={formulaire.date}
-        onChangeText={texte => modifier('date', texte)}
-        placeholder="JJ/MM/AAAA"
-        keyboardType="numbers-and-punctuation"
-      />
+      <ChampDatePortefeuille etiquette="Date" value={formulaire.date} onChangeText={texte => modifier('date', texte)} testID="champ-operation-date" />
       {erreurs.date ? <Alerte message={erreurs.date} /> : null}
       </>
 

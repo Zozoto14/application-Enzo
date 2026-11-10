@@ -21,6 +21,7 @@ import { BoutonConfirme, Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, TitreCarte, attenue, texte } from '../design';
 import { ApercuDiscord, VueDevblog } from './Contenu';
 import { Programmation, ToutPublier, dateHeureClub } from './Automatique';
+import { ChampDate } from '../../../ui/dates';
 
 type Langue = 'fr' | 'en';
 interface Brouillon {
@@ -80,7 +81,7 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
   const formulaire = (
     <Carte theme={theme} testID="esport-devblog-formulaire">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.s }}>
-        <Champ theme={theme} libelle={trDv('champ_date')} valeur={b.date} onChanger={v => regler('date', v)} maxLength={10} testID="esport-devblog-date" style={{ minWidth: 160, flex: 1 }} />
+        <ChampDate theme={theme} libelle={trDv('champ_date')} valeur={b.date} onChanger={v => regler('date', v)} testID="esport-devblog-date" style={{ minWidth: 160, flex: 1 }} />
         <Champ theme={theme} libelle={trDv('champ_version')} valeur={b.version} onChanger={v => regler('version', v)} maxLength={20} testID="esport-devblog-version" style={{ minWidth: 140, flex: 1 }} />
       </View>
       <Segments<Langue> theme={theme} libelle={trDv('apercu_langue')} valeur={langue} options={[['fr', trDv('langue_fr')], ['en', trDv('langue_en')]]} onChoisir={setLangue} testID="esport-devblog-langue" />

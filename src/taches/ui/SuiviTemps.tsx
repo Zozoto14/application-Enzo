@@ -15,6 +15,7 @@ import { estTerminee, type Tache } from '../modele';
 import { ajouterTemps, chronoLisible, chronoDe, dureeLisible, exporterTempsCsv, lireDuree, releveHebdo, supprimerTemps, tempsPasse, tempsVivants, type AxeReleve } from '../temps';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Puce, texteDe } from './atomes';
+import { BoutonCalendrier, formaterSaisie } from '../../ui/dates';
 
 /** Secondes qui défilent (seul l'affichage bouge : rien n'est écrit). */
 export function useSecondes(actif: boolean): number {
@@ -189,7 +190,10 @@ export function DialogueTemps({ a, t, onFermer, onErreur }: { a: Actions; t: Tac
       <Champ theme={theme} mobile={a.mobile} value={duree} onChangeText={setDuree} onSubmitEditing={valider} autoFocus={!a.mobile} placeholder="ex. 1h30" testID="temps-duree" accessibilityLabel="Durée" />
       <Text style={[attenueDe(theme), { color: duree && !minutes ? theme.critique : theme.attenue }]}>{minutes ? `→ ${dureeLisible(minutes)}` : duree ? 'Durée non comprise' : ' '}</Text>
       <Libelle theme={theme}>JOUR</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={jour} onChangeText={setJour} placeholder="aujourd’hui, hier, 12/10" testID="temps-jour" accessibilityLabel="Jour" />
+      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+        <Champ theme={theme} mobile={a.mobile} value={jour} onChangeText={setJour} placeholder="aujourd’hui, hier, 12/10" testID="temps-jour" accessibilityLabel="Jour" style={{ flex: 1, minWidth: 0 }} />
+        <BoutonCalendrier theme={theme} libelle="Jour" valeur={jourLu?.jour} max={a.etat.aujourdhui} onChoisir={iso => setJour(formaterSaisie(iso))} testID="temps-jour-calendrier" />
+      </View>
       <Text style={attenueDe(theme)}>{jourLu ? `→ ${jourLisible(jourLu.jour, a.etat.aujourdhui, true)}` : 'Jour non compris'}</Text>
       <Libelle theme={theme}>NOTE (FACULTATIVE)</Libelle>
       <Champ theme={theme} mobile={a.mobile} value={note} onChangeText={setNote} placeholder="ex. réunion client" testID="temps-note" accessibilityLabel="Note" />

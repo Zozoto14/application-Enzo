@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Interrupteur, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Interrupteur, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { apiDevblog, type EntreeDevblog, type EtatDiscord, type FrequenceAuto, type ReglagesAuto, type SalonDevblog, type VueAuto } from '../../devblog/api';
@@ -18,6 +18,7 @@ import { trDv, type CleDv } from '../../i18n/devblog';
 import { Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte } from '../design';
 import { ApercuDiscord } from './Contenu';
+import { ChampDateHeure, ChampHeure } from '../../../ui/dates';
 
 /** Date et heure lisibles dans la langue du compte, à l'heure de Paris. */
 export function dateHeureClub(isoUtc: string): string {
@@ -156,7 +157,7 @@ export function Programmation({ theme, client, entree, modifie, onChange }: { th
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-devblog-programmation" />
       {prog ? <Badge theme={theme} texte={trDv('prog_le', { date: dateHeureClub(prog.le) })} ton="accent" testID="esport-devblog-programmation-etat" /> : null}
       {modifie ? <Text style={{ ...attenue(theme, 13), color: theme.alerte }}>{trDv('enregistrer_d_abord')}</Text> : null}
-      <Champ theme={theme} libelle={trDv('prog_champ')} valeur={quand} onChanger={setQuand} maxLength={16} testID="esport-devblog-programmation-quand" style={{ maxWidth: 260 }} />
+      <ChampDateHeure theme={theme} fuseau="Europe/Paris" libelle={trDv('prog_champ')} valeur={quand} onChanger={setQuand} testID="esport-devblog-programmation-quand" style={{ maxWidth: 260 }} />
       <Text style={{ ...texte(theme, 14), fontWeight: '700' }}>{trDv('discord_salons')}</Text>
       <ChoixSalons theme={theme} salons={salons} choisis={choisis} onChanger={setChoisis} prefixe="esport-devblog-programmation-salon" />
       <LigneCase theme={theme} coche={here} libelle={trDv('discord_here')} onChanger={setHere} testID="esport-devblog-programmation-here" />
@@ -249,7 +250,7 @@ export function ReglagesAutomatiques({ theme, client, onOuvrir }: { theme: Theme
           {r.frequence === 'hebdo' ? (
             <Segments<string> theme={theme} libelle={trDv('auto_jour')} valeur={String(r.jour)} options={JOURS.map(j => [String(j), trDv(`jour_${j}` as CleDv)] as const)} onChoisir={v => regler({ jour: Number(v) })} testID="esport-devblog-auto-jour" />
           ) : null}
-          <Champ theme={theme} libelle={trDv('auto_heure')} valeur={r.heure} onChanger={v => regler({ heure: v.trim() })} maxLength={5} testID="esport-devblog-auto-heure" style={{ maxWidth: 220 }} />
+          <ChampHeure theme={theme} libelle={trDv('auto_heure')} valeur={r.heure} onChanger={v => regler({ heure: v.trim() })} testID="esport-devblog-auto-heure" style={{ maxWidth: 220 }} />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, minHeight: 44 }}>
             <View style={{ flex: 1, minWidth: 0 }}>

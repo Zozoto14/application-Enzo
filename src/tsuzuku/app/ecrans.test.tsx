@@ -173,7 +173,7 @@ describe('Tsuzuku : fiche, lien manuel, lecture, vu ailleurs, bibliothèque', ()
   it('une date invalide est refusée avec un message', async () => {
     await ouvrirFiche();
     await fireEvent.press(screen.getByTestId('vu-ailleurs-ouvrir'));
-    await texte('vu-ailleurs-date', 'hier');
+    await texte('vu-ailleurs-date', 'pas une date');
     await fireEvent.press(screen.getByTestId('vu-ailleurs-enregistrer'));
     expect(await screen.findByText(/Date invalide/)).toBeTruthy();
   });

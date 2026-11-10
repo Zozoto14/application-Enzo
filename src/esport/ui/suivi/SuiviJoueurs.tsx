@@ -32,6 +32,7 @@ import { NoteMarkdown } from '../review/Note';
 import { Pastille } from '../planning/commun';
 import { pct } from '../planning/FichePresence';
 import { tr, trn } from '../../i18n';
+import { ChampDate } from '../../../ui/dates';
 
 export const nomCategorie = (c: CategorieNote): string => tr(`suivi.categorie.${c}`);
 export const nomTon = (t: TonNote): string => tr(`suivi.ton.${t}`);
@@ -350,7 +351,7 @@ function FormulaireNote({
       <Choix<TonNote> theme={theme} libelle={tr('suivi.ton')} valeur={ton} options={TONS_NOTE.map(t => ({ id: t, nom: nomTon(t) }))} onChoisir={setTon} testID="esport-suivi-ton" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.s }}>
         <Champ theme={theme} libelle={tr('suivi.etiquettes')} valeur={tags} onChanger={setTags} maxLength={260} placeholder={tr('suivi.etiquettes_exemple')} style={{ flexGrow: 1, flexBasis: 240 }} testID="esport-suivi-tags" />
-        <Champ theme={theme} libelle={tr('suivi.date')} valeur={date} onChanger={setDate} maxLength={10} placeholder={auj} style={{ width: 150 }} testID="esport-suivi-date" />
+        <ChampDate theme={theme} libelle={tr('suivi.date')} valeur={date} onChanger={setDate} style={{ width: 190, maxWidth: '100%' }} testID="esport-suivi-date" />
       </View>
       {typesLien.length > 1 ? (
         <View style={{ gap: ESP.xs }}>

@@ -16,6 +16,7 @@ import { ESPACEMENT, RAYON } from '../theme';
 import { INTERVALLES_ACTUALISATION, INTERVALLE_PAR_DEFAUT_S, libelleIntervalle } from '../../cours/marche';
 import type { FournisseurCours } from '../../cours/fournisseur';
 import { tt } from '../mobile/jetons';
+import { ChampHeurePortefeuille } from '../dates/portefeuille';
 
 export function ReglageIntervalle({ intervalle, onChoisir }: { intervalle?: number; onChoisir(secondes: number): void }) {
   return (
@@ -258,15 +259,14 @@ export function ReglagePodcast({ heureAuto, onChanger }: { heureAuto?: string; o
         accessibilityLabel="Préparer le podcast automatiquement"
       />
       <Text style={{ color: palette.texteSecondaire, fontSize: tt(13) }}>Prêt chaque jour à</Text>
-      <View style={{ width: 90 }}>
-        <Champ
+      <View style={{ width: 150 }}>
+        <ChampHeurePortefeuille
           etiquette="Heure"
           value={heureSaisie}
           onChangeText={texte => {
             setHeureSaisie(texte);
             if (heureAuto && /^([01]\d|2[0-3]):[0-5]\d$/.test(texte)) onChanger(texte);
           }}
-          placeholder="07:30"
           testID="champ-heure-podcast"
         />
       </View>

@@ -17,6 +17,7 @@ import { Badge, ESP, Volet, attenue, texte } from '../../design';
 import { nomTableau } from '../commun';
 import { BadgeReponse, ChoixBoutons, jourLong, quandDans } from './commun';
 import { murale } from '../../../cm/reunions';
+import { ChampDate, ChampHeure } from '../../../../ui/dates';
 
 export function DetailReunion({ theme, api, id, cle, fuseau, moi, onFermer, onModifier, onChange }: { theme: ThemeHub; api: ApiReunions; id: string; cle: string; fuseau: string; moi: MoiReunions; onFermer(): void; onModifier(r: Reunion): void; onChange(): void }) {
   const [r, setR] = useState<Reunion | undefined>();
@@ -80,9 +81,9 @@ export function DetailReunion({ theme, api, id, cle, fuseau, moi, onFermer, onMo
               {proposer ? (
                 <View style={{ gap: ESP.xs }}>
                   <View style={[styles.ligne, { gap: ESP.xs }]}>
-                    <Champ theme={theme} libelle={trRe('form.date')} valeur={proposer.date} onChanger={date => setProposer({ ...proposer, date })} maxLength={10} testID="esport-cm-reunion-proposer-date" style={{ minWidth: 130, flexGrow: 1 }} />
-                    <Champ theme={theme} libelle={trRe('dispos.debut')} valeur={proposer.heureDebut} onChanger={heureDebut => setProposer({ ...proposer, heureDebut })} maxLength={5} testID="esport-cm-reunion-proposer-debut" style={{ minWidth: 90, flexGrow: 1 }} />
-                    <Champ theme={theme} libelle={trRe('dispos.fin')} valeur={proposer.heureFin} onChanger={heureFin => setProposer({ ...proposer, heureFin })} maxLength={5} testID="esport-cm-reunion-proposer-fin" style={{ minWidth: 90, flexGrow: 1 }} />
+                    <ChampDate theme={theme} libelle={trRe('form.date')} valeur={proposer.date} onChanger={date => setProposer({ ...proposer, date })} testID="esport-cm-reunion-proposer-date" style={{ minWidth: 130, flexGrow: 1 }} />
+                    <ChampHeure theme={theme} libelle={trRe('dispos.debut')} valeur={proposer.heureDebut} onChanger={heureDebut => setProposer({ ...proposer, heureDebut })} testID="esport-cm-reunion-proposer-debut" style={{ minWidth: 90, flexGrow: 1 }} />
+                    <ChampHeure theme={theme} libelle={trRe('dispos.fin')} valeur={proposer.heureFin} onChanger={heureFin => setProposer({ ...proposer, heureFin })} testID="esport-cm-reunion-proposer-fin" style={{ minWidth: 90, flexGrow: 1 }} />
                   </View>
                   <Champ theme={theme} libelle={trRe('action.commentaire')} valeur={proposer.commentaire} onChanger={commentaire => setProposer({ ...proposer, commentaire })} maxLength={500} testID="esport-cm-reunion-proposer-commentaire" />
                   <BoutonHub
@@ -191,7 +192,7 @@ export function DetailReunion({ theme, api, id, cle, fuseau, moi, onFermer, onMo
               ) : null}
               <View style={[styles.ligne, { gap: ESP.xs, alignItems: 'flex-end' }]}>
                 <Champ theme={theme} libelle={trRe('taches.nouvelle')} valeur={tache.texte} onChanger={texte_ => setTache({ ...tache, texte: texte_ })} maxLength={300} testID="esport-cm-reunion-tache-texte" style={{ flex: 2, minWidth: 200 }} />
-                <Champ theme={theme} libelle={trRe('taches.echeance')} valeur={tache.echeance} onChanger={echeance => setTache({ ...tache, echeance })} maxLength={10} testID="esport-cm-reunion-tache-echeance" style={{ flex: 1, minWidth: 130 }} />
+                <ChampDate theme={theme} libelle={trRe('taches.echeance')} valeur={tache.echeance} onChanger={echeance => setTache({ ...tache, echeance })} testID="esport-cm-reunion-tache-echeance" style={{ flex: 1, minWidth: 130 }} />
               </View>
               <ChoixBoutons theme={theme} libelle={trRe('taches.assigne')} valeur={tache.assigneA} options={[['', trRe('taches.personne')], ...r.participants.map(p => [p.compte, nom(p.compte)] as const)]} onChoisir={assigneA => setTache({ ...tache, assigneA })} testID="esport-cm-reunion-tache-assigne" />
               <BoutonHub

@@ -38,6 +38,7 @@ import { FeuilleAppel } from './FeuilleAppel';
 import { tr, trn } from '../../i18n';
 import { Icone } from '../../../ui/icones';
 import { useTempsReel } from '../../tempsReel/hooks';
+import { ChampDate, ChampHeure } from '../../../ui/dates';
 
 type Vue = 'mois' | 'semaine' | 'liste';
 type Formulaire = { mode: 'creer' } | { mode: 'serie'; id: string } | { mode: 'occurrence'; id: string; cle: string };
@@ -689,9 +690,9 @@ function FormulaireEvenement({
         ) : null}
         <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={s.titre} onChanger={titre => maj({ titre })} maxLength={80} placeholder={tr('planning.planning.scrim_vs')} testID="esport-formulaire-titre" />
         <View style={styles.ligne}>
-          <Champ theme={theme} libelle={tr('planning.planning.date_aaaa_mm_jj')} valeur={s.date} onChanger={date => maj({ date })} maxLength={10} style={{ flexGrow: 1, minWidth: 140 }} testID="esport-formulaire-date" />
-          <Champ theme={theme} libelle={tr('planning.planning.debut')} valeur={s.heureDebut} onChanger={heureDebut => maj({ heureDebut })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-debut" />
-          <Champ theme={theme} libelle={tr('planning.planning.fin')} valeur={s.heureFin} onChanger={heureFin => maj({ heureFin })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-fin" />
+          <ChampDate theme={theme} libelle={tr('planning.planning.date_aaaa_mm_jj')} valeur={s.date} onChanger={date => maj({ date })} style={{ flexGrow: 1, minWidth: 140 }} testID="esport-formulaire-date" />
+          <ChampHeure theme={theme} libelle={tr('planning.planning.debut')} valeur={s.heureDebut} onChanger={heureDebut => maj({ heureDebut })} style={{ width: 140 }} testID="esport-formulaire-debut" />
+          <ChampHeure theme={theme} libelle={tr('planning.planning.fin')} valeur={s.heureFin} onChanger={heureFin => maj({ heureFin })} style={{ width: 140 }} testID="esport-formulaire-fin" />
         </View>
         <Text style={attenue}>{tr('planning.planning.heures_de_une_fin', { fuseau: s.fuseau })}</Text>
         <Champ theme={theme} libelle={tr('planning.planning.lieu_ou_lien')} valeur={s.lieu ?? ''} onChanger={lieu => maj({ lieu })} maxLength={200} testID="esport-formulaire-lieu" />
@@ -728,7 +729,7 @@ function FormulaireEvenement({
                   ))}
                 </View>
                 <Segments theme={theme} libelle={tr('planning.planning.rythme')} valeur={intervalle} options={[['1', tr('planning.libelles.chaque_semaine')], ['2', tr('planning.planning.une_semaine_sur_deux')]]} onChoisir={v => setIntervalle(v === '2' ? '2' : '1')} testID="esport-formulaire-intervalle" />
-                <Champ theme={theme} libelle={tr('planning.planning.jusqu_au_facultatif_aaaa')} valeur={jusqua} onChanger={setJusqua} maxLength={10} testID="esport-formulaire-jusqua" />
+                <ChampDate theme={theme} libelle={tr('planning.planning.jusqu_au_facultatif_aaaa')} valeur={jusqua} onChanger={setJusqua} testID="esport-formulaire-jusqua" />
               </View>
             ) : null}
           </>

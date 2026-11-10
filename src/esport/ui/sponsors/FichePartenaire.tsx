@@ -16,6 +16,7 @@ import { BoutonConfirme, Choix, Intertitre, Panneau, Retours, styles, useAgir } 
 import { Badge, ESP, Squelette, attenue, texte, type Ton } from '../design';
 import { Aide } from '../cm/commun';
 import { ChoixTeams, Contacts, Echanges, PiecesSp, nomCompte, type Faire } from './commun';
+import { ChampDate } from '../../../ui/dates';
 
 const TON_ETAT: Record<'fait' | 'a_faire' | 'en_retard', Ton> = { fait: 'ok', a_faire: 'alerte', en_retard: 'critique' };
 
@@ -226,8 +227,8 @@ function Contrats({ theme, api, partenaireId, contrats, gerer, faire }: { theme:
         <View style={{ gap: ESP.xs }} testID="esport-sp-contrat-saisie">
           <Champ theme={theme} libelle={trSp('contrats.intitule')} valeur={s.intitule} onChanger={intitule => setS({ ...s, intitule })} maxLength={120} testID="esport-sp-contrat-intitule" />
           <View style={[styles.ligne, { gap: ESP.xs }]}>
-            <Champ theme={theme} libelle={trSp('contrats.debut')} valeur={s.debut} onChanger={debut => setS({ ...s, debut })} placeholder="2026-09-01" maxLength={10} testID="esport-sp-contrat-debut" style={{ flex: 1, minWidth: 130 }} />
-            <Champ theme={theme} libelle={trSp('contrats.fin')} valeur={s.fin} onChanger={fin => setS({ ...s, fin })} placeholder="2027-08-31" maxLength={10} testID="esport-sp-contrat-fin" style={{ flex: 1, minWidth: 130 }} />
+            <ChampDate theme={theme} libelle={trSp('contrats.debut')} valeur={s.debut} onChanger={debut => setS({ ...s, debut })} testID="esport-sp-contrat-debut" style={{ flex: 1, minWidth: 130 }} />
+            <ChampDate theme={theme} min={/^\d{4}-\d{2}-\d{2}$/.test(s.debut) ? s.debut : undefined} libelle={trSp('contrats.fin')} valeur={s.fin} onChanger={fin => setS({ ...s, fin })} testID="esport-sp-contrat-fin" style={{ flex: 1, minWidth: 130 }} />
           </View>
           <View style={[styles.ligne, { gap: ESP.xs }]}>
             <Champ theme={theme} libelle={trSp('contrats.montant')} valeur={s.montant} onChanger={montant => setS({ ...s, montant })} maxLength={16} testID="esport-sp-contrat-montant" style={{ flex: 1, minWidth: 140 }} />
@@ -387,8 +388,8 @@ function Contreparties({
           </View>
           {contrats.length ? <Choix theme={theme} libelle={trSp('obligations.contrat')} valeur={s.contratId} options={[{ id: '', nom: '—' }, ...contrats.map(c => ({ id: c.id, nom: c.intitule || trSp('contrats.du_au', { debut: c.debut, fin: c.fin }) }))]} onChoisir={contratId => setS({ ...s, contratId })} testID="esport-sp-obligation-contrat" /> : null}
           <View style={[styles.ligne, { gap: ESP.xs }]}>
-            <Champ theme={theme} libelle={trSp('obligations.debut')} valeur={s.debut} onChanger={debut => setS({ ...s, debut })} placeholder={trSp('obligations.debut_defaut')} maxLength={10} testID="esport-sp-obligation-debut" style={{ flex: 1, minWidth: 140 }} />
-            <Champ theme={theme} libelle={trSp('obligations.fin')} valeur={s.fin} onChanger={fin => setS({ ...s, fin })} placeholder={trSp('obligations.debut_defaut')} maxLength={10} testID="esport-sp-obligation-fin" style={{ flex: 1, minWidth: 140 }} />
+            <ChampDate theme={theme} placeholder={trSp('obligations.debut_defaut')} libelle={trSp('obligations.debut')} valeur={s.debut} onChanger={debut => setS({ ...s, debut })} testID="esport-sp-obligation-debut" style={{ flex: 1, minWidth: 140 }} />
+            <ChampDate theme={theme} placeholder={trSp('obligations.debut_defaut')} libelle={trSp('obligations.fin')} valeur={s.fin} onChanger={fin => setS({ ...s, fin })} testID="esport-sp-obligation-fin" style={{ flex: 1, minWidth: 140 }} />
           </View>
           <Choix theme={theme} libelle={trSp('champ.responsable')} valeur={s.responsable} options={[{ id: '', nom: '—' }, ...comptes.map(c => ({ id: c.compte, nom: c.pseudo ?? c.compte }))]} onChoisir={responsable => setS({ ...s, responsable })} testID="esport-sp-obligation-responsable" />
           <Champ theme={theme} libelle={trSp('c.notes')} valeur={s.notes} onChanger={notes => setS({ ...s, notes })} multiligne maxLength={2000} testID="esport-sp-obligation-notes" />

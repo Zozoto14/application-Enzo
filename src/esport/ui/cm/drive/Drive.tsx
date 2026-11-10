@@ -59,6 +59,7 @@ import { ZoneDepot } from './ZoneDepot';
 import { useTempsReel } from '../../../tempsReel/hooks';
 import { ArbreDossiers, FilAriane, styleCible, type NoeudArbre } from './explorateur';
 import { useGlisser } from './glisser';
+import { ChampPeriode } from '../../../../ui/dates';
 
 type Dialogue =
   | { genre: 'dossier'; nom: string; restreint: boolean }
@@ -613,10 +614,18 @@ export function Drive({
                   {optionsFiltres?.auteurs.length ? (
                     <Choix theme={theme} libelle={trDr('recherche.auteur')} valeur={filtres.auteur ?? 'tous'} options={[{ id: 'tous', nom: trDr('recherche.tous') }, ...optionsFiltres.auteurs.map(a => ({ id: a.compte, nom: a.pseudo ?? a.compte }))]} onChoisir={a => setFiltres({ ...filtres, auteur: a === 'tous' ? undefined : a })} testID="esport-drive-filtre-auteur" />
                   ) : null}
-                  <View style={[styles.ligne, { gap: ESP.xs }]}>
-                    <Champ theme={theme} libelle={trDr('recherche.du')} valeur={filtres.du ?? ''} onChanger={du => setFiltres({ ...filtres, du: du || undefined })} placeholder="2026-10-01" maxLength={10} testID="esport-drive-filtre-du" style={{ minWidth: 150 }} />
-                    <Champ theme={theme} libelle={trDr('recherche.au')} valeur={filtres.au ?? ''} onChanger={au => setFiltres({ ...filtres, au: au || undefined })} placeholder="2026-10-31" maxLength={10} testID="esport-drive-filtre-au" style={{ minWidth: 150 }} />
-                  </View>
+                  <ChampPeriode
+                    theme={theme}
+                    libelleDu={trDr('recherche.du')}
+                    libelleAu={trDr('recherche.au')}
+                    du={filtres.du ?? ''}
+                    au={filtres.au ?? ''}
+                    onDu={du => setFiltres(f => ({ ...f, du: du || undefined }))}
+                    onAu={au => setFiltres(f => ({ ...f, au: au || undefined }))}
+                    testIDDu="esport-drive-filtre-du"
+                    testIDAu="esport-drive-filtre-au"
+                    style={{ gap: ESP.xs }}
+                  />
                   <View style={[styles.ligne, { gap: ESP.s }]}>
                     <Text style={texte(theme, 13)}>{trDr('recherche.favoris')}</Text>
                     <Interrupteur theme={theme} libelle={trDr('recherche.favoris')} valeur={Boolean(filtres.favoris)} onChanger={v => setFiltres({ ...filtres, favoris: v || undefined })} testID="esport-drive-filtre-favoris" />

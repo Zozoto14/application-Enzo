@@ -25,6 +25,7 @@ import { entreesDemo } from './logiqueScene';
 import { historiqueDemo } from './logiqueStats';
 import { NoteSession } from './NoteSession';
 import { Bouton as BoutonHub, Interrupteur, Puce as PuceOffice } from './uiOffice';
+import { ChampPeriode } from '../ui/dates';
 
 export const INTERVALLE_LECTURE_MS = 5_000;
 const PAR_PAGE = 150;
@@ -295,8 +296,7 @@ export function Historique({ theme, contexte, office, filtreInitial, debutDemo }
       <RangeePuces theme={theme} libelle="Outil" valeurs={options.outils} choisie={filtres.outil} onChoix={v => changerFiltre('outil', v)} testID="filtre-outil" />
       <View style={styles.rangee}>
         <Text style={[styles.libelle, sm.texte, attenue]}>Période</Text>
-        <TextInput testID="filtre-du" placeholder="du AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.du ?? ''} onChangeText={t => changerFiltre('du', t)} accessibilityLabel="Période : du (AAAA-MM-JJ)" enterKeyHint="next" style={[styles.date, sm.champ, { color: theme.texte, borderColor: theme.ligne }]} />
-        <TextInput testID="filtre-au" placeholder="au AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.au ?? ''} onChangeText={t => changerFiltre('au', t)} accessibilityLabel="Période : au (AAAA-MM-JJ)" enterKeyHint="done" style={[styles.date, sm.champ, { color: theme.texte, borderColor: theme.ligne }]} />
+        <ChampPeriode theme={theme} du={filtres.du ?? ''} au={filtres.au ?? ''} onDu={t => changerFiltre('du', t)} onAu={t => changerFiltre('au', t)} libelleDu="Période : du" libelleAu="au" testIDDu="filtre-du" testIDAu="filtre-au" style={{ flexGrow: 1 }} styleChamp={{ maxWidth: 220 }} />
       </View>
 
       <View style={styles.boutons}>

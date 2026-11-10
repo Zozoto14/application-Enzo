@@ -7,7 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
+import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { apiCompetition, GENRES_RESULTAT, type ApiCompetition, type Bilan, type FiltresResultats, type GenreResultat, type Issue, type ListeResultats, type Resultat, type VueAdversaire } from '../../competition/api';
 import { prendre } from '../../competition/intention';
@@ -20,6 +20,7 @@ import type { PropsModule } from '../modules';
 import { BadgeResultat, LogoAdversaire, nomsAdversaires } from './commun';
 import { FormulaireResultat } from './FormulaireResultat';
 import { useTempsReel } from '../../tempsReel/hooks';
+import { ChampPeriode } from '../../../ui/dates';
 
 type Onglet = 'historique' | 'bilans';
 const quand = (iso: string, fuseau: string): string => formaterDate(iso, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: fuseau });
@@ -84,8 +85,7 @@ export function Resultats({ theme, client, detail, large, onAller }: PropsModule
           {liste && liste.filtres.jeux.length > 1 ? <Choix<string> theme={theme} libelle={trC('r.champ.jeu')} valeur={filtres.jeu ?? ''} options={[{ id: '', nom: trC('r.tous') }, ...liste.filtres.jeux.map(x => ({ id: x.cle, nom: x.nom }))]} onChoisir={v => setFiltres(f => ({ ...f, jeu: v || undefined }))} testID="esport-resultats-filtre-jeu" /> : null}
           <Choix<Issue | ''> theme={theme} libelle={trC('r.champ.issue')} valeur={filtres.issue ?? ''} options={[{ id: '', nom: trC('r.tous') }, { id: 'victoire', nom: nomIssue('victoire') }, { id: 'defaite', nom: nomIssue('defaite') }, { id: 'nul', nom: nomIssue('nul') }]} onChoisir={v => setFiltres(f => ({ ...f, issue: v || undefined }))} testID="esport-resultats-filtre-issue" />
           <View style={[styles.ligne, { gap: ESP.s, alignItems: 'flex-end' }]}>
-            <Champ theme={theme} libelle={trC('r.champ.du')} valeur={du} onChanger={setDu} maxLength={10} placeholder="2026-09-01" testID="esport-resultats-du" style={{ width: 150 }} />
-            <Champ theme={theme} libelle={trC('r.champ.au')} valeur={au} onChanger={setAu} maxLength={10} placeholder="2026-10-31" testID="esport-resultats-au" style={{ width: 150 }} />
+            <ChampPeriode theme={theme} libelleDu={trC('r.champ.du')} libelleAu={trC('r.champ.au')} du={du} au={au} onDu={setDu} onAu={setAu} testIDDu="esport-resultats-du" testIDAu="esport-resultats-au" style={{ flexGrow: 1, flexBasis: 360 }} styleChamp={{ maxWidth: 220 }} />
             <BoutonHub theme={theme} titre={trC('r.appliquer')} onPress={() => setFiltres(f => ({ ...f, du: du.trim() || undefined, au: au.trim() || undefined }))} testID="esport-resultats-periode" />
             <BoutonHub
               theme={theme}

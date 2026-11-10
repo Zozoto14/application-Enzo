@@ -231,7 +231,7 @@ describe('écrans Disponibilités, Présence et accueil', () => {
     await screen.findByTestId('esport-heatmap-plages');
     await fireEvent.press(screen.getByTestId('esport-heatmap-proposer-2026-10-19-20:00'));
     expect(await screen.findByTestId('esport-formulaire')).toBeTruthy();
-    expect(screen.getByTestId('esport-formulaire-date').props.value).toBe('2026-10-19');
+    expect(screen.getByTestId('esport-formulaire-date').props.value).toBe('19/10/2026');
     expect(screen.getByTestId('esport-formulaire-debut').props.value).toBe('20:00');
     expect(screen.getByTestId('esport-formulaire-fin').props.value).toBe('22:00');
     expect(screen.getByTestId('esport-formulaire-titre').props.value).toBe('Scrim');
