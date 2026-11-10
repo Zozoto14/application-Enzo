@@ -87,17 +87,43 @@ placé avec le même réglage « juste en dessous du rôle… » (au-dessus des 
   l'affichent comme une puce **« inclus automatiquement »**.
 - **Hub de l'événement** : le staff qui passe par le hub a **son propre salon** (voir « Vocaux de l'événement ») et
   voit le hub caché.
-- **Rôles staff supplémentaires** (champ de la fiche, sélecteur repliable des rôles du serveur dans l'ordre de la
-  hiérarchie, après « Lire les rôles du serveur » ; 20 au plus) : des rôles Discord **existants** reçoivent exactement
-  les mêmes droits que le rôle staff : hub et salon du staff, surcharges « voir, se connecter » de tous les salons
-  vocaux de l'événement, rôles qui traitent les tickets des catégories de l'événement, hub caché. Le bot ne les **crée
-  ni ne les supprime** : il n'ajoute un rôle à une catégorie que là où il n'y était pas, note ces ajouts
-  (`club_evenements.staff_sup_ajouts`, migration 0067) et ne défait que ceux-là (rôle retiré de la liste, catégorie
-  retirée de l'événement, fin ou suppression de l'événement) ; un rôle qui traitait déjà une catégorie y reste.
-  Changer la liste resynchronise les salons ouverts, les surcharges du hub et les catégories de tickets.
-- **Fin** : supprimé avec les rôles des équipes (bouton, cron) et retiré des rôles du staff des catégories de tickets ;
-  les rôles staff supplémentaires restent sur Discord, seuls leurs accès ajoutés par l'événement sont retirés.
+- **Fin** : supprimé avec les rôles des équipes (bouton, cron) et retiré des rôles du staff des catégories de tickets.
 - Données : `club_evenement_staff` (Discord ID, nom, compte lié) suit l'export ; RGPD : retiré du staff.
+
+## Rôles staff supplémentaires
+
+Section de la fiche (20 rôles au plus) : des rôles Discord qui ont **exactement les mêmes droits** que le rôle staff
+de l'événement : hub de l'événement et salon du staff, surcharges « voir, se connecter » de tous les salons vocaux de
+l'événement, rôles qui traitent les tickets des catégories de l'événement, hub caché. Changer la liste resynchronise
+les salons ouverts, les surcharges du hub et les catégories de tickets.
+
+- **Créer un rôle staff** : nom (ex. « Casteur The Nuke End »), couleur, libellé, personnes qui le reçoivent (choisies
+  dans le staff de l'événement ; modifiables ensuite). Le bot le crée (sans permission, non mentionnable), le place
+  avec le réglage « juste en dessous du rôle… » (après le rôle staff) et le donne. Il **appartient à l'événement** :
+  supprimé à la fin ou à la suppression, comme le rôle staff.
+- **Ajouter un rôle existant** (sélecteur repliable des rôles du serveur, ordre de la hiérarchie, après « Lire les
+  rôles du serveur ») : une confirmation s'affiche, « Ce rôle existe déjà sur le serveur : il sera SUPPRIMÉ de Discord à
+  la fin de l'événement, pour tous ses membres », avec **Ajouter (supprimé à la fin)**, **Ajouter sans le supprimer**
+  ou Annuler. Ensuite, l'interrupteur **« Supprimer ce rôle à la fin de l'événement »** (oui par défaut) reste
+  modifiable, avec un rappel rouge tant qu'il est activé.
+- **Jamais supprimés** (grisés dans le sélecteur, avec la raison, et refusés par le serveur) : @everyone, rôles gérés
+  par une intégration ou un bot, rôles qui donnent **Administrateur**, **Gérer le serveur** ou **Gérer les rôles**,
+  rôles **au niveau du bot ou au-dessus**. Le serveur **revérifie** juste avant la suppression : un rôle devenu
+  dangereux entre-temps est ignoré (noté au journal, rendu dans le bilan `ignores`).
+- **Libellé** de chaque rôle : `{role}` du nom du salon du staff (voir « Vocaux de l'événement ») ; vide, il est dérivé
+  du nom (sans le nom de l'événement, les symboles décoratifs, les emoji ni les espaces en trop : « ⟡ Casteur The Nuke
+  End ⟡ » → « Casteur ») ; l'exemple s'affiche dans le champ.
+- Accès aux tickets : un rôle n'est ajouté à une catégorie que là où il n'y était pas ; ces ajouts sont notés
+  (`club_evenements.staff_sup_ajouts`) et seuls eux sont défaits (rôle retiré de la liste, catégorie retirée de
+  l'événement, fin ou suppression).
+- **Fin ou suppression de l'événement** : accès défaits, puis les rôles marqués « Supprimer ce rôle à la fin de
+  l'événement » supprimés de Discord (et retirés de la liste) ; les autres restent sur Discord. La confirmation de
+  suppression de l'événement et la carte des équipes (« Supprimer les rôles ») affichent **la liste exacte** des rôles
+  supprimés : rôle staff, rôles staff supplémentaires marqués, rôles des équipes (`suppression.roles` de la fiche).
+- Données : colonne `club_evenements.staff_roles_sup` (migration 0067), entrées `{ id, nom, label, couleur,
+  supprimerFin, cree, membres }` (l'ancienne liste d'identifiants est relue sans suppression à la fin). Route
+  `POST /evenements/:id/staff-roles` (créer un rôle staff).
+
 
 ## Import depuis les tickets
 
@@ -143,9 +169,15 @@ retirent ici, et seulement ici**. Un membre qui a le rôle d'une équipe rejoint
   défaut), **places par défaut** (0 : illimité), **rôles autorisés en plus** (casters, admins). Le verrouillage est
   implicite (toujours verrouillé).
 - **Salon du staff** : le staff (rôle staff, rôles staff supplémentaires, rôles autorisés en plus, rôles du staff des
-  salons vocaux) qui passe par le hub a son propre salon, nommé d'après **« Nom du salon du staff »** (`Staff —
-  {pseudo}` par défaut), verrouillé sur le staff, avec les contrôles habituels ; une personne qui a aussi le rôle d'une
-  équipe va dans le salon de son équipe. Les autres sont refusés (MP).
+  salons vocaux) qui passe par le hub a son propre salon, nommé d'après **« Nom du salon du staff »** (`{role} —
+  {pseudo}` par défaut, variables `{role}` et `{pseudo}`), verrouillé sur le staff, avec les contrôles habituels ; une
+  personne qui a aussi le rôle d'une équipe va dans le salon de son équipe. Les autres sont refusés (MP).
+  `{role}` est le **libellé court** du premier rôle qui lui donne l'accès, dans cet ordre de priorité : rôles staff
+  supplémentaires (ordre de leur liste), rôle staff de l'événement (« Staff »), rôles autorisés en plus du hub (ordre du
+  hub ; libellé réglable à côté de chaque rôle), rôles du staff des salons vocaux (ordre des réglages ; libellé réglable
+  dans le Bot Esport HQ). Libellé vide : dérivé du nom du rôle (sans le nom de l'événement ni les symboles ; « Staff »
+  s'il ne reste rien). Ex. « Casteur — Léa », « Staff — Zed ». Un hub dont le modèle était l'ancien défaut
+  `Staff — {pseudo}` passe au nouveau.
 - **Options du hub** (interrupteurs, comme pour les hubs ordinaires : [vocaux.md](vocaux.md#options-de-chaque-hub)) :
   placer les salons créés juste sous le hub (oui), visibles mais pas joignables (non), **cacher le hub** aux personnes
   sans permission (**oui par défaut** : seuls les équipes, le staff et les rôles autorisés le voient).
@@ -182,6 +214,7 @@ Routes (`evenements.gerer`, 403 sinon) :
 | `POST /evenements/:id/equipes` | Ajouter des équipes `{ equipes: [...] }` (rôles automatiques) |
 | `PATCH`, `DELETE /evenements/:id/equipes/:e` | Modifier ; retirer (rôle et salon supprimés) |
 | `GET /evenements/staff-candidats?q=` | Personnes proposées pour le staff (app avec Discord lié, puis serveur) |
+| `POST /evenements/:id/staff-roles` | Créer un rôle staff `{ nom, couleur?, label?, membres? }` (appartient à l'événement, supprimé à la fin) |
 | `POST /evenements/:id/staff`, `DELETE /evenements/:id/staff/:s` | Ajouter au staff (rôle donné) ; retirer (rôle retiré) |
 | `GET`, `POST /evenements/:id/vocaux` | Hubs vocaux de l'événement (`staffRole`, `peutModifier`, `autresHubs`) ; ajouter un hub (+ `vocaux.configurer`) |
 | `PATCH`, `DELETE /evenements/:id/vocaux/:hub` | Modifier ; retirer un hub de l'événement (+ `vocaux.configurer` ; 404 si le hub n'est pas lié à l'événement) |

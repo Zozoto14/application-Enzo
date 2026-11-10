@@ -582,6 +582,9 @@ export function EquipesEvenement({
               testID="esport-eq-resynchroniser"
             />
           ) : null}
+          <Text style={attenue(theme)} testID="esport-eq-roles-a-supprimer">
+            {d.suppression?.roles?.length ? trVc('supprimer_roles_liste', { liste: d.suppression.roles.map(r => r.nom).join(', ') }) : trVc('supprimer_roles_aucun')}
+          </Text>
           <BoutonConfirme
             theme={theme}
             titre={trVc('eq.supprimer_roles')}

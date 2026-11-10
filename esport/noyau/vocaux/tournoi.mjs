@@ -14,14 +14,14 @@ import { rest } from '../tickets/discord.mjs';
 import { MODELE_STAFF_DEFAUT, nomSalon } from './reglages.mjs';
 import { supprimerLigne } from './salons.mjs';
 import { tv2 } from './textes.mjs';
-import { jsonOu } from '../outils.mjs';
+import { idsSup, libelleStaff, lireSup } from '../evenements-club/staff-sup.mjs';
 
 /** Rôle staff de l'événement et rôles staff supplémentaires (rôles existants ; plus aucun une fois l'événement nettoyé). */
 export async function rolesStaffEvenement(base, evenementId) {
   const v = await base.premier('SELECT staff_role_id, staff_roles_sup, roles_supprimes_le FROM club_evenements WHERE id = ?', [evenementId]);
   if (!v) return [];
-  const sup = v.roles_supprimes_le ? [] : jsonOu(v.staff_roles_sup, []);
-  return [v.staff_role_id, ...(Array.isArray(sup) ? sup : [])].filter(Boolean).map(String);
+  const sup = v.roles_supprimes_le ? [] : idsSup(v.staff_roles_sup);
+  return [v.staff_role_id, ...sup].filter(Boolean).map(String);
 }
 
 /**
@@ -61,7 +61,8 @@ export async function gererHubTournoi(ctx, hub, membre, { creerSalon, deplacer }
   const equipe = equipes.find(e => roles.includes(e.role_id));
   if (!equipe) {
     // Pas d'équipe, mais du staff (rôle staff de l'événement, rôle autorisé en plus du hub, rôle du staff des salons
-    // vocaux) : son propre salon (modèle « Staff — {pseudo} »), un par personne, contrôles ordinaires.
+    // vocaux) : son propre salon (modèle « {role} — {pseudo} » : {role} = libellé court du rôle qui donne l'accès,
+    // staff-sup.mjs `libelleStaff`), un par personne, contrôles ordinaires.
     const staff = [...(await rolesStaffEvenement(base, hub.tournoiId)), ...(hub.rolesAutorises ?? []), ...(ctx.reglages?.rolesStaff ?? [])].filter(Boolean);
     if (staff.some(r => roles.includes(String(r)))) {
       const sien = await base.premier('SELECT salon_id FROM vocaux_salons WHERE tournoi_id = ? AND hub_id = ? AND equipe_id IS NULL AND proprietaire_id = ? ORDER BY cree_le LIMIT 1', [hub.tournoiId, hub.id, membre.id]);
@@ -71,7 +72,9 @@ export async function gererHubTournoi(ctx, hub, membre, { creerSalon, deplacer }
         if (d.statut !== 404 && d.code !== 10003) return null;
         await supprimerLigne(base, sien.salon_id);
       }
-      const s = await creerSalon(ctx, hub, membre, { nom: nomSalon(hub.modeleStaff || MODELE_STAFF_DEFAUT, { pseudo: membre.nom || membre.id }), tournoiId: hub.tournoiId, equipeId: null });
+      const v = await base.premier('SELECT nom, staff_role_id, staff_roles_sup, roles_supprimes_le FROM club_evenements WHERE id = ?', [hub.tournoiId]);
+      const l = libelleStaff({ roles, sup: v?.roles_supprimes_le ? [] : lireSup(v?.staff_roles_sup), staffRoleId: v?.staff_role_id, hub, rolesStaff: ctx.reglages?.rolesStaff ?? [], etiquettesStaff: ctx.reglages?.etiquettesStaff ?? {}, nomsRoles: ctx.cache?.roles ?? new Map(), nomEvenement: v?.nom ?? '' });
+      const s = await creerSalon(ctx, hub, membre, { nom: nomSalon(hub.modeleStaff || MODELE_STAFF_DEFAUT, { pseudo: membre.nom || membre.id, role: l?.label ?? 'Staff' }), tournoiId: hub.tournoiId, equipeId: null });
       return s ? 'staff' : null;
     }
     // Pas d'équipe : déconnecté du hub, et un MP explique pourquoi (au mieux : MP fermés, rien de plus).

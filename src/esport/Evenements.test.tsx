@@ -241,9 +241,24 @@ function fauxClient(
             bot: false,
             utilisable: true,
           },
+          {
+            id: '720000000000000004',
+            nom: 'Admin',
+            position: 1,
+            couleur: null,
+            gere: false,
+            bot: false,
+            utilisable: true,
+            interdit: 'permissions',
+          },
         ],
       };
     if (chemin === '/evenements/ev1' && !methode) return fiche;
+    if (chemin === '/evenements/ev1/staff-roles' && methode === 'POST') {
+      const c = corps as { nom: string; label: string; couleur: string | null; membres: string[] };
+      fiche.evenement.discord.staffRolesSup = [...(fiche.evenement.discord.staffRolesSup ?? []), { id: '991', nom: c.nom, label: c.label, couleur: c.couleur, supprimerFin: true, cree: true, membres: c.membres }];
+      return { ...fiche };
+    }
     if (chemin === '/evenements/ev1' && methode === 'DELETE') return { ok: true, hubs: fiche.suppression?.hubs ?? 0, vocauxDesactives: Boolean(fiche.suppression?.desactiveVocaux), nettoyage: { roles: 2, salons: 1, echecs: [], erreur: null } };
     if (chemin === '/evenements/ev1' && methode === 'PATCH')
       return {
@@ -407,7 +422,7 @@ test('rôle repère : hiérarchie du serveur, rôle du bot grisé ; « juste en 
   );
   expect(bot.props.accessibilityState).toMatchObject({ disabled: true });
   expect(screen.getByText('rôle du bot')).toBeTruthy();
-  // Ordre de la hiérarchie : Esport HQ, Staff, Membre, puis « Tout en bas ».
+  // Ordre de la hiérarchie : Esport HQ, Staff, Membre, Admin, puis « Tout en bas ».
   const ids = screen
     .getAllByRole('radio')
     .map(n => String(n.props.testID))
@@ -416,6 +431,7 @@ test('rôle repère : hiérarchie du serveur, rôle du bot grisé ; « juste en 
     'esport-ev-position-720000000000000002',
     'esport-ev-position-720000000000000001',
     'esport-ev-position-720000000000000003',
+    'esport-ev-position-720000000000000004',
     'esport-ev-position-bas',
   ]);
   await fireEvent.press(bot);
@@ -604,17 +620,53 @@ test('supprimer un événement sans hub vocal : message général seulement (pas
   expect(screen.queryByTestId('esport-ev-supprimer-desactive')).toBeNull();
 });
 
-test('rôles staff supplémentaires : lus sur le serveur, choisis (rôle du bot exclu), enregistrés avec l’événement', async () => {
+test('rôles staff supplémentaires : rôle existant (confirmation « sera SUPPRIMÉ », désactivable), rôles dangereux grisés, libellé ; enregistrés', async () => {
   const { client, appels } = fauxClient(ficheDe());
   await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
   await fireEvent.press(await screen.findByTestId('esport-ev-staff-roles-sup-lire'));
-  await deplier('esport-ev-staff-roles-sup');
-  expect(screen.queryByTestId('esport-ev-staff-roles-sup-720000000000000002')).toBeNull();
-  await choisirDans('esport-ev-staff-roles-sup', '720000000000000001');
+  await deplier('esport-ev-staff-sup-choisir');
+  // Rôle du bot absent ; rôle avec Administrateur grisé, avec la raison.
+  expect(screen.queryByTestId('esport-ev-staff-sup-choisir-720000000000000002')).toBeNull();
+  expect(screen.getByTestId('esport-ev-staff-sup-choisir-720000000000000004').props.accessibilityState).toMatchObject({ disabled: true });
+  expect(screen.getByText(/Admin · Administrateur, Gérer le serveur ou Gérer les rôles : impossible/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-staff-sup-choisir-720000000000000001'));
+  expect(screen.getByText(/« Staff » sera SUPPRIMÉ de Discord à la fin de l’événement, pour tous ses membres/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-staff-sup-confirmer'));
+  expect(screen.getByTestId('esport-ev-staff-sup-720000000000000001-supprimer').props.value).toBe(true);
+  expect(screen.getByTestId('esport-ev-staff-sup-720000000000000001-alerte')).toBeTruthy();
+  // Désactivable ; libellé (exemple dérivé du nom).
+  await fireEvent(screen.getByTestId('esport-ev-staff-sup-720000000000000001-supprimer'), 'valueChange', false);
+  expect(screen.queryByTestId('esport-ev-staff-sup-720000000000000001-alerte')).toBeNull();
+  expect(screen.getByTestId('esport-ev-staff-sup-720000000000000001-label').props.placeholder).toBe('Staff');
+  await fireEvent.changeText(screen.getByTestId('esport-ev-staff-sup-720000000000000001-label'), 'Orga');
+  // Deuxième rôle, ajouté sans le supprimer.
+  await choisirDans('esport-ev-staff-sup-choisir', '720000000000000003');
+  await fireEvent.press(screen.getByTestId('esport-ev-staff-sup-garder'));
   await fireEvent.press(screen.getByTestId('esport-ev-enregistrer'));
   expect(await screen.findByText('Enregistré.')).toBeTruthy();
-  const patch = appels.filter(a => a.chemin === '/evenements/ev1' && a.methode === 'PATCH').at(-1)!.corps as { discord: { staffRolesSup: string[] } };
-  expect(patch.discord.staffRolesSup).toEqual(['720000000000000001']);
+  const patch = appels.filter(a => a.chemin === '/evenements/ev1' && a.methode === 'PATCH').at(-1)!.corps as { discord: { staffRolesSup: unknown[] } };
+  expect(patch.discord.staffRolesSup).toEqual([
+    { id: '720000000000000001', label: 'Orga', supprimerFin: false },
+    { id: '720000000000000003', label: '', supprimerFin: false },
+  ]);
+});
+
+test('« Créer un rôle staff » : nom, couleur, libellé (exemple dérivé), membres du staff ; la confirmation de suppression liste les rôles supprimés', async () => {
+  const fiche = { ...ficheDe(), staff: [{ id: 's0', discordId: '810000000000000301', nom: 'Zed', compteId: null, roleStatut: 'attribue' as const }], suppression: { hubs: 0, desactiveVocaux: false, roles: [{ id: '990', nom: 'Staff The Nuke End', quoi: 'staff' as const }, { id: '991', nom: 'Casteur The Nuke End', quoi: 'staff-cree' as const }, { id: '992', nom: 'LZ0 Ligne Zéro', quoi: 'equipe' as const }] } };
+  const { client, appels } = fauxClient(fiche);
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-staff-sup-nouveau'));
+  await fireEvent.changeText(screen.getByTestId('esport-ev-staff-sup-nom'), '⟡ Casteur The Nuke End ⟡');
+  expect(screen.getByTestId('esport-ev-staff-sup-nouveau-label').props.placeholder).toBe('Casteur');
+  await fireEvent.changeText(screen.getByTestId('esport-ev-staff-sup-couleur'), '#e4572e');
+  await choisirDans('esport-ev-staff-sup-nouveau-membres', '810000000000000301');
+  await fireEvent.press(screen.getByTestId('esport-ev-staff-sup-creer'));
+  expect(await screen.findByText('Rôle staff créé.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/staff-roles')!.corps).toEqual({ nom: '⟡ Casteur The Nuke End ⟡', couleur: '#e4572e', label: '', membres: ['810000000000000301'] });
+  // Fin de l'événement (« Supprimer les rôles ») et suppression : la liste exacte des rôles supprimés.
+  expect(screen.getByTestId('esport-eq-roles-a-supprimer').props.children).toBe('Rôles Discord supprimés : Staff The Nuke End, Casteur The Nuke End, LZ0 Ligne Zéro.');
+  await fireEvent.press(screen.getByTestId('esport-ev-supprimer'));
+  expect((await screen.findByTestId('esport-ev-supprimer-roles')).props.children).toBe('Rôles Discord supprimés : Staff The Nuke End, Casteur The Nuke End, LZ0 Ligne Zéro.');
 });
 
 test('vocaux de l’événement : options du hub (sous le hub, visibles mais pas joignables, hub caché par défaut) et nom du salon du staff envoyés', async () => {
@@ -632,4 +684,16 @@ test('vocaux de l’événement : options du hub (sous le hub, visibles mais pas
   await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
   expect(await screen.findByTestId('esport-ev-voc-hub-752')).toBeTruthy();
   expect(appels.find(a => a.chemin === '/evenements/ev1/vocaux' && a.methode === 'POST')!.corps).toMatchObject({ id: '752', placerSousHub: false, visibleNonJoignable: true, masquerHub: true, modeleStaff: 'Régie {pseudo}' });
+});
+
+test('vocaux de l’événement : libellé de chaque rôle autorisé en plus ({role} du salon du staff), exemple dérivé du nom', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-voc-hub-751-modifier'));
+  const champ = await screen.findByTestId('esport-ev-voc-libelles-720000000000000060');
+  expect(champ.props.placeholder).toBe('Caster');
+  await fireEvent.changeText(champ, 'Cast');
+  await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
+  expect(await screen.findByText('Hub enregistré.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/vocaux/751' && a.methode === 'PATCH')!.corps).toMatchObject({ etiquettes: { '720000000000000060': 'Cast' } });
 });

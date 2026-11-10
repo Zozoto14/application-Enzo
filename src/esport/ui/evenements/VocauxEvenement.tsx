@@ -22,6 +22,7 @@ import { Badge, Carte, ESP, TitreCarte, attenue, texte } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { SelecteurRepliable, optionsRoles, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 import { OptionsHub } from '../vocaux/OptionsHub';
+import { LibellesRoles } from '../vocaux/LibellesRoles';
 
 type Api = ReturnType<typeof apiEvenements>;
 const AUCUN = '-';
@@ -74,7 +75,7 @@ export function VocauxEvenement({ theme, api, client, fiche }: { theme: ThemeHub
   const enregistrer = () =>
     void agir('enregistrer', async () => {
       if (!saisie?.id) throw new Error(trEv('voc.salon_requis'));
-      const c: SaisieHubEvenement = { id: saisie.id, nom: salons.find(s => s.id === saisie.id)?.nom ?? saisie.nom, categorieId: saisie.categorieId, modeleNom: saisie.modeleNom, limite: saisie.limite, rolesAutorises: saisie.rolesAutorises, placerSousHub: saisie.placerSousHub !== false, visibleNonJoignable: saisie.visibleNonJoignable === true, masquerHub: saisie.masquerHub !== false, modeleStaff: saisie.modeleStaff ?? v.choix.modeleStaffDefaut };
+      const c: SaisieHubEvenement = { id: saisie.id, nom: salons.find(s => s.id === saisie.id)?.nom ?? saisie.nom, categorieId: saisie.categorieId, modeleNom: saisie.modeleNom, limite: saisie.limite, rolesAutorises: saisie.rolesAutorises, placerSousHub: saisie.placerSousHub !== false, visibleNonJoignable: saisie.visibleNonJoignable === true, masquerHub: saisie.masquerHub !== false, modeleStaff: saisie.modeleStaff ?? v.choix.modeleStaffDefaut, etiquettes: saisie.etiquettes ?? {} };
       setV(edite === NOUVEAU || !edite ? await api.ajouterHub(id, c) : await api.modifierHub(id, edite, c));
       fermer();
       return trEv('voc.enregistre');
@@ -93,6 +94,7 @@ export function VocauxEvenement({ theme, api, client, fiche }: { theme: ThemeHub
           <Champ theme={theme} libelle={trEv('voc.limite')} valeur={String(h.limite)} onChanger={x => maj({ limite: entier(x) })} maxLength={2} clavier="number-pad" testID="esport-ev-voc-limite" style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
         </View>
         <ChoixMultiple theme={theme} libelle={trEv('voc.roles')} valeurs={h.rolesAutorises} options={roles.filter(o => o.id !== v.staffRole?.id)} onChanger={rolesAutorises => maj({ rolesAutorises })} max={v.choix.limites.roles} testID="esport-ev-voc-roles" />
+        <LibellesRoles theme={theme} ids={h.rolesAutorises} noms={roles} valeurs={h.etiquettes ?? {}} onChanger={etiquettes => maj({ etiquettes })} nomEvenement={fiche.evenement.nom} testID="esport-ev-voc-libelles" />
         <PuceStaffAuto theme={theme} role={v.staffRole} testID="esport-ev-voc-staff-puce" />
         <Text style={attenue(theme)}>{trEv('voc.verrou')}</Text>
         <Champ theme={theme} libelle={trEv('voc.modele_staff')} valeur={h.modeleStaff ?? v.choix.modeleStaffDefaut ?? ''} onChanger={modeleStaff => maj({ modeleStaff })} maxLength={v.choix.limites.modele} testID="esport-ev-voc-modele-staff" />

@@ -97,7 +97,7 @@ export function creerMoteurVocaux({
   intervalleChaudMs = INTERVALLE_CHAUD_MS,
   horloge = () => performance.now(),
 } = {}) {
-  const cache = { pret: false, guildId: null, salons: new Map(), vocal: new Map() };
+  const cache = { pret: false, guildId: null, salons: new Map(), vocal: new Map(), roles: new Map() };
   const minuteries = new Map();
   /** File d'état (un travail à la fois). */
   let file = Promise.resolve();
@@ -513,6 +513,8 @@ export function creerMoteurVocaux({
   function guildCreate(d) {
     cache.guildId = String(d.id);
     cache.salons = new Map((d.channels ?? []).map(c => [String(c.id), c]));
+    // Noms des rôles (libellé `{role}` du salon du staff d'un hub d'événement).
+    cache.roles = new Map((d.roles ?? []).map(r => [String(r.id), String(r.name ?? '')]));
     const membres = new Map((d.members ?? []).map(m => [String(m.user?.id), m]));
     cache.vocal = new Map();
     for (const v of d.voice_states ?? []) {
@@ -554,6 +556,13 @@ export function creerMoteurVocaux({
         await enFile(async () => {
           if (d?.id) cache.salons.set(String(d.id), d);
         });
+        return;
+      case 'GUILD_ROLE_CREATE':
+      case 'GUILD_ROLE_UPDATE':
+        if (d?.role?.id) cache.roles.set(String(d.role.id), String(d.role.name ?? ''));
+        return;
+      case 'GUILD_ROLE_DELETE':
+        if (d?.role_id) cache.roles.delete(String(d.role_id));
         return;
       case 'CHANNEL_DELETE':
         if (!d?.id) return;

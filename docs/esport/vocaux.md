@@ -37,7 +37,8 @@ Permission du club **`vocaux.configurer`** (le Fondateur l'a d'office ; le Secon
 - **Hubs** (10 au plus, hubs d'événement compris), chacun : salon vocal, catégorie des salons créés (celle du hub par
   défaut), modèle du nom (`{pseudo}`), places par défaut, salons verrouillés à la création. Les **hubs d'événement** ne
   se créent pas ici : ils sont listés en ligne compacte en lecture seule (voir « Hub vocal d'un événement ») ;
-- **Rôles du staff** : entrent partout, utilisent les contrôles de tout salon ;
+- **Rôles du staff** : entrent partout, utilisent les contrôles de tout salon ; **libellé** de chaque rôle (`{role}` du
+  salon du staff d'un hub d'événement, vide : dérivé du nom du rôle) ;
 - **options de chaque hub** : salons placés sous le hub, visibles mais pas joignables, hub caché (voir « Options de
   chaque hub ») ;
 - **Suppression d'un salon vide après** (secondes), **salons par membre**, **départ du propriétaire**, **salon des
@@ -162,7 +163,9 @@ absents du corps ou renvoyés par une copie ancienne de l'écran), et un hub d'�
   1. le **rôle d'une équipe** de l'événement → le salon de son équipe (ci-dessous ; l'équipe passe avant le staff) ;
   2. sinon le **staff** : rôle staff de l'événement, **rôles staff supplémentaires** de l'événement, **rôles autorisés
      en plus** du hub, ou **rôles du staff** des salons vocaux → **son propre salon** (modèle « Nom du salon du staff »,
-     `Staff — {pseudo}` par défaut), dans la même catégorie, rangé sous le hub, dont il est **propriétaire** avec les
+     `{role} — {pseudo}` par défaut : `{role}` est le libellé court du premier de ces rôles qu'il a, dans l'ordre rôles
+     staff supplémentaires, rôle staff « Staff », rôles autorisés en plus, rôles du staff ; libellés réglables,
+     [evenements.md](evenements.md#vocaux-de-lévénement)), dans la même catégorie, rangé sous le hub, dont il est **propriétaire** avec les
      contrôles habituels (renommer, verrouiller / déverrouiller, expulser, liste d'amis, transférer). Créé
      **verrouillé** sur le staff (rôle staff, rôles staff supplémentaires, rôles autorisés, rôles du staff ; les rôles
      des équipes n'y entrent pas, sauf invités en amis) ; l'option « visibles mais pas joignables » s'y applique. **Un

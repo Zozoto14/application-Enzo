@@ -134,6 +134,9 @@ test('réglages : options des hubs (placement oui, visibles non, hub caché : é
 
 async function application() {
   const k = await bancTickets({ banc });
+  // Rôles existants du serveur (lus pour vérifier les rôles staff supplémentaires).
+  k.discord.etat.listerCrees = true;
+  for (const [id, name] of [['720000000000000090', 'Casteur'], ['720000000000000091', 'Admin LAN']]) k.discord.etat.roles.set(id, { id, name, position: 1, permissions: '0' });
   await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD, guildNom: 'Club' } });
   k.discord.etat.salons.set(HUB, { id: HUB, type: 2, name: 'Créer un salon', guild_id: k.GUILD, parent_id: CAT, position: 3, permission_overwrites: [{ id: MEMBRE_R, type: 0, allow: String(PV.VOIR), deny: '0' }] });
   return k;
@@ -227,14 +230,14 @@ test('rôles staff supplémentaires : ajoutés aux catégories de tickets (là o
   const t = new Date().toISOString();
   k.discord.etat.salons.set(SALON, { id: SALON, type: 2, guild_id: k.GUILD, permission_overwrites: [] });
   await k.b.base.executer("INSERT INTO vocaux_salons (salon_id, guild_id, hub_id, proprietaire_id, tournoi_id, verrouille, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, 1, ?, ?)", [SALON, k.GUILD, HUB, U1, id, t, t]);
-  const m = await k.api(`/evenements/${id}`, undefined, { methode: 'PATCH', corps: { categoriesTickets: [c1, c2], discord: { staffRolesSup: [SUP, DEJA] } } });
+  const m = await k.api(`/evenements/${id}`, undefined, { methode: 'PATCH', corps: { categoriesTickets: [c1, c2], discord: { staffRolesSup: [{ id: SUP, supprimerFin: false }, { id: DEJA, supprimerFin: false }] } } });
   assert.equal(m.statut, 200, JSON.stringify(m.corps));
-  assert.deepEqual(m.corps.evenement.discord.staffRolesSup, [SUP, DEJA]);
+  assert.deepEqual(m.corps.evenement.discord.staffRolesSup.map(e => [e.id, e.nom, e.supprimerFin, e.cree]), [[SUP, 'Casteur', false, false], [DEJA, 'Admin LAN', false, false]]);
   const roles = async c => JSON.parse((await k.b.base.premier('SELECT roles_discord FROM tickets_categories WHERE id = ?', [c])).roles_discord);
   assert.ok((await roles(c1)).includes(SUP) && (await roles(c2)).includes(SUP) && (await roles(c2)).includes(DEJA));
   for (const x of [SUP, DEJA]) assert.ok(k.discord.appels.some(p => p.methode === 'PUT' && p.chemin === `/channels/${SALON}/permissions/${x}`), x);
   // Retiré de la liste : retiré de c1 et c2 (ajouts de l'événement) et des salons de l'événement ; DEJA reste dans c1.
-  await k.api(`/evenements/${id}`, undefined, { methode: 'PATCH', corps: { discord: { staffRolesSup: [DEJA] } } });
+  await k.api(`/evenements/${id}`, undefined, { methode: 'PATCH', corps: { discord: { staffRolesSup: [{ id: DEJA }] } } });
   assert.ok(!(await roles(c1)).includes(SUP) && !(await roles(c2)).includes(SUP));
   assert.ok(k.discord.appels.some(p => p.methode === 'DELETE' && p.chemin === `/channels/${SALON}/permissions/${SUP}`));
   // Suppression de l'événement : DEJA retiré de c2 (ajout de l'événement), gardé dans c1 ; aucun rôle supprimé.

@@ -21,6 +21,7 @@ import { lireGeneral } from '../tickets/reglages.mjs';
 import { rest } from '../tickets/discord.mjs';
 import { salonsDuServeur, supprimerLigne } from '../vocaux/salons.mjs';
 import { nomRole } from './inscriptions.mjs';
+import { idsSup, lireSup, raisonInterdite } from './staff-sup.mjs';
 import { lireVocaux } from '../vocaux/reglages.mjs';
 import { resynchroniserHubsEvenement } from '../vocaux/hubs.mjs';
 
@@ -114,6 +115,9 @@ export async function rolesDuServeur(ctx) {
           : null,
         gere: Boolean(r.managed),
         bot: rolesBot.includes(String(r.id)),
+        permissions: String(r.permissions ?? '0'),
+        // Peut-il être choisi comme rôle staff supprimé à la fin ? Raison du refus, ou null (staff-sup.mjs).
+        interdit: raisonInterdite({ ...r, gere: Boolean(r.managed) }, { guildId: ctx.guildId, positionBot }),
         utilisable:
           positionBot !== null && Number(r.position ?? 0) < positionBot,
       }))
@@ -181,8 +185,11 @@ export async function placerRoles(ctx, evt, serveur = null) {
     };
   // Rôle staff de l'événement en premier (juste sous le repère), puis les rôles des équipes dans leur ordre.
   const staff = await ctx.base.premier('SELECT staff_role_id FROM club_evenements WHERE id = ?', [evt.id]);
+  const sup = await ctx.base.premier('SELECT staff_roles_sup FROM club_evenements WHERE id = ?', [evt.id]);
   const ids = [
     ...(staff?.staff_role_id ? [String(staff.staff_role_id)] : []),
+    // Rôles staff créés par l'événement (« Créer un rôle staff ») : juste après le rôle staff.
+    ...lireSup(sup?.staff_roles_sup).filter(e => e.cree).map(e => e.id),
     ...(
       await ctx.base.tous(
         'SELECT role_id FROM club_evenement_equipes WHERE evenement_id = ? AND role_id IS NOT NULL ORDER BY position, nom',
@@ -527,14 +534,19 @@ export async function nettoyerEvenement(ctx, evenementId) {
       roles++;
     } else echecs.push({ quoi: 'role', id: evt.staff_role_id, statut: r.statut, code: r.code ?? null });
   }
+  // Rôles staff supplémentaires : accès ajoutés par l'événement défaits, puis ceux marqués « supprimer à la fin »
+  // supprimés de Discord (revérifiés).
+  await accesStaffSup(ctx, { id: evenementId }, { fin: true });
+  const sup = await supprimerRolesSup(ctx, evenementId);
+  roles += sup.supprimes.length;
+  echecs.push(...sup.echecs);
   if (!echecs.length)
     await base.executer(
       'UPDATE club_evenements SET roles_supprimes_le = ?, maj_le = ? WHERE id = ?',
       [iso(ctx.maintenant()), iso(ctx.maintenant()), evenementId],
     );
-  await accesStaffSup(ctx, { id: evenementId }, { fin: true });
   await resynchroniserHubs(ctx, evenementId);
-  return { roles, salons: s.n, echecs };
+  return { roles, salons: s.n, echecs, ignores: sup.ignores };
 }
 
 // ------------------------------------------------------------------ Rôle staff de l'événement
@@ -598,7 +610,63 @@ async function accesTickets(ctx, roleId, categories) {
 /** Rôles staff supplémentaires d'un événement (rôles Discord existants), vides une fois l'événement nettoyé. */
 export function rolesStaffSup(evt) {
   if (!evt || evt.roles_supprimes_le) return [];
-  return listeJson(evt.staff_roles_sup);
+  return idsSup(evt.staff_roles_sup);
+}
+
+/**
+ * Rôles que la fin (ou la suppression) de l'événement supprimera de Discord, pour l'annoncer : rôles des équipes, rôle
+ * staff, rôles staff supplémentaires marqués « Supprimer ce rôle à la fin de l'événement ». `[{ id, nom, quoi }]`.
+ */
+export async function rolesASupprimer(base, evenementId) {
+  const evt = await base.premier('SELECT staff_role_id, staff_role_nom, staff_roles_sup FROM club_evenements WHERE id = ?', [evenementId]);
+  if (!evt) return [];
+  const equipes = await base.tous('SELECT role_id, role_nom, nom, tag FROM club_evenement_equipes WHERE evenement_id = ? AND role_id IS NOT NULL ORDER BY position, nom', [evenementId]);
+  return [
+    ...(evt.staff_role_id ? [{ id: String(evt.staff_role_id), nom: evt.staff_role_nom || 'Staff', quoi: 'staff' }] : []),
+    ...lireSup(evt.staff_roles_sup).filter(e => e.supprimerFin).map(e => ({ id: e.id, nom: e.nom || e.id, quoi: e.cree ? 'staff-cree' : 'staff-existant' })),
+    ...equipes.map(e => ({ id: String(e.role_id), nom: e.role_nom || `${e.tag} ${e.nom}`.trim(), quoi: 'equipe' })),
+  ];
+}
+
+/**
+ * Rôles staff supplémentaires marqués « Supprimer ce rôle à la fin de l'événement » : supprimés de Discord (fin ou
+ * suppression de l'événement), après une NOUVELLE vérification : jamais @everyone, un rôle géré, un rôle avec
+ * Administrateur / Gérer le serveur / Gérer les rôles, ni un rôle au niveau du bot ou au-dessus (ignorés, notés au
+ * journal). Les rôles supprimés (ou déjà absents) quittent la liste. Rend `{ supprimes, ignores, echecs }`.
+ */
+export async function supprimerRolesSup(ctx, evenementId) {
+  const { base } = ctx;
+  const b = { supprimes: [], ignores: [], echecs: [] };
+  const evt = await base.premier('SELECT staff_roles_sup FROM club_evenements WHERE id = ?', [evenementId]);
+  const sup = lireSup(evt?.staff_roles_sup);
+  const a = sup.filter(e => e.supprimerFin);
+  if (!a.length || !ctx.jetonBot) return b;
+  const serveur = await rolesDuServeur(ctx);
+  if (serveur.erreur) {
+    b.echecs.push(...a.map(e => ({ quoi: 'role', id: e.id, statut: 0, raison: serveur.erreur })));
+    return b;
+  }
+  const garder = new Set(sup.map(e => e.id));
+  for (const e of a) {
+    const role = serveur.roles.find(r => r.id === e.id);
+    if (!role) {
+      garder.delete(e.id); // déjà supprimé sur Discord
+      continue;
+    }
+    const raison = raisonInterdite(role, { guildId: ctx.guildId, positionBot: serveur.positionBot });
+    if (raison) {
+      b.ignores.push({ id: e.id, nom: e.nom || role.nom, raison });
+      ctx.journal?.warn?.(`[esport] événement : rôle staff « ${e.nom || role.nom} » non supprimé (${raison})`);
+      continue;
+    }
+    const r = await rest(ctx.fetch, ctx.jetonBot, 'DELETE', `/guilds/${ctx.guildId}/roles/${e.id}`, undefined, { raison: 'Esport HQ : fin de l’événement' });
+    if (r.ok || r.statut === 404) {
+      garder.delete(e.id);
+      b.supprimes.push(e.id);
+    } else b.echecs.push({ quoi: 'role', id: e.id, statut: r.statut, code: r.code ?? null });
+  }
+  if (garder.size !== sup.length) await base.executer('UPDATE club_evenements SET staff_roles_sup = ? WHERE id = ?', [JSON.stringify(sup.filter(e => garder.has(e.id))), evenementId]);
+  return b;
 }
 
 const objetJson = v => {
@@ -639,7 +707,7 @@ export async function accesStaffSup(ctx, evtLigne, { fin = false, retires = [] }
     else delete ajouts[roleId];
   }
   // Rôles retirés de la liste (`retires`), ou tous à la fin : surcharges des salons vocaux de l'événement retirées.
-  for (const roleId of fin ? listeJson(evt.staff_roles_sup) : retires.filter(r => !sup.includes(r)))
+  for (const roleId of fin ? idsSup(evt.staff_roles_sup) : retires.filter(r => !sup.includes(r)))
     for (const x of salonsEvt) await rest(ctx.fetch, ctx.jetonBot, 'DELETE', `/channels/${x.salonId}/permissions/${roleId}`, undefined, { raison: 'Esport HQ : staff de l’événement' });
   // Ajouter.
   for (const roleId of sup) {

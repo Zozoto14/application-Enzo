@@ -101,6 +101,8 @@ const fr = {
   opt_masquer_aide: 'Seuls les rôles ci-dessous et les rôles du staff des salons vocaux voient le hub. Ses permissions d’origine sont gardées et rendues si l’option est coupée ou le hub retiré.',
   opt_masquer_sans_roles: 'Choisissez d’abord les rôles qui peuvent utiliser ce hub.',
   opt_roles_hub: 'Rôles qui peuvent utiliser ce hub',
+  libelles_roles: 'Libellé de chaque rôle dans le nom du salon du staff ({role} — {pseudo})',
+  libelles_staff_aide: 'Hubs d’événement : le staff qui passe par le hub a un salon nommé « {role} — {pseudo} ». Vide : le nom du rôle sans le nom de l’événement ni les symboles.',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -198,6 +200,8 @@ const en: Record<keyof typeof fr, string> = {
   opt_masquer_aide: 'Only the roles below and the voice channel staff roles can see the hub. Its original permissions are kept and restored if the option is turned off or the hub removed.',
   opt_masquer_sans_roles: 'First choose the roles that can use this hub.',
   opt_roles_hub: 'Roles that can use this hub',
+  libelles_roles: 'Label of each role in the staff channel name ({role} — {pseudo})',
+  libelles_staff_aide: 'Event hubs: staff going through the hub get a channel named “{role} — {pseudo}”. Empty: the role name without the event name or symbols.',
 };
 
 export type CleVc = keyof typeof fr;

@@ -160,6 +160,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       visibleNonJoignable: champ('visibleNonJoignable', avant.visibleNonJoignable ?? false),
       masquerHub: champ('masquerHub', avant.masquerHub ?? true),
       modeleStaff: champ('modeleStaff', avant.modeleStaff ?? MODELE_STAFF_DEFAUT),
+      etiquettes: champ('etiquettes', avant.etiquettes ?? {}),
       verrouille: true,
       tournoiId: evtId,
     };

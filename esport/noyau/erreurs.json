@@ -938,6 +938,15 @@
   "L’événement est terminé ou annulé : ses rôles ne sont plus créés.": "The event is finished or cancelled: its roles are no longer created.",
   "Catégories de tickets : 10 au plus.": "Ticket categories: 10 at most.",
   "Rôles staff supplémentaires : 20 rôles Discord au plus.": "Extra staff roles: 20 Discord roles at most.",
+  "Libellé d’un rôle staff : 40 caractères au plus.": "Staff role label: 40 characters at most.",
+  "Impossible de vérifier ce rôle sur le serveur Discord (bot ou serveur à configurer).": "Unable to check this role on the Discord server (bot or server to set up).",
+  "Ce rôle ne peut pas être choisi : @everyone n’est jamais supprimé.": "This role cannot be chosen: @everyone is never deleted.",
+  "Ce rôle ne peut pas être choisi : il est géré par une intégration ou un bot.": "This role cannot be chosen: it is managed by an integration or a bot.",
+  "Ce rôle ne peut pas être choisi : il donne Administrateur, Gérer le serveur ou Gérer les rôles (jamais supprimé par le bot).": "This role cannot be chosen: it grants Administrator, Manage Server or Manage Roles (never deleted by the bot).",
+  "Ce rôle ne peut pas être choisi : il est au niveau du rôle du bot ou au-dessus.": "This role cannot be chosen: it is at or above the bot’s role.",
+  "Discord a refusé de créer le rôle (permission « Gérer les rôles » du bot ?).": "Discord refused to create the role (the bot’s “Manage Roles” permission?).",
+  "Libellés des rôles illisibles.": "Unreadable role labels.",
+  "Libellé d’un rôle : 40 caractères au plus.": "Role label: 40 characters at most.",
   "50 personnes au plus dans le staff.": "50 people at most in the staff."
  },
  "motifs": [

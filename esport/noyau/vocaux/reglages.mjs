@@ -21,7 +21,33 @@ export const LIMITES_VOCAUX = Object.freeze({ hubs: 10, roles: 20, amis: 25, pla
 export const MODELE_DEFAUT = 'Salon de {pseudo}';
 export const MODELE_TOURNOI_DEFAUT = '{tag} — {nom}';
 /** Salon du staff dans un hub d'événement. */
-export const MODELE_STAFF_DEFAUT = 'Staff — {pseudo}';
+export const MODELE_STAFF_DEFAUT = '{role} — {pseudo}';
+/** Ancien modèle par défaut (avant {role}) : relu comme le nouveau. */
+const MODELE_STAFF_ANCIEN = 'Staff — {pseudo}';
+const LIBELLE_MAX = 40;
+
+/** Libellés courts de rôles { roleId: libellé } (salon du staff : `{role}`). */
+function etiquettes(v, valider = false) {
+  if (v === undefined || v === null) return {};
+  if (typeof v !== 'object' || Array.isArray(v)) {
+    if (valider) throw echec(400, 'vocaux-etiquettes', 'Libellés des rôles illisibles.');
+    return {};
+  }
+  const out = {};
+  for (const [k, x] of Object.entries(v)) {
+    if (!ID.test(k) || typeof x !== 'string') {
+      if (valider) throw echec(400, 'vocaux-etiquettes', 'Libellés des rôles illisibles.');
+      continue;
+    }
+    const s = x.replace(/\s+/g, ' ').trim();
+    if (s.length > LIBELLE_MAX) {
+      if (valider) throw echec(400, 'vocaux-etiquettes', 'Libellé d’un rôle : 40 caractères au plus.');
+      continue;
+    }
+    if (s) out[k] = s;
+  }
+  return out;
+}
 
 export const VOCAUX_DEFAUT = Object.freeze({
   actif: false,
@@ -76,7 +102,9 @@ export function hubPropre(h) {
     // d'événement, non pour un hub ordinaire (qui demande alors des « rôles qui peuvent utiliser ce hub »).
     masquerHub: typeof h.masquerHub === 'boolean' ? h.masquerHub : Boolean(h.tournoiId),
     rolesHub: Array.isArray(h.rolesHub) ? h.rolesHub.filter(x => ID.test(String(x))) : [],
-    modeleStaff: typeof h.modeleStaff === 'string' && h.modeleStaff.trim() ? h.modeleStaff : MODELE_STAFF_DEFAUT,
+    modeleStaff: typeof h.modeleStaff === 'string' && h.modeleStaff.trim() && h.modeleStaff !== MODELE_STAFF_ANCIEN ? h.modeleStaff : MODELE_STAFF_DEFAUT,
+    // Libellés courts des rôles autorisés en plus (salon du staff : `{role}`) ; absent : dérivé du nom du rôle.
+    etiquettes: etiquettes(h.etiquettes),
   };
 }
 
@@ -88,6 +116,7 @@ export async function lireVocaux(base) {
   const s = { ...VOCAUX_DEFAUT, ...v };
   s.hubs = (Array.isArray(s.hubs) ? s.hubs : []).filter(h => h && ID.test(String(h.id))).map(hubPropre);
   s.rolesStaff = Array.isArray(s.rolesStaff) ? s.rolesStaff.filter(x => ID.test(String(x))) : [];
+  s.etiquettesStaff = etiquettes(s.etiquettesStaff);
   if (!MODES_PROPRIETAIRE.includes(s.quandProprietairePart)) s.quandProprietairePart = 'transferer';
   return s;
 }
@@ -131,6 +160,7 @@ function validerHub(h, i) {
     masquerHub: typeof h.masquerHub === 'boolean' ? h.masquerHub : Boolean(tournoiId),
     rolesHub: tournoiId ? [] : ids(h.rolesHub, LIMITES_VOCAUX.roles, 'vocaux-roles-hub'),
     modeleStaff: modeleStaff(h.modeleStaff),
+    etiquettes: etiquettes(h.etiquettes, true),
   });
 }
 
@@ -145,6 +175,8 @@ export function validerVocaux(c, actuel) {
     if (new Set(s.hubs.map(h => h.id)).size !== s.hubs.length) throw echec(400, 'vocaux-hub', 'Le même salon est choisi pour deux hubs.');
   }
   if (c.rolesStaff !== undefined) s.rolesStaff = ids(c.rolesStaff, LIMITES_VOCAUX.roles, 'vocaux-staff');
+  // Libellés courts des rôles du staff (salon du staff d'un hub d'événement : `{role}`).
+  if (c.etiquettesStaff !== undefined) s.etiquettesStaff = etiquettes(c.etiquettesStaff, true);
   s.delaiSuppressionS = entier(c.delaiSuppressionS, LIMITES_VOCAUX.delaiMinS, LIMITES_VOCAUX.delaiMaxS, 'vocaux-delai', s.delaiSuppressionS);
   s.maxParMembre = entier(c.maxParMembre, 1, LIMITES_VOCAUX.parMembreMax, 'vocaux-par-membre', s.maxParMembre);
   if (c.quandProprietairePart !== undefined) {
@@ -166,10 +198,13 @@ export function validerCommandesVocaux(c) {
   return s;
 }
 
-/** Nom d'un salon créé : modèle et variables ({pseudo} ; {tag}, {nom} pour un salon d'équipe), 100 caractères au plus. */
+/**
+ * Nom d'un salon créé : modèle et variables ({pseudo} ; {tag}, {nom} pour un salon d'équipe ; {role} pour le salon du
+ * staff d'un hub d'événement), 100 caractères au plus.
+ */
 export function nomSalon(modele, vars) {
-  const v = { pseudo: '', tag: '', nom: '', ...vars };
-  const brut = String(modele || MODELE_DEFAUT).replace(/\{(pseudo|tag|nom)\}/g, (_, k) => String(v[k] ?? ''));
+  const v = { pseudo: '', tag: '', nom: '', role: '', ...vars };
+  const brut = String(modele || MODELE_DEFAUT).replace(/\{(pseudo|tag|nom|role)\}/g, (_, k) => String(v[k] ?? ''));
   return nettoyerNom(brut) || nettoyerNom(MODELE_DEFAUT.replace('{pseudo}', v.pseudo)) || 'Salon';
 }
 

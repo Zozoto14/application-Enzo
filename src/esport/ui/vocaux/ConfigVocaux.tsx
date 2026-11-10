@@ -24,6 +24,7 @@ import { Badge, ESP, LARGEUR_CONTENU, Squelette, attenue, texte, type Ton } from
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import type { ContexteBot } from '../bot/sections';
 import { OptionsHub } from './OptionsHub';
+import { LibellesRoles } from './LibellesRoles';
 import { SelecteurRepliable, optionsRoles, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -225,6 +226,8 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
         <Intertitre theme={theme}>{trVc('staff')}</Intertitre>
         <Text style={attenue(theme)}>{trVc('staff_aide')}</Text>
         <ChoixMultiple theme={theme} libelle={trVc('staff')} valeurs={r.rolesStaff} options={roles} onChanger={rolesStaff => setR({ ...r, rolesStaff })} max={conf.choix.limites.roles} testID="esport-vc-staff" />
+        <LibellesRoles theme={theme} ids={r.rolesStaff} noms={roles} valeurs={r.etiquettesStaff ?? {}} onChanger={etiquettesStaff => setR({ ...r, etiquettesStaff })} testID="esport-vc-staff-libelles" />
+        {r.rolesStaff.length ? <Text style={attenue(theme)}>{trVc('libelles_staff_aide')}</Text> : null}
         <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
           <Champ theme={theme} libelle={trVc('delai')} valeur={String(r.delaiSuppressionS)} onChanger={v => setR({ ...r, delaiSuppressionS: entier(v) })} maxLength={3} clavier="number-pad" testID="esport-vc-delai" style={{ flexGrow: 1, flexBasis: 200, minWidth: 0 }} />
           <Champ theme={theme} libelle={trVc('par_membre')} valeur={String(r.maxParMembre)} onChanger={v => setR({ ...r, maxParMembre: entier(v) })} maxLength={1} clavier="number-pad" testID="esport-vc-par-membre" style={{ flexGrow: 1, flexBasis: 200, minWidth: 0 }} />

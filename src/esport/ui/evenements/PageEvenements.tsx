@@ -24,6 +24,7 @@ import { formaterDate, langueCourante } from '../../i18n';
 import { trEv, type CleEv } from '../../i18n/evenements';
 import {
   apiEvenements,
+  type StaffRoleSup,
   type ChoixEvenements,
   type Evenement,
   type FicheEvenement,
@@ -53,9 +54,9 @@ import { EquipesEvenement } from './EquipesEvenement';
 import { StaffEvenement } from './StaffEvenement';
 import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
+import { RolesStaffSup } from './RolesStaffSup';
 import { PositionRoles } from './PositionRoles';
 import { ChampDate } from '../../../ui/dates';
-import { optionsRoles } from '../../../ui/selecteurs/SelecteurRepliable';
 
 const AUCUN = '-';
 const TON: Record<StatutEvenement, Ton> = {
@@ -81,7 +82,7 @@ type Formulaire = {
   categorieTicketId: string | null;
   categoriesTickets: string[];
   staffModele: string;
-  staffRolesSup: string[];
+  staffRolesSup: StaffRoleSup[];
   rolesAuto: boolean;
   modeleRole: string;
   couleur: string;
@@ -120,7 +121,7 @@ const saisieDe = (f: Formulaire): SaisieEvenement => ({
   categoriesTickets: f.categoriesTickets,
   discord: {
     staffModele: f.staffModele,
-    staffRolesSup: f.staffRolesSup,
+    staffRolesSup: f.staffRolesSup.map(e => ({ id: e.id, label: e.label, supprimerFin: e.supprimerFin, ...(e.cree ? { membres: e.membres } : {}) })),
     rolesAuto: f.rolesAuto,
     modeleRole: f.modeleRole,
     couleur: f.couleur || null,
@@ -139,6 +140,8 @@ function Editeur({
   roles,
   onLireRoles,
   lectureRoles,
+  onCreerRole,
+  creationRole,
 }: {
   theme: ThemeHub;
   f: Formulaire;
@@ -148,6 +151,9 @@ function Editeur({
   roles: RolesServeur | undefined;
   onLireRoles(): void;
   lectureRoles: boolean;
+  /** « Créer un rôle staff » (fiche existante). */
+  onCreerRole?(c: { nom: string; couleur: string | null; label: string; membres: string[] }): void;
+  creationRole?: boolean;
 }) {
   const nomCategorie = (c: { nom: { fr: string; en: string } }) =>
     (langueCourante() === 'fr' ? c.nom.fr : c.nom.en) || c.nom.fr;
@@ -306,23 +312,8 @@ function Editeur({
       />
       <Text style={attenue(theme)}>{trEv('suppression_aide')}</Text>
       <Champ theme={theme} libelle={trEv('staff.modele')} valeur={f.staffModele} onChanger={staffModele => setF({ ...f, staffModele })} maxLength={90} testID="esport-ev-staff-modele" />
-      {/* Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés). */}
-      {roles?.roles.length ? (
-        <ChoixMultiple
-          theme={theme}
-          libelle={trEv('staff.roles_sup')}
-          valeurs={f.staffRolesSup}
-          options={optionsRoles(roles.roles.filter(r => !r.gere && !r.bot && r.id !== fiche?.evenement.discord.staffRoleId))}
-          onChanger={staffRolesSup => setF({ ...f, staffRolesSup })}
-          max={20}
-          testID="esport-ev-staff-roles-sup"
-        />
-      ) : (
-        <View style={{ alignSelf: 'flex-start' }}>
-          <BoutonHub theme={theme} titre={trEv('staff.roles_sup_lire')} onPress={onLireRoles} desactive={lectureRoles} testID="esport-ev-staff-roles-sup-lire" />
-        </View>
-      )}
-      <Text style={attenue(theme)}>{trEv('staff.roles_sup_aide')}</Text>
+      {/* Rôles staff supplémentaires : rôles existants (supprimés à la fin, sauf choix contraire) ou créés ici. */}
+      <RolesStaffSup theme={theme} valeur={f.staffRolesSup} onChanger={staffRolesSup => setF({ ...f, staffRolesSup })} roles={roles} onLireRoles={onLireRoles} lectureRoles={lectureRoles} fiche={fiche} nomEvenement={f.nom} onCreer={onCreerRole} creation={creationRole} />
     </View>
   );
 }
@@ -552,6 +543,13 @@ export function PageEvenements({
               roles={roles}
               onLireRoles={lireRoles}
               lectureRoles={enCours === 'roles-serveur'}
+              creationRole={enCours === 'creer-role'}
+              onCreerRole={c =>
+                void agir('creer-role', async () => {
+                  recevoir(await api.creerRoleStaff(fiche.evenement.id, c));
+                  return trEv('staff.sup_cree_ok');
+                })
+              }
             />
             <View style={styles.ligne}>
               <BoutonHub
@@ -595,6 +593,10 @@ export function PageEvenements({
               <Avis theme={theme} genre="critique" texte={trEv('supprimer_discord')} testID="esport-ev-supprimer-message" />
               {fiche.suppression?.hubs ? <Text style={attenue(theme)} testID="esport-ev-supprimer-hubs">{trEv('supprimer_hubs', { n: String(fiche.suppression.hubs) })}</Text> : null}
               {fiche.suppression?.desactiveVocaux ? <Avis theme={theme} genre="alerte" texte={trEv('supprimer_desactive')} testID="esport-ev-supprimer-desactive" /> : null}
+              {/* Exactement les rôles Discord que la suppression supprimera. */}
+              <Text style={attenue(theme)} testID="esport-ev-supprimer-roles">
+                {fiche.suppression?.roles?.length ? trEv('supprimer_roles_liste', { liste: fiche.suppression.roles.map(r => r.nom).join(', ') }) : trEv('supprimer_roles_aucun')}
+              </Text>
               <View style={styles.ligne}>
                 <BoutonHub
                   theme={theme}

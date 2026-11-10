@@ -1167,7 +1167,7 @@ test('application : hubs d’événement créés seulement dans la fiche de l’
   });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   // L'événement et le verrouillage sont imposés ; modèle par défaut des équipes.
-  assert.deepEqual(r.corps.hubs, [{ id: HUB_T, nom: 'Vocal équipe', categorieId: CAT, modeleNom: '{tag} — {nom}', limite: 5, verrouille: true, tournoiId: k.id, rolesAutorises: [CASTER], placerSousHub: true, visibleNonJoignable: false, masquerHub: true, rolesHub: [], modeleStaff: 'Staff — {pseudo}' }]);
+  assert.deepEqual(r.corps.hubs, [{ id: HUB_T, nom: 'Vocal équipe', categorieId: CAT, modeleNom: '{tag} — {nom}', limite: 5, verrouille: true, tournoiId: k.id, rolesAutorises: [CASTER], placerSousHub: true, visibleNonJoignable: false, masquerHub: true, rolesHub: [], modeleStaff: '{role} — {pseudo}', etiquettes: {} }]);
   // Même stockage : les réglages des salons vocaux le montrent.
   const c = await k.api('/vocaux/config');
   assert.deepEqual(c.corps.reglages.hubs.map(h => [h.id, h.tournoiId]), [[HUB_T, k.id]]);
@@ -1335,7 +1335,7 @@ test('suppression d’un événement : ses hubs vocaux retirés (même stockage)
   k.discord.etat.salons.set('710000000000000099', { id: '710000000000000099', type: 2, name: 'LZ0 — Ligne Zéro', guild_id: k.GUILD, permission_overwrites: [] });
   await k.b.base.executer("INSERT INTO vocaux_salons (salon_id, guild_id, hub_id, proprietaire_id, tournoi_id, equipe_id, cree_le, maj_le) VALUES ('710000000000000099', ?, ?, ?, ?, ?, ?, ?)", [k.GUILD, HUB_T, J1, k.id, eq.id, t, t]);
   // La fiche annonce ce que la suppression emporte (un hub ; les salons vocaux restent actifs : un autre hub).
-  assert.deepEqual((await k.api(k.chemin)).corps.suppression, { hubs: 1, desactiveVocaux: false });
+  assert.deepEqual((await k.api(k.chemin)).corps.suppression, { hubs: 1, desactiveVocaux: false, roles: [{ id: staff, nom: 'Staff The Nuke End', quoi: 'staff' }, { id: eq.roleId, nom: 'LZ0 Ligne Zéro', quoi: 'equipe' }] });
   const d = await k.api(k.chemin, undefined, { methode: 'DELETE' });
   assert.equal(d.statut, 200, JSON.stringify(d.corps));
   assert.deepEqual([d.corps.hubs, d.corps.vocauxDesactives, d.corps.nettoyage.salons, d.corps.nettoyage.roles, d.corps.nettoyage.echecs], [1, false, 1, 2, []]);
@@ -1355,7 +1355,7 @@ test('suppression d’un événement : ses hubs vocaux retirés (même stockage)
   await k.api(`/evenements/${e2}/vocaux`, undefined, { methode: 'POST', corps: { id: HUB_T } });
   await k.api('/vocaux/config', undefined, { methode: 'PUT', corps: { actif: true } });
   const eq2 = (await k.api(`/evenements/${e2}/equipes`, undefined, { methode: 'POST', corps: { nom: 'Bravo', tag: 'BRV' } })).corps.equipes[0];
-  assert.deepEqual((await k.api(`/evenements/${e2}`)).corps.suppression, { hubs: 1, desactiveVocaux: true });
+  assert.deepEqual((await k.api(`/evenements/${e2}`)).corps.suppression.desactiveVocaux, true);
   k.discord.programme.push({ statut: 403, corps: { code: 50013, message: 'Missing Permissions' }, si: (meth, ch) => meth === 'DELETE' && ch === `/guilds/${k.GUILD}/roles/${eq2.roleId}` });
   const d2 = await k.api(`/evenements/${e2}`, undefined, { methode: 'DELETE' });
   assert.equal(d2.statut, 200, JSON.stringify(d2.corps));
@@ -1369,7 +1369,12 @@ test('hub de l’événement : le staff (rôle staff, rôles staff supplémentai
   const k = await monterHub();
   const STAFF_EVT = '720000000000000500';
   const SUP = '720000000000000501';
-  await k.base.executer("UPDATE club_evenements SET staff_role_id = ?, staff_role_nom = 'Staff The Nuke End', staff_roles_sup = ? WHERE id = ?", [STAFF_EVT, JSON.stringify([SUP]), TOURNOI]);
+  await k.base.executer("UPDATE club_evenements SET staff_role_id = ?, staff_role_nom = 'Staff The Nuke End', staff_roles_sup = ? WHERE id = ?", [STAFF_EVT, JSON.stringify([{ id: SUP, nom: '⟡ Casteur The Nuke End ⟡' }]), TOURNOI]);
+  // Libellés : rôle staff supplémentaire dérivé de son nom ; rôle autorisé du hub dérivé du nom lu par la Gateway ;
+  // rôle du staff des salons vocaux : libellé saisi.
+  await k.moteur.evenement('GUILD_ROLE_CREATE', { guild_id: GUILD, role: { id: CASTER, name: 'Caster • The Nuke End' } });
+  const v = JSON.parse((await k.base.premier("SELECT valeur FROM tickets_reglages WHERE cle = 'vocaux'", [])).valeur);
+  await k.base.executer("UPDATE tickets_reglages SET valeur = ? WHERE cle = 'vocaux'", [JSON.stringify({ ...v, etiquettesStaff: { [STAFF]: 'Modo' } })]);
   const ZED = '810000000000000401';
   // Rôle staff de l'événement : salon « Staff — Zed », verrouillé sur le staff (pas sur les équipes).
   await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(ZED, HUB_T, 'Zed', [STAFF_EVT]));
@@ -1394,10 +1399,18 @@ test('hub de l’événement : le staff (rôle staff, rôles staff supplémentai
   assert.equal(creationsT(k.rest).length, 1);
   assert.deepEqual(k.rest.appels.filter(a => a.chemin === `/guilds/${GUILD}/members/${ZED}`).at(-1).corps, { channel_id: salon });
   // Rôle staff supplémentaire, rôle autorisé du hub (caster), staff des salons vocaux : leur salon aussi.
-  for (const [id, nom, role] of [['810000000000000402', 'Sup', SUP], ['810000000000000403', 'Cas', CASTER], ['810000000000000404', 'Mod', STAFF]]) {
-    await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(id, HUB_T, nom, [role]));
+  for (const [id, nom, roles, attendu] of [
+    ['810000000000000402', 'Sup', [SUP], 'Casteur — Sup'],
+    ['810000000000000403', 'Cas', [CASTER], 'Caster — Cas'],
+    ['810000000000000404', 'Mod', [STAFF], 'Modo — Mod'],
+    // Plusieurs rôles : rôles staff supplémentaires, puis rôle staff, puis rôles autorisés, puis staff des vocaux.
+    ['810000000000000405', 'Multi', [STAFF, CASTER, STAFF_EVT, SUP], 'Casteur — Multi'],
+    ['810000000000000406', 'Duo', [STAFF, CASTER, STAFF_EVT], 'Staff — Duo'],
+    ['810000000000000407', 'Trio', [STAFF, CASTER], 'Caster — Trio'],
+  ]) {
+    await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(id, HUB_T, nom, roles));
     await k.moteur.attendre();
-    assert.equal(creationsT(k.rest).at(-1).corps.name, `Staff — ${nom}`, nom);
+    assert.equal(creationsT(k.rest).at(-1).corps.name, attendu, nom);
   }
   // Rôle d'une équipe ET du staff : l'équipe passe d'abord.
   await k.moteur.evenement('VOICE_STATE_UPDATE', vsT(J1, HUB_T, 'Kira', [R1, STAFF_EVT]));

@@ -85,12 +85,16 @@ test('hubs : ajout, salon, catégorie, modèle, limite, verrouillage ; staff, d�
   await fireEvent(screen.getByTestId('esport-vc-hub-0-verrouille'), 'valueChange', true);
   await fireEvent(screen.getByTestId('esport-vc-actif'), 'valueChange', true);
   await choisirDans('esport-vc-staff', '720');
+  // Libellé du rôle du staff dans le nom du salon du staff d'un hub d'événement (exemple : nom du rôle).
+  expect(screen.getByTestId('esport-vc-staff-libelles-720').props.placeholder).toBe('Staff');
+  await fireEvent.changeText(screen.getByTestId('esport-vc-staff-libelles-720'), 'Modo');
   await fireEvent.changeText(screen.getByTestId('esport-vc-delai'), '30');
   await fireEvent.press(screen.getByTestId('esport-vc-proprietaire-garder'));
   await choisirDans('esport-vc-journaux', '713');
   await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
   await screen.findByText('Enregistré.');
   const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as Record<string, unknown>;
+  expect(put).toMatchObject({ etiquettesStaff: { 720: 'Modo' } });
   expect(put).toMatchObject({ actif: true, rolesStaff: ['720'], delaiSuppressionS: 30, quandProprietairePart: 'garder', salonJournaux: '713' });
   expect((put.hubs as unknown[])[0]).toMatchObject({ id: '751', nom: 'Créer un salon', categorieId: '750', modeleNom: 'Vocal de {pseudo}', limite: 5, verrouille: true });
 });

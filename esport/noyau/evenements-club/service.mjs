@@ -24,6 +24,15 @@ import { rest } from '../tickets/discord.mjs';
 import { lireVocaux, validerVocaux } from '../vocaux/reglages.mjs';
 import { evenement as evenementBus } from '../evenements.mjs';
 import { rendreHubs } from '../vocaux/hubs.mjs';
+import { LIMITES_SUP, idsSup, lireSup } from './staff-sup.mjs';
+
+/** Pourquoi un rôle existant ne peut pas être choisi comme rôle staff (il pourrait être supprimé à la fin). */
+const MESSAGES_INTERDIT = {
+  everyone: 'Ce rôle ne peut pas être choisi : @everyone n’est jamais supprimé.',
+  gere: 'Ce rôle ne peut pas être choisi : il est géré par une intégration ou un bot.',
+  permissions: 'Ce rôle ne peut pas être choisi : il donne Administrateur, Gérer le serveur ou Gérer les rôles (jamais supprimé par le bot).',
+  'au-dessus-du-bot': 'Ce rôle ne peut pas être choisi : il est au niveau du rôle du bot ou au-dessus.',
+};
 import { nomMembre } from '../vocaux/salons.mjs';
 import {
   LIMITES_EQUIPES,
@@ -42,6 +51,7 @@ import {
   synchroniserStaff,
   accesStaffSup,
   retirerDesCategories,
+  rolesASupprimer,
   verifierAncre,
 } from './discord.mjs';
 
@@ -151,7 +161,7 @@ const resume = l => ({
     staffModele: l.staff_modele || STAFF_MODELE_DEFAUT,
     staffRoleId: l.staff_role_id ?? null,
     staffRoleNom: l.staff_role_nom ?? null,
-    staffRolesSup: jsonOu(l.staff_roles_sup, []),
+    staffRolesSup: lireSup(l.staff_roles_sup),
   },
   categoriesTickets: jsonOu(l.categories_tickets, []),
   creeLe: l.cree_le,
@@ -377,11 +387,7 @@ export function servicesEvenements({
       const m = texte(d.staffModele, 90, 'evenement-staff-modele');
       s.staff_modele = m || STAFF_MODELE_DEFAUT;
     }
-    if (d.staffRolesSup !== undefined) {
-      // Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés).
-      if (!Array.isArray(d.staffRolesSup) || d.staffRolesSup.length > 20 || d.staffRolesSup.some(x => typeof x !== 'string' || !ID_ROLE.test(x))) throw echec(400, 'evenement-staff-roles', 'Rôles staff supplémentaires : 20 rôles Discord au plus.');
-      s.staff_roles_sup = JSON.stringify([...new Set(d.staffRolesSup)]);
-    }
+    if (d.staffRolesSup !== undefined) s.staff_roles_sup = JSON.stringify(await validerSup(d.staffRolesSup, lireSup(s.staff_roles_sup)));
     if (d.rolesAuto !== undefined) s.roles_auto = d.rolesAuto === false ? 0 : 1;
     if (d.modeleRole !== undefined) {
       const m = texte(d.modeleRole, 90, 'evenement-modele-role');
@@ -422,6 +428,47 @@ export function servicesEvenements({
       s.suppression_h = n;
     }
     return s;
+  }
+
+  /**
+   * Rôles staff supplémentaires saisis (`[{ id, label, supprimerFin, membres }]`, ou des identifiants) : un rôle
+   * existant ajouté, ou dont « Supprimer ce rôle à la fin de l'événement » s'active, est vérifié sur le serveur (il doit
+   * exister ; jamais @everyone, un rôle géré, un rôle avec Administrateur / Gérer le serveur / Gérer les rôles, ni un
+   * rôle au niveau du bot ou au-dessus). `cree`, `nom` et `couleur` d'un rôle déjà là restent ceux du serveur ; `membres`
+   * ne vaut que pour un rôle créé par l'événement.
+   */
+  async function validerSup(liste, avant) {
+    if (!Array.isArray(liste) || liste.length > LIMITES_SUP.roles) throw echec(400, 'evenement-staff-roles', 'Rôles staff supplémentaires : 20 rôles Discord au plus.');
+    const brut = liste.map(x => (typeof x === 'string' ? { id: x } : x));
+    if (brut.some(x => !x || typeof x !== 'object' || typeof x.id !== 'string' || !ID_ROLE.test(x.id))) throw echec(400, 'evenement-staff-roles', 'Rôles staff supplémentaires : 20 rôles Discord au plus.');
+    if (brut.some(x => x.label !== undefined && (typeof x.label !== 'string' || x.label.trim().length > LIMITES_SUP.label))) throw echec(400, 'evenement-staff-label', 'Libellé d’un rôle staff : 40 caractères au plus.');
+    let serveur = null;
+    const verifier = async id => {
+      if (!serveur) {
+        const c = await discordCtx();
+        if (c.erreur) throw echec(400, 'evenement-staff-roles-serveur', 'Impossible de vérifier ce rôle sur le serveur Discord (bot ou serveur à configurer).');
+        serveur = await rolesDuServeur(c);
+        if (serveur.erreur) throw echec(502, 'evenement-staff-roles-serveur', 'Impossible de vérifier ce rôle sur le serveur Discord (bot ou serveur à configurer).');
+      }
+      const r = serveur.roles.find(x => x.id === id);
+      if (!r) throw echec(400, 'evenement-staff-role-introuvable', 'Rôle introuvable sur le serveur Discord.');
+      if (r.interdit) throw echec(400, 'evenement-staff-role-interdit', MESSAGES_INTERDIT[r.interdit] ?? MESSAGES_INTERDIT.permissions);
+      return r;
+    };
+    const out = [];
+    for (const x of brut) {
+      if (out.some(e => e.id === x.id)) continue;
+      const a = avant.find(e => e.id === x.id);
+      const supprimerFin = typeof x.supprimerFin === 'boolean' ? x.supprimerFin : a ? a.supprimerFin : true;
+      const e = { id: x.id, nom: a?.nom ?? '', label: typeof x.label === 'string' ? x.label.replace(/\s+/g, ' ').trim() : a?.label ?? '', couleur: a?.couleur ?? null, supprimerFin, cree: a?.cree === true, membres: a?.membres ?? [] };
+      if (!a || (supprimerFin && !a.supprimerFin && !a.cree)) {
+        const r = await verifier(x.id);
+        e.nom = r.nom;
+      }
+      if (e.cree && x.membres !== undefined) e.membres = lireSup([{ id: x.id, membres: x.membres }])[0]?.membres ?? [];
+      out.push(e);
+    }
+    return out;
   }
 
   /** Rôle repère choisi : il doit exister et être SOUS le rôle du bot (sinon Discord refuserait de placer les rôles). */
@@ -548,8 +595,12 @@ export function servicesEvenements({
     const staffChange = supChange || evt.categories_tickets !== avant.categories_tickets || evt.staff_modele !== avant.staff_modele || evt.nom !== avant.nom;
     if (staffChange && (evt.staff_role_id || auto(evt) || supChange)) {
       const c = await discordCtx();
-      const supRetires = jsonOu(avant.staff_roles_sup, []).filter(r => !jsonOu(evt.staff_roles_sup, []).includes(r));
-      if (!c.erreur) staff = await synchroniserStaff(c, evt, { supRetires });
+      const supRetires = idsSup(avant.staff_roles_sup).filter(r => !idsSup(evt.staff_roles_sup).includes(r));
+      if (!c.erreur) {
+        staff = await synchroniserStaff(c, evt, { supRetires });
+        // Rôles créés par l'événement : membres ajoutés reçoivent le rôle, membres retirés le perdent.
+        await attribuerMembresSup(c, lireSup(avant.staff_roles_sup), lireSup(evt.staff_roles_sup));
+      }
     }
     return lire(acteur, id, discord || staff ? { discord: { erreur: null, bilan: discord, staff } } : {});
   }
@@ -623,7 +674,45 @@ export function servicesEvenements({
   async function suppressionDe(id) {
     const v = await lireVocaux(base);
     const hubs = v.hubs.filter(h => h.tournoiId === id).length;
-    return { hubs, desactiveVocaux: hubs > 0 && v.actif && hubs === v.hubs.length };
+    return { hubs, desactiveVocaux: hubs > 0 && v.actif && hubs === v.hubs.length, roles: await rolesASupprimer(base, id) };
+  }
+
+  /** Rôles créés par l'événement : donnés aux membres ajoutés, retirés aux membres retirés (au mieux). */
+  async function attribuerMembresSup(c, avant, apres) {
+    for (const e of apres.filter(x => x.cree)) {
+      const a = avant.find(x => x.id === e.id)?.membres ?? [];
+      for (const m of e.membres.filter(x => !a.includes(x))) await rest(fetchDiscord, jetonBot, 'PUT', `/guilds/${c.guildId}/members/${m}/roles/${e.id}`, undefined, { raison: 'Esport HQ : staff de l’événement' });
+      for (const m of a.filter(x => !e.membres.includes(x))) await rest(fetchDiscord, jetonBot, 'DELETE', `/guilds/${c.guildId}/members/${m}/roles/${e.id}`, undefined, { raison: 'Esport HQ : staff de l’événement' });
+    }
+  }
+
+  /**
+   * « Créer un rôle staff » (`{ nom, couleur?, label?, membres? }`) : rôle créé par le bot (sans permission, non
+   * mentionnable), placé avec le réglage « juste en dessous du rôle… » (après le rôle staff), donné aux membres choisis
+   * (Discord ID), ajouté aux rôles staff supplémentaires avec « Supprimer ce rôle à la fin de l'événement » : il
+   * appartient à l'événement et sera supprimé avec ses autres rôles. Mêmes droits que le rôle staff.
+   */
+  async function creerRoleStaff(acteur, id, corps) {
+    await exiger(acteur);
+    await ligne(id);
+    const nom = texte(corps?.nom, LIMITES_SUP.nom, 'evenement-staff-role-nom', { requis: true });
+    const label = texte(corps?.label ?? '', LIMITES_SUP.label, 'evenement-staff-label');
+    const couleur = corps?.couleur ? String(corps.couleur) : null;
+    if (couleur && !/^#[0-9a-fA-F]{6}$/.test(couleur)) throw echec(400, 'couleur', 'Couleur : #rrggbb.');
+    const membres = Array.isArray(corps?.membres) ? corps.membres.map(String) : [];
+    if (membres.length > LIMITES_SUP.membres || membres.some(m => !ID.test(m))) throw echec(400, 'equipe-discord', 'Discord ID invalide (17 à 20 chiffres).');
+    const avant = lireSup((await ligne(id)).staff_roles_sup);
+    if (avant.length >= LIMITES_SUP.roles) throw echec(400, 'evenement-staff-roles', 'Rôles staff supplémentaires : 20 rôles Discord au plus.');
+    const c = await exigerDiscord();
+    const r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${c.guildId}/roles`, { name: nom, permissions: '0', mentionable: false, hoist: false, ...(couleur ? { color: Number.parseInt(couleur.slice(1), 16) } : {}) }, { raison: 'Esport HQ : rôle staff de l’événement' });
+    if (!r.ok || !r.corps?.id) throw echec(502, 'evenement-staff-role-creation', 'Discord a refusé de créer le rôle (permission « Gérer les rôles » du bot ?).');
+    const entree = { id: String(r.corps.id), nom, label, couleur: couleur ? couleur.toLowerCase() : null, supprimerFin: true, cree: true, membres: [...new Set(membres)] };
+    await base.executer('UPDATE club_evenements SET staff_roles_sup = ?, roles_crees_le = COALESCE(roles_crees_le, ?), maj_le = ? WHERE id = ?', [JSON.stringify([...avant, entree]), iso(maintenant()), iso(maintenant()), id]);
+    await attribuerMembresSup(c, [], [entree]);
+    const evt = await ligne(id);
+    const staff = await synchroniserStaff(c, evt);
+    if (evt.role_ancre_id) await placerRoles(c, evt);
+    return lire(acteur, id, { discord: { erreur: null, staff } });
   }
 
   /**
@@ -1050,6 +1139,7 @@ export function servicesEvenements({
     retirerStaff,
     supprimerRoles,
     rolesServeur,
+    creerRoleStaff,
     exiger,
   };
 }
@@ -1062,6 +1152,7 @@ export function servicesEvenements({
  *   POST                /evenements/:id/equipes          { equipes: [...] } ajout (rôles automatiques)
  *   PATCH|DELETE        /evenements/:id/equipes/:e       modifier ; retirer (rôle et salon supprimés)
  *   GET                 /evenements/staff-candidats?q=   comptes de l'app (Discord lié) et membres du serveur
+ *   POST                /evenements/:id/staff-roles      créer un rôle staff (supprimé à la fin de l'événement)
  *   POST|DELETE         /evenements/:id/staff[/:s]       staff de l'événement (rôle staff donné / retiré)
  *   GET|POST            /evenements/:id/vocaux           hubs vocaux de l'événement ; ajouter (+ vocaux.configurer)
  *   PATCH|DELETE        /evenements/:id/vocaux/:hub      modifier ; retirer un hub (+ vocaux.configurer)
@@ -1117,6 +1208,10 @@ export async function routesEvenements({
       return ev.modifierEquipe(acteur, id, x, await lireCorps());
     if (p.length === 3 && m === 'DELETE')
       return ev.supprimerEquipe(acteur, id, x);
+  }
+  if (p.length === 2 && quoi === 'staff-roles' && m === 'POST') {
+    await limite('tickets_discord', acteur.compte);
+    return ev.creerRoleStaff(acteur, id, await lireCorps());
   }
   if (quoi === 'staff') {
     if (p.length === 2 && m === 'POST') return ev.ajouterStaff(acteur, id, await lireCorps());

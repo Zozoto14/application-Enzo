@@ -24,8 +24,30 @@ export interface DiscordEvenement {
   staffRoleId: string | null;
   /** Nom du rôle staff créé (tel que le bot l'a nommé). */
   staffRoleNom?: string | null;
-  /** Rôles Discord existants déclarés staff de l'événement (mêmes droits que le rôle staff ; jamais créés ni supprimés). */
-  staffRolesSup?: string[];
+  /** Rôles staff supplémentaires : mêmes droits que le rôle staff (docs/esport/evenements.md). */
+  staffRolesSup?: StaffRoleSup[];
+}
+
+/** Rôle staff supplémentaire d'un événement. */
+export interface StaffRoleSup {
+  id: string;
+  nom: string;
+  /** Libellé court du salon du staff (`{role}`) ; vide : dérivé du nom. */
+  label: string;
+  couleur: string | null;
+  /** Supprimé de Discord à la fin ou à la suppression de l'événement. */
+  supprimerFin: boolean;
+  /** Créé par l'événement (« Créer un rôle staff »). */
+  cree: boolean;
+  /** Rôle créé : Discord ID des personnes qui le reçoivent. */
+  membres: string[];
+}
+
+/** Rôle que la fin de l'événement supprimera de Discord. */
+export interface RoleASupprimer {
+  id: string;
+  nom: string;
+  quoi: 'staff' | 'staff-cree' | 'staff-existant' | 'equipe';
 }
 
 export interface Evenement {
@@ -144,7 +166,7 @@ export interface FicheEvenement {
   };
   nettoyage?: { roles: number; salons: number; echecs: unknown[] };
   /** Ce que la suppression emporte : hubs vocaux de l'événement ; salons vocaux désactivés faute d'autre hub. */
-  suppression?: { hubs: number; desactiveVocaux: boolean };
+  suppression?: { hubs: number; desactiveVocaux: boolean; /** Rôles supprimés de Discord avec l'événement. */ roles?: RoleASupprimer[] };
 }
 
 export interface PropositionEquipe {
@@ -174,6 +196,8 @@ export interface RoleServeur {
   bot: boolean;
   /** Sous le rôle du bot : peut servir de repère. */
   utilisable: boolean;
+  /** Pourquoi le rôle ne peut pas être choisi comme rôle staff (everyone, gere, permissions, au-dessus-du-bot), ou null. */
+  interdit?: string | null;
 }
 
 export interface RolesServeur {
@@ -204,9 +228,9 @@ export type SaisieEvenement = Partial<
   discord?: Partial<
     Pick<
       DiscordEvenement,
-      'rolesAuto' | 'modeleRole' | 'couleur' | 'roleAncreId' | 'suppressionH' | 'staffModele' | 'staffRolesSup'
+      'rolesAuto' | 'modeleRole' | 'couleur' | 'roleAncreId' | 'suppressionH' | 'staffModele'
     >
-  >;
+  > & { staffRolesSup?: Array<Pick<StaffRoleSup, 'id'> & Partial<Pick<StaffRoleSup, 'label' | 'supprimerFin' | 'membres'>>> };
 };
 
 /** Vocaux de l'événement (GET /evenements/:id/vocaux) : ses hubs, dans les réglages des salons vocaux. */
@@ -224,7 +248,7 @@ export interface VocauxEvenement {
 }
 
 /** Champs d'un hub d'événement saisis dans la fiche (l'événement et le verrouillage sont imposés par le serveur). */
-export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises' | 'placerSousHub' | 'visibleNonJoignable' | 'masquerHub' | 'modeleStaff'>>;
+export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises' | 'placerSousHub' | 'visibleNonJoignable' | 'masquerHub' | 'modeleStaff' | 'etiquettes'>>;
 
 export function apiEvenements(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) =>
@@ -266,6 +290,7 @@ export function apiEvenements(client: ClientEsport) {
     rolesServeur: () => r<RolesServeur>('/evenements/roles-serveur'),
     candidatsStaff: (q: string) => r<{ candidats: CandidatStaff[] }>(`/evenements/staff-candidats?q=${encodeURIComponent(q)}`),
     ajouterStaff: (id: string, c: { discordId: string; nom?: string }) => r<FicheEvenement>(`${un(id)}/staff`, 'POST', c),
+    creerRoleStaff: (id: string, c: { nom: string; couleur?: string | null; label?: string; membres?: string[] }) => r<FicheEvenement>(`${un(id)}/staff-roles`, 'POST', c),
     retirerStaff: (id: string, staffId: string) => r<FicheEvenement>(`${un(id)}/staff/${encodeURIComponent(staffId)}`, 'DELETE'),
     vocaux: (id: string) => r<VocauxEvenement>(`${un(id)}/vocaux`),
     ajouterHub: (id: string, c: SaisieHubEvenement) => r<VocauxEvenement>(`${un(id)}/vocaux`, 'POST', c),

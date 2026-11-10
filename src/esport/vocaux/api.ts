@@ -25,8 +25,10 @@ export interface Hub {
   masquerHub?: boolean;
   /** Hub ordinaire : rôles qui peuvent l'utiliser (exigés pour le cacher). */
   rolesHub?: string[];
-  /** Hub d'événement : modèle du nom du salon du staff ({pseudo}). */
+  /** Hub d'événement : modèle du nom du salon du staff ({role}, {pseudo}). */
   modeleStaff?: string;
+  /** Hub d'événement : libellés courts des rôles autorisés en plus ({role} du salon du staff). */
+  etiquettes?: Record<string, string>;
 }
 
 export interface ReglagesVocaux {
@@ -37,6 +39,8 @@ export interface ReglagesVocaux {
   maxParMembre: number;
   quandProprietairePart: ModeProprietaire;
   salonJournaux: string | null;
+  /** Libellés courts des rôles du staff ({role} du salon du staff d'un hub d'événement). */
+  etiquettesStaff?: Record<string, string>;
 }
 
 export type CommandesVocaux = Record<string, { actif: boolean; roles: string[] }>;
