@@ -132,49 +132,34 @@ node esport/outils/discord-commandes.mjs --adresse https://esport.appdashboard.f
 
 (avec le chemin de Node de votre compte, [bot-discord.md](bot-discord.md#6-enregistrer-les-commandes)).
 
-## Tournois : rôles des équipes
+## Rôles des équipes d'un événement
 
-Pour un tournoi organisé par le club (ex. **The Nuke End**, The Finals 3v3v3v3), la fiche du tournoi (module
-**Tournois**, [tournois-resultats.md](tournois-resultats.md)) a une carte **Équipes et rôles Discord**
-(`tournois.gerer` ; créer ou supprimer les rôles demande en plus `vocaux.configurer`). Migration :
-`esport/migrations/0063_tournoi_equipes_discord.sql`. Code : `esport/noyau/vocaux/tournoi.mjs`.
+Les équipes d'un événement organisé par le club (ex. **The Nuke End**) et leurs rôles Discord (un par équipe, créés,
+placés sous un rôle choisi et donnés automatiquement, supprimés à la fin) se gèrent dans **Administration ›
+Événements** (`evenements.gerer`) : voir [evenements.md](evenements.md). Les teams ne s'en occupent plus (leur module
+Tournois sert aux tournois extérieurs).
 
-1. **Équipes participantes** : nom, TAG (lettres et chiffres, 6 au plus, unique dans le tournoi) et membres (joueur,
-   coach, remplaçant ; Discord ID, nom, Embark ID), 64 équipes et 10 membres au plus.
-2. **Importer depuis les tickets** (catégorie choisie dans les réglages, ex. « Inscription The Nuke End » ; il faut
-   voir ses tickets) : chaque ticket donne une proposition lue dans les réponses du formulaire — nom, TAG, une ligne
-   par membre « Discord ID — Embark ID » (mention `<@…>`, identifiant seul, `@pseudo` ou Embark ID `nom#1234`, dans
-   n'importe quel ordre). Un `@pseudo` sans identifiant est cherché parmi les membres du serveur (nom **exact**) ; sinon
-   la ligne est signalée « sans Discord ID », à corriger. Les membres absents du serveur et les équipes déjà importées
-   (même ticket ou même TAG) sont signalés ; on coche celles à ajouter. Les réponses sont lues **dans l'app**, jamais
-   envoyées à une IA.
-3. **Créer les rôles Discord** : un rôle par équipe, nommé d'après le modèle (`{tag} {nom}` par défaut), **non
-   mentionnable**, sans permission, couleur facultative ; donné aux membres présents. Bilan : rôles créés,
-   attributions, **pas trouvés sur le serveur**, **sans Discord ID**, refus. Rejouable : seuls les rôles et
-   attributions manquants sont faits (un rôle supprimé à la main est recréé).
-4. **Fin du tournoi** : bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par
-   le cron (5 min) dès que le tournoi est **Terminé** ou **Annulé**, ou **N heures après sa date de fin** (réglage, 24
-   par défaut, 0 : jamais par la date).
+### Hub vocal d'un événement
 
-### Hub vocal du tournoi
+Dans les réglages des salons vocaux, **chaque hub** a l'option **Hub d'événement** (toujours visible). Activée, on
+choisit l'**événement** lié (ex. « Vocal équipe The Nuke End » lié à The Nuke End) ; s'il n'existe encore aucun
+événement, un message l'explique avec un bouton **Créer un événement** qui mène à Administration › Événements (pour qui
+a `evenements.gerer`). Les événements proposés sont ceux qui ne sont ni terminés ni annulés (plus ceux déjà liés). Un
+hub d'événement sans événement choisi n'est pas enregistré. Les hubs sont **repliables** : une ligne de résumé (salon,
+type normal / événement, verrouillé), un clic pour déplier ses réglages. Clé `tournoiId` du hub et colonne
+`vocaux_salons.tournoi_id` : l'identifiant de l'événement. Code : `esport/noyau/vocaux/tournoi.mjs`.
 
-Dans les réglages des salons vocaux, un hub peut être **lié à un tournoi** (ex. « Vocal équipe The Nuke End ») ; les
-tournois proposés sont ceux qui ont des équipes notées.
-
-- Seuls les membres qui ont le **rôle d'une équipe** du tournoi peuvent s'en servir : les autres sont **déconnectés**
-  du hub et reçoivent un **MP** qui explique pourquoi.
+- Seuls les membres qui ont le **rôle d'une équipe** de l'événement peuvent s'en servir : les autres sont
+  **déconnectés** du hub et reçoivent un **MP** qui explique pourquoi.
 - Le salon créé porte le nom de l'équipe (`{tag} — {nom}` par défaut) et reste **verrouillé sur son rôle** :
   « Se connecter » refusé à @everyone, accordé au rôle de l'équipe, aux rôles du staff et aux **rôles autorisés** du hub
   (casters, admins). Les joueurs peuvent expulser, limiter les places, transférer ; ils ne peuvent **ni renommer ni
   déverrouiller** (boutons grisés, refus de `/voc`), et il n'y a pas de liste d'amis.
 - **Un salon par équipe** à la fois : un coéquipier qui passe par le hub est déplacé dans le salon existant.
-- Le salon est supprimé une fois vide (comme les autres), et à la **fin du tournoi** avec les rôles.
-
-**Hiérarchie Discord** : les rôles créés naissent tout en bas ; le rôle « Esport HQ » doit être **au-dessus** d'eux
-(Paramètres du serveur › Rôles). Si Discord refuse (code 50013), l'écran explique quoi faire.
+- Le salon est supprimé une fois vide (comme les autres), quand l'équipe est retirée de l'événement, et à la **fin de
+  l'événement** avec les rôles.
 
 ## Données
 
-`vocaux_salons`, `tournoi_discord`, `tournoi_equipes` et `tournoi_equipe_membres` suivent l'export de la base
-(Administration) ; RGPD (effacement par Discord ID) : le nom affiché du propriétaire d'un salon est effacé, la personne
-est retirée des équipes des tournois. Aucun contenu de conversation n'est lu ni gardé.
+`vocaux_salons` suit l'export de la base (Administration) ; RGPD (effacement par Discord ID) : le nom affiché du
+propriétaire d'un salon est effacé (les équipes des événements : [evenements.md](evenements.md#données)). Aucun contenu de conversation n'est lu ni gardé.

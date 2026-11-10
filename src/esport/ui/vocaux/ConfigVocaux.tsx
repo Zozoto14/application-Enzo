@@ -2,13 +2,15 @@
  * Administration › Bot Esport HQ › Fonctionnalités › Salons vocaux temporaires (Fondateur et permission
  * vocaux.configurer ; carte du registre src/esport/ui/bot/sections.ts) : salons vocaux temporaires d'Esport HQ
  * (« rejoindre pour créer », docs/esport/vocaux.md). État de la connexion (les salons exigent la connexion EN DIRECT),
- * permissions du bot, hubs (salon, catégorie, modèle du nom, limite, verrouillage), rôles du staff, délai de
+ * permissions du bot, hubs repliables (ligne de résumé : salon, type normal / événement, verrouillé ; dépliés : salon,
+ * catégorie, modèle du nom, limite, verrouillage, « Hub d'événement » toujours proposé : événement du club lié, ou lien
+ * vers Administration › Événements pour en créer un), rôles du staff, délai de
  * suppression, salons par membre, départ du propriétaire, journaux, et les salons temporaires ouverts. Tout est validé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { Avis, BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
@@ -32,20 +34,23 @@ const hubVide = (modele: string): Hub => ({ id: '', nom: '', categorieId: null, 
 /** Réglages sous la carte « Salons vocaux temporaires » de l'onglet Bot Esport HQ (registre des fonctionnalités). */
 export function ReglagesVocaux(ctx: ContexteBot) {
   if (ctx.etat.vocaux && !ctx.etat.vocaux.configurer) return <Text style={attenue(ctx.theme)}>{trVc('sans_droit')}</Text>;
-  return <ConfigVocaux theme={ctx.theme} client={ctx.client} large={ctx.large} integre />;
+  return <ConfigVocaux theme={ctx.theme} client={ctx.client} large={ctx.large} integre onEvenements={ctx.ouvrirEvenements} />;
 }
 
 /** `integre` : dans une carte (pas de défilement ni de titre propres). */
-export function ConfigVocaux({ theme, client, large, integre = false }: { theme: ThemeHub; client: ClientEsport; large: boolean; integre?: boolean }) {
+export function ConfigVocaux({ theme, client, large, integre = false, onEvenements }: { theme: ThemeHub; client: ClientEsport; large: boolean; integre?: boolean; /** Administration › Événements (créer l'événement d'un hub). */ onEvenements?(): void }) {
   const api = useMemo(() => apiVocaux(client), [client]);
   const [conf, setConf] = useState<Config | undefined>();
   const [r, setR] = useState<ReglagesVocaux | undefined>();
   const [serveur, setServeur] = useState<ServeurVocaux | undefined>();
   const [cmd, setCmd] = useState<CommandesVocaux>({});
+  // Hubs dépliés (index) : repliés par défaut s'il y en a plusieurs, pour que la page reste lisible.
+  const [deplies, setDeplies] = useState<Set<number>>(new Set());
   const { erreur, avis, agir, enCours } = useAgir();
   const recevoir = useCallback((c: Config) => {
     setConf(c);
     setR(c.reglages);
+    setDeplies(d => (d.size || c.reglages.hubs.length !== 1 ? d : new Set([0])));
     setCmd(c.commandes);
   }, []);
   const lireServeur = useCallback(
@@ -74,6 +79,8 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
   const nomPerm = (cle: string) => trVc(`perm.${cle}` as CleVc);
   const enregistrer = () =>
     void agir('enregistrer', async () => {
+      // Hub d'événement sans événement choisi : rien n'est envoyé (il redeviendrait un hub ordinaire sans le dire).
+      if (r.hubs.some(h => h.tournoiId === '')) throw new Error(trVc('hub_tournoi_requis'));
       const nomDe = (id: string) => salons.find(s => s.id === id)?.nom;
       recevoir(await api.changer({ ...r, hubs: r.hubs.map(h => ({ ...h, nom: nomDe(h.id) ?? h.nom })) }));
       return trVc('enregistre');
@@ -137,46 +144,91 @@ export function ConfigVocaux({ theme, client, large, integre = false }: { theme:
         </View>
         <Intertitre theme={theme}>{trVc('hubs')}</Intertitre>
         <Text style={attenue(theme)}>{trVc('hubs_aide')}</Text>
-        {r.hubs.map((h, i) => (
-          <View key={i} style={{ gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-vc-hub-${i}`}>
-            <Text style={{ ...texte(theme), fontWeight: '700' }}>{trVc('hub', { n: i + 1 })}</Text>
-            {vocaux.length ? <Choix theme={theme} libelle={trVc('hub_salon')} valeur={h.id || undefined} options={vocaux} onChoisir={id => hub(i, { id })} testID={`esport-vc-hub-${i}-salon`} /> : <Text style={attenue(theme)}>{h.nom || h.id || trVc('rien')}</Text>}
-            {categories.length > 1 ? <Choix theme={theme} libelle={trVc('hub_categorie')} valeur={h.categorieId ?? AUCUN} options={categories} onChoisir={id => hub(i, { categorieId: id === AUCUN ? null : id })} testID={`esport-vc-hub-${i}-categorie`} /> : null}
-            <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-              <Champ theme={theme} libelle={trVc('hub_modele')} valeur={h.modeleNom} onChanger={modeleNom => hub(i, { modeleNom })} maxLength={conf.choix.limites.modele} testID={`esport-vc-hub-${i}-modele`} style={{ flexGrow: 2, flexBasis: 220, minWidth: 0 }} />
-              <Champ theme={theme} libelle={trVc('hub_limite')} valeur={String(h.limite)} onChanger={v => hub(i, { limite: entier(v) })} maxLength={2} clavier="number-pad" testID={`esport-vc-hub-${i}-limite`} style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
+        {r.hubs.map((h, i) => {
+          const ouvert = deplies.has(i);
+          const evenements = conf.evenements ?? [];
+          const evt = h.tournoiId ? evenements.find(e => e.id === h.tournoiId) : undefined;
+          const evenementHub = h.tournoiId !== null;
+          const basculer = () => setDeplies(d => (d.has(i) ? new Set([...d].filter(x => x !== i)) : new Set([...d, i])));
+          // Hub d'événement : modèle du nom des équipes ({tag} — {nom}) s'il n'a pas été personnalisé, et verrouillage.
+          const lier = (tournoiId: string | null) => {
+            const modeleNom = tournoiId !== null && h.modeleNom === conf.choix.modeleDefaut ? conf.choix.modeleTournoiDefaut : tournoiId === null && h.modeleNom === conf.choix.modeleTournoiDefaut ? conf.choix.modeleDefaut : h.modeleNom;
+            hub(i, { tournoiId, modeleNom, verrouille: tournoiId !== null ? true : h.verrouille });
+          };
+          const resume = trVc('hub_resume', {
+            salon: vocaux.find(v => v.id === h.id)?.nom || h.nom || h.id || trVc('hub_sans_salon'),
+            type: evenementHub ? trVc('hub_type_evenement', { nom: evt?.nom ?? (h.tournoiId || '?') }) : trVc('hub_type_normal'),
+            verrou: h.verrouille || evenementHub ? trVc('hub_resume_verrou') : '',
+          });
+          return (
+            <View key={i} style={{ gap: ESP.xs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-vc-hub-${i}`}>
+              <Pressable onPress={basculer} accessibilityRole="button" accessibilityState={{ expanded: ouvert }} accessibilityLabel={`${trVc('hub', { n: i + 1 })} : ${resume}`} style={[styles.ligne, { justifyContent: 'space-between' }]} testID={`esport-vc-hub-${i}-entete`}>
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text style={{ ...texte(theme), fontWeight: '700' }}>{trVc('hub', { n: i + 1 })}</Text>
+                  <Text style={attenue(theme)} numberOfLines={2} testID={`esport-vc-hub-${i}-resume`}>
+                    {resume}
+                  </Text>
+                </View>
+                {evenementHub ? <Badge theme={theme} ton="accent" texte={trVc('hub_tournoi')} /> : null}
+                <Text style={attenue(theme)}>{trVc(ouvert ? 'hub_fermer' : 'hub_ouvrir')}</Text>
+              </Pressable>
+              {ouvert ? (
+                <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-details`}>
+                  {vocaux.length ? <Choix theme={theme} libelle={trVc('hub_salon')} valeur={h.id || undefined} options={vocaux} onChoisir={id => hub(i, { id })} testID={`esport-vc-hub-${i}-salon`} /> : <Text style={attenue(theme)}>{h.nom || h.id || trVc('rien')}</Text>}
+                  {categories.length > 1 ? <Choix theme={theme} libelle={trVc('hub_categorie')} valeur={h.categorieId ?? AUCUN} options={categories} onChoisir={id => hub(i, { categorieId: id === AUCUN ? null : id })} testID={`esport-vc-hub-${i}-categorie`} /> : null}
+                  <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
+                    <Champ theme={theme} libelle={trVc('hub_modele')} valeur={h.modeleNom} onChanger={modeleNom => hub(i, { modeleNom })} maxLength={conf.choix.limites.modele} testID={`esport-vc-hub-${i}-modele`} style={{ flexGrow: 2, flexBasis: 220, minWidth: 0 }} />
+                    <Champ theme={theme} libelle={trVc('hub_limite')} valeur={String(h.limite)} onChanger={v => hub(i, { limite: entier(v) })} maxLength={2} clavier="number-pad" testID={`esport-vc-hub-${i}-limite`} style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
+                  </View>
+                  {/* Hub d'événement : toujours proposé ; activé, on choisit l'événement du club (ou on va en créer un). */}
+                  <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+                    <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_tournoi_interrupteur')}</Text>
+                    <Interrupteur theme={theme} libelle={trVc('hub_tournoi_interrupteur')} valeur={evenementHub} onChanger={v => lier(v ? (evenements.length === 1 ? evenements[0].id : '') : null)} testID={`esport-vc-hub-${i}-evenement`} />
+                  </View>
+                  {evenementHub ? (
+                    <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-tournoi-reglages`}>
+                      <Text style={attenue(theme)}>{trVc('hub_tournoi_aide')}</Text>
+                      {evenements.length ? (
+                        <Choix theme={theme} libelle={trVc('hub_tournoi_choisir')} valeur={h.tournoiId || undefined} options={evenements.map(e => ({ id: e.id, nom: e.debut ? `${e.nom} · ${e.debut}` : e.nom }))} onChoisir={id => lier(id)} testID={`esport-vc-hub-${i}-tournoi`} />
+                      ) : (
+                        <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-sans-evenement`}>
+                          <Avis theme={theme} genre="alerte" texte={trVc('hub_tournoi_vide')} />
+                          {conf.peutGererEvenements && onEvenements ? (
+                            <View style={{ alignSelf: 'flex-start' }}>
+                              <BoutonHub theme={theme} titre={trVc('hub_tournoi_creer')} onPress={onEvenements} testID={`esport-vc-hub-${i}-creer-evenement`} />
+                            </View>
+                          ) : (
+                            <Text style={attenue(theme)}>{trVc('hub_tournoi_sans_droit')}</Text>
+                          )}
+                        </View>
+                      )}
+                      <ChoixMultiple theme={theme} libelle={trVc('hub_roles_autorises')} valeurs={h.rolesAutorises} options={roles} onChanger={rolesAutorises => hub(i, { rolesAutorises })} max={conf.choix.limites.roles} testID={`esport-vc-hub-${i}-roles`} />
+                    </View>
+                  ) : (
+                    <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+                      <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_verrouille')}</Text>
+                      <Interrupteur theme={theme} libelle={trVc('hub_verrouille')} valeur={h.verrouille} onChanger={verrouille => hub(i, { verrouille })} testID={`esport-vc-hub-${i}-verrouille`} />
+                    </View>
+                  )}
+                  <BoutonHub
+                    theme={theme}
+                    variante="danger"
+                    titre={trVc('hub_retirer')}
+                    onPress={() => {
+                      setR({ ...r, hubs: r.hubs.filter((_, j) => j !== i) });
+                      setDeplies(new Set());
+                    }}
+                    testID={`esport-vc-hub-${i}-retirer`}
+                  />
+                </View>
+              ) : null}
             </View>
-            {conf.tournois?.length ? (
-              <Choix
-                theme={theme}
-                libelle={trVc('hub_tournoi_choisir')}
-                valeur={h.tournoiId ?? AUCUN}
-                options={[{ id: AUCUN, nom: trVc('hub_tournoi_aucun') }, ...conf.tournois.map(t => ({ id: t.id, nom: `${t.nom} · ${t.team}` }))]}
-                onChoisir={id => {
-                  const tournoiId = id === AUCUN ? null : id;
-                  // Modèle du nom : celui des équipes ({tag} — {nom}) pour un hub de tournoi, s'il n'a pas été personnalisé.
-                  const modeleNom = tournoiId && h.modeleNom === conf.choix.modeleDefaut ? conf.choix.modeleTournoiDefaut : !tournoiId && h.modeleNom === conf.choix.modeleTournoiDefaut ? conf.choix.modeleDefaut : h.modeleNom;
-                  hub(i, { tournoiId, modeleNom, verrouille: tournoiId ? true : h.verrouille });
-                }}
-                testID={`esport-vc-hub-${i}-tournoi`}
-              />
-            ) : null}
-            {h.tournoiId ? (
-              <View style={{ gap: ESP.xs }} testID={`esport-vc-hub-${i}-tournoi-reglages`}>
-                <Badge theme={theme} ton="accent" texte={trVc('hub_tournoi')} />
-                <Text style={attenue(theme)}>{trVc('hub_tournoi_aide')}</Text>
-                <ChoixMultiple theme={theme} libelle={trVc('hub_roles_autorises')} valeurs={h.rolesAutorises} options={roles} onChanger={rolesAutorises => hub(i, { rolesAutorises })} max={conf.choix.limites.roles} testID={`esport-vc-hub-${i}-roles`} />
-              </View>
-            ) : (
-              <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-                <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('hub_verrouille')}</Text>
-                <Interrupteur theme={theme} libelle={trVc('hub_verrouille')} valeur={h.verrouille} onChanger={verrouille => hub(i, { verrouille })} testID={`esport-vc-hub-${i}-verrouille`} />
-              </View>
-            )}
-            <BoutonHub theme={theme} variante="danger" titre={trVc('hub_retirer')} onPress={() => setR({ ...r, hubs: r.hubs.filter((_, j) => j !== i) })} testID={`esport-vc-hub-${i}-retirer`} />
-          </View>
-        ))}
-        {r.hubs.length < conf.choix.limites.hubs ? <BoutonHub theme={theme} titre={trVc('hub_ajouter')} onPress={() => setR({ ...r, hubs: [...r.hubs, hubVide(conf.choix.modeleDefaut)] })} testID="esport-vc-hub-ajouter" /> : null}
+          );
+        })}
+        {r.hubs.length < conf.choix.limites.hubs ? <BoutonHub theme={theme} titre={trVc('hub_ajouter')} onPress={() => {
+              setDeplies(d => new Set([...d, r.hubs.length]));
+              setR({ ...r, hubs: [...r.hubs, hubVide(conf.choix.modeleDefaut)] });
+            }} testID="esport-vc-hub-ajouter" /> : null}
         <Intertitre theme={theme}>{trVc('staff')}</Intertitre>
         <Text style={attenue(theme)}>{trVc('staff_aide')}</Text>
         <ChoixMultiple theme={theme} libelle={trVc('staff')} valeurs={r.rolesStaff} options={roles} onChanger={rolesStaff => setR({ ...r, rolesStaff })} max={conf.choix.limites.roles} testID="esport-vc-staff" />

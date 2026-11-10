@@ -6,6 +6,8 @@
  *  - « Rôles et permissions » (Fondateur, ou roles.gerer) ;
  *  - « Bot Esport HQ » (tous les réglages du bot Discord réunis : Fondateur, ou tickets.configurer ; chaque section
  *    garde ses contrôles côté serveur et mène aux pages qui gardent les réglages) ;
+ *  - « Événements » (événements et tournois organisés par le club, équipes et rôles Discord automatiques :
+ *    Fondateur, ou evenements.gerer) ;
  *  - « Devblog » (brouillons, éditeur, publication automatique : Fondateur, ou devblog.gerer ; la lecture des
  *    devblogs reste pour tous via « Nouveautés » du Dashboard).
  * Un sous-onglet n'apparaît qu'avec sa permission (le serveur contrôle chaque requête, comme avant). Les Tickets
@@ -20,21 +22,22 @@ import type { ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { tr } from '../../i18n';
 import { ESP, LARGEUR_CONTENU, Onglets } from '../design';
-import { Jeux, PageBot, PageDevblog, RolesPermissions, Statistiques } from '../differe';
+import { Jeux, PageBot, PageDevblog, PageEvenements, RolesPermissions, Statistiques } from '../differe';
 import type { NavigationBot } from '../bot/PageBot';
 
-export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'bot' | 'devblog';
+export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'bot' | 'evenements' | 'devblog';
 
 /** Ce que le compte peut ouvrir dans l'Administration (d'après GET /moi). */
 export type DroitsAdministration = Partial<Record<SousOngletAdmin, boolean>>;
 
-const ORDRE: readonly SousOngletAdmin[] = ['statistiques', 'jeux', 'roles', 'bot', 'devblog'];
+const ORDRE: readonly SousOngletAdmin[] = ['statistiques', 'jeux', 'roles', 'bot', 'evenements', 'devblog'];
 
 const LIBELLES: Record<SousOngletAdmin, { libelle(): string; description(): string }> = {
   statistiques: { libelle: () => tr('administration.onglet_statistiques'), description: () => tr('administration.onglet_statistiques_description') },
   jeux: { libelle: () => tr('administration.onglet_jeux'), description: () => tr('administration.onglet_jeux_description') },
   roles: { libelle: () => tr('administration.onglet_roles'), description: () => tr('administration.onglet_roles_description') },
   bot: { libelle: () => tr('administration.onglet_bot'), description: () => tr('administration.onglet_bot_description') },
+  evenements: { libelle: () => tr('administration.onglet_evenements'), description: () => tr('administration.onglet_evenements_description') },
   devblog: { libelle: () => tr('administration.onglet_devblog'), description: () => tr('administration.onglet_devblog_description') },
 };
 
@@ -96,7 +99,9 @@ export function PageAdministration({
         ) : onglet === 'roles' ? (
           <RolesPermissions theme={theme} client={client} large={large} />
         ) : onglet === 'bot' ? (
-          <PageBot theme={theme} client={client} large={large} navigation={navigationBot} />
+          <PageBot theme={theme} client={client} large={large} navigation={{ ...navigationBot, ouvrirEvenements: droits.evenements ? () => setChoix('evenements') : undefined }} />
+        ) : onglet === 'evenements' ? (
+          <PageEvenements theme={theme} client={client} large={large} />
         ) : onglet === 'devblog' ? (
           <PageDevblog theme={theme} client={client} large={large} />
         ) : null}

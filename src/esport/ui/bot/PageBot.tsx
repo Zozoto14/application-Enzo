@@ -34,6 +34,8 @@ export const SECTIONS_BOT: readonly SectionBot[] = ['connexion', 'serveur', 'mes
 export interface NavigationBot {
   ouvrirTickets?(section?: string): void;
   ouvrirTeam?(teamId: string, section?: string): void;
+  /** Administration › Événements (hub vocal d'un événement : créer l'événement d'abord). */
+  ouvrirEvenements?(): void;
 }
 
 const nomFonctionnalite = (id: string) => trBotOu(`fct.${id}`, id);
@@ -69,7 +71,7 @@ export function PageBot({ theme, client, large, navigation = {}, sectionInitiale
   useEffect(() => {
     void relire();
   }, [relire]);
-  const ctx: ContexteBot | undefined = etat ? { theme, client, large, etat, ouvrirTickets: navigation.ouvrirTickets, ouvrirTeam: navigation.ouvrirTeam, ouvrirSection: s => setSection(s as SectionBot) } : undefined;
+  const ctx: ContexteBot | undefined = etat ? { theme, client, large, etat, ouvrirTickets: navigation.ouvrirTickets, ouvrirTeam: navigation.ouvrirTeam, ouvrirEvenements: navigation.ouvrirEvenements, ouvrirSection: s => setSection(s as SectionBot) } : undefined;
   return (
     <PageEsport large={large} testID="esport-bot">
       <EnTetePage theme={theme} large={large} titre={trBot('titre')} sous={trBot('sous')} />

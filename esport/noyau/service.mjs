@@ -242,6 +242,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       peutGererDevblog: acteur.superAdmin || globales.has(PERMISSION_DEVBLOG),
       // Salons vocaux temporaires d'Esport HQ (migration 0060) : Administration › Bot Esport HQ › Fonctionnalités.
       peutConfigurerVocaux: acteur.superAdmin || globales.has('vocaux.configurer'),
+      // Événements organisés par le club (migration 0064) : Administration › Événements.
+      peutGererEvenements: acteur.superAdmin || globales.has('evenements.gerer'),
     };
   }
 

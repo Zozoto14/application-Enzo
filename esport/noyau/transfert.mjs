@@ -247,10 +247,11 @@ export const TABLES = [
   // Salons vocaux temporaires (migration 0060) : salons ouverts sur Discord (un serveur repris les retrouve et les
   // nettoie une fois vides).
   ['vocaux_salons', 'salon_id'],
-  // Équipes des tournois et rôles Discord (migration 0063).
-  ['tournoi_discord', 'tournoi_id'],
-  ['tournoi_equipes', 'id'],
-  ['tournoi_equipe_membres', 'id'],
+  // Événements organisés par le club, leurs équipes et rôles Discord (migration 0064 ; remplace les tables de 0063).
+  ['club_evenements', 'id'],
+  ['club_evenement_equipes', 'id'],
+  ['club_evenement_membres', 'id'],
+  ['club_evenement_staff', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -271,11 +272,41 @@ export async function baseVide(base) {
   return true;
 }
 
+/**
+ * Export fait avant la migration 0064 : les équipes notées sur un tournoi d'une team (tournoi_discord, tournoi_equipes,
+ * tournoi_equipe_membres) deviennent un événement du club au même identifiant, comme le fait la migration.
+ */
+export function reprendreTablesTournoi(tables) {
+  const anciennes = ['tournoi_discord', 'tournoi_equipes', 'tournoi_equipe_membres'];
+  if (!anciennes.some(t => t in tables)) return tables;
+  const { tournoi_discord: d = [], tournoi_equipes: e = [], tournoi_equipe_membres: m = [], ...reste } = tables;
+  const ids = [...new Set([...e.map(x => x.tournoi_id), ...d.map(x => x.tournoi_id)])];
+  const tournois = Array.isArray(reste.tournois) ? reste.tournois : [];
+  const evenements = ids
+    .map(id => {
+      const t = tournois.find(x => x.id === id);
+      if (!t) return null;
+      const r = d.find(x => x.tournoi_id === id) ?? {};
+      return { id, nom: t.nom, jeu: t.jeu ?? null, debut: t.debut ?? null, fin: t.fin ?? null, statut: ['en_cours', 'termine', 'annule'].includes(t.statut) ? t.statut : 'a_venir', description: '', categorie_ticket_id: r.categorie_ticket_id ?? null, roles_auto: 1, modele_role: r.modele_role ?? '{tag} {nom}', couleur: r.couleur ?? null, role_ancre_id: null, suppression_h: r.suppression_h ?? 24, roles_crees_le: r.roles_crees_le ?? null, roles_supprimes_le: r.roles_supprimes_le ?? null, cree_par: null, cree_le: t.cree_le, maj_le: r.maj_le ?? t.maj_le };
+    })
+    .filter(Boolean);
+  const gardes = new Set(evenements.map(x => x.id));
+  const equipes = e.filter(x => gardes.has(x.tournoi_id)).map(x => ({ id: x.id, evenement_id: x.tournoi_id, nom: x.nom, tag: x.tag, role_id: x.role_id ?? null, role_nom: null, ticket_id: x.ticket_id ?? null, position: x.position ?? 0, cree_le: x.cree_le, maj_le: x.maj_le }));
+  const idsEquipes = new Set(equipes.map(x => x.id));
+  return {
+    ...reste,
+    club_evenements: [...(reste.club_evenements ?? []), ...evenements],
+    club_evenement_equipes: [...(reste.club_evenement_equipes ?? []), ...equipes],
+    club_evenement_membres: [...(reste.club_evenement_membres ?? []), ...m.filter(x => idsEquipes.has(x.equipe_id))],
+  };
+}
+
 /** Importe un export dans une base vide ; rend le nombre de lignes par table. */
 export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
   if (!donnees || donnees.format !== FORMAT_EXPORT || donnees.version !== VERSION_EXPORT || typeof donnees.tables !== 'object') {
     throw echec(400, 'format', 'Ce fichier n’est pas un export Esport (version 1).');
   }
+  donnees = { ...donnees, tables: reprendreTablesTournoi(donnees.tables) };
   for (const nom of Object.keys(donnees.tables)) {
     if (!NOMS_TABLES.includes(nom)) throw echec(400, 'table-inconnue', `Table inconnue dans l’export : ${String(nom).slice(0, 40)}`);
   }

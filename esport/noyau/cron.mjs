@@ -34,7 +34,7 @@ import { configDrive } from './cm/drive/regles.mjs';
 import { rappelsReunions } from './cm/reunions/rappels.mjs';
 import { traiterMpReunions } from './cm/reunions/mp.mjs';
 import { tachesTickets } from './tickets/cron.mjs';
-import { tachesTournoisDiscord } from './vocaux/tournoi.mjs';
+import { tachesEvenementsDiscord } from './evenements-club/discord.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -68,8 +68,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     // Tickets Discord : relecture de secours si aucun processus ne tient la Gateway, puis cycle de vie (avertissements,
     // fermetures automatiques, salons archivés supprimés, rétention).
     ['tickets', async () => (rapportTickets = await tachesTickets(base, { jetonBot, maintenant, stockage, ...(fetch ? { fetch } : {}), ...(tickets ? { cycle: tickets(base) } : {}) }))],
-    // Tournois : rôles Discord des équipes (et leurs salons vocaux) supprimés à la fin du tournoi (migration 0063).
-    ['rôles Discord des tournois', () => tachesTournoisDiscord(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
+    // Événements du club : rôles Discord des équipes (et leurs salons vocaux) supprimés à la fin (migration 0064).
+    ['rôles Discord des événements', () => tachesEvenementsDiscord(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
     // Devblog : brouillons programmés publiés à l'heure (app, puis file Discord envoyée juste après).
     ['devblog programmé', () => publierProgrammes(base, { maintenant: maintenant() })],

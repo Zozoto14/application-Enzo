@@ -179,6 +179,8 @@ export function Esport(props: PropsRacineApp) {
     // Bot Esport HQ : le Fondateur, ou qui configure les tickets (chaque section est contrôlée par le serveur).
     // (ou qui configure les salons vocaux temporaires : leur carte est dans « Fonctionnalités »).
     bot: Boolean(moiPret && (moiPret.superAdmin || moiTickets?.configurer || moiPret.peutConfigurerVocaux)),
+    // Événements organisés par le club (tournois comme The Nuke End) : le Fondateur, ou evenements.gerer.
+    evenements: Boolean(moiPret && (moiPret.superAdmin || moiPret.peutGererEvenements)),
   };
   const administration = aAdministration(droitsAdmin);
   const pageVue =

@@ -7,8 +7,8 @@
  * présence s'y font comme d'habitude. Le résultat d'un match se saisit en rapide ici, ou en détaillé
  * dans le module Résultats (« Saisir le résultat détaillé »).
  *
- * Tournoi organisé par le club (ex. The Nuke End) : « Équipes et rôles Discord » (EquipesDiscord.tsx) note les équipes
- * participantes, les importe des tickets d'inscription et crée un rôle Discord par équipe.
+ * Ce module sert aux tournois EXTÉRIEURS auxquels la team participe. Un tournoi organisé par le club (équipes
+ * participantes, rôles Discord) se gère dans Administration › Événements (docs/esport/evenements.md).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,8 +25,6 @@ import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, Onglets, SqueletteCart
 import type { PropsModule } from '../modules';
 import { BadgeResultat, ChoixAdversaires, Info, LogoAdversaire, Pastille, instantSaisi, montant, murale, nomsAdversaires } from './commun';
 import { useTempsReel } from '../../tempsReel/hooks';
-import type { ClientEsport } from '../../client';
-import { EquipesDiscord } from './EquipesDiscord';
 
 type Filtre = 'actifs' | 'termines' | 'tous';
 const TON_STATUT: Record<StatutTournoi, Ton> = { a_venir: 'neutre', inscrit: 'accent', en_cours: 'alerte', termine: 'ok', annule: 'critique' };
@@ -91,7 +89,6 @@ export function Tournois({ theme, client, detail, large, onAller }: PropsModule)
       {ouvert ? (
         <FicheTournoi
           theme={theme}
-          client={client}
           api={api}
           teamId={teamId}
           id={ouvert}
@@ -165,7 +162,6 @@ function CarteTournoi({ theme, t, fuseau, onOuvrir }: { theme: ThemeHub; t: Tour
 
 function FicheTournoi({
   theme,
-  client,
   api,
   teamId,
   id,
@@ -178,7 +174,6 @@ function FicheTournoi({
   onPlanning,
 }: {
   theme: ThemeHub;
-  client: ClientEsport;
   api: ApiCompetition;
   teamId: string;
   id: string;
@@ -337,9 +332,6 @@ function FicheTournoi({
               {classementOuvert ? <FormulaireClassement theme={theme} t={t} onEnregistrer={corps => void faire('final', () => api.modifierTournoi(teamId, id, corps), trC('t.enregistre')).then(ok => ok && setClassementOuvert(false))} /> : null}
             </Carte>
           ) : null}
-
-          {/* Équipes participantes et rôles Discord (tournoi organisé par le club : inscriptions par tickets). */}
-          {gerer ? <EquipesDiscord theme={theme} client={client} teamId={teamId} tournoiId={id} /> : null}
 
           {gerer ? (
             <View style={{ alignSelf: 'flex-start' }}>

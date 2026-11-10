@@ -3,7 +3,8 @@
  *
  * Rangés dans `tickets_reglages` (comme la bienvenue par rôle) :
  *  - `vocaux` : activation, hubs (chacun : salon vocal « hub », catégorie des salons créés, modèle du nom, limite de
- *    places et verrouillage par défaut ; hub de tournoi : tournoi lié et rôles autorisés en plus), rôles du staff
+ *    places et verrouillage par défaut ; hub d'événement : `tournoiId` = événement du club lié (Administration ›
+ *    Événements) et rôles autorisés en plus), rôles du staff
  *    (contournent le verrouillage, utilisent les contrôles), délai de suppression d'un salon vide, salons par membre,
  *    ce qui se passe quand le propriétaire part, salon des journaux ;
  *  - `vocaux_commandes` : chaque sous-commande de /voc activée ou non, et ses rôles Discord autorisés.
@@ -92,7 +93,7 @@ function validerHub(h, i) {
   if (modele.length > LIMITES_VOCAUX.modele) throw echec(400, 'vocaux-modele', 'Modèle du nom : 90 caractères au plus.');
   let tournoiId = null;
   if (h.tournoiId !== undefined && h.tournoiId !== null && h.tournoiId !== '') {
-    if (typeof h.tournoiId !== 'string' || !MOTIF_TOURNOI.test(h.tournoiId)) throw echec(400, 'vocaux-tournoi', 'Tournoi introuvable.');
+    if (typeof h.tournoiId !== 'string' || !MOTIF_TOURNOI.test(h.tournoiId)) throw echec(400, 'vocaux-tournoi', 'Événement introuvable (Administration › Événements).');
     tournoiId = h.tournoiId;
   }
   return hubPropre({
@@ -101,7 +102,7 @@ function validerHub(h, i) {
     categorieId: idOuNull(h.categorieId, `vocaux-hub-${i + 1}-categorie`),
     modeleNom: modele,
     limite: entier(h.limite, 0, LIMITES_VOCAUX.places, 'vocaux-limite', 0),
-    // Un hub de tournoi crée toujours des salons verrouillés sur le rôle de l'équipe.
+    // Un hub d'événement crée toujours des salons verrouillés sur le rôle de l'équipe.
     verrouille: tournoiId ? true : h.verrouille === true,
     tournoiId,
     rolesAutorises: ids(h.rolesAutorises, LIMITES_VOCAUX.roles, 'vocaux-roles'),

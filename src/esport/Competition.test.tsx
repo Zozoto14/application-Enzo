@@ -261,6 +261,9 @@ describe('compétition (tournois, résultats)', () => {
     // Fiche : roster borné par le profil, puis un match daté (planning).
     expect(await screen.findByTestId('esport-tournoi-fiche')).toBeTruthy();
     expect(await screen.findByTestId(`esport-match-${MATCH}`)).toBeTruthy();
+    // Tournoi extérieur : aucune carte « Équipes et rôles Discord » (tournois du club : Administration › Événements).
+    expect(screen.queryByTestId('esport-eq')).toBeNull();
+    expect(appels.some(a => a.chemin.includes('/discord') || a.chemin.startsWith('/evenements'))).toBe(false);
     await fireEvent.press(screen.getByTestId('esport-tournoi-roster-modifier'));
     await fireEvent.press(screen.getByTestId('esport-roster-kai12345'));
     expect(screen.getByTestId('esport-roster-compte').props.children).toBe('2 / 5 titulaires · 0 / 2 remplaçants');

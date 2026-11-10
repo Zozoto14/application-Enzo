@@ -143,7 +143,7 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
   const appels = [];
   const programme = [];
   // `roles`, `absents`, `attributions` : rôles créés, membres absents du serveur, attributions (vocaux/tournoi.mjs).
-  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0, roles: new Map(), absents: new Set(), attributions: [], membres: [{ user: { id: '800000000000000077', username: 'zoe', global_name: 'Zoé' }, nick: null }, { user: { id: '800000000000000078', username: 'zorro', global_name: null }, nick: 'Zorro le Grand' }, { user: { id: '424242424242424243', username: 'zbot', bot: true }, nick: null }] };
+  const etat = { salons: new Map(), messages: new Map(), mp: [], n: 0, roles: new Map(), absents: new Set(), attributions: [], positions: new Map(), listerCrees: false, membres: [{ user: { id: '800000000000000077', username: 'zoe', global_name: 'Zoé' }, nick: null }, { user: { id: '800000000000000078', username: 'zorro', global_name: null }, nick: 'Zorro le Grand' }, { user: { id: '424242424242424243', username: 'zbot', bot: true }, nick: null }] };
   const id = () => `9${String(++etat.n).padStart(17, '0')}`;
   const rep = (corps, statut = 200, entetes = {}) => new Response(corps === undefined ? null : JSON.stringify(corps), { status: statut, headers: { 'Content-Type': 'application/json', ...entetes } });
   etat.salons.set('710000000000000010', { id: '710000000000000010', type: 4, name: 'Tickets', guild_id: guild, permission_overwrites: [] });
@@ -178,7 +178,22 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
       etat.roles.set(r.id, r);
       return rep(r);
     }
+    // Positions des rôles (événements du club : rôles placés sous un rôle repère) : [{ id, position }].
+    if (chemin === `/guilds/${guild}/roles` && methode === 'PATCH') {
+      for (const x of Array.isArray(corps) ? corps : []) {
+        const r = etat.roles.get(x.id);
+        if (r) r.position = x.position;
+        else etat.positions.set(x.id, x.position);
+      }
+      return rep([...etat.roles.values()]);
+    }
     const role = /^\/guilds\/\d+\/roles\/(\d+)$/.exec(chemin);
+    if (role && methode === 'PATCH') {
+      const r = etat.roles.get(role[1]);
+      if (!r) return rep({ code: 10011, message: 'Unknown Role' }, 404);
+      Object.assign(r, corps);
+      return rep(r);
+    }
     if (role && methode === 'DELETE') {
       if (!etat.roles.has(role[1])) return rep({ code: 10011, message: 'Unknown Role' }, 404);
       etat.roles.delete(role[1]);
@@ -191,7 +206,12 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
       etat.attributions.push({ methode, membre: attribution[1], role: attribution[2] });
       return rep(undefined, 204);
     }
-    if (chemin === `/guilds/${guild}/roles`) return rep([{ id: guild, name: '@everyone', permissions: '1024' }, { id: '720000000000000001', name: 'Staff', permissions: '0', position: 2 }, { id: '720000000000000002', name: 'Esport HQ', permissions: String((1n << 4n) | (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 15n) | (1n << 16n) | (1n << 28n)), managed: true, position: 3 }]);
+    if (chemin === `/guilds/${guild}/roles`) {
+      const fixes = [{ id: guild, name: '@everyone', permissions: '1024', position: 0 }, { id: '720000000000000001', name: 'Staff', permissions: '0', position: 2 }, { id: '720000000000000002', name: 'Esport HQ', permissions: String((1n << 4n) | (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 15n) | (1n << 16n) | (1n << 28n)), managed: true, position: 3 }];
+      // Rôles créés par le bot (etat.roles) ajoutés à la liste quand un test le demande (`etat.listerCrees`) ;
+      // `etat.positions` : positions déplacées (PATCH).
+      return rep([...fixes.map(r => ({ ...r, position: etat.positions.get(r.id) ?? r.position })), ...(etat.listerCrees ? [...etat.roles.values()].map(r => ({ permissions: '0', position: 1, ...r })) : [])]);
+    }
     if (chemin === `/guilds/${guild}/members/${bot}`) return rep({ user: { id: bot }, roles: ['720000000000000002'] });
     if (chemin === `/guilds/${guild}/members/search`) {
       const q = String(u.searchParams.get('query') ?? '').toLowerCase();

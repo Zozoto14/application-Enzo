@@ -94,26 +94,60 @@ test('hubs : ajout, salon, catégorie, modèle, limite, verrouillage ; staff, d�
   expect((put.hubs as unknown[])[0]).toMatchObject({ id: '751', nom: 'Créer un salon', categorieId: '750', modeleNom: 'Vocal de {pseudo}', limite: 5, verrouille: true });
 });
 
-test('hub de tournoi : tournoi lié, modèle des équipes, toujours verrouillé, rôles autorisés (casters) ; enregistré', async () => {
+test('hub d’événement : option toujours visible, événement lié, modèle des équipes, toujours verrouillé, casters ; enregistré', async () => {
   const conf = configDe();
-  conf.tournois = [{ id: 't1', nom: 'The Nuke End', team: 'Organisation' }];
+  conf.evenements = [
+    { id: 'e1', nom: 'The Nuke End', statut: 'a_venir', debut: '2026-11-21', equipes: 8 },
+    { id: 'e2', nom: 'LAN', statut: 'a_venir', debut: null, equipes: 0 },
+  ];
   const { client, appels } = fauxClient(conf);
   await render(<ConfigVocaux theme={theme} client={client} large />);
   await fireEvent.press(await screen.findByTestId('esport-vc-hub-ajouter'));
   await fireEvent.press(await screen.findByTestId('esport-vc-hub-0-salon-751'));
   expect(screen.getByTestId('esport-vc-hub-0-verrouille')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-tournoi-t1'));
+  await fireEvent(screen.getByTestId('esport-vc-hub-0-evenement'), 'valueChange', true);
+  // Plusieurs événements : il faut en choisir un avant d'enregistrer.
+  await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
+  expect(await screen.findByText(/Choisissez l’événement de chaque hub/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-tournoi-e1'));
   expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('{tag} — {nom}');
   expect(screen.queryByTestId('esport-vc-hub-0-verrouille')).toBeNull();
   expect(screen.getByText(/reste verrouillé sur son rôle/)).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-vc-hub-0-roles-720'));
   await fireEvent.press(screen.getByTestId('esport-vc-enregistrer'));
   await screen.findByText('Enregistré.');
-  const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as { hubs: unknown[] };
-  expect(put.hubs[0]).toMatchObject({ id: '751', tournoiId: 't1', modeleNom: '{tag} — {nom}', verrouille: true, rolesAutorises: ['720'] });
+  const puts = appels.filter(a => a.chemin === '/vocaux/config' && a.methode === 'PUT');
+  expect(puts).toHaveLength(1);
+  expect((puts[0].corps as { hubs: unknown[] }).hubs[0]).toMatchObject({ id: '751', tournoiId: 'e1', modeleNom: '{tag} — {nom}', verrouille: true, rolesAutorises: ['720'] });
+  // Résumé replié : salon, type, verrouillé.
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-entete'));
+  expect(screen.queryByTestId('esport-vc-hub-0-details')).toBeNull();
+  expect(screen.getByTestId('esport-vc-hub-0-resume').props.children).toBe('Créer un salon · événement : The Nuke End · verrouillé');
   // Retour à un hub ordinaire : le modèle par défaut revient.
-  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-tournoi--'));
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-entete'));
+  await fireEvent(screen.getByTestId('esport-vc-hub-0-evenement'), 'valueChange', false);
   expect(screen.getByTestId('esport-vc-hub-0-modele').props.value).toBe('Salon de {pseudo}');
+});
+
+test('hub d’événement sans événement : message clair et bouton vers Administration › Événements ; hubs repliés', async () => {
+  const conf = configDe();
+  conf.evenements = [];
+  conf.peutGererEvenements = true;
+  conf.reglages.hubs = [
+    { id: '751', nom: 'Créer un salon', categorieId: null, modeleNom: 'Salon de {pseudo}', limite: 0, verrouille: false, tournoiId: null, rolesAutorises: [] },
+    { id: '752', nom: 'Salon privé', categorieId: null, modeleNom: 'Salon de {pseudo}', limite: 0, verrouille: true, tournoiId: null, rolesAutorises: [] },
+  ];
+  const ouvrir = jest.fn();
+  const { client } = fauxClient(conf);
+  await render(<ConfigVocaux theme={theme} client={client} large onEvenements={ouvrir} />);
+  // Plusieurs hubs : repliés, une ligne de résumé chacun.
+  expect((await screen.findByTestId('esport-vc-hub-1-resume')).props.children).toBe('Salon privé · normal · verrouillé');
+  expect(screen.queryByTestId('esport-vc-hub-0-details')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-entete'));
+  await fireEvent(screen.getByTestId('esport-vc-hub-0-evenement'), 'valueChange', true);
+  expect(screen.getByText(/Aucun événement pour l’instant : créez-le dans Administration › Événements/)).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-vc-hub-0-creer-evenement'));
+  expect(ouvrir).toHaveBeenCalled();
 });
 
 test('commandes /voc : désactiver une sous-commande, la réserver à un rôle ; enregistré', async () => {

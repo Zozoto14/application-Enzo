@@ -37,5 +37,7 @@ export const PageDevblog = differe<React.ComponentProps<typeof import('./devblog
 export const Jeux = differe<React.ComponentProps<typeof import('./jeux/Jeux').Jeux>>(async () => (await import('./jeux/Jeux')).Jeux);
 // Tickets Discord (liste, conversation, configuration) : chargés seulement quand on les ouvre.
 export const PageTickets = differe<React.ComponentProps<typeof import('./tickets/PageTickets').PageTickets>>(async () => (await import('./tickets/PageTickets')).PageTickets);
+// Administration › Événements : chargé seulement quand on l'ouvre.
+export const PageEvenements = differe<React.ComponentProps<typeof import('./evenements/PageEvenements').PageEvenements>>(async () => (await import('./evenements/PageEvenements')).PageEvenements);
 // Administration › Bot Esport HQ : chargé seulement quand on l'ouvre.
 export const PageBot = differe<React.ComponentProps<typeof import('./bot/PageBot').PageBot>>(async () => (await import('./bot/PageBot')).PageBot);

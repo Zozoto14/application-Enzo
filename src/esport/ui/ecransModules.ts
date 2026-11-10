@@ -21,3 +21,4 @@ export { MaFicheTrombi } from './membres/FicheTrombi';
 export { PageDevblog } from './devblog/PageDevblog';
 export { PageTickets } from './tickets/PageTickets';
 export { PageBot } from './bot/PageBot';
+export { PageEvenements } from './evenements/PageEvenements';

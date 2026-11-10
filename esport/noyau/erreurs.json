@@ -914,9 +914,26 @@
   "Réponse de Claude illisible.": "Unreadable Claude answer.",
   "Claude refuse la requête : modèle ou paramètres non acceptés.": "Claude rejects the request: model or parameters not accepted.",
   "API Anthropic injoignable.": "Anthropic API unreachable.",
-  "Claude a refusé de répondre : moteur suivant.": "Claude declined to answer: next engine."
+  "Claude a refusé de répondre : moteur suivant.": "Claude declined to answer: next engine.",
+  "Événement illisible.": "Unreadable event.",
+  "Événement introuvable (Administration › Événements).": "Event not found (Administration › Events).",
+  "La date de fin précède la date de début.": "The end date is before the start date.",
+  "Rôle Discord invalide.": "Invalid Discord role.",
+  "Rôle introuvable sur le serveur Discord.": "Role not found on the Discord server.",
+  "Ce rôle est au-dessus du rôle du bot Esport HQ (ou c’est le sien) : le bot ne peut placer des rôles que sous son propre rôle. Choisissez un rôle plus bas, ou montez « Esport HQ » dans Paramètres du serveur › Rôles.": "This role is above the Esport HQ bot’s role (or is its own): the bot can only place roles below its own role. Choose a lower role, or move “Esport HQ” up in Server Settings › Roles.",
+  "200 événements au plus.": "200 events at most.",
+  "Un hub vocal est lié à cet événement : retirez-le d’abord (Administration › Bot Esport HQ › Salons vocaux temporaires).": "A voice hub is linked to this event: remove it first (Administration › Esport HQ bot › Temporary voice channels).",
+  "Discord a refusé de supprimer certains rôles : réessayez, ou supprimez-les à la main.": "Discord refused to delete some roles: try again, or delete them by hand.",
+  "64 équipes au plus par événement.": "64 teams at most per event.",
+  "L’événement est terminé ou annulé : ses rôles ne sont plus créés.": "The event is finished or cancelled: its roles are no longer created.",
+  "Catégories de tickets : 10 au plus.": "Ticket categories: 10 at most.",
+  "50 personnes au plus dans le staff.": "50 people at most in the staff."
  },
  "motifs": [
+  [
+   "^TAG déjà pris dans cet événement : (.+)\\.$",
+   "TAG already taken in this event: $1."
+  ],
   [
    "^TAG déjà pris dans ce tournoi : (.+)\\.$",
    "TAG already taken in this tournament: $1."

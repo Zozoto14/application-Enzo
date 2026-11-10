@@ -1169,6 +1169,8 @@ export const en: Record<Cle, string> = {
   'administration.onglet_jeux_description': 'Games: game profiles (formats, scoring, maps, characters), AI assistant',
   'administration.onglet_roles': 'Roles and permissions',
   'administration.onglet_roles_description': 'Roles and permissions: club, CM and team roles',
+  'administration.onglet_evenements': 'Events',
+  'administration.onglet_evenements_description': 'Events and tournaments organised by the club: teams, automatic Discord roles',
   'administration.onglet_devblog': 'Devblog',
   'administration.onglet_devblog_description': 'Devblog: drafts, writing, automatic publishing',
   'administration.onglet_bot': 'Esport HQ bot',

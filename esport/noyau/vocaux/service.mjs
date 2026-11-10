@@ -47,16 +47,18 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       choix: { commandes: COMMANDES_VOCAUX, modesProprietaire: MODES_PROPRIETAIRE, limites: LIMITES_VOCAUX, modeleDefaut: MODELE_DEFAUT, modeleTournoiDefaut: MODELE_TOURNOI_DEFAUT, permissionsBot: [...PERMISSIONS_VOCAUX] },
       bot: Boolean(jetonBot),
       lienInvitation: lienInvitationBot(applicationId),
-      // Tournois proposés pour un hub d'équipe : ceux qui ont des équipes notées (fiche du tournoi › Équipes et rôles
-      // Discord), pas terminés ni annulés ; plus ceux déjà liés à un hub.
-      tournois: (
+      // Événements du club proposés pour un hub d'équipe (Administration › Événements) : ceux qui ne sont ni terminés ni
+      // annulés, plus ceux déjà liés à un hub. Clé `tournoiId` du hub : l'identifiant de l'événement. `peutGererEvenements` :
+      // l'écran propose d'aller créer un événement (Administration › Événements).
+      evenements: (
         await base.tous(
-          `SELECT DISTINCT t.id, t.nom, te.nom AS team FROM tournois t JOIN teams te ON te.id = t.team_id
-            WHERE t.supprime_le IS NULL AND (t.id IN (SELECT tournoi_id FROM tournoi_equipes) AND t.statut NOT IN ('termine', 'annule')${reglages.hubs.some(h => h.tournoiId) ? ` OR t.id IN (${reglages.hubs.filter(h => h.tournoiId).map(() => '?').join(', ')})` : ''})
-            ORDER BY t.nom LIMIT 50`,
+          `SELECT id, nom, statut, debut, (SELECT COUNT(*) FROM club_evenement_equipes e WHERE e.evenement_id = club_evenements.id) AS equipes FROM club_evenements
+            WHERE statut NOT IN ('termine', 'annule')${reglages.hubs.some(h => h.tournoiId) ? ` OR id IN (${reglages.hubs.filter(h => h.tournoiId).map(() => '?').join(', ')})` : ''}
+            ORDER BY COALESCE(debut, cree_le) DESC, nom LIMIT 50`,
           reglages.hubs.filter(h => h.tournoiId).map(h => h.tournoiId),
         )
-      ).map(t => ({ id: t.id, nom: t.nom, team: t.team })),
+      ).map(e => ({ id: e.id, nom: e.nom, statut: e.statut, debut: e.debut ?? null, equipes: Number(e.equipes ?? 0) })),
+      peutGererEvenements: await aGlobale(base, acteur, 'evenements.gerer'),
     };
   }
 
@@ -66,7 +68,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     const reglages = validerVocaux(corps ?? {}, await lireVocaux(base));
     if (reglages.actif && !general.guildId) throw echec(400, 'vocaux-serveur', 'Choisissez d’abord le serveur Discord (Tickets › Configuration › Général).');
     for (const h of reglages.hubs) {
-      if (h.tournoiId && !(await base.premier('SELECT id FROM tournois WHERE id = ? AND supprime_le IS NULL', [h.tournoiId]))) throw echec(400, 'vocaux-tournoi', 'Tournoi introuvable.');
+      if (h.tournoiId && !(await base.premier('SELECT id FROM club_evenements WHERE id = ?', [h.tournoiId]))) throw echec(400, 'vocaux-tournoi', 'Événement introuvable (Administration › Événements).');
     }
     const t = maintenant();
     await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux' }, maintenant: t })]);

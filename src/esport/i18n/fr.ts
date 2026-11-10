@@ -1284,6 +1284,8 @@ export const fr = {
   'administration.onglet_jeux_description': 'Jeux : profils de jeu (formats, score, maps, personnages), assistant IA',
   'administration.onglet_roles': 'Rôles et permissions',
   'administration.onglet_roles_description': 'Rôles et permissions : rôles du club, du CM et des teams',
+  'administration.onglet_evenements': 'Événements',
+  'administration.onglet_evenements_description': 'Événements et tournois organisés par le club : équipes, rôles Discord automatiques',
   'administration.onglet_devblog': 'Devblog',
   'administration.onglet_devblog_description': 'Devblog : brouillons, rédaction, publication automatique',
   'administration.onglet_bot': 'Bot Esport HQ',
