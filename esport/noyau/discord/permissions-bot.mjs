@@ -33,12 +33,15 @@ export const BITS = Object.freeze({
  *               permissions qu'il a lui-même : réactions, fils) (tickets.md) ;
  *  - vocaux   : salons vocaux temporaires (créer, renommer, supprimer ; droits des salons pour le verrouillage ; se
  *               connecter ; déplacer et déconnecter des membres ; panneau dans le salon) et rôles des équipes de
- *               tournoi (vocaux.md).
+ *               tournoi (vocaux.md) ;
+ *  - roles_temp : rôles temporaires des teams (/role-temp) : « Gérer les rôles » (donner et retirer le rôle ; le rôle du
+ *               bot doit être AU-DESSUS du rôle temporaire), et écrire dans le salon des journaux (bot-discord.md).
  */
 export const FONCTIONNALITES_PERMISSIONS = [
   { id: 'annonces', permissions: ['voir_salons', 'envoyer', 'integrer', 'historique', 'mentionner', 'creer_fils_publics', 'envoyer_fils'] },
   { id: 'tickets', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'envoyer', 'historique', 'joindre', 'integrer', 'reactions', 'creer_fils_prives', 'creer_fils_publics', 'envoyer_fils'] },
   { id: 'vocaux', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'connecter', 'deplacer_membres', 'envoyer', 'integrer', 'historique'] },
+  { id: 'roles_temp', permissions: ['gerer_roles', 'voir_salons', 'envoyer'] },
 ];
 
 const bit = cle => {

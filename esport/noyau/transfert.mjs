@@ -252,6 +252,9 @@ export const TABLES = [
   ['club_evenement_equipes', 'id'],
   ['club_evenement_membres', 'id'],
   ['club_evenement_staff', 'id'],
+  // Rôles Discord temporaires des teams (migration 0066).
+  ['roles_temp_reglages', 'team_id'],
+  ['roles_temp_octrois', 'accorde_le, id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

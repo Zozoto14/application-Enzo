@@ -20,6 +20,7 @@ import { comptesHubSansEsport } from '../synchroAdmin';
 import { AjoutTeams } from './AjoutTeams';
 import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 import { tr, trn } from '../i18n';
+import { OctroisRolesTemp } from './rolesTemp/OctroisRolesTemp';
 
 const couleursRole = (): ReadonlyArray<readonly [string, string]> => [
   ['#d64545', tr('review.dessin.rouge')],
@@ -125,6 +126,8 @@ export function MembresRoles({
               {peut('members.invite') ? <AjouterUnCompte theme={theme} client={client} detail={detail} contexte={contexte} onFait={recharger} /> : null}
             </Panneau>
           ) : null}
+          {/* Rôles Discord temporaires (réglage de la team › Discord) : la section s'efface pour qui ne peut pas les donner. */}
+          {peut('members.view') && detail.modules.some(m => m.cle === 'discord' && m.active) ? <OctroisRolesTemp theme={theme} client={client} teamId={teamId} /> : null}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Roles theme={theme} client={client} detail={detail} roles={roles} onChange={recharger} />

@@ -21,6 +21,7 @@ import { tr, trn } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
 import { ChoixLangue } from './ChoixLangue';
 import { TestMpDiscord } from './TestMpDiscord';
+import { ReglagesRolesTemp } from './rolesTemp/ReglagesRolesTemp';
 
 const STATUTS: Record<EnvoiDiscord['statut'], string> = { get attente() {
       return tr('demandesCompte.en_attente');
@@ -383,6 +384,8 @@ export function Discord({ theme, client, detail }: PropsModule) {
       } /> : null}
 
       <TestMpDiscord theme={theme} client={client} teamId={teamId} />
+
+      <ReglagesRolesTemp theme={theme} client={client} teamId={teamId} />
 
       <Panneau theme={theme} testID="esport-discord-webhook">
         <Intertitre theme={theme}>{tr('discord.webhook_du_salon_repli')}</Intertitre>

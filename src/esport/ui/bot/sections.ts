@@ -17,6 +17,7 @@ import type { ClientEsport } from '../../client';
 import { trBot } from '../../i18n/bot';
 import type { EtatBotAdmin } from '../../bot/api';
 import { ReglagesVocaux } from '../vocaux/ConfigVocaux';
+import { ReglagesRolesTempClub } from '../rolesTemp/CarteRolesTemp';
 
 /** Ce que l'onglet donne à une fonctionnalité (navigation vers les pages qui gardent les réglages). */
 export interface ContexteBot {
@@ -70,6 +71,16 @@ export const FONCTIONNALITES_BOT: FonctionnaliteBot[] = [
     icone: 'micro',
     etat: ctx => (ctx.etat.vocaux?.actif ? { texte: trBot('fn.actif'), ton: 'ok' } : { texte: trBot('fn.inactif'), ton: 'neutre' }),
     Reglages: ReglagesVocaux,
+  },
+  // Rôles Discord temporaires des teams (docs/esport/bot-discord.md) : vue d'ensemble et commandes /role-temp sous la carte ;
+  // le réglage d'une team (rôle, durée, qui peut le donner) vit dans sa page › Discord.
+  {
+    id: 'roles_temp',
+    titre: () => trBot('fn.roles_temp'),
+    description: () => trBot('fn.roles_temp_description'),
+    icone: 'chrono',
+    etat: ctx => (ctx.etat.rolesTemp?.actif ? { texte: trBot('fn.actif'), ton: 'ok' } : { texte: trBot('fn.inactif'), ton: 'neutre' }),
+    Reglages: ReglagesRolesTempClub,
   },
 ];
 

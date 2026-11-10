@@ -76,6 +76,9 @@ import { routePieceTicket, routesTickets } from './tickets/routes.mjs';
 import { servicesVueTickets } from './tickets/vue.mjs';
 import { creerBotTickets } from './tickets/bot.mjs';
 import { creerBotVocaux } from './vocaux/bot.mjs';
+import { creerBotRolesTemp } from './roles-temp/bot.mjs';
+import { servicesRolesTemp } from './roles-temp/service.mjs';
+import { routesRolesTemp } from './roles-temp/routes.mjs';
 import { servicesVocaux } from './vocaux/service.mjs';
 import { routesVocaux } from './vocaux/routes.mjs';
 import { routesEvenements, servicesEvenements } from './evenements-club/service.mjs';
@@ -268,10 +271,13 @@ export function creerApi({
   // Événements organisés par le club et rôles Discord de leurs équipes (migration 0064) : Administration › Événements.
   const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot });
   const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
+  // Rôles Discord temporaires des teams (migration 0066, docs/esport/bot-discord.md) : /role-temp et réglages de la team.
+  const rt = servicesRolesTemp({ base, maintenant, noyau: s, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, botId: configBot.applicationId || null });
+  const botRolesTemp = creerBotRolesTemp({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   const bot = creerBot({
     base,
     maintenant,
-    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb, tickets: botTickets, vocaux: botVocaux },
+    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb, tickets: botTickets, vocaux: botVocaux, rolesTemp: botRolesTemp },
     config: configBot,
     fetch: envoiDiscord,
     lienApp,
@@ -521,6 +527,8 @@ export function creerApi({
     if (evenementsClub !== undefined) return evenementsClub;
     const vocaux = await routesVocaux({ vc, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (vocaux !== undefined) return vocaux;
+    const rolesTemp = await routesRolesTemp({ rt, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    if (rolesTemp !== undefined) return rolesTemp;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (sponsors !== undefined) return sponsors;
     const reseaux = await routesReseaux({ rs: rsx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });

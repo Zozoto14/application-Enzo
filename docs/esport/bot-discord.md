@@ -263,6 +263,7 @@ Réponses visibles **par vous seul** (éphémères).
 | messages dans un salon de ticket | l'auteur du ticket, une personne ajoutée | ils écrivent et envoient leurs fichiers directement (plus de bouton « Répondre ») ; réglage « Le staff répond uniquement depuis l'AppDashboard » (défaut) : le staff lit sans écrire ([tickets.md](tickets.md#le-staff-répond-uniquement-depuis-lappdashboard)) |
 | `/ticket prendre`, `liberer`, `ajouter`, `retirer`, `renommer`, `priorite`, `transferer`, `attente`, `note`, `transcript`, `rouvrir`, `stats`, `permanent`, `ping`, `panneau` | staff du ticket (rôles de la catégorie, compte lié qui répond aux tickets ; `panneau` : administrateur) | tickets : gestion depuis le salon ([tickets.md](tickets.md#commandes-discord)) |
 | `/voc renommer nom:` · `verrouiller` · `deverrouiller` · `expulser membre:` · `ami-ajouter membre:` · `ami-retirer membre:` · `limite places:` · `proprietaire membre:` | le propriétaire d'un salon vocal temporaire (ou le staff : rôles du staff, administrateurs) | gérer son salon vocal temporaire, tapée dans le salon (son fil) ou ailleurs en étant dedans ; chaque sous-commande peut être coupée ou réservée à des rôles ([vocaux.md](vocaux.md#commandes-voc)) |
+| `/role-temp donner membre: [duree:] [raison:] [equipe:]` · `retirer membre: [equipe:]` · `liste [equipe:]` | compte lié, membre actif d'une team avec un rôle autorisé (Coach, Manager, Propriétaire par défaut) ; le Fondateur | donner à quelqu'un le **rôle Discord temporaire de SA team** (24 h par défaut), le retirer tout de suite, voir qui l'a ; voir [Rôles temporaires](#rôles-temporaires) |
 | boutons du **panneau de contrôle** d'un salon vocal temporaire (rien à enregistrer) | son propriétaire, le staff | Renommer, Verrouiller / Déverrouiller, Limite de places, Expulser, Liste d'amis, Transférer ([vocaux.md](vocaux.md)) |
 | `/ticket supprimer [avis]` | compte Esport lié avec `tickets.gerer` (ou `tickets.configurer` pour la catégorie) | tickets : supprimer le ticket **fermé** du salon après confirmation (le salon disparaît, le ticket reste lisible 30 jours dans l'app puis est effacé) ; avis de l'auteur gardé anonyme (défaut) ou supprimé à l'effacement ([tickets.md](tickets.md#supprimer-un-ticket-fermé)) |
 
@@ -272,6 +273,65 @@ les teams liées au serveur** où elle est tapée. Tout est écrit dans le **Jou
 /prochain sur Discord », création, relance…).
 
 Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier »**.
+
+## Rôles temporaires
+
+Demande du Fondateur : le **coach donne un rôle Discord à durée limitée** à des personnes, par exemple un try-out (TO)
+qui reçoit « ⟡ 🎤𝙄𝙣𝙩𝙚𝙧𝙫𝙚𝙣𝙖𝙣𝙩 𝙏𝙁 ⟡ » pendant 24 h. Le rôle est choisi **d'après la team du coach** (The Final LZ0 :
+Intervenant TF, Valorant LZ0 : un autre rôle). Les noms de rôles viennent de Discord et sont affichés tels quels, Unicode
+fantaisie compris.
+
+**La commande** (réponse visible par vous seul) :
+
+| Commande | Effet |
+| --- | --- |
+| `/role-temp donner membre:@x [duree:24h] [raison:…] [equipe:…]` | ajoute le rôle de la team au membre (`PUT /guilds/{serveur}/members/{id}/roles/{rôle}`), note l'octroi (team, rôle, personne, qui l'a donné, raison, échéance), répond en privé (français ou anglais selon la langue de l'appelant), prévient la personne par message privé (réglage) et écrit dans le salon des journaux (réglage, les deux langues selon « Langue des messages » des tickets). La durée se tape `24h`, `90m`, `2j`, `1h30` ; de **1 h à 30 jours** |
+| `/role-temp retirer membre:@x [equipe:…]` | retire le rôle tout de suite et clôt l'octroi (sans `equipe`, l'octroi de la personne parmi vos teams) |
+| `/role-temp liste [equipe:…]` | les rôles actifs de la team : qui, et l'échéance (« dans 3 heures ») |
+
+- **Quelle team** : celle de l'appelant d'après son compte lié par `/lier` et sa place dans les teams (membre actif avec un
+  rôle autorisé). Avec **plusieurs teams**, l'option `equipe` (autocomplétion limitée à SES teams) précise laquelle ;
+  sans elle le bot répond en listant les teams possibles. Un joueur, un compte non lié ou un serveur qui n'est pas celui de
+  la team reçoivent une explication claire.
+- **Redonner prolonge** : la personne a déjà le rôle, la nouvelle échéance est la plus tardive entre l'ancienne et
+  « maintenant + durée » (jamais raccourcie). Un seul octroi actif par team et par personne.
+- **Échéance** : le **cron** (toutes les 5 minutes) et le processus qui tient la connexion en direct (toutes les 20 s, seul
+  le meneur) retirent le rôle (`DELETE …/roles/{rôle}`). Personne partie du serveur, rôle supprimé ou déjà retiré (404) :
+  l'octroi est clos sans erreur. Limite de débit de Discord : nouvel essai après `retry_after`. Hiérarchie des rôles ou
+  Discord injoignable : essais espacés (5 min, 10 min… 6 h), **10 au plus**, puis l'octroi passe en « échec » et le salon des
+  journaux est prévenu (retirez le rôle à la main).
+- **Réglages par team** : page de la team › **Discord › Rôles temporaires** (permission `discord.manage`) — activer, **rôle
+  Discord à donner** (choisi parmi ceux du serveur, avertissement si le rôle du bot est en dessous), **durée par défaut**
+  (24 h, de 1 h à 720 h), **personnes en même temps** (10 par défaut, 1 à 100), **qui peut donner le rôle** (rôles de la
+  team ; aucun choisi : Coach, Manager, Propriétaire ; les Fondateurs du club toujours), **salon des journaux**, **MP à la
+  personne**. Vue d'ensemble de toutes les teams et commandes dans **Administration › Bot Esport HQ › Fonctionnalités ›
+  Rôles temporaires**.
+- **Dans l'app** : page de la team › **Membres et rôles › Rôles temporaires** (visible de ceux qui peuvent donner le rôle) :
+  personnes qui l'ont (expire dans, donné par, raison), **Prolonger** (de la durée par défaut), **Retirer**, et un
+  formulaire **Donner** avec recherche d'une personne du serveur Discord.
+- **Commandes** : chaque sous-commande peut être désactivée ou réservée à des rôles Discord (Administration › Bot Esport HQ ›
+  Rôles temporaires › Commandes ; un administrateur du serveur n'est jamais bloqué). Journal d'activité de la team :
+  « Max a donné le rôle temporaire … à … », « … est arrivé à échéance ».
+- **Permissions Discord** : « Gérer les rôles » (déjà dans la liste centrale `permissions-bot.mjs`, fonctionnalité
+  `roles_temp`) et, pour le salon des journaux, voir le salon et y écrire. **Le rôle du bot doit être AU-DESSUS du rôle
+  temporaire** (Paramètres du serveur › Rôles) : sinon Discord refuse (403), et le bot l'explique en nommant les deux rôles.
+
+**À faire après la mise à jour** (une fois) :
+
+1. **Réenregistrer les commandes** (étape 6, ou Administration › Bot Esport HQ › Commandes › *Réenregistrer les commandes*) :
+   la commande `/role-temp` est nouvelle ; le tableau « enregistrées / attendues » doit repasser « À jour ».
+2. Sur Discord, **glisser le rôle « Esport HQ » au-dessus des rôles temporaires** (Paramètres du serveur › Rôles). Si le bot a
+   été invité avant cette version, « Gérer les rôles » est déjà demandé (tickets, salons vocaux) ; sinon réinvitez-le avec le
+   lien de l'onglet Bot Esport HQ.
+3. Page de la team › Discord › **Rôles temporaires** : choisir le rôle, activer, vérifier la durée ; chaque coach lie son
+   compte avec `/lier` (étape 8).
+
+Base : migration `0066_roles_temporaires.sql` (`roles_temp_reglages`, `roles_temp_octrois`, commandes dans
+`tickets_reglages` clé `roles_temp_commandes`). Code : `esport/noyau/roles-temp/` (`reglages.mjs`, `equipes.mjs` team de
+l'appelant, `moteur.mjs` octroi / retrait / échéance, `bot.mjs` `/role-temp`, `service.mjs` + `routes.mjs` app), tâche
+« rôles Discord temporaires » de `esport/noyau/cron.mjs`. Routes : `GET|PUT|POST|DELETE /teams/:t/roles-temporaires…`,
+`GET /roles-temp/config`, `PUT /roles-temp/config/commandes`. Tests : `esport/test/roles-temp.test.mjs`,
+`src/esport/RolesTemp.test.tsx`.
 
 ## Langues : anglais d'abord, fil français
 

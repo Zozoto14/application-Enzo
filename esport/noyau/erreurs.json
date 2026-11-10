@@ -844,6 +844,15 @@
   "25 catégories au plus par panneau.": "25 categories at most per panel.",
   "Identifiant Discord obligatoire.": "Discord ID required.",
   "Identifiant Discord invalide (chiffres seulement).": "Invalid Discord ID (digits only).",
+  "Rôle temporaire introuvable ou déjà terminé.": "Temporary role not found or already ended.",
+  "Nom du rôle illisible.": "Unreadable role name.",
+  "Liste de rôles de la team invalide.": "Invalid list of team roles.",
+  "Choisissez le rôle Discord à donner avant d’activer les rôles temporaires.": "Choose the Discord role to give before enabling temporary roles.",
+  "Liste d’identifiants Discord invalide.": "Invalid list of Discord IDs.",
+  "Un des rôles choisis n’appartient pas à cette team.": "One of the chosen roles does not belong to this team.",
+  "Ce rôle n’existe pas (ou n’est pas donnable) sur le serveur Discord.": "This role does not exist (or cannot be given) on the Discord server.",
+  "Choisissez une personne du serveur Discord.": "Choose a person from the Discord server.",
+  "Durée invalide.": "Invalid duration.",
   "Texte attendu.": "Text expected.",
   "Choisissez le rôle qui déclenche la bienvenue.": "Choose the role that triggers the welcome message.",
   "Choisissez le salon où publier la bienvenue.": "Choose the channel where the welcome message is posted.",
@@ -1354,6 +1363,10 @@
   [
    "^Tâche confidentielle \\((.+)\\) : seule l’IA locale du serveur peut la faire, et elle est indisponible\\. Rien n’a été envoyé à un service externe\\.$",
    "Confidential task ($1): only the server’s local AI may do it, and it is unavailable. Nothing was sent to an external service."
+  ],
+  [
+   "^Discord a refusé la recherche \\(HTTP (\\d+)\\)\\.$",
+   "Discord refused the search (HTTP $1)."
   ],
   [
    "^(\\d+) personnes ou rôles au plus\\.$",

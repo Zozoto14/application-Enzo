@@ -4,6 +4,7 @@
  */
 
 import { trDv } from './i18n/devblog';
+import { trRt } from './i18n/rolesTemp';
 import { nomModule, nomPermission, nomRole, type AlerteTableau, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
 
 /** Statuts d'un dépôt de réunion. */
@@ -204,6 +205,11 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return tr(m.ping ? 'jr.discord_ping_on' : 'jr.discord_ping_off', { qui, type: texte(m.type) });
     case 'discord.command_used':
       return tr('jr.discord_command_used', { qui, commande: texte(m.commande) });
+    // Rôles temporaires : le nom du rôle et de la personne viennent de Discord, affichés tels quels.
+    case 'discord.role_temp_given':
+      return trRt(m.prolonge ? 'journal_phrase_prolonge' : 'journal_phrase_donne', { qui, role: texte(m.role), membre: texte(m.membre) });
+    case 'discord.role_temp_removed':
+      return m.expire ? trRt('journal_phrase_expire', { role: texte(m.role), membre: texte(m.membre) }) : trRt('journal_phrase_retire', { qui, role: texte(m.role), membre: texte(m.membre) });
     case 'discord.account_linked':
       return tr('jr.discord_account_linked', { qui });
     case 'discord.account_unlinked':

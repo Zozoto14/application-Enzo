@@ -185,6 +185,30 @@ export const SOUS_COMMANDES_VOC = [
 ];
 COMMANDES.push({ name: 'voc', ...desc('Ton salon vocal temporaire', 'Your temporary voice channel'), contexts: SERVEUR, options: SOUS_COMMANDES_VOC });
 
+/**
+ * Rôles temporaires (docs/esport/bot-discord.md) : /role-temp <donner|retirer|liste>, pour le staff d'une team (Coach,
+ * Manager, Propriétaire par défaut) : le bot donne le rôle Discord réglé pour SA team (compte lié par /lier) pendant une
+ * durée limitée (24 h par défaut), puis le retire. L'option `equipe` (autocomplétion limitée à ses teams) ne sert qu'à
+ * qui en a plusieurs. Chaque sous-commande peut être désactivée ou réservée à des rôles (Administration › Bot Esport HQ).
+ */
+const optionEquipe = { type: T.CHAINE, name: 'equipe', ...desc('Ta team (si tu en as plusieurs)', 'Your team (if you have several)'), required: false, autocomplete: true };
+export const SOUS_COMMANDES_ROLE_TEMP = [
+  {
+    type: T.SOUS_COMMANDE,
+    name: 'donner',
+    ...desc('Donner le rôle temporaire de ta team à un membre (ex. un try-out)', 'Give your team’s temporary role to a member (e.g. a try-out)'),
+    options: [
+      { type: T.UTILISATEUR, name: 'membre', ...desc('Le membre du serveur', 'The server member'), required: true },
+      { type: T.CHAINE, name: 'duree', ...desc('Durée : 24h par défaut (90m, 2j… de 1h à 30j)', 'Duration: 24h by default (90m, 2d… from 1h to 30d)'), required: false, autocomplete: true, max_length: 20 },
+      { type: T.CHAINE, name: 'raison', ...desc('Raison (facultative)', 'Reason (optional)'), required: false, max_length: 300 },
+      optionEquipe,
+    ],
+  },
+  { type: T.SOUS_COMMANDE, name: 'retirer', ...desc('Retirer tout de suite le rôle temporaire d’un membre', 'Remove a member’s temporary role right now'), options: [{ type: T.UTILISATEUR, name: 'membre', ...desc('Le membre du serveur', 'The server member'), required: true }, optionEquipe] },
+  { type: T.SOUS_COMMANDE, name: 'liste', ...desc('Les rôles temporaires actifs de ta team', 'The active temporary roles of your team'), options: [optionEquipe] },
+];
+COMMANDES.push({ name: 'role-temp', ...desc('Rôle Discord temporaire pour les membres de ta team', 'Temporary Discord role for your team’s members'), contexts: SERVEUR, options: SOUS_COMMANDES_ROLE_TEMP });
+
 /** Définitions telles que Discord les attend (commandes de type 1, « chat input »). */
 export function definitionsCommandes() {
   return COMMANDES.map(c => ({ type: 1, integration_types: [0], ...c }));

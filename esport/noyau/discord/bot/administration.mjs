@@ -117,6 +117,8 @@ export function servicesBotAdmin({ base, maintenant = () => Date.now(), fetch: f
       },
       // Salons vocaux temporaires (vocaux/) : activés ou non, et si l'acteur peut les régler (carte « Fonctionnalités »).
       vocaux: { actif: Boolean((await lireVocaux(base)).actif), configurer: await aGlobale(base, acteur, 'vocaux.configurer') },
+      // Rôles temporaires des teams (roles-temp/) : au moins une team les a activés.
+      rolesTemp: { actif: Number((await base.premier('SELECT COUNT(*) AS n FROM roles_temp_reglages WHERE actif = 1', []))?.n ?? 0) > 0, configurer: true },
       // Serveur Discord du club : un seul réglage, celui des tickets (Tickets › Configuration › Général).
       serveur: general.guildId ? { id: general.guildId, nom: general.guildNom ?? '' } : null,
       teams: await teams(acteur),

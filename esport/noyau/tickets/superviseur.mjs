@@ -40,6 +40,7 @@ import { rest } from './discord.mjs';
 import { INTENT_MEMBRES, accueillirMembre, ecrireEtatBienvenue, effacerBienvenues, intentsVoulus, lireBienvenue } from './bienvenue.mjs';
 import { lireVocaux } from '../vocaux/reglages.mjs';
 import { creerMoteurVocaux } from '../vocaux/moteur.mjs';
+import { expirerRolesTemp } from '../roles-temp/moteur.mjs';
 
 export const BAIL = 'gateway';
 export const DUREE_BAIL_MS = 60_000;
@@ -290,6 +291,8 @@ export function creerSuperviseurTickets({
       const vivant = e.etat === 'pret' && (!e.dernierAck || t - e.dernierAck < Math.max(120_000, intervalle * 4));
       // Salons vocaux vides arrivés au délai (rattrapage des minuteries : processus remplacé, redémarrage).
       if (vivant) await moteur.passage().catch(err => journal.error?.('[esport] vocaux : passage', err?.message ?? err));
+      // Rôles Discord temporaires arrivés à échéance : retirés ici sans attendre le cron (toutes les 5 minutes), par le seul meneur.
+      await expirerRolesTemp(base, { fetch: fetchDiscord, jetonBot, maintenant }).catch(err => journal.error?.('[esport] rôles temporaires : échéance', err?.message ?? err));
       let mode = vivant ? 'direct' : 'secours';
       let releve = null;
       if (mode === 'secours' ? t - dernierSecours >= intervalleSecours : rattraper) {

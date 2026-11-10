@@ -42,6 +42,7 @@ const fr = {
   'fct.annonces': 'Annonces des teams',
   'fct.tickets': 'Tickets',
   'fct.vocaux': 'Salons vocaux temporaires',
+  'fct.roles_temp': 'Rôles temporaires',
 
   'perm.gerer_salons': 'Gérer les salons',
   'perm.reactions': 'Ajouter des réactions',
@@ -149,6 +150,8 @@ const fr = {
   'fn.tickets_ouvrir': 'Ouvrir Tickets › Configuration',
   'fn.vocaux': 'Salons vocaux temporaires',
   'fn.vocaux_description': 'Un salon vocal créé à la demande, supprimé quand il se vide.',
+  'fn.roles_temp': 'Rôles temporaires',
+  'fn.roles_temp_description': 'Le coach donne un rôle Discord à durée limitée (try-out, remplaçant) avec /role-temp ; le bot le retire à l’échéance.',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -187,6 +190,7 @@ const en: Record<keyof typeof fr, string> = {
   'fct.annonces': 'Team announcements',
   'fct.tickets': 'Tickets',
   'fct.vocaux': 'Temporary voice channels',
+  'fct.roles_temp': 'Temporary roles',
 
   'perm.gerer_salons': 'Manage channels',
   'perm.reactions': 'Add reactions',
@@ -289,6 +293,8 @@ const en: Record<keyof typeof fr, string> = {
   'fn.tickets_ouvrir': 'Open Tickets › Configuration',
   'fn.vocaux': 'Temporary voice channels',
   'fn.vocaux_description': 'A voice channel created on demand, deleted when it empties.',
+  'fn.roles_temp': 'Temporary roles',
+  'fn.roles_temp_description': 'The coach gives a time-limited Discord role (try-out, substitute) with /role-temp; the bot removes it when it expires.',
 };
 
 export type CleBot = keyof typeof fr;

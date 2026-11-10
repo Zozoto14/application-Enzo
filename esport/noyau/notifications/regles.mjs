@@ -118,6 +118,8 @@ export const REGLES = Object.freeze({
   // ---- Discord (réglages et échecs d'envoi : discord.manage).
   'discord.*': { categorie: 'discord', acces: 'team:discord.manage', lien: TEAM('parametres') },
   'discord.command_used': AUCUN,
+  'discord.role_temp_given': AUCUN,
+  'discord.role_temp_removed': AUCUN,
   'discord.test_mp': AUCUN,
   'discord.account_linked': AUCUN,
   'discord.account_unlinked': AUCUN,

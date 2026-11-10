@@ -64,6 +64,11 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
       // Équipes des événements du club : la personne est retirée des membres (Discord ID, nom, Embark ID).
       { sql: `DELETE FROM club_evenement_membres WHERE discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       { sql: `DELETE FROM club_evenement_staff WHERE discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
+      // Rôles temporaires : octrois terminés effacés ; un octroi encore actif garde l'identifiant (le rôle doit être retiré
+      // à l'échéance), sans nom ni raison.
+      { sql: `DELETE FROM roles_temp_octrois WHERE statut <> 'actif' AND membre_discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
+      { sql: `UPDATE roles_temp_octrois SET membre_nom = '', raison = '' WHERE membre_discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
+      { sql: `UPDATE roles_temp_octrois SET accorde_par_discord_id = NULL, accorde_par_nom = '' WHERE accorde_par_discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
     );
   }
   if (compte) {
@@ -76,6 +81,9 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
       { sql: 'UPDATE tickets_liste_noire SET ajoute_par = NULL WHERE ajoute_par = ?', params: [compte] },
       { sql: 'UPDATE tickets_panneaux SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
       { sql: 'UPDATE tickets_reglages SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+      { sql: 'UPDATE roles_temp_octrois SET accorde_par = NULL WHERE accorde_par = ?', params: [compte] },
+      { sql: 'UPDATE roles_temp_octrois SET retire_par = NULL WHERE retire_par = ?', params: [compte] },
+      { sql: 'UPDATE roles_temp_reglages SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     );
   }
   return lot;

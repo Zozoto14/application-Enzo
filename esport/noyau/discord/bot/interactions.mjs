@@ -137,7 +137,8 @@ export function lireHeureSaisie(saisie) {
 export function creerBot({ base, maintenant = () => Date.now(), services, config = {}, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), lienApp = '', limite = async () => {}, attenteDiffere }) {
   // `tickets` (tickets/bot.mjs) : boutons, menus, fenêtres et commandes des tickets (sans compte lié).
   // `vocaux` (vocaux/bot.mjs) : panneau de contrôle des salons vocaux temporaires et /voc (sans compte lié).
-  const { noyau, planning: p, resumes, objectifs, playbook, liaisons, tickets, vocaux } = services;
+  // `rolesTemp` (roles-temp/bot.mjs) : /role-temp (rôles Discord temporaires des teams, compte lié par /lier).
+  const { noyau, planning: p, resumes, objectifs, playbook, liaisons, tickets, vocaux, rolesTemp } = services;
   const lien = /^https:\/\//.test(lienApp) ? lienApp : '';
   const attendreLent = attenteDiffere ?? (() => new Promise(ok => setTimeout(ok, 2000).unref?.()));
 
@@ -619,6 +620,11 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
         const r = await vocaux.interaction(i);
         if (r !== undefined) return r;
       }
+      // Rôles temporaires : traités à part (la team de l'appelant vient de son compte lié).
+      if (rolesTemp) {
+        const r = await rolesTemp.interaction(i);
+        if (r !== undefined) return r;
+      }
       if (i.type === TYPE.COMMANDE) {
         const f = COMMANDES[i.data?.name];
         return f ? await f(i) : erreur(i, T(lg(i), 'bot.erreur.commande_inconnue'));
@@ -679,6 +685,8 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       try {
         const rt = tickets ? await tickets.interaction(i) : undefined;
         if (rt !== undefined) return json(rt);
+        const rr = rolesTemp ? await rolesTemp.interaction(i) : undefined;
+        if (rr !== undefined) return json(rr);
         return json(await autocomplete(i));
       } catch {
         return json({ type: REPONSE.CHOIX, data: { choices: [] } });

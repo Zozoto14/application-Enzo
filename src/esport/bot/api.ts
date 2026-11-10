@@ -36,6 +36,8 @@ export interface EtatBotAdmin {
   tickets: { actif: boolean; langue: ModeLangue; connexion: Connexion; diagnostic: DiagnosticTickets; commandes: Commandes };
   /** Salons vocaux temporaires (absent d'un ancien serveur). */
   vocaux?: { actif: boolean; configurer: boolean };
+  /** Rôles temporaires des teams (absent d'un ancien serveur) : au moins une team les a activés. */
+  rolesTemp?: { actif: boolean; configurer: boolean };
   serveur: { id: string; nom: string } | null;
   teams: TeamBot[];
   commandes: CommandeBot[];

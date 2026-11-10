@@ -264,6 +264,9 @@ export const TYPES_DISCORD = [
   'discord.account_unlinked',
   'discord.pings_changed',
   'discord.command_used',
+  // Rôles Discord temporaires des teams (migration 0066) : donné / prolongé, retiré (à la main ou à l'échéance).
+  'discord.role_temp_given',
+  'discord.role_temp_removed',
 ];
 
 /** Événement de domaine → types de messages Discord qu'il peut déclencher. */
