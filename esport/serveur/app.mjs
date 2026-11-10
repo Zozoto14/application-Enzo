@@ -25,6 +25,9 @@ import { sourceGitDepot } from './devblog-source.mjs';
 import { creerServiceDeploiement } from './deploiement.mjs';
 import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
 import { creerFetchDiscordNode } from '../adaptateurs/fetchDiscordNode.mjs';
+import { configSmtp, creerEnvoyeur, manquesSmtp, resumeSmtp, suivreVerificationSmtp } from './courriel-smtp.mjs';
+import { installerJournal } from './journal-fichier.mjs';
+import { infosDemarrage } from './version-serveur.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
@@ -128,9 +131,30 @@ export async function demarrer({ port, hote, ...options } = {}) {
   };
 }
 
+/** Ligne de démarrage du journal (~/logs/esport.log) : version, Node, pid, configuration, e-mails ; aucun secret. */
+export function ligneDemarrage({ infos, config, journal, env = process.env }) {
+  const smtp = configSmtp(env);
+  const manques = manquesSmtp(env);
+  const courriel = smtp ? `SMTP configuré (${resumeSmtp(smtp)})` : manques.length === 4 ? 'SMTP non configuré (facultatif : récapitulatif par e-mail)' : `SMTP incomplet (manquant : ${manques.join(', ') || 'MAIL_FROM valide'})`;
+  return `[esport] démarrage : version ${infos.commit ? infos.commit.slice(0, 7) : 'inconnue'}, Node ${infos.node}, pid ${infos.pid}, configuration ${config.fichierEnv ?? 'aucun fichier (variables de Setup Node.js App seulement)'}, journal ${journal?.fichier ?? 'désactivé'} ; e-mails : ${courriel}`;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href || globalThis.__appdashboardDemarrer === 'esport') {
-  demarrer()
-    .then(s => console.log(`[esport] serveur prêt (${s.url})${s.esport.config.fichierEnv ? `, configuration : ${s.esport.config.fichierEnv}` : ''}`))
+  // Journal ~/logs/esport.log d'abord (après esport.env : réglages et valeurs à masquer), pour tout voir, même un échec.
+  const config = chargerConfigEsport();
+  const journal = installerJournal({ app: 'esport' });
+  console.log(ligneDemarrage({ infos: infosDemarrage({ app: 'esport' }), config, journal }));
+  demarrer({ config })
+    .then(async s => {
+      console.log(`[esport] serveur prêt (${s.url})`);
+      // Vérification SMTP du récapitulatif (connexion + identifiants), sans rien envoyer ni retarder le démarrage.
+      const smtp = configSmtp(process.env);
+      if (smtp) {
+        const envoyeur = await creerEnvoyeur({ ...smtp, copieEnvoyes: false }).catch(() => undefined);
+        await suivreVerificationSmtp(envoyeur, { app: 'esport' }).lancer();
+        await envoyeur?.fermer?.().catch(() => undefined);
+      }
+    })
     .catch(e => {
       console.error('[esport] démarrage impossible :', e);
       process.exit(1);

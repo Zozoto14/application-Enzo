@@ -46,7 +46,7 @@ test('courriel : sans transport SMTP → 503 non-configure ; réservé au jeton 
   const r = await appel(env, '/courriel/envoyer', { corps: { destinataires: ['lea@exemple.fr'], variables: { objet: 'Salut', message: 'Coucou' } } });
   assert.equal(r.status, 503);
   assert.equal((await r.json()).motif, 'non-configure');
-  assert.deepEqual(await (await appel(env, '/courriel/etat', { methode: 'GET' })).json(), { configure: false, expediteur: null, limites: { heure: 100, jour: 300 } });
+  assert.deepEqual(await (await appel(env, '/courriel/etat', { methode: 'GET' })).json(), { configure: false, expediteur: null, limites: { heure: 100, jour: 300 }, test: true });
   const ami = await jetonDeProfil(JETON, 'abc123def');
   for (const chemin of ['/courriel/etat', '/courriel/journal']) assert.equal((await appel(env, chemin, { methode: 'GET', jeton: ami })).status, 403);
   assert.equal((await appel({ ...env, ENVOYER_COURRIEL: envoyeur }, '/courriel/envoyer', { jeton: ami, corps: { destinataires: ['a@b.fr'] } })).status, 403);
@@ -86,7 +86,7 @@ test('courriel : message libre envoyé par le vrai transport au faux SMTP (HTML 
   assert.equal(journal.envois[0].ref, 'messagerie');
   const brut = [...env.BOITE.donnees.values()].join('\n');
   assert.ok(!/lea@exemple|tom@exemple/i.test(brut), 'aucune adresse en clair dans la boîte');
-  assert.deepEqual(await (await appel(env, '/courriel/etat', { methode: 'GET' })).json(), { configure: true, expediteur: null, limites: { heure: 100, jour: 300 } });
+  assert.deepEqual(await (await appel(env, '/courriel/etat', { methode: 'GET' })).json(), { configure: true, expediteur: null, limites: { heure: 100, jour: 300 }, test: true });
 });
 
 test('courriel : invitation (bouton vers le lien), FR et EN', async () => {

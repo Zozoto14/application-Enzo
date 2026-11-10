@@ -231,8 +231,13 @@ describe('Administration › Messagerie', () => {
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-objet'), 'Tournoi samedi');
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-message'), 'Salle B, 14 h');
     await fireEvent.press(screen.getByTestId('admin-messagerie-deux-versions'));
-    // Version anglaise incomplète : envoi bloqué.
-    expect(screen.getByTestId('admin-messagerie-envoyer').props.accessibilityState?.disabled).toBe(true);
+    // Version anglaise incomplète : rien ne part, et l'app le dit (jamais un bouton muet).
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('admin-messagerie-envoyer'));
+      await new Promise<void>(res => setTimeout(res, 20));
+    });
+    expect(screen.getByTestId('admin-messagerie-retour')).toHaveTextContent(/version anglaise est incomplète/);
+    expect(r.appels.some(a => a.url.endsWith('/courriel/envoyer'))).toBe(false);
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-objet-en'), 'Saturday tournament');
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-message-en'), 'Room B, 2 pm');
     await act(async () => {
@@ -275,7 +280,12 @@ describe('Administration › Messagerie', () => {
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-objet'), 'Salut');
     await fireEvent.changeText(screen.getByTestId('admin-messagerie-message'), 'Bonjour');
     expect(screen.getByTestId('admin-messagerie-mailto')).toBeTruthy();
-    expect(screen.getByTestId('admin-messagerie-envoyer').props.accessibilityState?.disabled).toBe(true);
+    // « Envoyer » répond quand même : le serveur dit qu'il n'est pas configuré.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('admin-messagerie-envoyer'));
+      await new Promise<void>(res => setTimeout(res, 20));
+    });
+    expect(screen.getByTestId('admin-messagerie-retour')).toHaveTextContent(/SMTP non configuré/);
   });
 });
 

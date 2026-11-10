@@ -276,7 +276,11 @@ cPanel › section **Logiciel** › **Setup Node.js App** › **Create Applicati
 | **Application root** | `application-enzo/esport` | `application-enzo/relais` |
 | **Application URL** | `esport.appdashboard.fr` (chemin vide) | `relais.appdashboard.fr` (chemin vide) |
 | **Application startup file** | `serveur/app.cjs` | `serveur/app.cjs` |
-| **Passenger log file** | `/home/jayo8828/logs/esport-passenger.log` | `/home/jayo8828/logs/relais-passenger.log` |
+
+Journaux : les versions récentes de cPanel n'ont plus de champ **Passenger log file**. Chaque app écrit donc elle-même
+son journal : `~/logs/esport.log` et `~/logs/relais.log` (rotation à 5 Mo, 3 fichiers ; autre emplacement :
+`JOURNAL_FICHIER=…` dans son `.env`, rien : `JOURNAL_DESACTIVE=1`). Si votre cPanel affiche encore le champ, il
+peut rester vide.
 
 Cliquez **Create** pour chacune. Puis, dans l'app **Esport** seulement : bouton **Run NPM Install** (il installe le
 seul paquet nécessaire, `pg`, pour les deux apps). Dans l'app relais, inutile : elle n'a aucune dépendance à elle et
@@ -954,8 +958,10 @@ seulement après une semaine sans souci ici.
 
 | Ce que vous voyez | Que faire |
 | --- | --- |
-| Des membres n'arrivent pas à se connecter avec le bon mot de passe, ou « (prénom inconnu) » dans l'Administration | [diagnostic-comptes.md](diagnostic-comptes.md) : Administration › Utilisateurs › fiche › « Diagnostic de connexion » (et « Débloquer ») ; dans le terminal : `node relais/serveur/diagnostic-connexions.mjs` (après le `source …/activate`) et `grep -hF "[relais] connexion" ~/logs/relais-passenger.log \| tail -n 50`. |
-| Page « We're sorry, but something went wrong » ou erreur 503 sur esport./relais. | Lisez le journal de l'app : `tail -n 50 ~/logs/esport-passenger.log` (ou `relais-passenger.log`). Sans réglage de journal, Passenger écrit dans `stderr.log` du dossier de l'app (`~/application-enzo/esport/stderr.log`). Redémarrer : **Setup Node.js App** › l'app › **Restart**, ou `touch ~/application-enzo/esport/tmp/restart.txt`. |
+| Des membres n'arrivent pas à se connecter avec le bon mot de passe, ou « (prénom inconnu) » dans l'Administration | [diagnostic-comptes.md](diagnostic-comptes.md) : Administration › Utilisateurs › fiche › « Diagnostic de connexion » (et « Débloquer ») ; dans le terminal : `node relais/serveur/diagnostic-connexions.mjs` (après le `source …/activate`) et `grep -hF "[relais] connexion" ~/logs/relais.log \| tail -n 50`. |
+| Page « We're sorry, but something went wrong » ou erreur 503 sur esport./relais. | Lisez le journal de l'app : `tail -n 50 ~/logs/relais.log` (ou `esport.log`) ; la dernière ligne `ERROR` dit pourquoi. Rien dans ce fichier : le code ne se charge même pas, voir `~/application-enzo/relais/stderr.log`. Redémarrer : voir « Redémarrer une app » ci-dessous. |
+| Mises à jour › Serveurs : « le relais n'a pas redémarré » (ou « version inconnue ») | Le relais tourne encore l'ancien code : **Setup Node.js App** › `application-enzo/relais` › **Restart** (ou la commande de « Redémarrer une app » ci-dessous), puis vérifiez la dernière ligne de démarrage : `grep "démarrage" ~/logs/relais.log \| tail -n 1` doit montrer la nouvelle version. |
+| Messagerie : « plus aucun e-mail ne part » | **Administration › Messagerie › Tester l'envoi** dit la cause exacte (appareil non relié, relais arrêté ou ancien, SMTP non configuré ou refusé) ; tableau complet dans [emails.md](emails.md), « Dépannage ». Journal : `grep -E "e-mails\|courriel" ~/logs/relais.log \| tail -n 20`. |
 | Tickets Discord : « Connexion Discord : Hors ligne » | Ouvrez **Tickets › Configuration › Connexion** : le **diagnostic** dit quelle condition manque (jeton, serveur, catégorie, activation, app arrêtée, `URL_PUBLIQUE`, tâche cron jamais vue, avec la commande à copier). Détails : [esport/tickets.md](esport/tickets.md). |
 | `/sante` répond « Serveur Esport pas encore configuré » avec une liste de problèmes | Le fichier `~/.appdashboard/esport.env` manque une valeur (la liste dit laquelle). Corrigez, puis redémarrez l'app. |
 | « Node 22 ou plus est nécessaire » | **Setup Node.js App** › l'app › **Node.js version** : 22 › **Save**, pour les deux apps ; corrigez aussi le chemin `nodevenv/…/22/` de la tâche cron. |
@@ -970,7 +976,7 @@ seulement après une semaine sans souci ici.
 | Dans l'app : « Esport pas encore activé » | Sur le site : `https://appdashboard.fr/esport.json` doit contenir `https://esport.appdashboard.fr`. Sur PC/iPhone : l'adresse se déduit du relais ; synchronisez une fois. |
 | Lecture des sources Tsuzuku refusée depuis le site (CORS) | `ORIGINES_SITE` de `relais.env` doit contenir l'adresse exacte du site (avec ou sans `www`). |
 | Support : rien n'arrive dans Discord | **Administration › Support** dit si le webhook est absent, mal formé, ou le motif du dernier échec. `DISCORD_WEBHOOK_URL` dans `relais.env`, puis redémarrez le relais ([support.md](support.md)). Les demandes déjà reçues : bouton **Renvoyer sur Discord**. |
-| E-mails : « l'envoi par le serveur n'est pas configuré » | Les cinq lignes `SMTP_*` / `MAIL_FROM` de `relais.env` ([emails.md](emails.md)), puis redémarrez le relais. `tail ~/logs/relais-passenger.log` dit laquelle manque. |
+| E-mails : « l'envoi par le serveur n'est pas configuré » | Les cinq lignes `SMTP_*` / `MAIL_FROM` de `relais.env` ([emails.md](emails.md)), puis redémarrez le relais. La Messagerie et `grep "démarrage" ~/logs/relais.log \| tail -n 1` disent laquelle manque. |
 | E-mails en spam | cPanel › **Email Deliverability** : SPF et DKIM « Valide » ([emails.md](emails.md) § 2). |
 | Discord : « interactions endpoint url could not be verified » | `DISCORD_PUBLIC_KEY` et `DISCORD_APPLICATION_ID` dans `esport.env`, app redémarrée, puis réessayez. `curl -s https://esport.appdashboard.fr/sante` doit montrer `"bot":true`. |
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
@@ -992,9 +998,38 @@ seulement après une semaine sans souci ici.
 | Jeux : « Plafond mensuel … atteint » | **Jeux › Administration IA** › Plafonds mensuels : montez-les, ou attendez le mois suivant. |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur (dernière entrée de `X-Forwarded-For` posée par le frontal d'o2switch) : un intermédiaire commun (VPN, réseau d'entreprise) peut faire partager un compteur à plusieurs appareils. Patientez quelques minutes. |
 
-Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cron.log` (tâches planifiées),
-`~/logs/esport-transcription.log` (transcriptions sur le serveur), `~/logs/esport-passenger.log` et
-`~/logs/relais-passenger.log` (les deux apps).
+Journaux utiles : `~/logs/relais.log` et `~/logs/esport.log` (les deux apps : démarrage avec la version, e-mails,
+erreurs), `~/logs/esport-deploy.log` (déploiements et redémarrages), `~/logs/esport-cron.log` (tâches planifiées),
+`~/logs/esport-transcription.log` (transcriptions sur le serveur).
+
+### Lire les journaux des apps
+
+Dans cPanel › **Terminal** :
+
+```bash
+tail -n 50 ~/logs/relais.log                      # relais : 50 dernières lignes
+tail -n 50 ~/logs/esport.log                      # Esport
+grep "démarrage" ~/logs/relais.log | tail -n 3    # derniers démarrages : version, Node, pid, configuration, e-mails
+grep -E "ERROR|WARN" ~/logs/relais.log | tail -n 20
+tail -f ~/logs/relais.log                         # en direct (Ctrl+C pour arrêter)
+```
+
+Chaque ligne commence par la date (UTC) et le niveau (`INFO`, `WARN`, `ERROR`). Les secrets n'y sont jamais écrits
+(mots de passe, jetons, URL de la base, webhooks) et les adresses e-mail sont masquées (`l***@e***.fr`). Les anciens
+fichiers `relais.log.1`, `relais.log.2` gardent la suite (5 Mo chacun).
+
+### Redémarrer une app
+
+- cPanel › **Setup Node.js App** › ligne `application-enzo/relais` (ou `application-enzo/esport`) › **Restart**
+  (icône de flèche circulaire, ou bouton **Restart** dans la page de l'app) ;
+- ou dans le Terminal : `bash ~/application-enzo/esport/serveur/redemarrer-apps.sh relais` (ou `esport`, ou rien pour
+  les deux). Il pose `tmp/restart.txt` et, si la commande existe, lance
+  `cloudlinux-selector restart --json --interpreter nodejs --app-root application-enzo/relais` ; le résultat est noté
+  dans `~/logs/esport-deploy.log`. `deployer.sh` fait la même chose après chaque déploiement.
+
+Vérifier que le redémarrage a pris : `grep "démarrage" ~/logs/relais.log | tail -n 1` (nouvelle heure, nouvelle
+version), ou Paramètres › Administration › **Mises à jour** › Serveurs (« Relais : version abc1234 (démarré il y a
+2 min) »).
 
 Pour les curieux : les fichiers concernés sont `esport/serveur/` (serveur Esport, cron, migrations, import,
 `deployer.sh`), `relais/serveur/` (relais et sa boîte PostgreSQL), `esport/adaptateurs/postgres.mjs`,

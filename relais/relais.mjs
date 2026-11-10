@@ -71,7 +71,7 @@ import { routeDiagnosticConnexions } from './diagnostic.mjs';
 
 export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post', 'jeton-invitation'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post', 'jeton-invitation', 'courriel-test', 'version-serveur'];
 /** Fonctions qui n'existent qu'avec un magasin de coffres (serveur Node + PostgreSQL). */
 const FONCTIONS_COFFRE = ['coffre-serveur', 'coffre-v10', 'avis'];
 /** Une enveloppe chiffrée (fichier d'un compte) : taille maximale (PostgreSQL). */
@@ -1008,6 +1008,13 @@ export async function traiterRequete(requete, env, ctx) {
     // « sondage » par défaut : aucune connexion tenue ouverte ; relais/avis.mjs).
     // Sans magasin de coffres (`env.COFFRES`), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
     return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), ...(env.COFFRES ? { tempsReel: modeTempsReel(env), pasSondage: PAS_SONDAGE_S } : {}), heure: Date.now() });
+  }
+  if (pathname === '/serveur/version') {
+    // Version en service (Fondateur) : commit chargé au démarrage, heure de démarrage, pid, durée, dernier
+    // commit déployé par deployer.sh. Fournie par le serveur Node (relais/serveur/app.mjs) ; absente : 404.
+    if (!portee.maitre) return erreur('Réservé au Fondateur.', 403);
+    if (typeof env.VERSION_SERVEUR !== 'function') return reponse({ erreur: 'Version indisponible sur ce relais.', motif: 'indisponible' }, 404);
+    return reponse(env.VERSION_SERVEUR());
   }
   if (pathname === '/heure') {
     // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.

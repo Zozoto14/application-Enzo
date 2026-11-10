@@ -294,7 +294,7 @@ export function creerServiceDeploiement({
 } = {}) {
   const suivi = github ?? creerSuiviGithub({ depot: process.env.GITHUB_DEPOT || DEPOT_GITHUB, maintenant });
   // Version du serveur : celle du code chargé au démarrage (Passenger redémarre l'app à chaque déploiement).
-  const serveur = { commit: lireCommitGit(depot), demarreLe: iso(maintenant()) };
+  const serveur = { commit: lireCommitGit(depot), demarreLe: iso(maintenant()), pid: process.pid, node: process.versions.node };
   const drapeau = join(etatDir, 'deployer-demande');
 
   return {
@@ -311,7 +311,7 @@ export function creerServiceDeploiement({
       return {
         ...synthese,
         site: versionSite,
-        serveur: { ...serveur, redemarrageEnAttente: Boolean(codeDeploye && serveur.commit && !memeCommit(codeDeploye, serveur.commit)) },
+        serveur: { ...serveur, dureeS: Math.max(0, Math.round((t - Date.parse(serveur.demarreLe)) / 1000)), redemarrageEnAttente: Boolean(codeDeploye && serveur.commit && !memeCommit(codeDeploye, serveur.commit)) },
         relais: { commit: codeDeploye, redemarreLe: iso(mtime(join(depot, 'relais', 'tmp', 'restart.txt'))) },
         deploiement: {
           codeDeploye,

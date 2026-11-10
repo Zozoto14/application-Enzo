@@ -6,7 +6,8 @@
 #      git fetch ; s'il y a du nouveau sur main : git reset --hard origin/main ;
 #   2. les dépendances du serveur (esport/package.json : pg, nodemailer, @anthropic-ai/sdk), si elles ont changé ;
 #   3. les migrations de la base PostgreSQL (Esport + table de la boîte du relais) ;
-#   4. le redémarrage des deux apps Node (Passenger : touch tmp/restart.txt) ;
+#   4. le redémarrage des deux apps Node (touch tmp/restart.txt, et cloudlinux-selector restart s'il existe :
+#      esport/serveur/redemarrer-apps.sh) ;
 #   5. le site : branche deploiement-o2switch (construite par GitHub Actions), copiée dans public_html
 #      (rsync --delete, en protégeant .htaccess, .well-known, cgi-bin, maj/… ; bloc .htaccess fusionné).
 #      Les fichiers hachés de assets/ ne sont PAS effacés tout de suite : un onglet resté ouvert sur l'ancienne
@@ -147,10 +148,11 @@ if [ "$SANS_CODE" = 0 ]; then
     fi
     # 3. Migrations (idempotentes) : configuration lue dans ~/.appdashboard/esport.env.
     "$NODE" esport/serveur/migrer.mjs >> "$JOURNAL" 2>&1 || echec "migrations (voir le journal ; l'ancienne version reste en service)"
-    # 4. Redémarrage des deux apps (Passenger relit le code au prochain appel).
-    mkdir -p esport/tmp relais/tmp
-    touch esport/tmp/restart.txt relais/tmp/restart.txt
+    # 4. Redémarrage des deux apps : restart.txt (Passenger relit le code au prochain appel) et, si la commande
+    #    existe, cloudlinux-selector restart (comme le bouton « Restart » de Setup Node.js App) ; résultat au journal.
+    #    code-deploye d'abord : les apps le comparent au commit qu'elles ont chargé (Mises à jour, /serveur/version).
     echo "$APRES" > "$ETAT/code-deploye"
+    DEPOT="$DEPOT" JOURNAL="$JOURNAL" /bin/bash esport/serveur/redemarrer-apps.sh esport relais
     journal "serveurs Esport et relais redémarrés sur $(git log -1 --format='%h %s' | cut -c1-90)"
   fi
 fi

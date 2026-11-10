@@ -4,6 +4,7 @@
  *
  *   const smtp = await fauxSmtp({ utilisateur, motDePasse });
  *   … smtp.port, smtp.messages ([{ de, a: [], donnees, auth }]), smtp.refuser = adresse => true …
+ *   smtp.refuserExpediteur = adresse => true (MAIL FROM refusé, 553) ; smtp.limite = true (refus « trop d'e-mails par heure »)
  *   await smtp.fermer();
  */
 
@@ -11,7 +12,7 @@ import net from 'node:net';
 
 export async function fauxSmtp({ utilisateur = 'noreply@appdashboard.test', motDePasse = 'mdp-smtp-test', port = 0 } = {}) {
   const messages = [];
-  const etat = { refuser: () => false, authentifications: 0 };
+  const etat = { refuser: () => false, refuserExpediteur: () => false, limite: false, authentifications: 0 };
   const serveur = net.createServer(socket => {
     let tampon = '';
     let enDonnees = false;
@@ -66,6 +67,8 @@ export async function fauxSmtp({ utilisateur = 'noreply@appdashboard.test', motD
           ecrire('334 VXNlcm5hbWU6');
         } else if (commande === 'MAIL') {
           if (!auth) ecrire('530 5.7.0 Authentication required');
+          else if (etat.limite) ecrire('550 5.7.0 Domain appdashboard.test has exceeded the max emails per hour (100/100 (100%)) allowed. Message discarded.');
+          else if (etat.refuserExpediteur(/<([^>]*)>/.exec(ligne)?.[1] ?? '')) ecrire('553 5.7.1 Sender address rejected: not owned by user');
           else {
             courant.de = /<([^>]*)>/.exec(ligne)?.[1] ?? '';
             ecrire('250 2.1.0 Ok');
@@ -102,6 +105,12 @@ export async function fauxSmtp({ utilisateur = 'noreply@appdashboard.test', motD
     etat,
     set refuser(f) {
       etat.refuser = f;
+    },
+    set refuserExpediteur(f) {
+      etat.refuserExpediteur = f;
+    },
+    set limite(v) {
+      etat.limite = Boolean(v);
     },
     env: { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(serveur.address().port), SMTP_USER: utilisateur, SMTP_PASS: motDePasse, MAIL_FROM: `AppDashboard <${utilisateur}>`, SMTP_SANS_TLS: '1', MAIL_COPIE_ENVOYES: '0' },
     fermer: () => new Promise(ok => serveur.close(() => ok())),

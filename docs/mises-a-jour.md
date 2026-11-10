@@ -69,7 +69,7 @@ Le serveur Esport expose **`GET /deploiement`** (Fondateur, ou un compte à qui 
 | --- | --- |
 | Version du serveur Esport | commit du dépôt cloné, lu dans `.git` au démarrage de l'app (redémarrée à chaque déploiement) |
 | Version du site | `public_html/version.json` |
-| Version du relais | `~/.appdashboard/code-deploye` (même dépôt) et date de `relais/tmp/restart.txt` |
+| Version du relais | `~/.appdashboard/code-deploye` (même dépôt) et date de `relais/tmp/restart.txt` ; la version **en service** est lue au relais lui-même (`GET /serveur/version`, section « Serveurs » de la page) |
 | Dernier déploiement, 10 dernières lignes | `~/logs/esport-deploy.log` : lignes datées écrites par deployer.sh **seulement** (jamais la sortie de npm ou des migrations), secrets masqués |
 | Dernière vérification du serveur | `~/.appdashboard/derniere-verification` (écrit chaque minute par le guet) |
 | Dernier commit de main, état du workflow « Site (o2switch) » | API publique GitHub, **sans jeton** |
@@ -103,6 +103,14 @@ vérification du serveur, état de la construction GitHub (avec lien), 10 derni�
   un passage complet. **Le serveur web ne lance jamais de commande** : pas d'exécution possible depuis l'app. Limité à
   30 demandes par heure et par compte.
 - **Recharger l'app** : rechargement propre (comme le bandeau).
+
+**Serveurs** (en haut de la page) : la version **en service** de chaque app, lue auprès d'elle : « Relais : version
+abc1234 (démarré il y a 3 j) » (`GET /serveur/version` du relais, Fondateur : commit chargé au démarrage, heure de
+démarrage, pid, durée) et « Serveur Esport : version … » (`GET /deploiement`). Si deployer.sh a déployé un autre commit
+depuis (`~/.appdashboard/code-deploye`), l'alerte « le relais n'a pas redémarré : cliquez Restart dans Setup Node.js
+App » s'affiche ; un relais qui ne connaît pas encore `/serveur/version` est signalé de la même façon (« version
+inconnue »). Journaux des apps : `~/logs/relais.log` et `~/logs/esport.log` ([o2switch.md](o2switch.md), « Lire les
+journaux des apps »).
 
 ## 4. deployer.sh : guetter plutôt qu'attendre 5 minutes
 

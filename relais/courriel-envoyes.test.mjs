@@ -191,5 +191,5 @@ test('messages d’erreur SMTP : certificat, authentification, injoignable', () 
   assert.equal(codeErreur(cert), 'smtp-certificat');
   assert.equal(codeErreur(Object.assign(new Error('x'), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' })), 'smtp-certificat');
   assert.equal(codeErreur(Object.assign(new Error('Invalid login'), { code: 'EAUTH', responseCode: 535 })), 'smtp-authentification');
-  assert.equal(codeErreur(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ESOCKET' })), 'smtp-injoignable');
+  assert.equal(codeErreur(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ESOCKET' })), 'smtp-refuse');
 });

@@ -14,6 +14,10 @@
  * L'habillage (en-tête, pied de page, mentions, bouton) est traduit pour CHAQUE destinataire ; le corps reste
  * celui que le Fondateur a écrit — ou, s'il écrit aussi une version anglaise, chacun reçoit la sienne. L'aperçu
  * montre le rendu exact (objet, HTML, texte) dans la langue choisie, avant l'envoi.
+ *
+ * Jamais silencieux : « Envoyer » répond toujours (envoyé, ou la raison précise : appareil non relié avec le jeton
+ * maître, relais injoignable ou arrêté, ancienne version du relais, SMTP non configuré ou refusé…). « Tester l'envoi »
+ * fait vérifier la connexion SMTP au relais et envoie un e-mail de test (docs/emails.md, « Dépannage »).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,7 +25,20 @@ import { Linking, Platform, Text, View } from 'react-native';
 import { ChampNote } from '../../../esport/ui/ChampNote';
 import { trouverConfig, type Annuaire } from '../../../esport/client';
 import { fabrique } from '../../../esport/fabrique';
-import { apercuCourriel, courrielDisponible, envoyerCourriel, journalCourriel, libelleErreurCourriel, mailtoSecours, type ApercuCourriel, type EnvoiJournal, type LangueCourriel } from '../../../messagerie/courriel';
+import {
+  apercuCourriel,
+  envoyerCourriel,
+  etatCourriel,
+  libelleErreurCourriel,
+  lireJournalCourriel,
+  mailtoSecours,
+  testerCourriel,
+  type ApercuCourriel,
+  type EnvoiJournal,
+  type EtatCourriel,
+  type LangueCourriel,
+  type ResultatTest,
+} from '../../../messagerie/courriel';
 import { NOMS_LANGUES, langueEffective } from '../contacts';
 import { police, type ThemeHub } from '../../themes';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, dateLisible, type OutilsAdmin } from './commun';
@@ -49,8 +66,13 @@ function CadreApercu({ theme, apercu }: { theme: ThemeHub; apercu: ApercuCourrie
 
 export function Messagerie({ outils }: { outils: OutilsAdmin }) {
   const { theme, donnees, tous } = outils;
-  const [disponible, setDisponible] = useState<boolean | undefined>();
+  const [etat, setEtat] = useState<EtatCourriel | undefined>();
+  const disponible = etat?.configure;
   const [journal, setJournal] = useState<EnvoiJournal[] | undefined>();
+  const [journalIndisponible, setJournalIndisponible] = useState<string | undefined>();
+  const [adresseTest, setAdresseTest] = useState(() => donnees.contacts.principal?.email ?? '');
+  const [testEnCours, setTestEnCours] = useState(false);
+  const [test, setTest] = useState<ResultatTest | undefined>();
   const [choisis, setChoisis] = useState<ReadonlySet<string>>(new Set());
   const [objet, setObjet] = useState('');
   const [message, setMessage] = useState('');
@@ -78,9 +100,10 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
   const avecAdresse = comptes.filter(c => c.email);
 
   const charger = useCallback(async () => {
-    const [d, j] = await Promise.all([courrielDisponible(), journalCourriel()]);
-    setDisponible(d);
-    setJournal(j);
+    const [e, j] = await Promise.all([etatCourriel(), lireJournalCourriel()]);
+    setEtat(e);
+    setJournal(j.envois);
+    setJournalIndisponible(j.message);
   }, []);
   useEffect(() => {
     void charger();
@@ -146,25 +169,39 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
   }, [apercuOuvert, objet, message, langueAffichee, deuxVersions, objetEn, messageEn]);
 
   const envoyer = async () => {
+    // Toujours une réponse visible : un problème de saisie est dit ici plutôt que par un bouton grisé muet.
+    if (probleme) {
+      setRetour({ genre: 'alerte', texte: probleme });
+      return;
+    }
     setEnCours(true);
     setRetour(undefined);
-    const r = await envoyerCourriel({
-      destinataires: destinataires.map(d => ({ adresse: d.email!, nom: d.nom, langue: langueDe(d.id) })),
-      modele: 'libre',
-      langue: langue === 'en' ? 'en' : 'fr',
-      objet: objet.trim(),
-      message,
-      ...(versionEn ? { en: versionEn } : {}),
-      ref: 'messagerie',
-    });
-    setEnCours(false);
+    let r: Awaited<ReturnType<typeof envoyerCourriel>>;
+    try {
+      r = await envoyerCourriel({
+        destinataires: destinataires.map(d => ({ adresse: d.email!, nom: d.nom, langue: langueDe(d.id) })),
+        modele: 'libre',
+        langue: langue === 'en' ? 'en' : 'fr',
+        objet: objet.trim(),
+        message,
+        ...(versionEn ? { en: versionEn } : {}),
+        ref: 'messagerie',
+      });
+    } catch (e) {
+      r = { ok: false, envoyes: 0, resultats: [], erreur: `erreur inattendue de l’app (${e instanceof Error ? e.message : String(e)})` };
+    } finally {
+      setEnCours(false);
+    }
     if (r.nonConfigure) {
-      setDisponible(false);
-      setRetour({ genre: 'alerte', texte: 'Le serveur n’envoie pas encore d’e-mails (SMTP non configuré) : utilisez « Ouvrir ma messagerie ».' });
+      setEtat(avant => ({ ...avant, configure: false }));
+      setRetour({ genre: 'alerte', texte: 'Le serveur n’envoie pas encore d’e-mails (SMTP non configuré) : utilisez « Ouvrir ma messagerie », ou « Tester l’envoi » pour voir ce qui manque.' });
       return;
     }
     if (r.envoyes === 0) {
-      setRetour({ genre: 'critique', texte: `Aucun e-mail envoyé : ${r.erreur ? libelleErreurCourriel(r.erreur) : 'erreur'}.` });
+      const detail = r.erreur ? libelleErreurCourriel(r.erreur) : 'le relais n’a rien envoyé, sans dire pourquoi';
+      const parAdresse = r.resultats.filter(x => x.statut === 'echec' && x.erreur).map(e => `${e.a} (${libelleErreurCourriel(e.erreur)})`);
+      setRetour({ genre: 'critique', texte: `Aucun e-mail envoyé : ${detail}${parAdresse.length > 1 ? ` ; détail : ${parAdresse.join(', ')}` : ''}.` });
+      if (r.probleme) setEtat(avant => ({ ...avant, probleme: r.probleme, message: r.erreur }));
     } else {
       const echecs = r.resultats.filter(x => x.statut === 'echec');
       setRetour({
@@ -182,23 +219,60 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
     void charger();
   };
 
+  const tester = async () => {
+    setTestEnCours(true);
+    setTest(undefined);
+    try {
+      setTest(await testerCourriel(adresseTest));
+    } catch (e) {
+      setTest({ ok: false, etape: 'relais', message: `Erreur inattendue de l’app : ${e instanceof Error ? e.message : String(e)}` });
+    } finally {
+      setTestEnCours(false);
+    }
+    void charger();
+  };
+
   const secours = mailtoSecours(destinataires.map(d => d.email!), objet, message);
 
   return (
     <View style={{ gap: 12 }} testID="admin-messagerie">
       <Panneau theme={theme}>
         <Intertitre theme={theme}>Écrire un e-mail</Intertitre>
-        {disponible === false ? (
+        {etat?.probleme ? (
+          <Avis theme={theme} genre="critique" testID="admin-messagerie-probleme" texte={etat.message ?? 'Relais injoignable.'} />
+        ) : disponible === false ? (
           <Avis
             theme={theme}
             genre="alerte"
             testID="admin-messagerie-non-configure"
-            texte="Le serveur n’envoie pas encore d’e-mails : ajoutez SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS et MAIL_FROM dans ~/.appdashboard/relais.env, puis redémarrez le relais (docs/emails.md). En attendant, « Ouvrir ma messagerie » prépare le message."
+            texte={`Le serveur n’envoie pas encore d’e-mails : ${
+              etat?.manques?.length ? `il manque ${etat.manques.join(', ')}` : 'ajoutez SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS et MAIL_FROM'
+            } dans ~/.appdashboard/relais.env, puis redémarrez le relais (cPanel › Setup Node.js App › Restart ; docs/emails.md). En attendant, « Ouvrir ma messagerie » prépare le message.`}
           />
         ) : disponible ? (
           <Text style={attenue} testID="admin-messagerie-pret">
             Envoi direct par le serveur. Un e-mail par destinataire : personne ne voit les autres adresses.
           </Text>
+        ) : (
+          <Text style={attenue} testID="admin-messagerie-verification">
+            Vérification de l’envoi par le serveur…
+          </Text>
+        )}
+        {etat?.verification?.statut === 'echec' ? (
+          <Avis
+            theme={theme}
+            genre="critique"
+            testID="admin-messagerie-verification-echec"
+            texte={`Au démarrage du relais, la connexion SMTP a échoué${etat.verification.technique ? ` (code ${etat.verification.technique})` : ''} : ${etat.verification.explication ?? libelleErreurCourriel(etat.verification.code)}`}
+          />
+        ) : null}
+        {etat && !etat.probleme && etat.test === false ? (
+          <Avis
+            theme={theme}
+            genre="alerte"
+            testID="admin-messagerie-relais-ancien"
+            texte="Le relais tourne une ancienne version (il n’a pas redémarré après la dernière mise à jour) : cPanel › Setup Node.js App › application-enzo/relais › Restart."
+          />
         ) : null}
         <Text style={[texte, { fontWeight: '600' }]}>Destinataires ({destinataires.length})</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -272,8 +346,8 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
         ) : null}
         {probleme && (objet || message || choisis.size) ? <Text style={[attenue, { color: theme.alerte }]}>{probleme}</Text> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <BoutonHub theme={theme} variante="plein" titre={enCours ? 'Envoi…' : `Envoyer (${destinataires.length})`} desactive={enCours || Boolean(probleme) || disponible === false} onPress={() => void envoyer()} testID="admin-messagerie-envoyer" />
-          {disponible === false && !probleme ? (
+          <BoutonHub theme={theme} variante="plein" titre={enCours ? 'Envoi…' : `Envoyer (${destinataires.length})`} desactive={enCours} onPress={() => void envoyer()} testID="admin-messagerie-envoyer" />
+          {(disponible === false || etat?.probleme) && !probleme ? (
             <BoutonHub
               theme={theme}
               titre="Ouvrir ma messagerie"
@@ -284,10 +358,25 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
         </View>
         {retour ? <Avis theme={theme} genre={retour.genre} texte={retour.texte} testID="admin-messagerie-retour" /> : null}
       </Panneau>
+      <Panneau theme={theme} testID="admin-messagerie-test">
+        <Intertitre theme={theme}>Tester l’envoi</Intertitre>
+        <Text style={attenue}>
+          Le relais vérifie la connexion et les identifiants SMTP, puis envoie un e-mail de test à cette adresse (vide : à la boîte d’envoi elle-même{etat?.expediteur ? `, ${etat.expediteur}` : ''}). En cas d’échec, la cause exacte s’affiche.
+        </Text>
+        <Champ theme={theme} libelle="Adresse de test (la vôtre)" valeur={adresseTest} onChanger={setAdresseTest} maxLength={254} testID="admin-messagerie-test-adresse" placeholder="vous@exemple.fr" />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <BoutonHub theme={theme} titre={testEnCours ? 'Test en cours…' : 'Tester l’envoi'} desactive={testEnCours} onPress={() => void tester()} testID="admin-messagerie-tester" />
+        </View>
+        {test ? <Avis theme={theme} genre={test.ok ? 'ok' : 'critique'} texte={test.message} testID="admin-messagerie-test-retour" /> : null}
+      </Panneau>
       <Panneau theme={theme} testID="admin-messagerie-historique">
         <Intertitre theme={theme}>Historique des envois</Intertitre>
         <Text style={attenue}>Une copie de chaque e-mail arrive aussi dans le dossier « Envoyés » de la boîte noreply (webmail).</Text>
-        {journal === undefined ? <Text style={attenue}>Historique indisponible (serveur injoignable).</Text> : journal.length === 0 ? <Text style={attenue}>Aucun envoi pour l’instant.</Text> : null}
+        {journal === undefined ? (
+          <Text style={[attenue, journalIndisponible ? { color: theme.alerte } : null]} testID="admin-messagerie-historique-indisponible">
+            {journalIndisponible ? `Historique indisponible : ${journalIndisponible}` : 'Lecture de l’historique…'}
+          </Text>
+        ) : journal.length === 0 ? <Text style={attenue}>Aucun envoi pour l’instant.</Text> : null}
         {(journal ?? []).slice(0, 50).map(e => {
           const ok = e.resultats.filter(r => r.statut === 'envoye').length;
           const ko = e.resultats.length - ok;
@@ -299,7 +388,7 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
                 {ko ? <Pilule theme={theme} texte={`Échec ×${ko}`} couleur={theme.critique} /> : null}
               </View>
               <Text style={attenue}>
-                {dateLisible(e.date, true)} · {e.modele === 'invitation' ? 'Invitation' : e.modele === 'support' ? 'Réponse au support' : e.modele === 'recap' ? 'Récapitulatif' : 'Messagerie'} · {e.resultats.map(r => `${r.a}${r.statut === 'echec' ? ` ✗ ${libelleErreurCourriel(r.erreur)}` : ''}`).join(', ')}
+                {dateLisible(e.date, true)} · {e.ref === 'test' ? 'Test d’envoi' : e.modele === 'invitation' ? 'Invitation' : e.modele === 'support' ? 'Réponse au support' : e.modele === 'recap' ? 'Récapitulatif' : 'Messagerie'} · {e.resultats.map(r => `${r.a}${r.statut === 'echec' ? ` ✗ ${libelleErreurCourriel(r.erreur)}` : ''}`).join(', ')}
               </Text>
             </View>
           );

@@ -6,7 +6,7 @@
  * Et Paramètres › À propos › « Mettre à jour automatiquement » (`ReglageMajAuto`). docs/mises-a-jour.md.
  */
 
-import React, { useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { useLangue } from '../../esport/i18n';
 import { BoutonHub } from '../Hub';
@@ -14,7 +14,8 @@ import { police, type ThemeHub } from '../themes';
 import { tt } from '../../ui/mobile/jetons';
 import { court, phraseEtat, pastillePour, sondeur, useEtatDeploiement, type EtatDeploiement } from './deploiement';
 import { couleurTon } from './PastilleDeploiement';
-import { dateCourte, ilYa, tm } from './textes';
+import { versionRelais, type EtatVersionRelais } from './serveurs';
+import { dateCourte, depuis, ilYa, tm } from './textes';
 import { abonnerMajAuto, definirMajAuto, majAutoActive, rechargerProprement, versionLocale } from './version';
 
 function Ligne({ theme, libelle, valeur, testID }: { theme: ThemeHub; libelle: string; valeur: string; testID?: string }) {
@@ -23,6 +24,59 @@ function Ligne({ theme, libelle, valeur, testID }: { theme: ThemeHub; libelle: s
       <Text style={{ color: theme.attenue, fontSize: tt(13), minWidth: 190, ...police(theme.policeTexte) }}>{libelle}</Text>
       <Text style={{ color: theme.texte, fontSize: tt(13), flexShrink: 1, ...police(theme.policeChiffres) }} selectable>
         {valeur}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * « Serveurs » : version EN SERVICE du relais (lue au relais lui-même) et du serveur Esport, depuis quand ils
+ * tournent, et l'alerte « n'a pas redémarré » quand deployer.sh a déployé un autre commit depuis.
+ */
+function Serveurs({ theme, e, relais }: { theme: ThemeHub; e: EtatDeploiement | undefined; relais: EtatVersionRelais | undefined }) {
+  const texte = { color: theme.texte, fontSize: tt(13), ...police(theme.policeTexte) };
+  const alerte = { color: theme.critique, fontSize: tt(13), ...police(theme.policeTexte) };
+  const v = relais?.version;
+  const esportDuree = e?.serveur.dureeS ?? (e?.serveur.demarreLe ? Math.round(((Date.parse(e.heure) || Date.now()) - Date.parse(e.serveur.demarreLe)) / 1000) : null);
+  return (
+    <View style={{ gap: 4 }} testID="maj-serveurs">
+      <Text style={[styles.section, { color: theme.attenue }]}>{tm('page.serveurs').toUpperCase()}</Text>
+      {!relais ? (
+        <Text style={texte}>{tm('page.relais.chargement')}</Text>
+      ) : v ? (
+        <>
+          <Text style={texte} testID="maj-serveur-relais" selectable>
+            {tm('page.serveur.ligne', { nom: tm('page.serveur.nom.relais'), commit: court(v.commit), depuis: depuis(v.dureeS) })}
+          </Text>
+          {v.aJour === false ? (
+            <Text style={alerte} testID="maj-serveur-relais-pas-redemarre">
+              {tm('page.serveur.pas_redemarre', { nom: tm('page.serveur.nom.relais'), commit: court(v.commit), deploye: court(v.codeDeploye), racine: 'application-enzo/relais', app: 'relais' })}
+            </Text>
+          ) : null}
+        </>
+      ) : relais.probleme === 'ancien-relais' ? (
+        <Text style={alerte} testID="maj-serveur-relais-ancien">
+          {tm('page.relais.ancien')}
+        </Text>
+      ) : (
+        <Text style={alerte} testID="maj-serveur-relais-probleme">
+          {tm('page.relais.probleme', { message: relais.message ?? '' })}
+        </Text>
+      )}
+      {e ? (
+        <>
+          <Text style={texte} testID="maj-serveur-esport" selectable>
+            {tm('page.serveur.ligne', { nom: tm('page.serveur.nom.esport'), commit: court(e.serveur.commit), depuis: depuis(esportDuree) })}
+          </Text>
+          {e.serveur.redemarrageEnAttente ? (
+            <Text style={alerte} testID="maj-serveur-esport-pas-redemarre">
+              {tm('page.serveur.pas_redemarre', { nom: tm('page.serveur.nom.esport'), commit: court(e.serveur.commit), deploye: court(e.deploiement.codeDeploye), racine: 'application-enzo/esport', app: 'esport' })}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
+      <Text style={{ color: theme.attenue, fontSize: tt(12), ...police(theme.policeTexte) }} selectable>
+        {tm('page.journaux')}
       </Text>
     </View>
   );
@@ -107,9 +161,19 @@ export function PageMisesAJour({ theme, actif = true }: { theme: ThemeHub; actif
   const { etat, erreur, chargement } = useEtatDeploiement(actif);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | undefined>();
   const [demande, setDemande] = useState(false);
+  const [relais, setRelais] = useState<EtatVersionRelais | undefined>();
+  const lireRelais = useCallback(() => {
+    void versionRelais()
+      .catch(() => ({ probleme: 'reponse' as const, message: '' }))
+      .then(setRelais);
+  }, []);
+  useEffect(() => {
+    if (actif) lireRelais();
+  }, [actif, lireRelais]);
   return (
     <View style={{ gap: 12 }} testID="maj-page">
       <Text style={{ color: theme.attenue, fontSize: tt(14), ...police(theme.policeTexte) }}>{tm('page.intro')}</Text>
+      {actif ? <Serveurs theme={theme} e={etat} relais={relais} /> : null}
       {etat ? (
         <Contenu theme={theme} e={etat} />
       ) : (
@@ -135,7 +199,16 @@ export function PageMisesAJour({ theme, actif = true }: { theme: ThemeHub; actif
             }}
           />
         ) : null}
-        <BoutonHub theme={theme} titre={`⟳ ${tm('page.actualiser')}`} desactive={chargement} onPress={() => void sondeur.rafraichir(true)} testID="maj-actualiser-etat" />
+        <BoutonHub
+          theme={theme}
+          titre={`⟳ ${tm('page.actualiser')}`}
+          desactive={chargement}
+          onPress={() => {
+            void sondeur.rafraichir(true);
+            lireRelais();
+          }}
+          testID="maj-actualiser-etat"
+        />
         <BoutonHub theme={theme} titre={tm('page.recharger')} onPress={() => void rechargerProprement()} testID="maj-recharger-app" />
       </View>
       {message ? (

@@ -72,11 +72,11 @@ touch ~/application-enzo/relais/tmp/restart.txt
 (ou **Setup Node.js App** › l'app du relais › **Restart**). Le paquet `nodemailer` est installé tout seul par la mise
 à jour automatique (`esport/package.json`).
 
-**Vérifier** : Administration › Messagerie affiche « Envoi direct par le serveur ». Envoyez-vous un e-mail d'essai
-(mettez votre adresse dans votre propre fiche… ou invitez un compte de test). Si rien n'arrive : le journal
-`~/logs/relais-passenger.log` dit « e-mails désactivés : … manquant(s) » si une ligne manque ; l'historique de la
-Messagerie donne le motif d'un échec (« identifiants SMTP refusés », « certificat SMTP ne correspond pas au nom du
-serveur », « serveur SMTP injoignable »…).
+**Vérifier** : Administration › Messagerie affiche « Envoi direct par le serveur ». Puis, en bas de la page,
+**Tester l'envoi** (votre adresse, ou vide pour la boîte d'envoi elle-même) : le relais vérifie la connexion et les
+identifiants SMTP, puis envoie un e-mail de test. En cas d'échec, la cause exacte s'affiche (voir « Dépannage »
+ci-dessous). Au démarrage, le relais écrit aussi dans `~/logs/relais.log` si SMTP est configuré (ou les variables
+manquantes) et le résultat de sa vérification SMTP.
 
 ### Note : SMTP_HOST=poisson.o2switch.net, à cause du certificat
 
@@ -168,13 +168,48 @@ Exception volontaire : le **récapitulatif Esport**. L'utilisateur donne lui-mê
 est **chiffrée** sur le serveur Esport (AES-GCM, clé du serveur), jamais rendue en clair par l'API, et **effacée** dès
 qu'il désactive le récapitulatif, supprime ses données Esport, ou que son compte est supprimé.
 
+## Dépannage : « plus aucun e-mail ne part »
+
+La Messagerie ne reste jamais muette : le bandeau en haut de la page et le message sous **Envoyer** disent la cause.
+**Tester l'envoi** fait le tour complet (relais joignable, configuration, connexion SMTP, e-mail de test).
+
+| Message dans la Messagerie | Cause | Que faire |
+| --- | --- | --- |
+| « Cet appareil n'est pas relié au relais avec le jeton maître » | Cet appareil n'a pas le jeton du Fondateur | Envoyez depuis le PC du Fondateur, ou reliez cet appareil (code de liaison AB1.… créé sur le PC), ou connectez-vous avec l'identifiant du Fondateur. |
+| « Relais injoignable » / « n'a pas répondu à temps » | Pas de réseau, ou relais arrêté | Vérifiez la connexion ; sinon redémarrez le relais (cPanel › **Setup Node.js App** › `application-enzo/relais` › **Restart**) et lisez son journal. |
+| « Le relais ne répond pas (erreur 502/503 de l'hébergeur) » | L'app relais est arrêtée ou ne démarre plus | **Restart**, puis `tail -n 50 ~/logs/relais.log` : la dernière ligne `ERROR` dit pourquoi (configuration incomplète, base, erreur de chargement). |
+| « Le relais tourne une ancienne version » | Il n'a pas redémarré après la mise à jour | **Restart** dans Setup Node.js App. La page **Mises à jour** › Serveurs affiche la version en service. |
+| « Envoi non configuré : … Manquant : SMTP_PASS, MAIL_FROM » | Lignes absentes de `relais.env` | Ajoutez-les (§ 3), puis **Restart**. |
+| « Identifiant ou mot de passe SMTP refusé (EAUTH) » | `SMTP_USER` ou `SMTP_PASS` faux | `SMTP_USER` = l'adresse complète ; recopiez le mot de passe de la boîte (cPanel › Comptes de messagerie › Gérer), **Restart**. |
+| « Connexion refusée (ECONNREFUSED) » | Mauvais `SMTP_HOST` ou `SMTP_PORT` | `SMTP_HOST=poisson.o2switch.net`, `SMTP_PORT=465`. |
+| « Le serveur SMTP ne répond pas (ETIMEDOUT) » | Mauvais port ou chiffrement | 465 = SSL/TLS, 587 = STARTTLS. |
+| « Serveur SMTP introuvable (ENOTFOUND) » | `SMTP_HOST` mal écrit | Corrigez-le. |
+| « certificat … ne correspond pas » | `SMTP_HOST=mail.appdashboard.fr` | Nom du serveur affiché par cPanel (note ci-dessus). |
+| « Expéditeur refusé » | `MAIL_FROM` n'est pas la boîte `SMTP_USER` | `MAIL_FROM=AppDashboard <noreply@appdashboard.fr>`. |
+| « Destinataire refusé » | Adresse inexistante ou refusée | Corrigez l'adresse dans la fiche du compte. |
+| « Limite d'envoi de l'hébergeur atteinte » / « limite d'envoi du relais » | Trop d'e-mails par heure | Réessayez plus tard. |
+
+Journal du relais (cPanel › **Terminal**) :
+
+```bash
+tail -n 50 ~/logs/relais.log                     # les 50 dernières lignes
+grep -E "démarrage|e-mails|courriel" ~/logs/relais.log | tail -n 20
+```
+
+Au démarrage, une ligne `[relais] démarrage : version abc1234, Node 22…, pid …, configuration …, e-mails : SMTP
+configuré (poisson.o2switch.net:465, SSL/TLS, …)` (ou `SMTP NON configuré (manquant : …)`), puis
+`[relais] e-mails : connexion SMTP vérifiée` ou `vérification SMTP en ÉCHEC : smtp-authentification (EAUTH 535). …`.
+Chaque échec d'envoi : `[courriel] échec d'envoi vers l***@e***.fr : code (détail technique)`. Jamais de mot de passe,
+de jeton ni d'adresse complète dans ce journal.
+
 Garde-fous : 100 destinataires par envoi, **100 e-mails par heure et 300 par jour** (protège la réputation de la
 boîte), adresses validées (pas de retour à la ligne : pas d'injection d'en-têtes).
 
 ## Pour les développeurs
 
-- Relais : `relais/courriel.mjs` (routes `GET /courriel/etat`, `POST /courriel/envoyer`, `POST /courriel/apercu`,
-  `GET /courriel/journal`, jeton maître ; `variables.en` = version anglaise), `relais/courriel-modeles.mjs` (modèles HTML et texte FR/EN, Markdown sûr), transport
+- Relais : `relais/courriel.mjs` (routes `GET /courriel/etat` (avec `manques` et `verification`), `POST /courriel/envoyer`, `POST /courriel/apercu`,
+  `GET /courriel/journal`, `POST /courriel/tester`, jeton maître ; `variables.en` = version anglaise), codes d'erreur
+  SMTP et explications `relais/courriel-erreurs.mjs`, `relais/courriel-modeles.mjs` (modèles HTML et texte FR/EN, Markdown sûr), transport
   `esport/serveur/courriel-smtp.mjs` (nodemailer) injecté par `relais/serveur/app.mjs` (`env.ENVOYER_COURRIEL`) :
   sans lui (SMTP absent de `relais.env`) : 503 `non-configure`, l'app garde le `mailto`.
 - Langue des comptes : migration `esport/migrations/0019_langue_defaut.sql`, `PUT /comptes/:compte/langue-defaut`
@@ -186,6 +221,8 @@ boîte), adresses validées (pas de retour à la ligne : pas d'injection d'en-t�
 - App : `src/messagerie/courriel.ts`, `src/hub/admin/ui/Messagerie.tsx`, envoi direct dans
   `src/hub/admin/ui/EnvoiInvitation.tsx`.
 - Tests avec un FAUX serveur SMTP local (`relais/test-smtp/faux-smtp.mjs`) : `relais/courriel.test.mjs`,
+  `relais/diagnostic-courriel.test.mjs` (codes EAUTH, ECONNREFUSED, ETIMEDOUT, ENOTFOUND, expéditeur, destinataire,
+  limite ; « Tester l'envoi » ; version du relais), `src/hub/admin/ui/messagerieDiagnostic.test.tsx` (messages de l'app),
   `esport/test/discord-id.test.mjs` (récapitulatif), `esport/test/langue-comptes.test.mjs` (langue par défaut, priorité,
   403, migration), `scripts/e2e-support-mail-discord.mjs`, `scripts/e2e-langue-comptes.mjs` (compte créé en English,
   invitation reçue en anglais, interface Esport de l'invité en anglais, Messagerie vers deux comptes FR et EN). Aucun test n'envoie de

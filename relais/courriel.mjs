@@ -17,6 +17,8 @@
  *   POST /courriel/envoyer    { destinataires: [{ adresse, nom?, langue? }], modele, langue, variables, ref? }
  *   POST /courriel/apercu     { modele, langue, variables } → { objet, texte, html } (aucune adresse, aucun envoi)
  *   GET  /courriel/journal    derniers envois (adresses masquées)
+ *   POST /courriel/tester     { adresse? } : connexion SMTP (verify) puis e-mail de test à cette adresse (sinon à la
+ *                             boîte d'envoi elle-même) ; codes d'erreur précis (docs/emails.md, « Dépannage »)
  *
  * Langue : chaque destinataire a la sienne (`destinataires[].langue`, résolue par l'app du Fondateur
  * depuis la langue par défaut de son compte, ou forcée par lui) ; `langue` ne sert que si un
@@ -29,6 +31,7 @@
 
 import { adresseValide, masquerAdresse, rendreCourriel } from './courriel-modeles.mjs';
 import { limiter } from './support.mjs';
+import { codeErreurSmtp, detailTechnique, expliquerErreurSmtp } from './courriel-erreurs.mjs';
 
 export const MODELES_COURRIEL = ['libre', 'invitation', 'support', 'recap'];
 const DESTINATAIRES_MAX = 100;
@@ -80,8 +83,10 @@ export async function envoyerCourriel(env, { destinataires, modele, langue, vari
       await env.ENVOYER_COURRIEL({ a: d.adresse.trim(), nom: typeof d.nom === 'string' ? d.nom.slice(0, 60) : undefined, objet: message.objet, texte: message.texte, html: message.html, langue: l });
       resultats.push({ a, statut: 'envoye', langue: l });
     } catch (e) {
-      // Le message d'erreur SMTP peut citer l'adresse : seul un code court sort d'ici.
-      resultats.push({ a, statut: 'echec', erreur: codeErreur(e), langue: l });
+      // Le message d'erreur SMTP peut citer l'adresse : seul un code court sort d'ici (et au journal du serveur).
+      const code = codeErreur(e);
+      console.warn(`[courriel] échec d'envoi vers ${a} : ${code} (${detailTechnique(e)})`);
+      resultats.push({ a, statut: 'echec', erreur: code, langue: l });
     }
   }
   const id = [...crypto.getRandomValues(new Uint8Array(6))].map(o => o.toString(16).padStart(2, '0')).join('');
@@ -99,16 +104,52 @@ export async function envoyerCourriel(env, { destinataires, modele, langue, vari
   return { ok: envoyes > 0 && envoyes === resultats.length, id, envoyes, resultats, ...(envoyes < resultats.length ? { erreur: resultats.find(r => r.erreur)?.erreur } : {}) };
 }
 
-/** Code d'erreur court, sans adresse ni détail du serveur. */
-export function codeErreur(e) {
-  const code = String(e?.code ?? '');
-  const reponse = Number(e?.responseCode);
-  if (code === 'EAUTH' || reponse === 535) return 'smtp-authentification';
-  if (/ERR_TLS_CERT_ALTNAME_INVALID|does not match certificate'?s altnames/i.test(`${code} ${e?.cause?.code ?? ''} ${e?.message ?? ''}`)) return 'smtp-certificat';
-  if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'EDNS') return 'smtp-injoignable';
-  if (code === 'EENVELOPE' || (reponse >= 550 && reponse < 560)) return 'destinataire-refuse';
-  if (reponse >= 400 && reponse < 500) return 'smtp-temporaire';
-  return 'smtp-erreur';
+/** Code d'erreur court, sans adresse ni détail du serveur (relais/courriel-erreurs.mjs). */
+export const codeErreur = codeErreurSmtp;
+
+/**
+ * « Tester l'envoi » (Administration › Messagerie) : 1. configuration (variables manquantes), 2. connexion et
+ * identifiants SMTP (verify), 3. un e-mail de test à `adresse` (celle du Fondateur ; sinon la boîte d'envoi elle-même).
+ * Réponse : { ok, etape, code?, explication?, manques?, a? (adresse masquée) } ; jamais le message brut du serveur.
+ */
+async function testerCourriel(requete, env, o) {
+  const diag = env.COURRIEL_DIAGNOSTIC ?? {};
+  if (!configure(env)) {
+    const manques = Array.isArray(diag.manques) ? diag.manques : [];
+    return o.reponse({ ok: false, etape: 'configuration', code: 'non-configure', manques, explication: `${expliquerErreurSmtp('non-configure')}${manques.length ? ` Manquant : ${manques.join(', ')}.` : ''}` }, 503);
+  }
+  let corps = {};
+  try {
+    const texte = await requete.text();
+    corps = texte ? JSON.parse(texte.slice(0, 4096)) : {};
+  } catch {
+    return o.erreur('Demande illisible.', 400);
+  }
+  const adresse = typeof corps?.adresse === 'string' && corps.adresse.trim() ? corps.adresse.trim() : typeof env.MAIL_FROM_AFFICHE === 'string' ? env.MAIL_FROM_AFFICHE : '';
+  if (!adresseValide(adresse)) return o.reponse({ ok: false, etape: 'envoi', code: 'adresse-invalide', explication: expliquerErreurSmtp('adresse-invalide') }, 400);
+  if (typeof diag.verifier === 'function') {
+    try {
+      await diag.verifier();
+    } catch (e) {
+      const code = codeErreur(e);
+      console.warn(`[courriel] test : connexion SMTP impossible : ${code} (${detailTechnique(e)})`);
+      return o.reponse({ ok: false, etape: 'connexion', code, technique: detailTechnique(e), explication: expliquerErreurSmtp(code) });
+    }
+  }
+  const heure = await limiter(env, 'courriel:limite:heure', LIMITE_HEURE, 3_600_000);
+  if (!heure.ok) return o.reponse({ ok: false, etape: 'envoi', code: 'limite', attente: heure.attenteS ?? 0, explication: `Limite d’envoi atteinte (${LIMITE_HEURE} e-mails par heure) : réessayez plus tard.` }, 429);
+  const r = await envoyerCourriel(env, {
+    destinataires: [{ adresse }],
+    modele: 'libre',
+    langue: 'fr',
+    variables: { objet: 'Test d’envoi AppDashboard', message: `Ceci est un e-mail de test envoyé depuis Administration › Messagerie, le ${new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}.\n\nS’il est arrivé, l’envoi d’e-mails par le serveur fonctionne.` },
+    ref: 'test',
+  });
+  await heure.enregistrer(1);
+  const res = r.resultats[0];
+  if (r.ok) return o.reponse({ ok: true, etape: 'envoi', a: res?.a ?? masquerAdresse(adresse), id: r.id });
+  const code = res?.erreur ?? r.erreur ?? 'smtp-erreur';
+  return o.reponse({ ok: false, etape: 'envoi', code, a: res?.a ?? masquerAdresse(adresse), explication: expliquerErreurSmtp(code) });
 }
 
 function lireDestinataires(liste) {
@@ -149,8 +190,18 @@ export async function routeCourriel(requete, env, portee, chemin, o) {
   if (!portee?.maitre) return o.erreur('Réservé au Fondateur.', 403);
   const m = requete.method;
   if (chemin === '/courriel/etat' && m === 'GET') {
-    return o.reponse({ configure: configure(env), expediteur: typeof env.MAIL_FROM_AFFICHE === 'string' ? env.MAIL_FROM_AFFICHE : null, limites: { heure: LIMITE_HEURE, jour: LIMITE_JOUR } });
+    // `manques` : NOMS des variables absentes de relais.env (jamais une valeur) ; `verification` : test SMTP du démarrage.
+    const diag = env.COURRIEL_DIAGNOSTIC;
+    return o.reponse({
+      configure: configure(env),
+      expediteur: typeof env.MAIL_FROM_AFFICHE === 'string' ? env.MAIL_FROM_AFFICHE : null,
+      limites: { heure: LIMITE_HEURE, jour: LIMITE_JOUR },
+      ...(Array.isArray(diag?.manques) ? { manques: diag.manques } : {}),
+      ...(diag?.verification ? { verification: diag.verification() } : {}),
+      test: true,
+    });
   }
+  if (chemin === '/courriel/tester' && m === 'POST') return testerCourriel(requete, env, o);
   if (chemin === '/courriel/journal' && m === 'GET') {
     return o.reponse({ envois: env.BOITE ? await lireJournal(env) : [] });
   }

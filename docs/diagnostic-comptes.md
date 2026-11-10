@@ -160,13 +160,13 @@ node relais/serveur/diagnostic-connexions.mjs --tout-debloquer
 
 ```bash
 # Chaque tentative, une ligne (compte ou début de l'identifiant, cause, adresse masquée) :
-grep -hF "[relais] connexion" ~/logs/relais-passenger.log | tail -n 50
+grep -hF "[relais] connexion" ~/logs/relais.log | tail -n 50
 # Échecs comptés par cause :
-grep -hF "[relais] connexion" ~/logs/relais-passenger.log | grep -v ": succes" | sed 's/.* : \([a-z0-9-]*\) .*/\1/' | sort | uniq -c | sort -rn
+grep -hF "[relais] connexion" ~/logs/relais.log | grep -v ": succes" | sed 's/.* : \([a-z0-9-]*\) .*/\1/' | sort | uniq -c | sort -rn
 # Pannes du serveur pendant une connexion (base de données) :
-grep -h "erreur serveur\|erreur-serveur\|postgres" ~/logs/relais-passenger.log | tail -n 30
+grep -h "erreur serveur\|erreur-serveur\|postgres" ~/logs/relais.log | tail -n 30
 # Sessions Esport refusées (code et adresse masquée) :
-grep -hF "[esport] session refusée" ~/logs/esport-passenger.log | tail -n 30
+grep -hF "[esport] session refusée" ~/logs/esport.log | tail -n 30
 ```
 
 Sans réglage de journal dans « Setup Node.js App », Passenger écrit dans `~/application-enzo/relais/stderr.log` et

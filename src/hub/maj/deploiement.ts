@@ -30,7 +30,7 @@ export interface EtatDeploiement {
   phase?: 'build' | 'publication';
   estimationMin: number | null;
   site: { id: string; commit: string | null; date: string | null } | null;
-  serveur: { commit: string | null; demarreLe: string | null; redemarrageEnAttente: boolean };
+  serveur: { commit: string | null; demarreLe: string | null; redemarrageEnAttente: boolean; pid?: number; node?: string; dureeS?: number };
   relais: { commit: string | null; redemarreLe: string | null };
   deploiement: {
     codeDeploye: string | null;

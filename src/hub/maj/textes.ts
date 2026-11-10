@@ -40,6 +40,18 @@ const FR = {
   'page.version.relais': 'Relais',
   'page.version.github': 'Dernier commit sur GitHub (main)',
   'page.redemarrage_attente': 'redémarrage en attente',
+  'page.serveurs': 'Serveurs (version en service)',
+  'page.serveur.ligne': '{nom} : version {commit} (démarré {depuis})',
+  'page.serveur.nom.relais': 'Relais',
+  'page.serveur.nom.esport': 'Serveur Esport',
+  'page.depuis.min': 'il y a {n} min',
+  'page.depuis.h': 'il y a {n} h',
+  'page.depuis.j': 'il y a {n} j',
+  'page.serveur.pas_redemarre': '{nom} n’a pas redémarré : il tourne {commit} alors que {deploye} est déployé. Cliquez « Restart » dans cPanel › Setup Node.js App ({racine}), puis lisez ~/logs/{app}.log.',
+  'page.relais.ancien': 'Relais : version inconnue (il tourne une version d’avant ce suivi : il n’a pas redémarré). Cliquez « Restart » dans cPanel › Setup Node.js App (application-enzo/relais), puis lisez ~/logs/relais.log.',
+  'page.relais.chargement': 'Relais : lecture de la version…',
+  'page.relais.probleme': 'Relais : {message}',
+  'page.journaux': 'Journaux des serveurs : ~/logs/relais.log et ~/logs/esport.log (Terminal de cPanel : tail -n 50 ~/logs/relais.log).',
   'page.deploiement': 'Dernier déploiement',
   'page.verification': 'Dernière vérification du serveur',
   'page.demande_attente': 'Vérification demandée, en attente du prochain passage (moins d’une minute en général).',
@@ -105,6 +117,18 @@ const EN: Record<CleMaj, string> = {
   'page.version.relais': 'Relay',
   'page.version.github': 'Latest commit on GitHub (main)',
   'page.redemarrage_attente': 'restart pending',
+  'page.serveurs': 'Servers (running version)',
+  'page.serveur.ligne': '{nom}: version {commit} (started {depuis})',
+  'page.serveur.nom.relais': 'Relay',
+  'page.serveur.nom.esport': 'Esport server',
+  'page.depuis.min': '{n} min ago',
+  'page.depuis.h': '{n} h ago',
+  'page.depuis.j': '{n} d ago',
+  'page.serveur.pas_redemarre': '{nom} has not restarted: it runs {commit} while {deploye} is deployed. Click “Restart” in cPanel › Setup Node.js App ({racine}), then read ~/logs/{app}.log.',
+  'page.relais.ancien': 'Relay: unknown version (it runs a version older than this tracking: it has not restarted). Click “Restart” in cPanel › Setup Node.js App (application-enzo/relais), then read ~/logs/relais.log.',
+  'page.relais.chargement': 'Relay: reading the version…',
+  'page.relais.probleme': 'Relay: {message}',
+  'page.journaux': 'Server logs: ~/logs/relais.log and ~/logs/esport.log (cPanel Terminal: tail -n 50 ~/logs/relais.log).',
   'page.deploiement': 'Last deployment',
   'page.verification': 'Server’s last check',
   'page.demande_attente': 'Check requested, waiting for the next run (usually under a minute).',
@@ -153,4 +177,14 @@ export function ilYa(d: string | null | undefined, maintenant = Date.now()): str
   if (!Number.isFinite(t)) return tm('page.inconnu');
   const n = Math.round((maintenant - t) / 60_000);
   return n <= 0 ? tm('page.a_l_instant') : tm('page.il_y_a', { n });
+}
+
+/** Depuis combien de temps (« il y a 3 j ») à partir d'une durée en secondes. */
+export function depuis(dureeS: number | null | undefined): string {
+  if (dureeS == null || !Number.isFinite(dureeS)) return tm('page.inconnu');
+  const min = Math.floor(dureeS / 60);
+  if (min < 1) return tm('page.a_l_instant');
+  if (min < 60) return tm('page.depuis.min', { n: min });
+  const h = Math.floor(min / 60);
+  return h < 24 ? tm('page.depuis.h', { n: h }) : tm('page.depuis.j', { n: Math.floor(h / 24) });
 }

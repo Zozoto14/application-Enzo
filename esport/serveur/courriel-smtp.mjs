@@ -22,6 +22,8 @@
  * Jamais de journal du contenu ni des adresses (logger désactivé).
  */
 
+import { codeErreurSmtp, detailTechnique, expliquerErreurSmtp } from '../../relais/courriel-erreurs.mjs';
+
 const MOTIF_ADRESSE = /^[^\s<>@]+@[^\s<>@]+\.[A-Za-z]{2,}$/;
 
 /** Configuration SMTP lue dans l'environnement ; `undefined` si elle est incomplète. */
@@ -118,6 +120,8 @@ export async function creerEnvoyeur(config, { creerTransport, copieur: copieurIn
     }
     return { id };
   };
+  /** Connexion + identifiants (commande SMTP « AUTH »), sans rien envoyer : diagnostic (démarrage, « Tester l'envoi »). */
+  envoyer.verifier = () => transport.verify();
   envoyer.fermer = async () => {
     try {
       await copieur?.fermer?.();
@@ -126,4 +130,37 @@ export async function creerEnvoyeur(config, { creerTransport, copieur: copieurIn
     }
   };
   return envoyer;
+}
+
+/** Résumé lisible de la configuration (journal de démarrage) : serveur, port, chiffrement ; jamais le mot de passe. */
+export function resumeSmtp(config) {
+  if (!config) return null;
+  return `${config.hote}:${config.port}, ${config.sansTls ? 'sans chiffrement (tests)' : config.securise ? 'SSL/TLS' : 'STARTTLS'}, expéditeur ${config.adresseDe}`;
+}
+
+/**
+ * Vérification SMTP au démarrage, SANS bloquer le démarrage : `lancer()` essaie la connexion et les identifiants
+ * et écrit le résultat au journal (code EAUTH, ECONNREFUSED, ETIMEDOUT, ENOTFOUND… et explication en français).
+ * `etat()` : { statut: non-configure | en-cours | ok | echec, code?, technique?, explication?, le? } (aucun secret),
+ * repris par /courriel/etat.
+ */
+export function suivreVerificationSmtp(envoyeur, { app = 'serveur', journal = console, maintenant = Date.now } = {}) {
+  let etat = envoyeur?.verifier ? { statut: 'en-cours' } : { statut: 'non-configure' };
+  return {
+    etat: () => ({ ...etat }),
+    async lancer() {
+      if (!envoyeur?.verifier) return etat;
+      const debut = maintenant();
+      try {
+        await envoyeur.verifier();
+        etat = { statut: 'ok', le: new Date(maintenant()).toISOString() };
+        journal.log(`[${app}] e-mails : connexion SMTP vérifiée, identifiants acceptés (${maintenant() - debut} ms).`);
+      } catch (e) {
+        const code = codeErreurSmtp(e);
+        etat = { statut: 'echec', code, technique: detailTechnique(e), explication: expliquerErreurSmtp(code), le: new Date(maintenant()).toISOString() };
+        journal.error(`[${app}] e-mails : vérification SMTP en ÉCHEC : ${code} (${etat.technique}). ${etat.explication}`);
+      }
+      return etat;
+    },
+  };
 }
