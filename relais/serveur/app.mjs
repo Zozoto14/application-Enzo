@@ -27,7 +27,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
-import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut } from '../../esport/serveur/commun.mjs';
+import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut, lireCleAdresse } from '../../esport/serveur/commun.mjs';
 import { traiterRequete } from '../relais.mjs';
 import { creerAvis, modeTempsReel } from '../avis.mjs';
 import { compresser } from './compression.mjs';
@@ -92,6 +92,8 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     AVIS: creerAvis(),
     SYNCHRO_TEMPS_REEL: config.SYNCHRO_TEMPS_REEL ?? modeTempsReel({}),
     CLE_A2F: config.CLE_A2F,
+    // Preuve de l'adresse du navigateur transmise par le serveur Esport (clé créée ici une fois, fichier 600).
+    CLE_ADRESSE: config.CLE_ADRESSE ?? lireCleAdresse({ creer: true }),
     DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL,
     DISCORD_BOT_TOKEN: config.DISCORD_BOT_TOKEN,
     LIEN_APP: config.LIEN_APP,

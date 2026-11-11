@@ -64,7 +64,9 @@ export function modeTempsReel(env) {
 
 /** Adresse de l'appareil (le pont du serveur Node la recalcule dans X-Adresse-Client). */
 export function ipDe(requete) {
-  return requete.headers.get('X-Adresse-Client') || (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue';
+  // À défaut, la DERNIÈRE entrée de X-Forwarded-For (ajoutée par le proxy) : les premières viennent du client.
+  const xff = (requete.headers.get('X-Forwarded-For') ?? '').split(',').map(x => x.trim()).filter(Boolean);
+  return requete.headers.get('X-Adresse-Client') || xff[xff.length - 1] || 'inconnue';
 }
 
 /** Bus en mémoire : abonnés par compte, bornés par compte et adresse, par compte, et en tout. */

@@ -16,7 +16,13 @@ import { fetchIaDepuisEnv } from '../adaptateurs/fetchIaNode.mjs';
 import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
-import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
+import { creerServeurHttp, ecouter, exigerNode, lireCleAdresse } from './commun.mjs';
+
+/** Clé de preuve d'adresse partagée avec le relais : relue tant qu'elle manque (le relais la crée à son démarrage). */
+function cleAdresseRelais() {
+  let cle = '';
+  return () => (cle ||= lireCleAdresse());
+}
 import { compresser } from '../../relais/serveur/compression.mjs';
 import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
 import { creerIaLocale } from './ia-locale/service.mjs';
@@ -57,7 +63,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     base: b,
     stockage: st,
     cleSession: config.cleSession,
-    verifierJeton: verifierJeton ?? verificateurRelais({ adresse: config.relais }),
+    verifierJeton: verifierJeton ?? verificateurRelais({ adresse: config.relais, cleAdresse: cleAdresseRelais() }),
     creationTeams: config.creationTeams,
     cleDiscord: config.cleDiscord,
     lienApp: config.lienApp,

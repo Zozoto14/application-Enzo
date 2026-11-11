@@ -12,6 +12,7 @@
  */
 
 import { echec } from './outils.mjs';
+import { preuveAdresse } from '../../relais/preuve-adresse.mjs';
 
 const MOTIF_JETON = /^[\x21-\x7e]{16,256}$/;
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
@@ -20,11 +21,21 @@ const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
  * Fabrique `verifierJeton(jeton, ip)` → `{ compte, superAdmin }`, ou lève
  * (401 jeton refusé, 403 compte révoqué, 503 relais injoignable ou trop ancien).
  */
-export function verificateurRelais({ liaison, adresse, fetch: requete = globalThis.fetch }) {
+export function verificateurRelais({ liaison, adresse, fetch: requete = globalThis.fetch, cleAdresse = () => '' }) {
   const appeler = async (jeton, ip) => {
+    // Adresse du navigateur : prouvée par HMAC (clé partagée avec le relais du même hébergement), sinon le relais
+    // ne la croit pas. X-Forwarded-For reste pour un relais d'avant ce changement.
+    const cle = typeof cleAdresse === 'function' ? cleAdresse() : cleAdresse;
+    const preuve = {};
+    if (ip && cle) {
+      const horodatage = String(Date.now());
+      preuve['X-Adresse-Navigateur'] = ip;
+      preuve['X-Adresse-Horodatage'] = horodatage;
+      preuve['X-Adresse-Preuve'] = await preuveAdresse(cle, ip, horodatage, jeton);
+    }
     const init = {
       method: 'POST',
-      headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json', ...(ip ? { 'X-Forwarded-For': ip } : {}) },
+      headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json', ...(ip ? { 'X-Forwarded-For': ip } : {}), ...preuve },
       body: '{}',
     };
     if (liaison && typeof liaison.fetch === 'function') {

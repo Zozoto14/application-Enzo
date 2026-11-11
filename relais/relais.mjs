@@ -68,6 +68,7 @@ import { lireA2f, routeA2f, verifierCodeConnexion } from './a2f.mjs';
 import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme, selLeurre } from './sessions.mjs';
 import { attenteApres, attenteIp as attenteIpPartagee, echecIp as echecIpPartage, noterTentative } from './connexions.mjs';
 import { routeDiagnosticConnexions } from './diagnostic.mjs';
+import { preuveAdresse } from './preuve-adresse.mjs';
 
 export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
@@ -494,7 +495,42 @@ const OUBLI_IDENTIFIANT_MS = 3600_000;
 export const ENTETE_ADRESSE_CLIENT = 'X-Adresse-Client';
 
 export function adresseIp(requete) {
-  return requete.headers.get(ENTETE_ADRESSE_CLIENT) ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue');
+  return requete.headers.get(ENTETE_ADRESSE_CLIENT) ?? derniereAdresseTransmise(requete) ?? 'inconnue';
+}
+
+/**
+ * Dernière entrée de X-Forwarded-For : celle ajoutée par le proxy de l'hébergeur. Les premières sont écrites par
+ * le client lui-même et ne prouvent rien (les prendre laissait contourner les limites par adresse).
+ */
+export function derniereAdresseTransmise(requete) {
+  const xff = (requete.headers.get('X-Forwarded-For') ?? '').split(',').map(x => x.trim()).filter(Boolean);
+  return xff.length ? xff[xff.length - 1] : null;
+}
+
+/**
+ * Adresse du navigateur transmise par le serveur Esport (même hébergement) quand il fait vérifier un jeton : crue
+ * SEULEMENT avec une preuve HMAC par la clé partagée CLE_ADRESSE (fichier ~/.appdashboard/adresse-relais.cle, créé
+ * par le relais), liée au jeton vérifié et valable 2 minutes. Sans preuve valable : null (l'adresse de la connexion
+ * compte).
+ */
+export const ENTETES_ADRESSE = { ip: 'X-Adresse-Navigateur', horodatage: 'X-Adresse-Horodatage', preuve: 'X-Adresse-Preuve' };
+const DUREE_PREUVE_ADRESSE_MS = 120_000;
+const egalTempsConstant = (a, b) => {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+};
+export async function adresseNavigateurProuvee(requete, env, maintenant = Date.now()) {
+  const cle = env?.CLE_ADRESSE;
+  if (typeof cle !== 'string' || cle.length < 32) return null;
+  const ip = requete.headers.get(ENTETES_ADRESSE.ip) ?? '';
+  const horodatage = requete.headers.get(ENTETES_ADRESSE.horodatage) ?? '';
+  const preuve = requete.headers.get(ENTETES_ADRESSE.preuve) ?? '';
+  const jeton = /^Bearer\s+(.+)$/i.exec(requete.headers.get('Authorization') ?? '')?.[1]?.trim() ?? '';
+  if (!/^[0-9a-fA-F:.]{2,45}$/.test(ip) || !/^\d{10,16}$/.test(horodatage) || !preuve || !jeton) return null;
+  if (Math.abs(maintenant - Number(horodatage)) > DUREE_PREUVE_ADRESSE_MS) return null;
+  return egalTempsConstant(preuve, await preuveAdresse(cle, ip, horodatage, jeton)) ? ip : null;
 }
 
 export { attenteApres };
@@ -873,9 +909,10 @@ async function verifierJeton(requete, env, portee) {
     return erreur('Méthode non autorisée.', 405);
   }
   const maintenant = Date.now();
-  // L'adresse vue est celle du serveur Esport : celui-ci transmet celle du navigateur dans
-  // X-Forwarded-For, prise ici en premier (sinon tous les comptes partageraient un compteur).
-  const ip = (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || adresseIp(requete);
+  // L'adresse vue est celle du serveur Esport : celui-ci transmet celle du navigateur, crue seulement avec sa preuve
+  // HMAC (sinon tous les comptes partageraient un compteur). Sans preuve : l'adresse de la connexion (jamais la
+  // première entrée de X-Forwarded-For, que n'importe quel client peut inventer pour échapper aux limites).
+  const ip = (await adresseNavigateurProuvee(requete, env, maintenant)) ?? adresseIp(requete);
   const attente = await attenteIp(env, ip, maintenant);
   if (attente > 0) return tropDeTentatives(attente);
   if (!portee) {

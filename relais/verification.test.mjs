@@ -71,3 +71,40 @@ test('GET refusé (405) ; routes existantes inchangées (401 sans jeton)', async
   const r = await relais.traiter(new Request('https://relais.test/sante'), env);
   assert.equal(r.status, 401);
 });
+
+test('adresse annoncée par l’appelant : crue seulement avec la preuve HMAC du serveur Esport (X-Forwarded-For falsifiable)', async () => {
+  const { preuveAdresse } = await import('./preuve-adresse.mjs');
+  const { adresseNavigateurProuvee, derniereAdresseTransmise } = await import('./relais.mjs');
+  const CLE = 'cle-adresse-partagee-de-test-0123456789';
+  const env = { JETON, BOITE: kv(), CLE_ADRESSE: CLE };
+  // Un attaquant change à chaque essai la première entrée de X-Forwarded-For : son adresse réelle (celle de la
+  // connexion) reste la même, il est bloqué comme avant.
+  let dernier;
+  for (let i = 0; i < 36; i++) {
+    const r = await relais.traiter(new Request('https://relais.test/jeton/verifier', {
+      method: 'POST',
+      headers: { 'X-Adresse-Client': '203.0.113.77', 'X-Forwarded-For': `10.9.${i}.1, 203.0.113.77`, Authorization: `Bearer faux-jeton-${i}-0123456789abcdef` },
+      body: '{}',
+    }), env);
+    dernier = r.status;
+  }
+  assert.equal(dernier, 429);
+  // Le serveur Esport (même connexion bloquée) transmet l'adresse d'un autre navigateur avec la preuve : acceptée.
+  const h = String(Date.now());
+  const ok = await relais.traiter(new Request('https://relais.test/jeton/verifier', {
+    method: 'POST',
+    headers: { 'X-Adresse-Client': '203.0.113.77', 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': h, 'X-Adresse-Preuve': await preuveAdresse(CLE, '198.51.100.9', h, JETON), Authorization: `Bearer ${JETON}` },
+    body: '{}',
+  }), env);
+  assert.equal((await ok.json()).valide, true);
+  // Preuve fausse, périmée, d'un autre jeton ou sans clé côté relais : ignorée.
+  const req = (entetes) => new Request('https://relais.test/jeton/verifier', { method: 'POST', headers: { Authorization: `Bearer ${JETON}`, ...entetes } });
+  const vieux = String(Date.now() - 10 * 60_000);
+  assert.equal(await adresseNavigateurProuvee(req({ 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': h, 'X-Adresse-Preuve': '0'.repeat(64) }), env), null);
+  assert.equal(await adresseNavigateurProuvee(req({ 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': vieux, 'X-Adresse-Preuve': await preuveAdresse(CLE, '198.51.100.9', vieux, JETON) }), env), null);
+  assert.equal(await adresseNavigateurProuvee(req({ 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': h, 'X-Adresse-Preuve': await preuveAdresse(CLE, '198.51.100.9', h, 'autre-jeton') }), env), null);
+  assert.equal(await adresseNavigateurProuvee(req({ 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': h, 'X-Adresse-Preuve': await preuveAdresse(CLE, '198.51.100.9', h, JETON) }), { JETON }), null);
+  assert.equal(await adresseNavigateurProuvee(req({ 'X-Adresse-Navigateur': '198.51.100.9', 'X-Adresse-Horodatage': h, 'X-Adresse-Preuve': await preuveAdresse(CLE, '198.51.100.9', h, JETON) }), env), '198.51.100.9');
+  // Sans l'en-tête du pont HTTP : la DERNIÈRE entrée de X-Forwarded-For (celle du proxy).
+  assert.equal(derniereAdresseTransmise(new Request('https://r/', { headers: { 'X-Forwarded-For': '6.6.6.6, 203.0.113.5' } })), '203.0.113.5');
+});

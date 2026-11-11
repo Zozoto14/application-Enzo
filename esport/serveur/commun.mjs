@@ -12,12 +12,45 @@
  */
 
 import http from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /** Fichier d'environnement par défaut d'une app : ~/.appdashboard/<nom>.env (hors du dépôt, hors public_html). */
 export const fichierEnvParDefaut = nom => join(homedir(), '.appdashboard', `${nom}.env`);
+
+/**
+ * Clé partagée relais ↔ Esport (même hébergement) qui prouve l'adresse du navigateur transmise par l'Esport au
+ * relais (relais/relais.mjs, adresseNavigateurProuvee). Fichier ~/.appdashboard/adresse-relais.cle (droits 600),
+ * créé par le relais au démarrage, lu par l'Esport ; CLE_ADRESSE_RELAIS dans l'environnement la remplace.
+ * Jamais affichée ni journalisée.
+ */
+export const FICHIER_CLE_ADRESSE = () => join(homedir(), '.appdashboard', 'adresse-relais.cle');
+export function lireCleAdresse({ env = process.env, fichier = FICHIER_CLE_ADRESSE(), creer = false } = {}) {
+  if (env.CLE_ADRESSE_RELAIS && env.CLE_ADRESSE_RELAIS.length >= 32) return env.CLE_ADRESSE_RELAIS;
+  try {
+    const cle = readFileSync(fichier, 'utf8').trim();
+    if (cle.length >= 32) return cle;
+  } catch {
+    /* pas encore créée */
+  }
+  if (!creer) return '';
+  try {
+    const cle = randomBytes(32).toString('base64url');
+    mkdirSync(join(fichier, '..'), { recursive: true, mode: 0o700 });
+    writeFileSync(fichier, `${cle}\n`, { mode: 0o600, flag: 'wx' });
+    chmodSync(fichier, 0o600);
+    return cle;
+  } catch {
+    // Créée entre-temps par un autre processus, ou dossier en lecture seule.
+    try {
+      return readFileSync(fichier, 'utf8').trim();
+    } catch {
+      return '';
+    }
+  }
+}
 
 /** Lit un fichier .env simple (CLE=valeur, # commentaires, guillemets facultatifs). Rend les clés lues. */
 export function lireFichierEnv(texte) {
