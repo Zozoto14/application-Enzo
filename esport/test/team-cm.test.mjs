@@ -90,7 +90,13 @@ test('migration 0068 depuis une base réaliste : membres du CM du club, rôles l
   const team = await base.premier('SELECT * FROM teams WHERE id = ?', [TEAM_CM_ID]);
   assert.deepEqual([team.nom, team.slug, team.genre, team.jeu], ['CM du club', 'cm-du-club', 'cm', 'communication']);
   const modules = Object.fromEntries((await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [TEAM_CM_ID])).map(m => [m.module, Number(m.active)]));
-  for (const m of ['planning', 'availability', 'meeting_summaries', 'discord', 'resources']) assert.equal(modules[m], 1, m);
+  for (const m of ['availability', 'meeting_summaries', 'discord', 'resources']) assert.equal(modules[m], 1, m);
+  // Migration 0071 : Planning, Présence et Objectifs coupés pour le CM du club (les lignes restent, réactivables).
+  for (const m of ['planning', 'attendance', 'goals_tasks']) assert.equal(modules[m], 0, m);
+  // Les autres teams gardent leurs modules ; la migration est rejouable sans effet.
+  assert.equal(Number((await base.premier("SELECT active FROM team_modules WHERE team_id = ? AND module = 'planning'", [VAL])).active), 1);
+  await base.executer(readFileSync(new URL('../migrations/0071_cm_du_club_modules.sql', import.meta.url), 'utf8').split('\n').filter(l => !l.startsWith('--')).join('\n').trim().replace(/;$/, ''), []);
+  assert.deepEqual(Object.fromEntries((await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [TEAM_CM_ID])).map(m => [m.module, Number(m.active)])), modules);
   for (const m of ['strat_editor', 'tournois', 'resultats', 'scouting', 'playbook', 'cm']) assert.equal(modules[m], 0, m);
   // Rôles liés aux rôles CM (le rôle créé compris), permissions de team par défaut.
   const roles = await base.tous('SELECT id, nom, cm_role_id FROM roles WHERE team_id = ? ORDER BY position, nom', [TEAM_CM_ID]);
@@ -158,7 +164,10 @@ test('après la migration : espace CM par le CM du club (Manager d’une autre t
   const teams = (await ok('/teams', s.lina0001)).teams;
   const tcm = teams.find(t => t.id === TEAM_CM_ID);
   assert.deepEqual([tcm.genre, tcm.role.nom, tcm.membres, tcm.jeuNom], ['cm', 'Responsable CM', 4, 'Communication']);
-  assert.ok(!tcm.modules.includes('strat_editor') && tcm.modules.includes('planning'));
+  assert.ok(!tcm.modules.includes('strat_editor') && !tcm.modules.includes('planning') && !tcm.modules.includes('attendance') && !tcm.modules.includes('goals_tasks') && tcm.modules.includes('availability'));
+  // Le Fondateur peut les rallumer dans les Paramètres de la team.
+  await ok(`/teams/${TEAM_CM_ID}/modules`, s.principal, { methode: 'PUT', corps: { modules: { planning: true } } });
+  assert.ok((await ok('/teams', s.lina0001)).teams.find(t => t.id === TEAM_CM_ID).modules.includes('planning'));
   assert.ok((await ok('/dashboard', s.lina0001)).teams.some(t => t.team.id === TEAM_CM_ID));
   const annuaire = await ok('/membres', s.principal);
   const ta = annuaire.teams.find(t => t.id === TEAM_CM_ID);

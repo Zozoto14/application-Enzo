@@ -255,8 +255,10 @@ test('calendriers des teams : planning pour un membre, compétition publiable se
   // Le CM du club (membre d'aucune team) : seulement la compétition publiable de A (module CM activé), pas B.
   await ok(`/teams/${B.teamId}/modules`, s.fondateur, 'PUT', { modules: { cm: false } });
   const c = await ok(periode, s.cm123456);
-  // + le planning de le CM du club, dont il est membre (migration 0068).
-  assert.deepEqual(c.teams.map(t => [t.id, t.acces]), [['00000000-0000-4000-8000-00000000c0de', 'planning'], [A.teamId, 'competition']]);
+  // Le CM du club n'a plus de planning (migration 0071) : seul le planning de la CM du club rallumé réapparaît ici.
+  assert.deepEqual(c.teams.map(t => [t.id, t.acces]), [[A.teamId, 'competition']]);
+  await ok('/teams/00000000-0000-4000-8000-00000000c0de/modules', s.fondateur, 'PUT', { modules: { planning: true } });
+  assert.deepEqual((await ok(periode, s.cm123456)).teams.map(t => [t.id, t.acces]), [['00000000-0000-4000-8000-00000000c0de', 'planning'], [A.teamId, 'competition']]);
   const vus = c.teams.find(t => t.id === A.teamId).evenements;
   assert.deepEqual(vus.map(e => e.genre).sort(), ['match', 'tournoi']);
   const texte = JSON.stringify(vus);

@@ -85,8 +85,8 @@ Contrôles d'une route CM : session → team existante → module `cm` activé (
 L'espace « **CM du club** » EST une team : une seule entité, une seule carte dans la page **Teams** — la carte
 « **CM du club** » (pastille rose « CM », « Communication · N membres », puces des sections : Contenus, À valider,
 Drive, Sponsors ; **Ouvrir l'espace CM**). Il n'y a pas de page de team à part : ses pages de team s'ouvrent **dans
-l'espace CM** (barre latérale) — **Équipe** : **Équipe CM** (membres et rôles de la team), Réunions, Planning,
-Disponibilités, Présence, Résumés, Objectifs, **Rôles CM** (affectations) ; **DATA** : Ressources de l'équipe ;
+l'espace CM** (barre latérale) — **Équipe** : **Équipe CM** (membres et rôles de la team), Réunions,
+Disponibilités, Résumés, **Rôles CM** (affectations) (Planning, Présence et Objectifs sont coupés pour le CM du club depuis la migration 0071 ; le Fondateur peut les rallumer dans les Paramètres de la team) ; **DATA** : Ressources de l'équipe ;
 **Gestion** : **Paramètres de la team** (nom, description, modules), **Discord** (webhook, messages), Journal de la team,
 puis Import Trello, Réglages, Journal du CM. Chaque entrée suit les modules activés et les permissions de team du
 compte. Tout lien vers sa page de team (Dashboard, Membres, notification, ancien lien, « Changer de team ») ouvre
@@ -569,6 +569,12 @@ visible de tous les membres du tableau (ce n'est plus une préférence personnel
   triée) ; **à l'intérieur** d'une colonne en tri automatique le réordonnancement est désactivé (pas d'indicateur de
   dépôt, annonce « Colonne en tri automatique : passer en ordre manuel pour réordonner. » ; « Monter » et « Descendre »
   masqués ; « Liste précédente / suivante » et « Déplacer vers… » restent). Règle : `regleDepot` (`Tableau.tsx`).
+- **Pas de sélection de texte pendant un glisser** (web) : saisir une poignée de carte ou un en-tête de colonne coupe la
+  sélection de texte de la page (`user-select: none` sur toute la page tant que le geste dure, sélection existante
+  effacée, `selectstart` refusé), puis la rend au relâchement ; les champs et la fiche de carte restent sélectionnables.
+  Les cartes et poignées portent `user-select: none` et `-webkit-touch-callout: none` (appui long sur iPad / iPhone :
+  ni sélection ni menu de maintien). Aucun attribut `title` ni élément `draggable` HTML5 : pas d'infobulle ni d'image
+  fantôme du navigateur. Code : `ui/cm/selectionGlisser.web.ts` ; vérifié par `scripts/e2e-esport-cm-selection.mjs`.
 - **Création en chaîne** : la nouvelle carte apparaît à sa place triée (une carte sans drapeau ni échéance : après les
   cartes qui en ont, avant les terminées ; dans une colonne de fin : parmi les terminées) et la colonne défile jusqu'à
   elle.

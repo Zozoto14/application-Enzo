@@ -109,10 +109,10 @@ describe('CM du club : une seule carte, la team dans l’espace CM', () => {
     expect(versEspaceCm({ v: 'team', id: 't-val' })).toEqual({ v: 'team', id: 't-val' });
   });
 
-  it('espace CM › Équipe : Équipe CM (membres de la team), Réunions, Planning, Disponibilités, puis Rôles CM ; Gestion : Paramètres de la team', () => {
+  it('espace CM › Équipe : Équipe CM (membres de la team), Réunions, Disponibilités, puis Rôles CM (ni Planning, ni Présence, ni Objectifs) ; Gestion : Paramètres de la team', () => {
     const detail: DetailTeam = {
       team: { id: TEAM_CM, nom: 'CM du club', slug: 'cm-du-club', jeu: 'communication', genre: 'cm', description: '', logoUrl: null, fuseau: 'Europe/Paris', creeLe: '', archivee: false },
-      modules: CATALOGUE.modules.map(m => ({ cle: m.cle, active: ['planning', 'availability', 'discord', 'resources'].includes(m.cle) })),
+      modules: CATALOGUE.modules.map(m => ({ cle: m.cle, active: ['availability', 'meeting_summaries', 'discord', 'resources'].includes(m.cle) })),
       membres: 4,
       moi: { membreId: 'm1', role: { id: RESPONSABLE, nom: 'Responsable CM', couleur: '#db2777', cle: null }, permissions: ['members.view', 'planning.view', 'availability.view_all', 'availability.edit_own', 'discord.manage', 'resources.view'], superAdmin: false },
     };
@@ -121,10 +121,14 @@ describe('CM du club : une seule carte, la team dans l’espace CM', () => {
     expect(equipe.entrees.map(e => [e.id, e.libelle])).toEqual([
       ['team:membres', 'Équipe CM'],
       ['reunions', expect.any(String)],
-      ['team:module:planning', 'Planning'],
       ['team:module:availability', 'Disponibilités'],
+      ['team:module:meeting_summaries', 'Résumés'],
       ['equipe', 'Rôles CM'],
     ]);
+    // Le Fondateur peut rallumer ces modules dans les Paramètres de la team : les entrées reviennent.
+    const rallume: DetailTeam = { ...detail, modules: detail.modules.map(m => ({ ...m, active: m.active || ['planning', 'attendance', 'goals_tasks'].includes(m.cle) })), moi: { ...detail.moi, permissions: [...detail.moi.permissions, 'attendance.view_all', 'attendance.rsvp_own', 'goals_tasks.view'], superAdmin: true } };
+    const ids = groupesCm({ voirCm: true, drive: true, sponsors: false, reunions: true, gerer: true, team: entreesTeamCm(entreesBarre(rallume)) }).find(g => g.id === 'equipe')!.entrees.map(e => e.id);
+    expect(ids).toEqual(expect.arrayContaining(['team:module:planning', 'team:module:attendance', 'team:module:goals_tasks']));
     expect(groupes.find(g => g.id === 'gestion')!.entrees.map(e => e.id)).toEqual(expect.arrayContaining(['team:parametres', 'team:module:discord']));
     expect(groupes.find(g => g.id === 'data')!.entrees.map(e => e.id)).toContain('team:module:resources');
     // Sans la team (compte hors équipe), rien ne change.

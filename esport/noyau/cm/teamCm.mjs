@@ -15,8 +15,13 @@ export const SLUG_TEAM_CM = 'cm-du-club';
 /** Rôles de la Team CM liés aux deux rôles CM système. */
 export const ROLES_TEAM_CM_SYSTEME = Object.freeze({ responsable: '00000000-0000-4000-8000-00000000c001', correspondant: '00000000-0000-4000-8000-00000000c002' });
 
-/** Modules de la Team CM à sa création (les modules de jeu sont coupés ; `cm` reste coupé : la team ouvre l'espace du club). */
-export const MODULES_TEAM_CM = Object.freeze(['activity_log', 'planning', 'availability', 'attendance', 'meeting_summaries', 'goals_tasks', 'discord', 'resources']);
+/**
+ * Modules activés par défaut sur la Team CM (les modules de jeu sont coupés ; `cm` reste coupé : la team ouvre l'espace du club).
+ * Migration 0071 : Planning, Présence et Objectifs sont coupés (le Fondateur peut les rallumer dans les Paramètres de la team).
+ */
+export const MODULES_TEAM_CM = Object.freeze(['activity_log', 'availability', 'meeting_summaries', 'discord', 'resources']);
+/** Modules coupés sur la Team CM par la migration 0071 (réactivables par le Fondateur). */
+export const MODULES_TEAM_CM_COUPES = Object.freeze(['planning', 'attendance', 'goals_tasks']);
 /** Modules qui ne s'activent jamais sur la Team CM (onglet CM d'une team : la Team CM a l'espace « CM du club »). */
 export const MODULES_INTERDITS_TEAM_CM = Object.freeze(['cm']);
 
@@ -71,6 +76,9 @@ export const SQL_REPRISE_TEAM_CM = Object.freeze([
 /** Rejoue la reprise (import d'un export antérieur à la migration 0068, réparation). */
 export async function reprendreTeamCm(base) {
   for (const sql of SQL_REPRISE_TEAM_CM) await base.executer(sql, []);
+  // Migration 0071 : Planning, Présence, Objectifs coupés. Ici seulement les lignes que la reprise vient de créer
+  // (jamais modifiées depuis la création de la team) : un module rallumé depuis par le Fondateur reste allumé.
+  await base.executer(`UPDATE team_modules SET active = 0 WHERE team_id = ? AND module IN (?, ?, ?) AND active <> 0 AND maj_le = (SELECT cree_le FROM teams WHERE id = ?)`, [TEAM_CM_ID, ...MODULES_TEAM_CM_COUPES, TEAM_CM_ID]);
 }
 
 /** Rôle de la Team CM lié à un rôle CM (null s'il n'existe pas). */

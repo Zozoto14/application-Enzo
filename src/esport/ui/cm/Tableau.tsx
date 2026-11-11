@@ -24,6 +24,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { bloquerSelection, libererSelection, STYLE_SAISISSABLE } from './selectionGlisser';
 import { Animated, Image, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type GestureResponderEvent, type LayoutChangeEvent, type PanResponderGestureState, type TextStyle, type ViewStyle } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { Icone } from '../../../ui/icones';
@@ -1510,6 +1511,7 @@ function TuileCarte({
         borderWidth: urgence === 'critique' ? 2 : 1,
         borderColor: urgence === 'critique' ? couleurUrgence('critique', theme.sombre) : urgence === 'urgent' ? melanger(theme.ligne, couleurUrgence('urgent', theme.sombre), 0.45) : theme.ligne,
         overflow: 'hidden',
+        ...STYLE_SAISISSABLE,
       }}
       testID={`esport-cm-carte-${c.id}`}>
       {/* Bande de couleur du niveau, sur le bord gauche (pulsation douce pour Critique). */}
@@ -1660,6 +1662,9 @@ function EnteteGlissable({
       onPanResponderTerminationRequest: () => !etat.current.en,
       onPanResponderGrant: (e: GestureResponderEvent) => {
         const ev = etat.current;
+        // Web : ni sélection de texte ni image fantôme du navigateur pendant le geste.
+        e.preventDefault?.();
+        bloquerSelection();
         ev.x = e.nativeEvent.pageX;
         ev.y = e.nativeEvent.pageY;
         ev.en = false;
@@ -1679,17 +1684,19 @@ function EnteteGlissable({
       },
       onPanResponderRelease: () => {
         annuler();
+        libererSelection();
         if (etat.current.en) rappel.current.fin(false);
         etat.current.en = false;
       },
       onPanResponderTerminate: () => {
         annuler();
+        libererSelection();
         if (etat.current.en) rappel.current.fin(true);
         etat.current.en = false;
       },
     }),
   ).current;
-  useEffect(() => annuler, []);
+  useEffect(() => () => { annuler(); libererSelection(); }, []);
   if (!actif) return <View style={{ flex: 1 }}>{children}</View>;
   return (
     <View
@@ -1697,7 +1704,7 @@ function EnteteGlissable({
       testID={testID}
       accessibilityHint={aide}
       accessibilityLabel={libelle}
-      style={{ flex: 1, justifyContent: 'center', minHeight: 32, cursor: 'grab', userSelect: 'none' } as unknown as ViewStyle}>
+      style={{ flex: 1, justifyContent: 'center', minHeight: 32, cursor: 'grab', ...STYLE_SAISISSABLE } as unknown as ViewStyle}>
       {children}
     </View>
   );
@@ -1713,19 +1720,31 @@ function Poignee({ theme, titre, glisser, testID }: { theme: ThemeHub; titre: st
       onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e: GestureResponderEvent) => rappel.current.debut(e.nativeEvent.pageX, e.nativeEvent.pageY),
+      onPanResponderGrant: (e: GestureResponderEvent) => {
+        // Web : ni sélection de texte ni image fantôme du navigateur pendant le geste.
+        e.preventDefault?.();
+        bloquerSelection();
+        rappel.current.debut(e.nativeEvent.pageX, e.nativeEvent.pageY);
+      },
       onPanResponderMove: (_e: GestureResponderEvent, g: PanResponderGestureState) => rappel.current.bouge(g.moveX, g.moveY),
-      onPanResponderRelease: () => rappel.current.fin(false),
-      onPanResponderTerminate: () => rappel.current.fin(true),
+      onPanResponderRelease: () => {
+        libererSelection();
+        rappel.current.fin(false);
+      },
+      onPanResponderTerminate: () => {
+        libererSelection();
+        rappel.current.fin(true);
+      },
     }),
   ).current;
+  useEffect(() => libererSelection, []);
   return (
     <View
       {...geste.panHandlers}
       testID={testID}
       accessibilityLabel={trCm('carte.poignee', { titre })}
       accessibilityHint={trCm('carte.poignee_aide')}
-      style={{ width: 24, height: 32, alignItems: 'center', justifyContent: 'center', cursor: 'grab' } as unknown as ViewStyle}>
+      style={{ width: 24, height: 32, alignItems: 'center', justifyContent: 'center', cursor: 'grab', ...STYLE_SAISISSABLE } as unknown as ViewStyle}>
       <Text style={{ color: theme.attenue, fontSize: 14 }}>⠿</Text>
     </View>
   );
