@@ -11,6 +11,26 @@ des équipes adverses ni des rôles Discord.
 Migration : `esport/migrations/0064_evenements_club.sql`. Code : `esport/noyau/evenements-club/` (serveur),
 `src/esport/ui/evenements/` (écran). Tests : `esport/test/evenements-club.test.mjs`, `src/esport/Evenements.test.tsx`.
 
+## Site LigneZero
+
+Les équipes des tournois du site **lz.appdashboard.fr** (dépôt `site-ligne-zero`, même hébergement o2switch) se
+créent et se gèrent **uniquement ici** : l'admin du site n'a plus de bouton pour créer, renommer ou supprimer une
+équipe (il garde la tête de série, le logo, la couleur, les disqualifications et les scores).
+
+- Dans la fiche de l'événement, carte **« Site LigneZero »** : choisir le **tournoi du site** et « Enregistrer le
+  lien » (un seul événement par tournoi du site ; « Aucun » retire le lien sans rien supprimer).
+- Ensuite, l'app fait foi : une équipe **ajoutée** (à la main ou importée des tickets), **modifiée** (nom, TAG,
+  joueurs, coach, remplaçants, Discord ID, Embark ID) ou **retirée** ici l'est aussi sur le site, tout de suite. Une
+  différence côté site est écrasée ; une équipe disparue du site y est recréée.
+- Au premier lien, les équipes déjà présentes des deux côtés (même nom ou même TAG) sont rapprochées, et celles
+  qui n'existent que sur le site (anciennes inscriptions) sont reprises dans l'événement (TAG attribué au besoin).
+- Synchronisation aussi toutes les 5 minutes (cron, événements ni terminés ni annulés) et avec « Synchroniser » ;
+  bilan affiché (envoyées, mises à jour, reprises, problèmes).
+- Accès au site : clé de service lue dans `~/.lignezero/api.env` (`CLE_SERVICE`, créée par le déploiement du
+  site), rien à recopier ; autre hébergement : `LZ_API_URL` et `LZ_CLE` dans `esport.env`.
+- Code : `esport/noyau/site-lz/` (client de l'API du site, pont). Migration 0070 (`site_tournoi_id`,
+  `site_equipe_id`, `site_empreinte`). Tests : `esport/test/site-lz-pont.test.mjs`, `src/esport/Evenements.test.tsx`.
+
 ## Droits
 
 Permission du club **`evenements.gerer`** (« Événements : gérer », catégorie Administration). Le Fondateur l'a

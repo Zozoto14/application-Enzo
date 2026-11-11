@@ -273,6 +273,15 @@ function fauxClient(
       };
     if (chemin === '/evenements/ev1/import')
       return { categorieId: 'cat1', propositions };
+    if (chemin.startsWith('/evenements/ev1/site')) {
+      const lie = chemin.endsWith('/synchro') || (methode === 'PUT' && (corps as { tournoiId: string | null }).tournoiId) ? 'tn1' : null;
+      return {
+        tournoiId: lie,
+        tournois: [{ id: 'tn1', nom: 'The Nuke End', statut: 'registration' }],
+        erreur: null,
+        etat: lie ? { ok: true, le: '2026-11-10T10:00:00.000Z', envoyees: 2, recues: 1, majSite: 0, majApp: 0, supprimees: 0, erreurs: [] } : null,
+      };
+    }
     if (chemin === '/evenements/ev1/equipes' && methode === 'POST') {
       const ajout = (
         corps as {
@@ -696,4 +705,17 @@ test('vocaux de l’événement : libellé de chaque rôle autorisé en plus ({r
   await fireEvent.press(screen.getByTestId('esport-ev-voc-enregistrer'));
   expect(await screen.findByText('Hub enregistré.')).toBeTruthy();
   expect(appels.find(a => a.chemin === '/evenements/ev1/vocaux/751' && a.methode === 'PATCH')!.corps).toMatchObject({ etiquettes: { '720000000000000060': 'Cast' } });
+});
+
+test('Site LigneZero : tournoi du site lié, équipes synchronisées, fiche relue', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  await fireEvent.press(await screen.findByTestId('esport-ev-site-tournoi-tn1'));
+  await fireEvent.press(screen.getByTestId('esport-ev-site-lier'));
+  expect(await screen.findByText('Lien enregistré, équipes synchronisées.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/site' && a.methode === 'PUT')!.corps).toEqual({ tournoiId: 'tn1' });
+  expect(screen.getByTestId('esport-ev-site-dernier')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-site-synchro'));
+  expect(await screen.findByText('Synchronisé avec le site.')).toBeTruthy();
+  expect(appels.filter(a => a.chemin === '/evenements/ev1' && !a.methode).length).toBeGreaterThan(1);
 });

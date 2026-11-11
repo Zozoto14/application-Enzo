@@ -250,6 +250,14 @@ export interface VocauxEvenement {
 /** Champs d'un hub d'événement saisis dans la fiche (l'événement et le verrouillage sont imposés par le serveur). */
 export type SaisieHubEvenement = Partial<Pick<Hub, 'id' | 'nom' | 'categorieId' | 'modeleNom' | 'limite' | 'rolesAutorises' | 'placerSousHub' | 'visibleNonJoignable' | 'masquerHub' | 'modeleStaff' | 'etiquettes'>>;
 
+/** Lien avec un tournoi du site LigneZero (docs/esport/evenements.md, « Site LigneZero »). */
+export interface SiteEvenement {
+  tournoiId: string | null;
+  tournois: Array<{ id: string; nom: string; statut: string }>;
+  erreur: string | null;
+  etat: { ok: boolean; le: string; envoyees: number; recues: number; majSite: number; majApp: number; supprimees: number; erreurs: string[] } | null;
+}
+
 export function apiEvenements(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) =>
     client.requete<T>(chemin, methode, corps);
@@ -288,6 +296,9 @@ export function apiEvenements(client: ClientEsport) {
     supprimerRoles: (id: string) =>
       r<FicheEvenement>(`${un(id)}/roles/supprimer`, 'POST', {}),
     rolesServeur: () => r<RolesServeur>('/evenements/roles-serveur'),
+    site: (id: string) => r<SiteEvenement>(`${un(id)}/site`),
+    lierSite: (id: string, tournoiId: string | null) => r<SiteEvenement>(`${un(id)}/site`, 'PUT', { tournoiId }),
+    synchroniserSite: (id: string) => r<SiteEvenement>(`${un(id)}/site/synchro`, 'POST', {}),
     candidatsStaff: (q: string) => r<{ candidats: CandidatStaff[] }>(`/evenements/staff-candidats?q=${encodeURIComponent(q)}`),
     ajouterStaff: (id: string, c: { discordId: string; nom?: string }) => r<FicheEvenement>(`${un(id)}/staff`, 'POST', c),
     creerRoleStaff: (id: string, c: { nom: string; couleur?: string | null; label?: string; membres?: string[] }) => r<FicheEvenement>(`${un(id)}/staff-roles`, 'POST', c),

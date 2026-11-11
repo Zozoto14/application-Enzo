@@ -18,7 +18,7 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ base: baseFournie, creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia, devblogSource, deploiement } = {}) {
+export async function banc({ base: baseFournie, creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia, devblogSource, deploiement, siteLz } = {}) {
   // `base` : une base déjà migrée (fixture d'une base de production, esport/test/team-cm.test.mjs).
   const base = baseFournie ?? (await baseMigree());
   const stockage = sansStockage ? undefined : stockageMemoire();
@@ -58,6 +58,8 @@ export async function banc({ base: baseFournie, creationTeams = 'fondateur', rel
     devblogSource: devblogSource ?? null,
     // Suivi des mises à jour : service simulé par les tests qui en ont besoin (sinon 404 « indisponible »).
     ...(deploiement ? { deploiement } : {}),
+    // Site LigneZero : faux site fourni par les tests du pont (sinon : aucun site, jamais de réseau réel).
+    siteLz: siteLz ?? { configure: false, lister: async () => [], inserer: async () => [], modifier: async () => [], supprimer: async () => null, supprimerOu: async () => null },
   });
   let ipCompteur = 0;
   async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json', entetes = {} } = {}) {

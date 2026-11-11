@@ -51,6 +51,7 @@ import {
   type Ton,
 } from '../design';
 import { EquipesEvenement } from './EquipesEvenement';
+import { SiteEvenement } from './SiteEvenement';
 import { StaffEvenement } from './StaffEvenement';
 import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
@@ -576,6 +577,8 @@ export function PageEvenements({
           <StaffEvenement theme={theme} api={api} fiche={fiche} onFiche={setFiche} />
 
           <VocauxEvenement theme={theme} api={api} client={client} fiche={fiche} />
+
+          <SiteEvenement theme={theme} api={api} fiche={fiche} onFiche={setFiche} />
 
           <EquipesEvenement
             theme={theme}

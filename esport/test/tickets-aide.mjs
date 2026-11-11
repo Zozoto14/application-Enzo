@@ -282,13 +282,13 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
  * envoie une interaction signée ; `config(corps)` règle les tickets en Fondateur. `modeles` : catégories par défaut
  * semées à la première lecture de la configuration (sinon, réglage `categories_defaut` déjà posé : base vierge).
  */
-export async function bancTickets({ banc, attenteDiffere, modeles = false } = {}) {
+export async function bancTickets({ banc, attenteDiffere, modeles = false, siteLz } = {}) {
   const APP = '424242424242424242';
   const hexa = o => Buffer.from(o).toString('hex');
   const paire = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
   const publique = hexa(await crypto.subtle.exportKey('raw', paire.publicKey));
   const discord = fauxDiscordRest();
-  const b = await banc({ fetchDiscord: discord.fetch, lienApp: 'https://app.exemple/esport', discordBot: { applicationId: APP, publicKey: publique, jetonBot: 'jeton-bot-de-test-jamais-reel' }, attenteDiffere: attenteDiffere ?? (() => new Promise(() => {})) });
+  const b = await banc({ fetchDiscord: discord.fetch, lienApp: 'https://app.exemple/esport', discordBot: { applicationId: APP, publicKey: publique, jetonBot: 'jeton-bot-de-test-jamais-reel' }, attenteDiffere: attenteDiffere ?? (() => new Promise(() => {})), ...(siteLz ? { siteLz } : {}) });
   const fondateur = await b.session('principal', 'Fondateur');
   if (!modeles) await b.base.executer("INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES ('categories_defaut', '{}', '2026-01-01T00:00:00.000Z')", []);
   const differes = [];

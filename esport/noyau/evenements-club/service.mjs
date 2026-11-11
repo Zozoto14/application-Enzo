@@ -164,6 +164,8 @@ const resume = l => ({
     staffRolesSup: lireSup(l.staff_roles_sup),
   },
   categoriesTickets: jsonOu(l.categories_tickets, []),
+  // Tournoi du site LigneZero lié (site-lz/pont.mjs).
+  siteTournoiId: l.site_tournoi_id ?? null,
   creeLe: l.cree_le,
   majLe: l.maj_le,
 });
@@ -176,6 +178,11 @@ export function servicesEvenements({
   botId = null,
   journal = console,
 }) {
+  // Pont avec le site LigneZero (site-lz/pont.mjs), branché après coup : { apres(id), equipeSupprimee(e) }.
+  let pont = null;
+  const apresSite = async (acteur, id) => {
+    if (pont && !acteur?.systeme) await pont.apres(id);
+  };
   async function exiger(acteur) {
     if (!(await aGlobale(base, acteur, PERMISSION_EVENEMENTS)))
       throw echec(
@@ -867,6 +874,7 @@ export function servicesEvenements({
       ids.push(eid);
     }
     const discord = await auto_(evt, { equipeIds: ids });
+    await apresSite(acteur, id);
     return lire(acteur, id, discord ? { discord } : {});
   }
 
@@ -930,6 +938,7 @@ export function servicesEvenements({
           bilan: await synchroniser(c, evt, { equipeIds: [], retirer }),
         };
     }
+    await apresSite(acteur, id);
     return lire(acteur, id, discord ? { discord } : {});
   }
 
@@ -959,6 +968,7 @@ export function servicesEvenements({
     await base.executer('DELETE FROM club_evenement_equipes WHERE id = ?', [
       equipeId,
     ]);
+    if (pont && !acteur?.systeme) await pont.equipeSupprimee(e);
     return lire(acteur, id, discord ? { discord } : {});
   }
 
@@ -1141,6 +1151,9 @@ export function servicesEvenements({
     rolesServeur,
     creerRoleStaff,
     exiger,
+    brancherPont: p => {
+      pont = p;
+    },
   };
 }
 
@@ -1159,10 +1172,13 @@ export function servicesEvenements({
  *   POST                /evenements/:id/import           { categorieId } propositions lues dans les tickets
  *   POST                /evenements/:id/roles            resynchroniser les rôles (bilan)
  *   POST                /evenements/:id/roles/supprimer  supprimer les rôles et les salons des équipes
+ *   GET|PUT             /evenements/:id/site             tournoi du site LigneZero lié ; { tournoiId } lier / délier
+ *   POST                /evenements/:id/site/synchro     synchroniser les équipes avec le site
  */
 export async function routesEvenements({
   ev,
   vc,
+  pont,
   acteur,
   chemin,
   methode: m,
@@ -1223,6 +1239,11 @@ export async function routesEvenements({
     if (p.length === 2 && m === 'POST') return vc.ajouterHubEvenement(acteur, id, await lireCorps());
     if (p.length === 3 && m === 'PATCH') return vc.modifierHubEvenement(acteur, id, x, await lireCorps());
     if (p.length === 3 && m === 'DELETE') return vc.retirerHubEvenement(acteur, id, x);
+  }
+  if (quoi === 'site' && pont) {
+    if (p.length === 2 && m === 'GET') return pont.vue(acteur, id);
+    if (p.length === 2 && m === 'PUT') return pont.lier(acteur, id, await lireCorps());
+    if (p.length === 3 && x === 'synchro' && m === 'POST') return pont.synchroniserMaintenant(acteur, id);
   }
   if (p.length === 2 && quoi === 'import' && m === 'POST') {
     await limite('tickets_discord', acteur.compte);

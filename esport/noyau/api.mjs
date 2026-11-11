@@ -82,6 +82,8 @@ import { routesRolesTemp } from './roles-temp/routes.mjs';
 import { servicesVocaux } from './vocaux/service.mjs';
 import { routesVocaux } from './vocaux/routes.mjs';
 import { routesEvenements, servicesEvenements } from './evenements-club/service.mjs';
+import { clientSite, configSite } from './site-lz/client.mjs';
+import { creerPontSite } from './site-lz/pont.mjs';
 import { servicesCycleTickets } from './tickets/cycle.mjs';
 import { servicesRgpdTickets } from './tickets/rgpd.mjs';
 import { contexteTickets } from './tickets/acces.mjs';
@@ -189,6 +191,8 @@ export function creerApi({
   deploiement,
   // Temps réel (docs/esport/temps-reel.md) : { mode: sse|attente|sondage, maxTotal… } (TEMPS_REEL dans esport.env).
   tempsReel = {},
+  // Client de l'API du site LigneZero (tests : faux site) ; défaut : clé lue sur l'hébergement (site-lz/client.mjs).
+  siteLz = null,
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -270,6 +274,9 @@ export function creerApi({
   const vc = servicesVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, serveurTickets: ticketsServeur });
   // Événements organisés par le club et rôles Discord de leurs équipes (migration 0064) : Administration › Événements.
   const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
+  // Pont avec le site LigneZero (docs/esport/evenements.md, « Site LigneZero ») : équipes synchronisées avec un tournoi du site.
+  const pontSite = creerPontSite({ base, ev, site: siteLz ?? clientSite(configSite()), maintenant });
+  ev.brancherPont(pontSite);
   const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Rôles Discord temporaires des teams (migration 0066, docs/esport/bot-discord.md) : /role-temp et réglages de la team.
   const rt = servicesRolesTemp({ base, maintenant, noyau: s, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, botId: configBot.applicationId || null });
@@ -523,7 +530,7 @@ export function creerApi({
     if (administrationBot !== undefined) return administrationBot;
     const tickets = await routesTickets({ tk, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
     if (tickets !== undefined) return tickets;
-    const evenementsClub = await routesEvenements({ ev, vc, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    const evenementsClub = await routesEvenements({ ev, vc, pont: pontSite, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (evenementsClub !== undefined) return evenementsClub;
     const vocaux = await routesVocaux({ vc, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (vocaux !== undefined) return vocaux;

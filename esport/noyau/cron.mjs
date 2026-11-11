@@ -35,6 +35,9 @@ import { rappelsReunions } from './cm/reunions/rappels.mjs';
 import { traiterMpReunions } from './cm/reunions/mp.mjs';
 import { tachesTickets } from './tickets/cron.mjs';
 import { tachesEvenementsDiscord } from './evenements-club/discord.mjs';
+import { servicesEvenements } from './evenements-club/service.mjs';
+import { clientSite, configSite } from './site-lz/client.mjs';
+import { creerPontSite } from './site-lz/pont.mjs';
 import { expirerRolesTemp } from './roles-temp/moteur.mjs';
 
 /**
@@ -43,7 +46,7 @@ import { expirerRolesTemp } from './roles-temp/moteur.mjs';
  * `fetchTranscription` (API de transcription facultative), `adaptateursReseaux` (relevés automatiques des
  * statistiques des réseaux : aucun en V1, voir reseaux/adaptateurs.mjs), `drive` (quota du Drive CM, regles.mjs).
  */
-export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive(), tickets } = {}) {
+export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive(), tickets, siteLz = null } = {}) {
   let rapportTickets = null;
   const transcrire = async () => {
     if (!transcriptionExterne?.actif || !stockage) return 0;
@@ -71,6 +74,15 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['tickets', async () => (rapportTickets = await tachesTickets(base, { jetonBot, maintenant, stockage, ...(fetch ? { fetch } : {}), ...(tickets ? { cycle: tickets(base) } : {}) }))],
     // Événements du club : rôles Discord des équipes (et leurs salons vocaux) supprimés à la fin (migration 0064).
     ['rôles Discord des événements', () => tachesEvenementsDiscord(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
+    // Site LigneZero : équipes des événements liés à un tournoi du site, synchronisées dans les deux sens.
+    ['équipes du site LigneZero', async () => {
+      const site = siteLz ?? clientSite(configSite());
+      if (!site.configure) return { evenements: 0 };
+      const ev = servicesEvenements({ base, maintenant, fetch: fetch ?? ((...a) => globalThis.fetch(...a)), jetonBot, journal });
+      const pont = creerPontSite({ base, ev, site, maintenant, journal });
+      ev.brancherPont(pont);
+      return pont.tacheCron();
+    }],
     // Rôles Discord temporaires (migration 0066) : rôles arrivés à échéance retirés (réessais : limite de débit, hiérarchie).
     ['rôles Discord temporaires', () => expirerRolesTemp(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
