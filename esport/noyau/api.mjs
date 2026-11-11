@@ -77,6 +77,7 @@ import { creerBotTickets } from './tickets/bot.mjs';
 import { servicesCycleTickets } from './tickets/cycle.mjs';
 import { servicesRgpdTickets } from './tickets/rgpd.mjs';
 import { contexteTickets } from './tickets/acces.mjs';
+import { servicesSiteLz } from './tickets/siteLz.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
@@ -245,6 +246,18 @@ export function creerApi({
     fetch: envoiDiscord,
     jetonBot,
     liaisons: { creerProspect: (a, c) => sp.creerProspect(a, c), prospect: (a, id) => sp.prospect(a, id), creerCarte: (a, t, c) => cm.tableaux.creerCarte(a, t, c), carte: (a, id) => cm.tableaux.carte(a, id) },
+  });
+  // Site LigneZero (Tickets › Configuration › Site LZ) : équipes du site, rôles et salons Discord, inscriptions.
+  tk.site = servicesSiteLz({
+    base,
+    maintenant,
+    contexteTickets,
+    fetch: envoiDiscord,
+    jetonBot,
+    envoyerDansTicket: async (ticketId, texte) => {
+      const ticket = await cycleTickets.ticketPar(ticketId);
+      if (ticket?.salon_id) await cycleTickets.posterSysteme(ticket, { content: texte, allowed_mentions: { parse: [] } }, texte);
+    },
   });
   const botTickets = creerBotTickets({ base, maintenant, cycle: cycleTickets, config: tk.config });
   const bot = creerBot({

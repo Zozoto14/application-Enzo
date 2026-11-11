@@ -29,6 +29,7 @@ import { publierEnBase } from '../temps-reel/diffusion.mjs';
 import { annoncer, ingererMessage, plusRecent, telechargeurCdn } from './conversation.mjs';
 import { DROITS_BOT, DROITS_LECTURE, DROITS_PARTICIPANT, P, REFUS_ECRITURE, REFUS_ECRITURE_MINIMAL, idDiscord, rest } from './discord.mjs';
 import { boutonsTicket, chargeAccueil, nomPriorite, nomSalon, rangeeRepondre, titreTicket } from './panneaux.mjs';
+import { noterInscription } from './siteLz.mjs';
 import { STATUTS_OUVERTS, categoriePublique, dansHoraires, delaiFermeture, lireGeneral, lireHoraires, lireMessages, lireReglage, reponsesAppSeules } from './reglages.mjs';
 import { bilingue, duree, langueDe, messageBilingue, messageRegle, nom2, remplir, sur, surLong, t as tx } from './textes.mjs';
 
@@ -230,6 +231,8 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     await base.lot([ev('ticket.ouvert', ticket, null, { auteur: sur(auteur.nom, 80), nomCategorie: cat.nom.fr })]);
     await journalDiscord(general, { description: bilingue(l => tx(l, 'journal_ouvert', { numero, auteur: `<@${auteur.id}>`, categorie: sur(l === 'fr' ? cat.nom.fr : cat.nom.en, 80) }), { mode: general.langue === 'auteur' ? 'en_fr' : general.langue }), color: 0x4caf7a });
     await annoncer(base, id, t);
+    // Catégorie liée à un tournoi du site LigneZero : inscription en attente de validation (Configuration › Site LZ).
+    await noterInscription(base, await ticketPar(id), lues, { maintenant }).catch(e => console.error('[esport] site LZ : inscription', e?.message ?? e));
     await alerterNouveau(await ticketPar(id), cat).catch(e => console.error('[esport] tickets : alerte', e?.message ?? e));
     return ticketPar(id);
   }

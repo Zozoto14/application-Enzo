@@ -59,6 +59,18 @@ function fauxClient(conf: Config) {
       };
     if (chemin === '/tickets/config/bienvenue' && methode === 'PUT') return { ...conf, bienvenue: { ...conf.bienvenue, ...(corps as object), existantsNotes: true }, titulaires: { ok: true, notes: 3 } };
     if (chemin === '/tickets/config/bienvenue/test' && methode === 'POST') return { ok: true };
+    if (chemin.startsWith('/tickets/config/site')) {
+      const vue = {
+        reglages: { discordActif: false, rosterActif: false, inscriptions: [] },
+        etat: null,
+        erreur: null,
+        categories: [{ id: 'cat-nuke', nom: 'Inscription The Nuke End' }],
+        inscriptions: [{ id: 'ins1', ticket_id: 'tk1', tournoi_id: 'tn1', cree_le: '2026-11-10T10:00:00Z', donnees: { equipe: 'Les Bombes', tag: 'BMB', numero: 7, contact: { nom: 'Nova' }, joueurs: [{ pseudo: 'Nova', discordId: '810000000000000001', embarkId: 'Nova#1234' }] } }],
+        donnees: { tournois: [{ id: 'tn1', slug: 'nuke', nom: 'The Nuke End', statut: 'registration', ouvert: true, equipes: [{ id: 'eq1', nom: 'Alpha', tag: 'ALP', statut: 'registered', joueurs: [{ id: 'j1', pseudo: 'Un', discordId: null, embarkId: null }] }] }], roster: [] },
+      };
+      if (chemin === '/tickets/config/site/synchro') return { ...vue, bilan: { ok: true, le: '', crees: 4, supprimes: 0, membres: 1, absents: 0, erreurs: [] } };
+      return vue;
+    }
     if (chemin === '/tickets/config/categories' && methode === 'POST') {
       const c = corps as Partial<Categorie>;
       const cat = { ...(c as Categorie), id: 'cat1', position: 0 };
@@ -690,6 +702,26 @@ test('Bienvenue : rôle, salon et message choisis, activation enregistrée ; tit
   expect(put).toMatchObject({ actif: true, roleId: '720', roleNom: 'Staff', salonId: '713', message: 'Bienvenue {membre} dans {role} 💥', supprimerApresS: 5 });
   await fireEvent.press(screen.getByTestId('esport-tk-bv-tester'));
   await screen.findByText('Message d’essai publié dans le salon.');
+});
+
+test('Site LZ : équipes du site modifiables, synchro Discord, inscription validée', async () => {
+  const { client, appels } = fauxClient(configDe());
+  await render(<ConfigTickets theme={theme} client={client} large />);
+  await fireEvent.press(await screen.findByTestId('esport-tk-conf-onglet-site'));
+  expect(await screen.findByText(/Les Bombes/)).toBeTruthy();
+  await fireEvent.changeText(screen.getByTestId('esport-tk-site-joueur-discord-j1'), '810000000000000042');
+  await fireEvent.press(screen.getByTestId('esport-tk-site-joueur-ok-j1'));
+  await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/config/site/modifier')).toBe(true));
+  expect(appels.find(a => a.chemin === '/tickets/config/site/modifier')!.corps).toMatchObject({ type: 'joueur', id: 'j1', discordId: '810000000000000042' });
+  await fireEvent.press(screen.getByTestId('esport-tk-site-synchro'));
+  await screen.findByText(/4 créé\(s\)/);
+  await fireEvent.press(screen.getByTestId('esport-tk-site-valider-ins1'));
+  await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/config/site/inscriptions/ins1/valider')).toBe(true));
+  await fireEvent.press(screen.getByTestId('esport-tk-site-lien-cat-cat-nuke'));
+  await fireEvent.press(screen.getByTestId('esport-tk-site-lien-tournoi-tn1'));
+  await fireEvent.press(screen.getByTestId('esport-tk-site-lien-ajouter'));
+  await waitFor(() => expect(appels.some(a => a.chemin === '/tickets/config/site' && a.methode === 'PUT')).toBe(true));
+  expect(appels.find(a => a.chemin === '/tickets/config/site' && a.methode === 'PUT')!.corps).toEqual({ inscriptions: [{ categorieId: 'cat-nuke', tournoiId: 'tn1' }] });
 });
 
 test('Bienvenue : intent « Server Members » refusé par Discord : rappel affiché', async () => {

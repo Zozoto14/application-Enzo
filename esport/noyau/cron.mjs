@@ -33,6 +33,7 @@ import { configDrive } from './cm/drive/regles.mjs';
 import { rappelsReunions } from './cm/reunions/rappels.mjs';
 import { traiterMpReunions } from './cm/reunions/mp.mjs';
 import { tachesTickets } from './tickets/cron.mjs';
+import { clientSite, configSite, synchroniserDiscord } from './tickets/siteLz.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -66,6 +67,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     // Tickets Discord : relecture de secours si aucun processus ne tient la Gateway, puis cycle de vie (avertissements,
     // fermetures automatiques, salons archivés supprimés, rétention).
     ['tickets', async () => (rapportTickets = await tachesTickets(base, { jetonBot, maintenant, stockage, ...(fetch ? { fetch } : {}), ...(tickets ? { cycle: tickets(base) } : {}) }))],
+    // Site LigneZero : rôles et salons Discord des équipes des tournois du site (si activé dans Tickets › Site LZ).
+    ['site LigneZero', () => synchroniserDiscord({ base, site: clientSite(configSite()), jetonBot, maintenant, ...(fetch ? { fetch } : { fetch: (...a) => globalThis.fetch(...a) }) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
     // Devblog : brouillons programmés publiés à l'heure (app, puis file Discord envoyée juste après).
     ['devblog programmé', () => publierProgrammes(base, { maintenant: maintenant() })],

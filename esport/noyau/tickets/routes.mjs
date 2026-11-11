@@ -6,6 +6,7 @@
  *   GET           /tickets/moi ; /tickets/etat
  *   GET           /tickets/config ; /tickets/config/discord[?serveur=<id> : serveur choisi, pas encore enregistré]
  *   PUT           /tickets/config/(general|messages|horaires|commandes|bienvenue) ; POST /tickets/config/bienvenue/test
+ *   GET|PUT       /tickets/config/site ; POST …/site/synchro ; POST …/site/modifier ; POST …/site/inscriptions/:id/(valider|refuser)
  *   POST          /tickets/config/categories ; PATCH|DELETE /tickets/config/categories/:id ; PUT …/categories/ordre
  *   POST          /tickets/config/categories/defaut { cles }   (catégories par défaut cochées, doublons de nom ignorés)
  *   POST          /tickets/config/panneaux ; PATCH|DELETE /tickets/config/panneaux/:id
@@ -105,6 +106,16 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
         await limite('tickets_discord', acteur.compte);
         return cf.changerBienvenue(acteur, await lireCorps());
       }
+    }
+    if (b === 'site' && tk.site) {
+      if (n === 2 && m === 'GET') return tk.site.vue(acteur);
+      if (n === 2 && m === 'PUT') return tk.site.changer(acteur, await lireCorps());
+      if (n === 3 && c === 'synchro' && m === 'POST') {
+        await limite('tickets_discord', acteur.compte);
+        return tk.site.synchroniser(acteur);
+      }
+      if (n === 3 && c === 'modifier' && m === 'POST') return tk.site.modifier(acteur, await lireCorps());
+      if (n === 5 && c === 'inscriptions' && (p[4] === 'valider' || p[4] === 'refuser') && m === 'POST') return tk.site.traiterInscription(acteur, d, p[4]);
     }
     if (n === 3 && b === 'bienvenue' && c === 'test' && m === 'POST') {
       await limite('tickets_discord', acteur.compte);

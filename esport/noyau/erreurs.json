@@ -877,7 +877,13 @@
   "Discord demande d’attendre : réessayez dans un instant.": "Discord asks to wait: try again in a moment.",
   "Discord a refusé le message (permissions du bot ?).": "Discord refused the message (bot permissions?).",
   "Pièce jointe trop volumineuse : 5 Mo au plus.": "Attachment too large: 5 MB at most.",
-  "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total."
+  "Pièces jointes trop volumineuses : 5 Mo au plus en tout.": "Attachments too large: 5 MB at most in total.",
+  "Site LigneZero introuvable sur cet hébergement (clé de service absente).": "LigneZero website not found on this host (service key missing).",
+  "Le site LigneZero ne répond pas.": "The LigneZero website is not responding.",
+  "Liste d’inscriptions invalide.": "Invalid registration list.",
+  "Discord ID invalide (un nombre de 17 à 20 chiffres).": "Invalid Discord ID (a number of 17 to 20 digits).",
+  "Élément à modifier manquant.": "Item to change is missing.",
+  "Inscription introuvable ou déjà traitée.": "Registration not found or already handled."
  },
  "motifs": [
   [
@@ -1327,6 +1333,10 @@
   [
    "^(\\d+) caractères au plus\\.$",
    "$1 characters at most."
+  ],
+  [
+   "^Site LigneZero : (.+)$",
+   "LigneZero website: $1"
   ]
  ]
 }

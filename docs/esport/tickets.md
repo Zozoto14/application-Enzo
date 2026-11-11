@@ -409,6 +409,28 @@ Code : `esport/noyau/tickets/bienvenue.mjs` (règles, message, titulaires), `sup
 
 ---
 
+## Site LigneZero (Configuration › Site LZ)
+
+Lien avec le site de la structure, **lz.appdashboard.fr** (dépôt `site-ligne-zero`), hébergé sur le même compte o2switch.
+
+- **Accès au site** : Esport HQ lit la clé de service du site dans `~/.lignezero/api.env` (`CLE_SERVICE`, créée
+  automatiquement par le déploiement du site) : rien à recopier. Autre hébergement : `LZ_API_URL` et `LZ_CLE` dans
+  `esport.env`.
+- **Équipes** : les équipes des tournois du site (nom, TAG, joueurs, Discord ID, Embark ID) et le roster LZ (Discord
+  ID) s'affichent dans l'onglet et s'y modifient ; c'est enregistré directement sur le site.
+- **Rôles et salons Discord** (interrupteur) : pour chaque équipe d'un tournoi **ouvert** (inscriptions ou en cours),
+  un rôle, un salon texte et un salon vocal privés, dans une catégorie « 🏆 <tournoi> ». Le rôle est donné aux joueurs
+  dont le Discord ID est renseigné (ceux qui ne sont pas encore sur le serveur sont réessayés), retiré à ceux qui
+  quittent l'équipe. Équipe renommée : rôle et salons renommés. Tournoi terminé ou équipe retirée : tout est supprimé.
+  Option : la même chose pour le roster LZ (un rôle « LZ · <jeu> » par jeu, catégorie « 🎮 Roster LZ »). Fait par le
+  cron (toutes les 5 minutes) ou le bouton « Synchroniser maintenant ». Le bot doit pouvoir **gérer les rôles** et
+  **gérer les salons**. Suivi en base : `lz_discord` (migration 0060).
+- **Inscriptions depuis Discord** : une catégorie de tickets (ex. « Inscription The Nuke End ») se lie à un tournoi du
+  site. Chaque ticket ouvert dans cette catégorie devient une inscription **en attente** (équipe, TAG, joueurs lus
+  dans les lignes « Discord ID — Embark ID ») ; « Valider et créer sur le site » crée l'équipe et ses joueurs sur le
+  site (le premier joueur est capitaine ; remplaçants et coach avec leur rôle) et l'annonce dans le ticket.
+  Table `lz_inscriptions`.
+
 ## Connexion Discord : un seul processus, et un secours
 
 L'app Esport tourne sous **Passenger** chez o2switch : plusieurs processus Node possibles, qui peuvent être arrêtés
@@ -557,5 +579,6 @@ uniquement depuis l'AppDashboard » change.
   sur base vide seulement, bouton sans doublon ; réponses depuis l'app seulement : droits des salons, accueil, fenêtre
   « Répondre », remise à jour des salons ouverts, repli 403), `esport/test/tickets-panneaux-modeles.test.mjs` (panneaux
   par défaut et catégorie The Nuke End : limites Discord dans tous les modes de langue, catégories manquantes ajoutées
-  ou laissées de côté, titres renumérotés, libellés propres, jamais publié à la création), `src/esport/Tickets.test.tsx`
+  ou laissées de côté, titres renumérotés, libellés propres, jamais publié à la création), `esport/test/site-lz.test.mjs`
+  (site LigneZero : rôles et salons des équipes, nettoyage, inscriptions validées vers le site), `src/esport/Tickets.test.tsx`
   (écrans). Aides : `esport/test/tickets-aide.mjs`. Aucun test n'appelle le vrai Discord.

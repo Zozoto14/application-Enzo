@@ -390,6 +390,65 @@ export interface PieceEnvoyee {
   base64: string;
 }
 
+// ------------------------------------------------------------------ Site LigneZero (Configuration › Site LZ)
+
+export interface JoueurSite {
+  id: string;
+  pseudo: string;
+  role?: string | null;
+  capitaine?: boolean;
+  discordId: string | null;
+  embarkId?: string | null;
+}
+export interface EquipeSite {
+  id: string;
+  nom: string;
+  tag?: string | null;
+  statut: string;
+  disqualifiee?: boolean;
+  joueurs: JoueurSite[];
+}
+export interface TournoiSite {
+  id: string;
+  slug: string;
+  nom: string;
+  statut: string;
+  ouvert: boolean;
+  equipes: EquipeSite[];
+}
+export interface InscriptionSite {
+  id: string;
+  ticket_id: string;
+  tournoi_id: string;
+  cree_le: string;
+  donnees: { equipe: string; tag: string; numero?: number; contact?: { nom?: string }; joueurs: Array<{ pseudo: string; discordId: string | null; embarkId: string | null }>; remplacants?: Array<{ pseudo: string; discordId: string | null; embarkId: string | null }>; coach?: Array<{ pseudo: string; discordId: string | null; embarkId: string | null }> };
+}
+export interface VueSite {
+  reglages: { discordActif: boolean; rosterActif: boolean; inscriptions: Array<{ categorieId: string; tournoiId: string }> };
+  etat: { ok: boolean; le: string; crees: number; supprimes: number; membres: number; absents: number; erreurs: string[]; motif?: string } | null;
+  donnees: { tournois: TournoiSite[]; roster: Array<{ id: string; nom: string; joueurs: JoueurSite[] }> } | null;
+  erreur: string | null;
+  inscriptions: InscriptionSite[];
+  categories: Array<{ id: string; nom: string }>;
+}
+export type ModifSite =
+  | { type: 'equipe'; id: string; nom?: string; tag?: string | null }
+  | { type: 'joueur'; id: string; pseudo?: string; discordId?: string | null; embarkId?: string | null; capitaine?: boolean }
+  | { type: 'roster'; id: string; discordId: string | null }
+  | { type: 'ajout_joueur'; id: string; pseudo: string; discordId?: string | null; embarkId?: string | null; ordre?: number }
+  | { type: 'retrait_joueur'; id: string };
+
+export function apiSite(client: ClientEsport) {
+  const r = <T>(chemin: string, methode?: string, corps?: unknown) => client.requete<T>(chemin, methode, corps);
+  return {
+    vue: () => r<VueSite>('/tickets/config/site'),
+    changer: (c: Partial<VueSite['reglages']>) => r<VueSite>('/tickets/config/site', 'PUT', c),
+    synchroniser: () => r<VueSite & { bilan: NonNullable<VueSite['etat']> }>('/tickets/config/site/synchro', 'POST', {}),
+    modifier: (m: ModifSite) => r<VueSite>('/tickets/config/site/modifier', 'POST', m),
+    inscription: (id: string, decision: 'valider' | 'refuser') => r<VueSite>(`/tickets/config/site/inscriptions/${encodeURIComponent(id)}/${decision}`, 'POST', {}),
+  };
+}
+
 export function apiTickets(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) => client.requete<T>(chemin, methode, corps);
   return {

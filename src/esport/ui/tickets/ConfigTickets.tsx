@@ -19,8 +19,9 @@ import { BoutonConfirme, Choix, Intertitre, Panneau as Bloc, Retours, styles, us
 import { Badge, ESP, Onglets, Squelette, Volet, attenue, texte, type Ton } from '../design';
 import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
+import { SectionSiteLz } from './SiteLz';
 
-type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
+type Section = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue' | 'site';
 const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
   ['connexion', 'conf.connexion'],
   ['general', 'conf.general'],
@@ -31,6 +32,7 @@ const SECTIONS: ReadonlyArray<[Section, CleTk]> = [
   ['horaires', 'conf.horaires'],
   ['commandes', 'conf.commandes'],
   ['bienvenue', 'conf.bienvenue'],
+  ['site', 'conf.site'],
 ];
 const VIDE: DeuxLangues = { fr: '', en: '' };
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -145,6 +147,7 @@ export function ConfigTickets({ theme, client, large }: { theme: ThemeHub; clien
       {section === 'horaires' ? <SectionHoraires {...props} /> : null}
       {section === 'commandes' ? <SectionCommandes {...props} /> : null}
       {section === 'bienvenue' ? <SectionBienvenue {...props} /> : null}
+      {section === 'site' ? <SectionSiteLz theme={theme} client={client} agir={agir} /> : null}
     </View>
   );
 }

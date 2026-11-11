@@ -242,6 +242,9 @@ export const TABLES = [
   ['tickets_avis_anonymes', 'id'],
   // Bienvenue par rôle (migration 0058) : personnes déjà accueillies (jamais deux fois).
   ['discord_bienvenues', 'guild_id, discord_user_id, role_id'],
+  // Site LigneZero (migration 0060) : rôles et salons Discord créés pour les équipes, inscriptions par ticket.
+  ['lz_discord', 'cle'],
+  ['lz_inscriptions', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
