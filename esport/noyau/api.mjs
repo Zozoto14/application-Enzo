@@ -124,7 +124,9 @@ export function masquerAdresse(ip) {
 }
 
 export function adresseIp(requete) {
-  return requete.headers.get('X-Adresse-Client') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || null);
+  // À défaut, la DERNIÈRE entrée de X-Forwarded-For (ajoutée par le proxy) : les premières viennent du client.
+  const xff = (requete.headers.get('X-Forwarded-For') ?? '').split(',').map(x => x.trim()).filter(Boolean);
+  return requete.headers.get('X-Adresse-Client') ?? (xff[xff.length - 1] || null);
 }
 
 /** Type de contenu annoncé, sans paramètres (« application/json; charset=utf-8 » → « application/json »). */
@@ -279,7 +281,7 @@ export function creerApi({
   // Événements organisés par le club et rôles Discord de leurs équipes (migration 0064) : Administration › Événements.
   const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Pont avec le site LigneZero (docs/esport/evenements.md, « Site LigneZero ») : équipes synchronisées avec un tournoi du site.
-  const pontSite = creerPontSite({ base, ev, site: siteLz ?? clientSite(configSite()), maintenant });
+  const pontSite = creerPontSite({ base, ev, site: siteLz ?? clientSite(() => configSite()), maintenant });
   ev.brancherPont(pontSite);
   const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Rôles Discord temporaires des teams (migration 0066, docs/esport/bot-discord.md) : /role-temp et réglages de la team.

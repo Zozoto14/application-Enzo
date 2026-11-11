@@ -190,7 +190,7 @@ export function creerPontSite({ base, ev, site, maintenant = () => Date.now(), j
     if (!evt) throw echec(404, 'evenement-introuvable', 'Événement introuvable.');
     let tournois = [];
     let erreur = null;
-    if (!site.configure) erreur = 'Site LigneZero introuvable sur cet hébergement (clé de service absente).';
+    if (!site.configure) erreur = 'Site LigneZero introuvable sur cet hébergement (clé du pont absente).';
     else {
       try {
         tournois = (await site.lister('tournaments', [], [{ col: 'created_at', asc: false }])).map(t => ({ id: t.id, nom: t.name, statut: t.status }));

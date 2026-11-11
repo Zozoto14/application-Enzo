@@ -76,7 +76,7 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['rôles Discord des événements', () => tachesEvenementsDiscord(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
     // Site LigneZero : équipes des événements liés à un tournoi du site, synchronisées dans les deux sens.
     ['équipes du site LigneZero', async () => {
-      const site = siteLz ?? clientSite(configSite());
+      const site = siteLz ?? clientSite(() => configSite());
       if (!site.configure) return { evenements: 0 };
       const ev = servicesEvenements({ base, maintenant, fetch: fetch ?? ((...a) => globalThis.fetch(...a)), jetonBot, journal });
       const pont = creerPontSite({ base, ev, site, maintenant, journal });

@@ -9,7 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { banc } from './aide.mjs';
 import { bancTickets } from './tickets-aide.mjs';
-import { configSite } from '../noyau/site-lz/client.mjs';
+import { createHash, createHmac } from 'node:crypto';
+import { adresseSure, clientSite, configSite, entetesSignes } from '../noyau/site-lz/client.mjs';
 import { empreinte, joueursSite, membresApp, tagLibre } from '../noyau/site-lz/pont.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
 
@@ -164,8 +165,72 @@ test('premier lien : équipes déjà présentes des deux côtés rapprochées (p
 });
 
 test('clé du site lue dans ~/.lignezero/api.env (même hébergement), variables prioritaires', () => {
-  const lire = () => 'URL_SITE=https://lz.example\nCLE_SERVICE="cle-secrete"\n';
-  assert.deepEqual(configSite({}, lire), { url: 'https://lz.example/api', cle: 'cle-secrete' });
-  assert.deepEqual(configSite({ LZ_CLE: 'x', LZ_API_URL: 'https://autre/api/' }, lire), { url: 'https://autre/api', cle: 'x' });
+  const PONT = 'p'.repeat(40);
+  // Site à jour : la clé du pont ; l'ancienne clé (celle du bot) n'est plus lue.
+  const lire = () => `URL_SITE=https://lz.example\nCLE_SERVICE="cle-secrete"\nCLE_PONT='${PONT}'\n`;
+  assert.deepEqual(configSite({}, lire), { url: 'https://lz.example/api', clePont: PONT, cle: '' });
+  // Site pas encore à jour : ancien accès (compatibilité de déploiement).
+  const ancien = () => 'URL_SITE=https://lz.example\nCLE_SERVICE="cle-secrete"\n';
+  assert.deepEqual(configSite({}, ancien), { url: 'https://lz.example/api', clePont: '', cle: 'cle-secrete' });
+  assert.deepEqual(configSite({ LZ_CLE: 'x', LZ_API_URL: 'https://autre/api/' }, ancien), { url: 'https://autre/api', clePont: '', cle: 'x' });
+  // Clé du pont trop courte : ignorée.
+  assert.equal(configSite({}, () => 'CLE_PONT=courte\n').clePont, '');
   assert.equal(configSite({}, () => { throw new Error('absent'); }).cle, '');
+});
+
+test('pont signé : la clé ne voyage jamais, signature HMAC vérifiable, nonce unique, HTTPS obligatoire', async () => {
+  const PONT = 'k'.repeat(48);
+  const vues = [];
+  const faux = async (url, init) => {
+    vues.push({ url, init });
+    return new Response(JSON.stringify({ data: [] }), { status: 200 });
+  };
+  const site = clientSite({ url: 'https://lz.example/api', clePont: PONT }, faux);
+  assert.equal(site.signe, true);
+  await site.lister('tournament_teams', [{ col: 'tournament_id', op: 'eq', val: T1 }]);
+  await site.supprimer('tournament_teams', T1);
+  const [a, b] = vues;
+  assert.equal(a.url, 'https://lz.example/api/rest');
+  assert.equal(a.init.redirect, 'error');
+  assert.ok(!('authorization' in a.init.headers), 'pas de Bearer');
+  assert.ok(!JSON.stringify(a.init).includes(PONT), 'la clé n’apparaît nulle part dans la requête');
+  assert.equal(JSON.parse(a.init.body).columns, 'id,tournament_id,name,tag');
+  // Signature recalculée comme le site (api/serveur/cles.mjs) : LZ1, méthode, chemin, horodatage, nonce, sha256(corps).
+  const h = a.init.headers;
+  const attendu = createHmac('sha256', PONT)
+    .update(`LZ1\nPOST\n/rest\n${h['x-lz-horodatage']}\n${h['x-lz-nonce']}\n${createHash('sha256').update(a.init.body).digest('hex')}`)
+    .digest('base64url');
+  assert.equal(h['x-lz-signature'], attendu);
+  assert.ok(Math.abs(Number(h['x-lz-horodatage']) - Date.now()) < 5000);
+  assert.match(h['x-lz-nonce'], /^[A-Za-z0-9_-]{24}$/);
+  assert.notEqual(h['x-lz-nonce'], b.init.headers['x-lz-nonce']);
+  // Vecteur fixe (le même figure dans les tests du site).
+  assert.equal(entetesSignes('c'.repeat(32), { corps: '{}', maintenant: 1700000000000, nonce: 'n'.repeat(22) })['x-lz-signature'], createHmac('sha256', 'c'.repeat(32)).update(`LZ1\nPOST\n/rest\n1700000000000\n${'n'.repeat(22)}\n${createHash('sha256').update('{}').digest('hex')}`).digest('base64url'));
+  // HTTP en clair : refusé avant tout envoi ; localhost permis pour les essais.
+  await assert.rejects(clientSite({ url: 'http://lz.example/api', clePont: PONT }, faux).lister('tournaments'), e => e.code === 'site-non-https');
+  assert.equal(adresseSure('http://localhost:3100/api'), true);
+  assert.equal(vues.length, 2);
+  // Message d'erreur du site borné.
+  const refus = clientSite({ url: 'https://lz.example/api', clePont: PONT }, async () => new Response(JSON.stringify({ error: { message: 'x'.repeat(5000) } }), { status: 403 }));
+  await assert.rejects(refus.lister('tournaments'), e => e.message.length < 300);
+});
+
+test('clé du pont relue sans redémarrage (déploiement du site, rotation) : au plus une fois par minute', async () => {
+  let t = 0;
+  let fichier = 'URL_SITE=https://lz.example\nCLE_SERVICE=ancienne-cle-du-bot\n';
+  const vues = [];
+  const site = clientSite(() => configSite({}, () => fichier), async (url, init) => {
+    vues.push(init.headers);
+    return new Response('{"data":[]}', { status: 200 });
+  }, { maintenant: () => t });
+  assert.equal(site.signe, false);
+  await site.lister('tournaments');
+  assert.equal(vues[0].authorization, 'Bearer ancienne-cle-du-bot');
+  // Le site crée CLE_PONT : prise dans la minute, plus jamais de Bearer.
+  fichier += `CLE_PONT=${'n'.repeat(40)}\n`;
+  t = 61_000;
+  await site.lister('tournaments');
+  assert.equal(vues[1].authorization, undefined);
+  assert.ok(vues[1]['x-lz-signature']);
+  assert.equal(site.signe, true);
 });
