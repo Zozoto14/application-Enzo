@@ -32,7 +32,9 @@ const roleDuPoste = poste => (poste === 'coach' ? 'Coach' : poste === 'remplacan
 
 /** Membres de l'app → joueurs du site (le premier joueur est capitaine). */
 export function joueursSite(equipeSiteId, membres) {
-  const capitaine = membres.findIndex(m => m.poste === 'joueur');
+  // Capitaine coché dans l'app ; à défaut, le premier joueur.
+  const coche = membres.findIndex(m => m.capitaine);
+  const capitaine = coche >= 0 ? coche : membres.findIndex(m => m.poste === 'joueur');
   return membres.map((m, i) => ({
     team_id: equipeSiteId,
     pseudo: (m.nom || String(m.embarkId ?? '').replace(/#\d+$/, '') || 'Joueur').slice(0, 40),
@@ -54,12 +56,17 @@ export function membresApp(joueurs) {
       discordId: ID_DISCORD.test(String(j.discord_id ?? '')) ? String(j.discord_id) : null,
       nom: String(j.pseudo ?? '').slice(0, 100),
       embarkId: String(j.embark_id ?? '').slice(0, 60),
+      capitaine: Boolean(j.is_captain),
     }));
 }
 
 /** Empreinte d'une équipe (forme de l'app) : sert à savoir quel côté a changé depuis la dernière synchronisation. */
 export function empreinte({ nom, tag, membres }) {
-  return JSON.stringify([String(nom ?? '').trim(), String(tag ?? '').toUpperCase(), (membres ?? []).map(m => [m.poste, m.discordId ?? '', String(m.nom ?? '').trim(), String(m.embarkId ?? '').trim()])]);
+  const liste = membres ?? [];
+  // Capitaine effectif (coché, sinon le premier joueur) : le même calcul des deux côtés.
+  const coche = liste.findIndex(m => m.capitaine);
+  const cap = coche >= 0 ? coche : liste.findIndex(m => m.poste === 'joueur');
+  return JSON.stringify([String(nom ?? '').trim(), String(tag ?? '').toUpperCase(), liste.map((m, i) => [m.poste, m.discordId ?? '', String(m.nom ?? '').trim(), String(m.embarkId ?? '').trim(), i === cap])]);
 }
 
 /** TAG pour une équipe du site qui n'en a pas (ou déjà pris) : initiales du nom, numérotées si besoin. */

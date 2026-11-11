@@ -234,3 +234,24 @@ test('clé du pont relue sans redémarrage (déploiement du site, rotation) : au
   assert.ok(vues[1]['x-lz-signature']);
   assert.equal(site.signe, true);
 });
+
+test('capitaine coché dans l’app : un seul, transmis au site (is_captain) ; sinon le premier joueur', async () => {
+  const k = await monter();
+  await k.api(`${k.chemin}/site`, undefined, { methode: 'PUT', corps: { tournoiId: T1 } });
+  const r = await k.api(`${k.chemin}/equipes`, undefined, { methode: 'POST', corps: { equipes: [{ nom: 'Bêta', tag: 'BET', membres: [
+    { poste: 'joueur', discordId: J1, nom: 'Un' },
+    { poste: 'joueur', discordId: J2, nom: 'Deux', capitaine: true },
+    { poste: 'coach', discordId: COACH, nom: 'Coach', capitaine: true },
+  ] }] } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  const app = r.corps.equipes.find(e => e.tag === 'BET');
+  assert.deepEqual(app.membres.map(m => m.capitaine), [false, true, false], 'un seul capitaine (le premier coché)');
+  const site = equipesSite(k).find(e => e.name === 'Bêta');
+  assert.deepEqual(joueursDe(k, site.id).map(p => [p.pseudo, p.is_captain]), [['Un', false], ['Deux', true], ['Coach', false]]);
+  // Synchronisation suivante : rien à renvoyer (empreintes identiques).
+  const s = await k.api(`${k.chemin}/site/synchro`, undefined, { methode: 'POST', corps: {} });
+  assert.equal(s.corps.etat.majSite, 0);
+  // Capitaine changé dans l'app → changé sur le site.
+  await k.api(`${k.chemin}/equipes/${app.id}`, undefined, { methode: 'PATCH', corps: { membres: app.membres.map((m, i) => ({ ...m, capitaine: i === 0 })) } });
+  assert.deepEqual(joueursDe(k, site.id).map(p => p.is_captain), [true, false, false]);
+});

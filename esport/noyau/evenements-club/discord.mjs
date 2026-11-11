@@ -67,6 +67,7 @@ export async function equipesDe(base, evenementId) {
         discordId: m.discord_id ?? null,
         nom: m.nom,
         embarkId: m.embark_id,
+        capitaine: Number(m.capitaine ?? 0) === 1,
         roleStatut: m.role_statut ?? null,
       })),
   }));

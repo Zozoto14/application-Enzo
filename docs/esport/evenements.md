@@ -58,7 +58,8 @@ s'il doit régler les vocaux).
     au-dessus du sien. Le serveur revérifie à l'enregistrement (refus expliqué). Sans choix : tout en bas ;
   - **suppression automatique** N heures après la date de fin (24 par défaut, 0 : jamais par la date).
 - **Équipes participantes** : nom, TAG (lettres et chiffres, 6 au plus, unique dans l'événement) et membres (joueur,
-  coach, remplaçant ; Discord ID, nom, Embark ID) ; 64 équipes et 10 membres au plus.
+  coach, remplaçant ; Discord ID, nom, Embark ID ; case **Capitaine**, un seul par équipe : c'est lui qui reçoit le
+  lien du map ban du site — sans capitaine coché, le premier joueur) ; 64 équipes et 10 membres au plus.
 
 ## Rôles automatiques
 

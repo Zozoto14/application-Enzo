@@ -9,7 +9,7 @@
 
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { Avis, BoutonHub, Champ } from '../../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
 import type { ThemeHub } from '../../../hub/themes';
 import { trEv as trVc, type CleEv as CleVc } from '../../i18n/evenements';
 import {
@@ -36,6 +36,7 @@ const propre = (m: MembreEquipe): MembreEquipe => ({
   discordId: m.discordId ? m.discordId.replace(/\D/g, '') || null : null,
   nom: m.nom,
   embarkId: m.embarkId,
+  capitaine: Boolean(m.capitaine),
 });
 
 /** Éditeur d'une équipe : nom, TAG, membres (poste, Discord ID, nom, Embark ID). */
@@ -104,6 +105,22 @@ function EditeurEquipe({
             onChoisir={poste => membre(i, { poste })}
             testID={`${prefixe}-membre-${i}-poste`}
           />
+          {/* Un seul capitaine : cocher l'un décoche les autres. */}
+          <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+            <Text style={{ ...texte(theme, 13), flex: 1, minWidth: 0 }}>{trVc('eq.capitaine')}</Text>
+            <Interrupteur
+              theme={theme}
+              libelle={trVc('eq.capitaine')}
+              valeur={Boolean(m.capitaine)}
+              onChanger={v =>
+                setE({
+                  ...e,
+                  membres: e.membres.map((x, j) => ({ ...x, capitaine: j === i ? v : v ? false : Boolean(x.capitaine) })),
+                })
+              }
+              testID={`${prefixe}-membre-${i}-capitaine`}
+            />
+          </View>
           <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
             <Champ
               theme={theme}
@@ -373,6 +390,7 @@ export function EquipesEvenement({
       discordId: m.discordId,
       nom: m.nom,
       embarkId: m.embarkId,
+      capitaine: Boolean(m.capitaine),
     })),
   });
   const importer = () =>
@@ -510,7 +528,8 @@ export function EquipesEvenement({
             </View>
             {e.membres.map((m, i) => (
               <Text key={m.id ?? i} style={attenue(theme)}>
-                {trVc(`eq.poste.${m.poste}` as CleVc)} · {m.nom || '—'} ·{' '}
+                {trVc(`eq.poste.${m.poste}` as CleVc)}
+                {m.capitaine ? ` (${trVc('eq.capitaine_court')})` : ''} · {m.nom || '—'} ·{' '}
                 {m.discordId ?? trVc('eq.membre_sans_id')}
                 {m.embarkId ? ` · ${m.embarkId}` : ''}
                 {m.roleStatut

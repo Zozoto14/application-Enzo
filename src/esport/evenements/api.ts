@@ -74,6 +74,8 @@ export interface MembreEquipe {
   discordId: string | null;
   nom: string;
   embarkId: string;
+  /** Capitaine de l'équipe (un seul) : reçoit le lien du map ban du site. */
+  capitaine?: boolean;
   roleStatut?: 'attribue' | 'absent' | 'refus' | null;
 }
 

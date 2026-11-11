@@ -104,7 +104,8 @@ function validerEquipe(c) {
       typeof c.ticketId === 'string' && UUID.test(c.ticketId)
         ? c.ticketId
         : null,
-    membres: membres.map(m => {
+    // Un seul capitaine par équipe (le premier coché) : il reçoit le lien du map ban du site.
+    membres: membres.map((m, i) => {
       const poste = POSTES.includes(m?.poste) ? m.poste : 'joueur';
       const discordId =
         m?.discordId === null ||
@@ -123,6 +124,7 @@ function validerEquipe(c) {
         discordId,
         nom: texte(m?.nom ?? '', 100, 'equipe-membre'),
         embarkId: texte(m?.embarkId ?? '', 60, 'equipe-embark'),
+        capitaine: m?.capitaine === true && membres.findIndex(x => x?.capitaine === true) === i,
       };
     }),
   };
@@ -804,7 +806,7 @@ export function servicesEvenements({
     let i = 0;
     for (const m of membres)
       await base.executer(
-        'INSERT INTO club_evenement_membres (id, equipe_id, poste, discord_id, nom, embark_id, role_statut, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO club_evenement_membres (id, equipe_id, poste, discord_id, nom, embark_id, role_statut, position, capitaine) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           nouvelId(),
           equipeId,
@@ -814,6 +816,7 @@ export function servicesEvenements({
           m.embarkId,
           m.roleStatut ?? null,
           i++,
+          m.capitaine ? 1 : 0,
         ],
       );
   }
