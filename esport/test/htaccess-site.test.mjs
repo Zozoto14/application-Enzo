@@ -28,6 +28,15 @@ test('cache : assets/ un an (noms à empreinte), index.html et version.json reva
   assert.match(bloc, /version\\\.json\$#">\n\s+Header set Cache-Control "no-cache, no-store, must-revalidate"/);
 });
 
+test('sécurité : fichiers cachés et sauvegardes jamais servis, en-têtes de sécurité sur tout le site', () => {
+  assert.match(bloc, /RedirectMatch 404 "\/\\\.\(\?!well-known\/\)"/);
+  assert.match(bloc, /RedirectMatch 404 "\(\?i\)\\\.\(bak\|old[^"]*\|map\|env[^"]*\)\$"/);
+  assert.match(bloc, /Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"/);
+  assert.match(bloc, /Header set X-Frame-Options "SAMEORIGIN"/);
+  assert.match(bloc, /Header set Referrer-Policy "strict-origin-when-cross-origin"/);
+  assert.match(bloc, /Options -Indexes/);
+});
+
 test('les blocs IfModule sont équilibrés (Apache refuse sinon tout le .htaccess : erreur 500)', () => {
   const ouverts = (bloc.match(/<IfModule /g) ?? []).length;
   const fermes = (bloc.match(/<\/IfModule>/g) ?? []).length;

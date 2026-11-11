@@ -64,6 +64,10 @@ const guillemets = v => `"${String(v).replace(/"/g, '\\"')}"`;
 export function genererBloc({ headers = '', redirects = '' } = {}) {
   const l = [DEBUT];
   l.push('Options -Indexes', 'DirectoryIndex index.html', 'AddType application/manifest+json .webmanifest', 'AddType application/javascript .jsbundle', 'AddType application/wasm .wasm', '');
+  // Sécurité (docs/securite.md) : jamais de fichier caché (.git, .env, .htaccess…) sauf /.well-known, ni de sauvegarde,
+  // de journal ou de carte de sources.
+  l.push('# Fichiers cachés, sauvegardes, journaux et cartes de sources : jamais servis.');
+  l.push('RedirectMatch 404 "/\\.(?!well-known/)"', 'RedirectMatch 404 "(?i)\\.(bak|old|orig|save|swp|sql|log|map|env|ini|sh|lock)$"', '');
   // AddOutputFilterByType vient de mod_filter (Apache 2.4) : sans lui, la directive serait inconnue et Apache
   // refuserait tout le .htaccess (erreur 500 sur le site entier). D'où les gardes IfModule.
   l.push('# Compression des textes : brotli si disponible, sinon gzip (mod_deflate). Sans module : fichiers servis tels quels.');
