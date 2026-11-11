@@ -52,6 +52,7 @@ import { ClocheNotifications, PageNotifications, useCompteurNotifications } from
 import type { LienNotification } from '../notifications/api';
 import { useTempsReel } from '../tempsReel/hooks';
 import { IndicateurDirect } from '../tempsReel/ui';
+import { FournisseurEcriture } from './ecriture/ZoneEcriture';
 
 type Etat =
   | { e: 'chargement' }
@@ -438,7 +439,8 @@ export function Esport(props: PropsRacineApp) {
         droite={etat.e === 'pret' && etat.moi.profil ? <ClocheNotifications theme={theme} n={notifs.nonLues} actif={vue.v === 'notifications'} onPress={() => setVue({ v: 'notifications' })} /> : undefined}
       />
       <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>
-        {contenu}
+        {/* Assistant d'écriture : le client de la session pour les champs de message (docs/esport/ia-api.md). */}
+        <FournisseurEcriture client={clientPret}>{contenu}</FournisseurEcriture>
         {/* Temps réel : pastille discrète « En direct » / « Reconnexion… » (docs/esport/temps-reel.md). */}
         {etat.e === 'pret' ? (
           <View pointerEvents="none" style={{ position: 'absolute', right: 12, bottom: 12 }}>

@@ -39,6 +39,7 @@ import { tr, trn } from '../../i18n';
 import { Icone } from '../../../ui/icones';
 import { useTempsReel } from '../../tempsReel/hooks';
 import { ChampDate, ChampHeure } from '../../../ui/dates';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 type Vue = 'mois' | 'semaine' | 'liste';
 type Formulaire = { mode: 'creer' } | { mode: 'serie'; id: string } | { mode: 'occurrence'; id: string; cle: string };
@@ -696,7 +697,9 @@ function FormulaireEvenement({
         </View>
         <Text style={attenue}>{tr('planning.planning.heures_de_une_fin', { fuseau: s.fuseau })}</Text>
         <Champ theme={theme} libelle={tr('planning.planning.lieu_ou_lien')} valeur={s.lieu ?? ''} onChanger={lieu => maj({ lieu })} maxLength={200} testID="esport-formulaire-lieu" />
-        <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} multiligne testID="esport-formulaire-description" />
+        <ZoneEcriture theme={theme} champ="planning.description" valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} testID="esport-formulaire-description-ecriture">
+          <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} multiligne testID="esport-formulaire-description" />
+        </ZoneEcriture>
         {serie && adversaires.length > 0 ? (
           <Choix
             theme={theme}

@@ -28,6 +28,7 @@ import { PageEsport } from '../CadreEsport';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, SqueletteCartes, TitreCarte, attenue, texte } from '../design';
 import { EditeurProfil, libelleChemin, libelleRaison } from './EditeurProfil';
+import { ReglagesEcriture } from '../ecriture/ReglagesEcriture';
 
 type Onglet = 'profils' | 'maj' | 'ia' | 'admin';
 type Vue = { v: 'liste' } | { v: 'nouveau' } | { v: 'fiche'; cle: string } | { v: 'brouillon'; id: string };
@@ -716,7 +717,7 @@ function EditeurOrdre({ theme, tache, ordre, moteurs, desactive, onChanger }: {
  * Confidentialité : tâches qui restent sur le serveur (réunions, suivi, strats : IA locale seulement) et tâches qui
  * peuvent partir chez le fournisseur d'API. Le Fondateur seul lève la règle, tâche par tâche, avec confirmation.
  */
-const TACHES_EXTERNES = ['profils', 'traduction', 'cm', 'devblog'] as const;
+const TACHES_EXTERNES = ['profils', 'traduction', 'ecriture', 'cm', 'devblog'] as const;
 function CarteConfidentialite({ theme, etat, desactive, onChanger }: { theme: ThemeHub; etat: EtatIa; desactive: boolean; onChanger: (t: TacheConfidentielle, v: boolean) => void }) {
   const c = etat.confidentialite;
   if (!c) return null;
@@ -896,6 +897,8 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
             onChanger={(t, v) => void agir(`externe-${t}`, async () => { appliquer(await api.reglerIa({ externes: { [t]: v } })); return trJeux('jeux.confidentialite_enregistree'); })}
           />
         ) : null}
+        {/* Assistant d'écriture (corriger, traduire les messages tapés) : activer, rôles permis (Fondateur). */}
+        {etat.fondateur ? <ReglagesEcriture theme={theme} client={client} /> : null}
         <CarteTranscriptionServeur theme={theme} etat={etat} ligne={ligne} />
         <CarteIaLocale theme={theme} etat={etat} enCours={enCours} ligne={ligne}
           onTester={() =>

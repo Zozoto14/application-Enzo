@@ -150,6 +150,8 @@ const ALIAS_TACHES = {
   test: 'profils',
   leger: 'leger',
   traduction: 'leger',
+  // Assistant d'écriture (corriger, reformuler les messages tapés : ./ecriture.mjs), non confidentiel.
+  ecriture: 'leger',
   cm: 'leger',
   devblog: 'leger',
   transcription: 'leger',

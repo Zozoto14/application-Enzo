@@ -28,6 +28,7 @@ import { Etoiles } from './AvisTickets';
 import { ComposeurTicket } from './ComposeurTicket';
 import { DialogueMention } from './MentionTicket';
 import { ChampPeriode } from '../../../ui/dates';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 const nomCat = (c: { nom: { fr: string; en: string } }) => (langueCourante() === 'en' ? c.nom.en || c.nom.fr : c.nom.fr || c.nom.en);
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -533,7 +534,10 @@ export function VueTicket({
             <Interrupteur theme={theme} libelle={trTk('vue.mode_note')} valeur={note} onChanger={setNote} testID="esport-tk-mode-note" />
           </View>
           {!note ? <Text style={attenue(theme)}>{trTk('vue.repondre_aide', { pseudo: '…' })}</Text> : <Text style={attenue(theme)}>{trTk('vue.note_interne_aide')}</Text>}
-          <ComposeurTicket theme={theme} libelle={note ? trTk('vue.note_interne') : trTk('vue.message')} valeur={texteMsg} onChanger={setTexteMsg} onEnvoyer={envoyer} maxLength={note ? 4000 : 1800} testID="esport-tk-message" />
+          {/* Assistant d'écriture : réponse publique pour l'auteur du ticket (permis, décision du Fondateur) ; jamais sur une note interne. */}
+          <ZoneEcriture theme={theme} champ="tickets.reponse" confidentiel={note} valeur={texteMsg} onChanger={setTexteMsg} maxLength={note ? 4000 : 1800} testID="esport-tk-ecriture">
+            <ComposeurTicket theme={theme} libelle={note ? trTk('vue.note_interne') : trTk('vue.message')} valeur={texteMsg} onChanger={setTexteMsg} onEnvoyer={envoyer} maxLength={note ? 4000 : 1800} testID="esport-tk-message" />
+          </ZoneEcriture>
           {!note ? (
             <View style={styles.ligne}>
               {choixFichierDisponible ? <BoutonHub theme={theme} titre={trTk('vue.joindre')} icone="trombone" onPress={joindre} desactive={pieces.length + drive.length >= 3} testID="esport-tk-joindre" /> : null}

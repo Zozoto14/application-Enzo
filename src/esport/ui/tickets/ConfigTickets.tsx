@@ -21,6 +21,7 @@ import { ChoixDrive } from '../cm/drive/ChoixDrive';
 import { ApercuDiscord } from './ApercuDiscord';
 import { ChampHeure } from '../../../ui/dates';
 import { SelecteurRepliable, optionsRoles, optionsSalons, type NatureSelecteur } from '../../../ui/selecteurs/SelecteurRepliable';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 export type SectionConfigTickets = 'connexion' | 'general' | 'categories' | 'panneaux' | 'messages' | 'liste' | 'horaires' | 'commandes' | 'bienvenue';
 type Section = SectionConfigTickets;
@@ -72,8 +73,26 @@ export function ChoixMultiple({
 function DeuxChamps({ theme, cle, vars, valeur, onChanger, multiligne, max, testID }: { theme: ThemeHub; cle: [CleTk, CleTk]; vars?: Record<string, string>; valeur: DeuxLangues; onChanger(v: DeuxLangues): void; multiligne?: boolean; max?: number; testID: string }) {
   return (
     <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-      <Champ theme={theme} libelle={trTk(cle[0], vars)} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} multiligne={multiligne} maxLength={max} testID={`${testID}-fr`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
-      <Champ theme={theme} libelle={trTk(cle[1], vars)} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} multiligne={multiligne} maxLength={max} testID={`${testID}-en`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+      {multiligne ? (
+        <>
+          {/* Textes multilignes (accueil, panneaux) : assistant d'écriture (corriger, traduire). */}
+          <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
+            <ZoneEcriture theme={theme} champ="tickets.messages" valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} maxLength={max} testID={`${testID}-fr-ecriture`}>
+              <Champ theme={theme} libelle={trTk(cle[0], vars)} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} multiligne maxLength={max} testID={`${testID}-fr`} />
+            </ZoneEcriture>
+          </View>
+          <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
+            <ZoneEcriture theme={theme} champ="tickets.messages" valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} maxLength={max} testID={`${testID}-en-ecriture`}>
+              <Champ theme={theme} libelle={trTk(cle[1], vars)} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} multiligne maxLength={max} testID={`${testID}-en`} />
+            </ZoneEcriture>
+          </View>
+        </>
+      ) : (
+        <>
+          <Champ theme={theme} libelle={trTk(cle[0], vars)} valeur={valeur.fr} onChanger={fr => onChanger({ ...valeur, fr })} maxLength={max} testID={`${testID}-fr`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+          <Champ theme={theme} libelle={trTk(cle[1], vars)} valeur={valeur.en} onChanger={en => onChanger({ ...valeur, en })} maxLength={max} testID={`${testID}-en`} style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }} />
+        </>
+      )}
     </View>
   );
 }
@@ -917,10 +936,14 @@ function SectionMessages(props: PropsSection) {
           <Intertitre theme={theme}>{trTk(`msg.${k}` as CleTk)}</Intertitre>
           <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
             <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
-              <Champ theme={theme} libelle={trTk('francais')} valeur={m[k].fr} placeholder={conf.messagesDefaut[k]?.fr} onChanger={fr => setM({ ...m, [k]: { ...m[k], fr } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-fr`} />
+              <ZoneEcriture theme={theme} champ="tickets.messages" valeur={m[k].fr} onChanger={fr => setM({ ...m, [k]: { ...m[k], fr } })} maxLength={1500} testID={`esport-tk-msg-${k}-fr-ecriture`}>
+                <Champ theme={theme} libelle={trTk('francais')} valeur={m[k].fr} placeholder={conf.messagesDefaut[k]?.fr} onChanger={fr => setM({ ...m, [k]: { ...m[k], fr } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-fr`} />
+              </ZoneEcriture>
             </View>
             <View style={{ flexGrow: 1, flexBasis: 240, minWidth: 0 }}>
-              <Champ theme={theme} libelle={trTk('anglais')} valeur={m[k].en} placeholder={conf.messagesDefaut[k]?.en} onChanger={en => setM({ ...m, [k]: { ...m[k], en } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-en`} />
+              <ZoneEcriture theme={theme} champ="tickets.messages" valeur={m[k].en} onChanger={en => setM({ ...m, [k]: { ...m[k], en } })} maxLength={1500} testID={`esport-tk-msg-${k}-en-ecriture`}>
+                <Champ theme={theme} libelle={trTk('anglais')} valeur={m[k].en} placeholder={conf.messagesDefaut[k]?.en} onChanger={en => setM({ ...m, [k]: { ...m[k], en } })} multiligne maxLength={1500} testID={`esport-tk-msg-${k}-en`} />
+              </ZoneEcriture>
             </View>
           </View>
         </View>

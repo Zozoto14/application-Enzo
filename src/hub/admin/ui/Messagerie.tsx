@@ -23,7 +23,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Platform, Text, View } from 'react-native';
 import { ChampNote } from '../../../esport/ui/ChampNote';
-import { trouverConfig, type Annuaire } from '../../../esport/client';
+import { trouverConfig, type Annuaire, type ClientEsport } from '../../../esport/client';
+import { ZoneEcriture } from '../../../esport/ui/ecriture/ZoneEcriture';
 import { fabrique } from '../../../esport/fabrique';
 import {
   apercuCourriel,
@@ -84,6 +85,7 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
   const [langueApercu, setLangueApercu] = useState<LangueCourriel | undefined>();
   const [apercu, setApercu] = useState<ApercuCourriel | undefined | 'indisponible'>();
   const [annuaire, setAnnuaire] = useState<Annuaire | undefined>();
+  const [clientEsport, setClientEsport] = useState<ClientEsport | undefined>();
   const [enCours, setEnCours] = useState(false);
   const [retour, setRetour] = useState<{ genre: 'ok' | 'alerte' | 'critique'; texte: string } | undefined>();
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
@@ -111,7 +113,12 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
     void (async () => {
       try {
         const { config } = await trouverConfig(fabrique.relais());
-        if (config) setAnnuaire(await fabrique.client(config).annuaire());
+        if (config) {
+          const client = fabrique.client(config);
+          // Assistant d'écriture (corriger, traduire le message) : même session Esport du Fondateur (jeton maître).
+          setClientEsport(client);
+          setAnnuaire(await client.annuaire());
+        }
       } catch {
         setAnnuaire(undefined);
       }
@@ -310,7 +317,9 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
             : `Tous reçoivent l’e-mail en ${NOMS_LANGUES[langue]}, quelle que soit la langue de leur compte.`}
         </Text>
         <Champ theme={theme} libelle="Objet" valeur={objet} onChanger={setObjet} maxLength={160} testID="admin-messagerie-objet" placeholder="Ex. : Tournoi de samedi" />
-        <ChampNote theme={theme} libelle="Message" valeur={message} onChanger={setMessage} maxLength={20000} testID="admin-messagerie-message" apercu="bouton" placeholder="Bonjour à tous, …" />
+        <ZoneEcriture theme={theme} client={clientEsport} champ="messagerie" valeur={message} onChanger={setMessage} maxLength={20000} testID="admin-messagerie-ecriture">
+          <ChampNote theme={theme} libelle="Message" valeur={message} onChanger={setMessage} maxLength={20000} testID="admin-messagerie-message" apercu="bouton" placeholder="Bonjour à tous, …" />
+        </ZoneEcriture>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 }}>
           <Case theme={theme} coche={deuxVersions} libelle="Écrire aussi une version anglaise" onChanger={setDeuxVersions} testID="admin-messagerie-deux-versions" />
           <Text style={[texte, { flex: 1 }]}>Écrire aussi une version anglaise (chacun reçoit la sienne)</Text>
@@ -319,7 +328,9 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
           <View style={{ gap: 8 }} testID="admin-messagerie-version-en">
             <Text style={attenue}>Version anglaise : reçue par les destinataires en anglais (le texte ci-dessus va aux autres).</Text>
             <Champ theme={theme} libelle="Objet (English)" valeur={objetEn} onChanger={setObjetEn} maxLength={160} testID="admin-messagerie-objet-en" placeholder="E.g. Saturday’s tournament" />
-            <ChampNote theme={theme} libelle="Message (English)" valeur={messageEn} onChanger={setMessageEn} maxLength={20000} testID="admin-messagerie-message-en" apercu="jamais" placeholder="Hello everyone, …" />
+            <ZoneEcriture theme={theme} client={clientEsport} champ="messagerie" valeur={messageEn} onChanger={setMessageEn} maxLength={20000} testID="admin-messagerie-ecriture-en">
+              <ChampNote theme={theme} libelle="Message (English)" valeur={messageEn} onChanger={setMessageEn} maxLength={20000} testID="admin-messagerie-message-en" apercu="jamais" placeholder="Hello everyone, …" />
+            </ZoneEcriture>
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>

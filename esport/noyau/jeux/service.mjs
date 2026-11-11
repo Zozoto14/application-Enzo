@@ -1288,6 +1288,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     testerIa,
     etatTestIa,
     discuterPour,
+    // Fournisseur d'une API (nvidia, mistral…), jamais la clé : mention « Texte envoyé à l'IA (…) » de l'assistant d'écriture.
+    fournisseurDe: m => (m === 'api' || m === 'api2' ? (configs[m]?.fournisseur ?? null) : null),
     lancerBrouillon,
     lancerVerification,
     executerTravail,

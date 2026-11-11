@@ -44,6 +44,8 @@ export const LIMITES = {
   apercu: { max: 60, fenetreS: 3600 },
   // Assistant IA des profils de jeu (brouillon, vérification manuelle, test) : par compte, en plus du plafond mensuel.
   ia: { max: 20, fenetreS: 3600 },
+  // Assistant d'écriture (corriger, traduire, reformuler un message) : par compte, en plus du plafond mensuel du moteur.
+  ia_ecriture: { max: 30, fenetreS: 60 },
   // Page Rôles et permissions (migration 0033) : changements de rôles du club et du modèle des teams, par compte.
   roles: { max: 300, fenetreS: 3600 },
   // Temps réel : « je modifie cet élément » (renouvelé toutes les 20 s par fiche ouverte), par compte.

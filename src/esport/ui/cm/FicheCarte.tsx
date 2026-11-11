@@ -47,6 +47,7 @@ import { GestionEtiquettes } from './GestionEtiquettes';
 import { LiensLies } from './liens/LiensLies';
 import { useVerrouOptimiste } from '../../tempsReel/hooks';
 import { BandeauConflit, PastillePresence } from '../../tempsReel/ui';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 const vide = { fr: '', en: '' };
 
@@ -582,15 +583,17 @@ function TextesReseau({ theme, reseau, valeur, large, editer, onChanger, onCopie
           return (
             <View key={langue} style={{ flex: large ? 1 : undefined, gap: 4 }}>
               {editer ? (
-                <Champ
-                  theme={theme}
-                  libelle={trCm(langue === 'fr' ? 'post.texte_fr' : 'post.texte_en')}
-                  valeur={valeur[langue]}
-                  onChanger={v => onChanger({ ...valeur, [langue]: v })}
-                  multiligne
-                  maxLength={5000}
-                  testID={`esport-cm-post-${reseau}-${langue}`}
-                />
+                <ZoneEcriture theme={theme} champ="cm.post" valeur={valeur[langue]} onChanger={v => onChanger({ ...valeur, [langue]: v })} maxLength={5000} testID={`esport-cm-post-${reseau}-${langue}-ecriture`}>
+                  <Champ
+                    theme={theme}
+                    libelle={trCm(langue === 'fr' ? 'post.texte_fr' : 'post.texte_en')}
+                    valeur={valeur[langue]}
+                    onChanger={v => onChanger({ ...valeur, [langue]: v })}
+                    multiligne
+                    maxLength={5000}
+                    testID={`esport-cm-post-${reseau}-${langue}`}
+                  />
+                </ZoneEcriture>
               ) : (
                 <View style={{ gap: 2 }}>
                   <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{trCm(langue === 'fr' ? 'post.texte_fr' : 'post.texte_en')}</Text>
@@ -720,7 +723,9 @@ function Description({ theme, valeur, enCours, joueurs, onEnregistrer }: { theme
   const [texteLocal, setTexteLocal] = useBrouillon(valeur);
   return (
     <View style={{ gap: ESP.xs }}>
-      <ChampNote theme={theme} libelle={trCm('fiche.description')} valeur={texteLocal} onChanger={setTexteLocal} testID="esport-cm-fiche-description-champ" maxLength={8000} joueurs={joueurs} />
+      <ZoneEcriture theme={theme} champ="cm.carte" valeur={texteLocal} onChanger={setTexteLocal} maxLength={8000} testID="esport-cm-fiche-description-ecriture">
+        <ChampNote theme={theme} libelle={trCm('fiche.description')} valeur={texteLocal} onChanger={setTexteLocal} testID="esport-cm-fiche-description-champ" maxLength={8000} joueurs={joueurs} />
+      </ZoneEcriture>
       {texteLocal !== valeur ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} variante="plein" desactive={enCours} onPress={() => onEnregistrer(texteLocal)} testID="esport-cm-fiche-description-ok" /> : null}
     </View>
   );
@@ -1051,7 +1056,9 @@ function Commentaires({ theme, api, c, nouveauxDepuis, commenter, gerer, nom, jo
       })}
       {commenter ? (
         <View style={{ gap: ESP.xs }}>
-          <ChampNote theme={theme} libelle={trCm('fiche.commentaire_nouveau')} valeur={texteNouveau} onChanger={setTexteNouveau} testID="esport-cm-commentaire-champ" maxLength={4000} apercu="jamais" joueurs={joueurs} />
+          <ZoneEcriture theme={theme} champ="cm.commentaire" valeur={texteNouveau} onChanger={setTexteNouveau} maxLength={4000} testID="esport-cm-commentaire-ecriture">
+            <ChampNote theme={theme} libelle={trCm('fiche.commentaire_nouveau')} valeur={texteNouveau} onChanger={setTexteNouveau} testID="esport-cm-commentaire-champ" maxLength={4000} apercu="jamais" joueurs={joueurs} />
+          </ZoneEcriture>
           <BoutonHub
             theme={theme}
             titre={trCm('fiche.commenter')}

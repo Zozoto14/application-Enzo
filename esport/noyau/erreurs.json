@@ -955,7 +955,20 @@
   "Site LigneZero introuvable sur cet hébergement (clé de service absente).": "LigneZero website not found on this host (service key missing).",
   "Le site LigneZero ne répond pas.": "The LigneZero website is not responding.",
   "Tournoi du site invalide.": "Invalid website tournament.",
-  "Choisissez d’abord le tournoi du site.": "Choose the website tournament first."
+  "Choisissez d’abord le tournoi du site.": "Choose the website tournament first.",
+  "L’IA a modifié des éléments protégés (mentions, liens, emojis, code, variables) : rien n’a été remplacé, réessayez.": "The AI changed protected items (mentions, links, emojis, code, variables): nothing was replaced, please try again.",
+  "L’IA a changé la mise en forme (gras, souligné, barré, spoilers ou retours à la ligne) : rien n’a été remplacé, réessayez.": "The AI changed the formatting (bold, underline, strikethrough, spoilers or line breaks): nothing was replaced, please try again.",
+  "Champ confidentiel : l’assistant d’écriture n’y est pas disponible (rien n’a été envoyé).": "Confidential field: the writing assistant isn’t available here (nothing was sent).",
+  "Champ inconnu pour l’assistant d’écriture.": "Unknown field for the writing assistant.",
+  "Action inconnue (corriger, traduire-en, traduire-fr ou reformuler).": "Unknown action (corriger, traduire-en, traduire-fr or reformuler).",
+  "Texte vide : rien à envoyer à l’IA.": "Empty text: nothing to send to the AI.",
+  "Texte trop long pour l’assistant (6000 caractères au plus).": "Text too long for the assistant (6,000 characters at most).",
+  "Plafond mensuel de l’IA atteint : l’assistant d’écriture est en pause jusqu’au mois prochain (réglable dans Administration › IA).": "Monthly AI cap reached: the writing assistant is paused until next month (adjustable in Administration › AI).",
+  "Réponse de l’IA inutilisable : réessayez.": "Unusable AI response: please try again.",
+  "IA indisponible pour le moment : réessayez dans un instant.": "AI unavailable right now: please try again in a moment.",
+  "Assistant d’écriture désactivé par le Fondateur.": "Writing assistant disabled by the Founder.",
+  "L’assistant d’écriture n’est pas ouvert à votre rôle.": "The writing assistant isn’t open to your role.",
+  "Réglage de l’assistant d’écriture : actif oui ou non, groupes parmi club, cm, staff_teams et joueurs.": "Writing assistant setting: active yes or no, groups among club, cm, staff_teams and joueurs."
  },
  "motifs": [
   [

@@ -916,7 +916,7 @@ export interface ClientEsport {
   /** Statistiques d'usage : envoie un lot (`keepalive` : départ de la page, sans attendre la réponse). */
   envoyerUsage?(lot: unknown, keepalive?: boolean): Promise<{ actif?: boolean } | undefined>;
   /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
-  requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
+  requete<T>(chemin: string, methode?: string, corps?: unknown, options?: { delai?: number }): Promise<T>;
   /** Temps réel (src/esport/tempsReel) : session courante (`forcer` : une nouvelle, après un 401). */
   jetonSession?(forcer?: boolean): Promise<string>;
   /** Temps réel : le serveur l'annonce-t-il (fonction « temps-reel » de /session) ? */
@@ -955,6 +955,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     jeton?: string,
     binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string>; delai?: number; signal?: unknown },
     surcharger = false,
+    delai?: number,
   ): Promise<T> {
     let r: Awaited<ReturnType<Fetch>>;
     const surcharge = surcharger && METHODES_SURCHARGEES.includes(methode);
@@ -975,7 +976,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
           body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
           ...(binaire?.signal ? { signal: binaire.signal } : {}),
         }),
-        binaire?.delai ?? (binaire ? 120_000 : 15_000),
+        delai ?? binaire?.delai ?? (binaire ? 120_000 : 15_000),
       );
     } catch (e) {
       if (e instanceof ErreurEsport) throw e;
@@ -1040,18 +1041,18 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     }
   }
 
-  async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4]): Promise<T> {
+  async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4], delai?: number): Promise<T> {
     let r: T;
     let jetonUtilise: string | undefined;
     const surcharge = () => sessions.get(cle)?.surcharge ?? false;
     try {
       jetonUtilise = await session();
-      r = await brut<T>(chemin, methode, corps, jetonUtilise, binaire, surcharge());
+      r = await brut<T>(chemin, methode, corps, jetonUtilise, binaire, surcharge(), delai);
     } catch (e) {
       // Session expirée (ou serveur redémarré avec une nouvelle clé) : une nouvelle, une fois (partagée par les requêtes en cours).
       if (e instanceof ErreurEsport && e.code === 'session') {
         const jeton = await session(true, jetonUtilise);
-        r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge());
+        r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge(), delai);
       } else throw e;
     }
     signalerAppel(methode, chemin);
@@ -1178,7 +1179,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
         .catch(() => undefined);
       return undefined;
     },
-    requete: (chemin, methode, corps) => appel(chemin, methode, corps),
+    // `options.delai` : attente plus longue qu'à l'ordinaire (assistant d'écriture : réponse de l'IA, 90 s au plus).
+    requete: (chemin, methode, corps, options) => appel(chemin, methode, corps, undefined, options?.delai),
     binaire: (chemin, methode, octets, entetes = {}, options = {}) =>
       appel(chemin, methode, undefined, { octets, type: 'application/octet-stream', entetes, delai: options.delai ?? 180_000, signal: options.signal }),
   };

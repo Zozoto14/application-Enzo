@@ -64,7 +64,7 @@ Deux catégories de tâches, chacune avec son ordre (réglé dans **Administrati
 | Tâche (`discuterPour`) | Catégorie | Défaut |
 | --- | --- | --- |
 | `brouillon`, `verification`, `sources`, `test`, `profils` | **profils** | API principale (Mistral Large) → secondaire → IA locale |
-| `traduction`, `cm`, `leger` (et toute tâche inconnue non confidentielle) | **leger** | API secondaire (gpt-oss-20b) → principale → IA locale |
+| `traduction`, `ecriture` (assistant d'écriture, partie 5 bis), `cm`, `leger` (et toute tâche inconnue non confidentielle) | **leger** | API secondaire (gpt-oss-20b) → principale → IA locale |
 | `transcription`, `correction`, `resumes`, `suivi`, `strats` (et alias : voir 2 bis) | **confidentielle** | **IA locale seulement**, quel que soit l'ordre |
 
 **Quand passe-t-on au moteur suivant ?** Quand le moteur est absent (pas de clé), en panne (5xx, injoignable, délai
@@ -110,7 +110,8 @@ Par prudence, **tout nom de tâche qui contient** « transcri », « reunion »,
   `503 ia-confidentielle-sans-local` (« … Rien n'a été envoyé à un service externe. »), **aucun appel réseau**. La
   relecture des transcriptions est alors simplement **absente** (voir [transcription.md](transcription.md)).
 - **Peuvent partir chez le fournisseur** (aucune donnée de réunion) : **profils de jeu** (brouillons, vérifications,
-  sources), **traductions**, **textes des posts CM**, **devblog** (rédigé à partir des messages de commit nettoyés,
+  sources), **traductions**, **assistant d'écriture** (texte tapé dans un champ non confidentiel, partie 5 bis),
+  **textes des posts CM**, **devblog** (rédigé à partir des messages de commit nettoyés,
   voir [devblog.md](devblog.md)).
 
 **Lever la règle (Fondateur seulement, tâche par tâche)** : Administration IA › carte **« Confidentialité : ce qui
@@ -278,6 +279,74 @@ const { texte, moteur } = await ia.discuterPour('correction', messages, { json: 
 - Les API existantes restent : `configIa(env)`, `creerConnecteur(config).discuter(messages, options)`,
   `creerConnecteurLocal(...)`, `extraireJson`.
 
+## 5 bis. Assistant d'écriture (corriger, traduire, reformuler un message)
+
+Demande du Fondateur (11 novembre 2026) : « Mets une IA qui permet de corriger mes fautes quand j'écris des messages,
+exemple dans les tickets etc., et aussi je peux lui demander de traduire mon texte en anglais quand j'en ai besoin. »
+
+**Dans l'app** : sous les champs de message, une petite barre **Corriger** · **Traduire en anglais** · **⋯**
+(**Traduire en français**, **Reformuler poliment**), icônes monochromes. Raccourci sur le web : **Ctrl+Maj+K**
+(Cmd+Maj+K sur Mac) = Corriger, quand le curseur est dans le champ. **Rien ne part sans un clic** (ou le raccourci) :
+jamais de correction automatique. Le résultat s'affiche en **aperçu** (changements surlignés mot à mot : barré = retiré,
+surligné = ajouté ou corrigé ; une traduction est montrée telle quelle) avec **Remplacer**, **Insérer en dessous**
+(pratique pour un message bilingue FR + EN) et **Annuler** ; après un remplacement, **Annuler le remplacement** remet
+le texte d'avant. Sous l'aperçu : « Texte envoyé à l'IA (Claude) pour correction » (moteur réellement utilisé).
+
+**Où il apparaît** : réponse à un ticket, message d'une mention de ticket (« Mentionner »), messages automatiques,
+accueil et panneaux des tickets (Configuration), texte des posts CM (FR et EN), description et commentaires des cartes
+CM, modèle des messages Discord d'une team (annonces planning, résultats…), introduction et conclusion du devblog,
+description d'un événement du club, description d'un événement du planning, description d'une team, et
+**Administration › Messagerie** du hub (message FR et EN : le hub ouvre la même session Esport que pour l'annuaire, avec
+le jeton maître du Fondateur ; le relais, lui, n'a pas d'IA).
+
+**Confidentialité** :
+
+- **Seul le texte du champ** part, jamais la conversation du ticket, le titre de la carte ni aucun autre contexte.
+- **Jamais sur un champ confidentiel** : notes, transcriptions et résumés de réunion (y compris les réunions CM), notes
+  du staff et suivi des joueurs, strats et playbook, **notes internes des tickets**, journal. Le bouton n'y est pas, et
+  le serveur refuse de toute façon (`403 ecriture-confidentielle`) : il n'accepte que la liste fermée `CHAMPS_ECRITURE`
+  de `esport/noyau/ia/ecriture.mjs` (un champ inconnu : `400 ecriture-champ`).
+- **Réponses aux tickets : permises, par décision explicite du Fondateur** (elles sont publiques pour l'auteur du ticket ;
+  la tâche confidentielle « tickets » couvre les conversations, notes internes et transcripts, que l'assistant n'envoie
+  jamais). Voir aussi [tickets.md](tickets.md).
+- Tâches du répartiteur : `ecriture` (corriger, reformuler) et `traduction`, toutes deux **légères** et **non
+  confidentielles** (le nom `correction` est réservé à la relecture des transcriptions, confidentielle : l'assistant ne
+  l'emploie pas). Ordre : celui des tâches légères (Administration IA). Avec Claude : modèle et effort des tâches
+  légères (`IA_CLAUDE_MODELE_LEGER`, effort `low`), jamais de température ni de réflexion désactivée.
+
+**Éléments protégés** : mentions `<@id>`, `<@!id>`, rôles `<@&id>`, salons `<#id>`, emojis personnalisés `<:nom:id>`,
+horodatages `<t:…>`, liens, blocs et morceaux de code, `@everyone` / `@here`, variables `{pseudo}` / `{{team}}`,
+@mentions de l'app, codes d'emoji `:smile:` et emojis Unicode sont remplacés par des marqueurs `⟦n⟧` **avant** l'envoi
+(l'IA ne les voit pas) puis remis. Un marqueur perdu, dupliqué ou inventé → `422 ecriture-proteges` ; un nombre de
+lignes ou de délimiteurs Markdown (`**`, `__`, `~~`, `||`) changé → `422 ecriture-format` : **rien n'est remplacé**,
+l'utilisateur réessaie. La consigne demande de corriger seulement l'orthographe, la grammaire, la ponctuation et les
+accents (ton, registre et sens gardés), une traduction naturelle, et de garder le vocabulaire esport (scrim, tryhard,
+noms de maps, d'agents, de jeux, pseudos) ; le texte est traité comme une donnée, jamais comme une consigne.
+
+**Limites** : 6000 caractères par demande (`413 ecriture-trop-long`), **30 demandes par minute et par compte**
+(`429 trop-de-requetes`), et chaque appel à une API **compte dans le plafond mensuel du moteur** (au plafond du dernier
+moteur : `429 ecriture-quota`) ; IA absente ou en panne : `503 ecriture-indisponible`.
+
+**Qui peut s'en servir : par défaut, LE FONDATEUR SEUL** (décision du Fondateur, 11 novembre 2026). Pour tous les
+autres, les boutons sont **cachés** (pas seulement grisés) et le serveur refuse aussi (`403 ecriture-permission`).
+Administration IA › carte **« Assistant d'écriture »** : l'activer ou non (activé par défaut), puis **ajouter des
+rôles** — **Rôles du club** (Second CEO, staff des tickets, devblog, événements…), **Équipe CM**, **Staff des teams**
+(Propriétaire, Manager, Coach, Analyste), **Joueurs et autres membres des teams** ; aucun coché par défaut — et/ou
+**ajouter des personnes** une à une (liste des membres ; « Retirer » pour enlever). Stocké dans `ia_reglages`
+(`ecriture_actif`, `ecriture_groupes`, `ecriture_comptes`).
+
+API (préfixe facultatif `/api/esport`) :
+
+| Méthode | Chemin | Rôle |
+| --- | --- | --- |
+| `GET` | `/ia/ecriture` | `{ actif, autorise, disponible, champs, tailleMax, modes }` : l'app montre la barre si tout est vrai et le champ listé |
+| `POST` | `/ia/ecriture` | `{ mode: corriger \| traduire-en \| traduire-fr \| reformuler, champ, texte }` → `{ texte, mode, moteur, fournisseur, inchange }` (rien n'est enregistré) |
+| `GET` `PUT` | `/ia/ecriture/reglages` | Fondateur : `{ actif?, groupes?, comptes? }` (défaut : groupes et comptes vides = le Fondateur seul) |
+
+Tests : `esport/test/ia-ecriture.test.mjs` (chaîne réelle avec un faux NVIDIA : seul le texte masqué part, éléments
+protégés gardés ou refus, champs confidentiels, longueur, limite de débit, plafond, Fondateur seul par défaut, rôles et personnes ajoutés) et
+`src/esport/Ecriture.test.tsx` (barre, aperçu, remplacer / insérer / annuler, masquée sur une note interne).
+
 ## 6. Administration IA
 
 **Esport › Administration › Jeux › Administration IA** (Fondateur) :
@@ -294,7 +363,8 @@ const { texte, moteur } = await ia.discuterPour('correction', messages, { json: 
   revenir à l'ordre par défaut) ; il ne s'applique pas aux tâches confidentielles ;
 - **Confidentialité : ce qui quitte le serveur** : la liste des tâches qui **restent sur le serveur** (réunions,
   transcription, relecture, résumés, suivi, strats : IA locale seulement) et de celles qui **peuvent partir chez le
-  fournisseur** (profils de jeu, traductions, posts CM) ; l'interrupteur du Fondateur (partie 2 bis) ;
+  fournisseur** (profils de jeu, traductions, assistant d'écriture, posts CM) ; l'interrupteur du Fondateur (partie 2 bis) ;
+- **Assistant d'écriture** : l'activer ; par défaut le Fondateur seul, ajouter des rôles ou des personnes (partie 5 bis) ;
 - **Plafonds mensuels** : appels de l'API principale (défaut 30), de l'API secondaire (défaut 200), de Claude
   (défaut 100), vérifications (défaut 8). Au plafond, le moteur est sauté (le suivant prend le relais). L'IA locale n'a pas de plafond.
 

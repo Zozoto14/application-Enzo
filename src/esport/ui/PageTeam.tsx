@@ -50,6 +50,7 @@ import { noterPage, pageDeSection } from '../usage';
 import { MaFicheTrombi } from './differe';
 import { apiTrombi } from '../trombi/api';
 import { trTb } from '../i18n/trombi';
+import { ZoneEcriture } from './ecriture/ZoneEcriture';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
@@ -518,7 +519,9 @@ export function Parametres({
         <Panneau theme={theme}>
           <TitreCarte theme={theme} titre={tr('pageTeam.la_team')} sous={tr('pageTeam.nom_et_description_visibles')} />
           <Champ theme={theme} libelle={tr('pageTeam.nom')} valeur={nom} onChanger={setNom} maxLength={60} testID="esport-parametres-nom" />
-          <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
+          <ZoneEcriture theme={theme} champ="team.description" valeur={description} onChanger={setDescription} maxLength={500} testID="esport-parametres-description-ecriture">
+            <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
+          </ZoneEcriture>
           {/* Team CM : pas de profil de jeu (le serveur refuse de le changer). */}
           {jeux && jeux.length > 1 && detail.team.genre !== 'cm' ? (
             <>

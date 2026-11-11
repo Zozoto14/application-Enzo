@@ -58,6 +58,7 @@ import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { RolesStaffSup } from './RolesStaffSup';
 import { PositionRoles } from './PositionRoles';
 import { ChampDate } from '../../../ui/dates';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 const AUCUN = '-';
 const TON: Record<StatutEvenement, Ton> = {
@@ -212,15 +213,17 @@ function Editeur({
         onChoisir={statut => setF({ ...f, statut })}
         testID="esport-ev-statut"
       />
-      <Champ
-        theme={theme}
-        libelle={trEv('description')}
-        valeur={f.description}
-        onChanger={description => setF({ ...f, description })}
-        maxLength={choix.limites.description}
-        multiligne
-        testID="esport-ev-description"
-      />
+      <ZoneEcriture theme={theme} champ="evenements.description" valeur={f.description} onChanger={description => setF({ ...f, description })} maxLength={choix.limites.description} testID="esport-ev-description-ecriture">
+        <Champ
+          theme={theme}
+          libelle={trEv('description')}
+          valeur={f.description}
+          onChanger={description => setF({ ...f, description })}
+          maxLength={choix.limites.description}
+          multiligne
+          testID="esport-ev-description"
+        />
+      </ZoneEcriture>
 
       {fiche ? (
         <>

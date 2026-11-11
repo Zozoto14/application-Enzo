@@ -545,6 +545,16 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
   **confidentielle** dans le connecteur IA, `esport/noyau/ia/confidentialite.mjs` : IA locale seulement si un jour une
   fonction s'en servait), jamais copiées dans le fil des
   notifications, le journal ou le temps réel (ils ne portent que des identifiants, le numéro et la catégorie).
+- **Assistant d'écriture (exception voulue par le Fondateur, 11 novembre 2026)** : dans la zone de **réponse** d'un
+  ticket (et le message d'une mention, les messages automatiques, l'accueil et les panneaux de la Configuration), le
+  staff peut cliquer **Corriger**, **Traduire en anglais / en français** ou **Reformuler poliment** (raccourci
+  Ctrl+Maj+K). Seul **le texte qu'il vient de taper** part à l'IA (tâches non confidentielles `ecriture` / `traduction`,
+  moteur des tâches légères, Claude possible) : jamais la conversation, les réponses au formulaire, les pièces ni le
+  transcript. Une réponse est publique pour l'auteur du ticket : c'est pourquoi elle est permise. **Jamais sur une note
+  interne** (le bouton disparaît en mode « Note interne », et le serveur refuse le champ `tickets.note`). Rien ne part
+  sans un clic ; l'aperçu indique « Texte envoyé à l'IA (…) pour correction ». **Par défaut, seul le Fondateur voit ces
+  boutons** ; il peut ouvrir l'assistant à d'autres rôles ou personnes (Administration IA). Détails et limites :
+  [ia-api.md](ia-api.md), partie 5 bis.
 - **Pièces jointes** : copiées dans le **stockage privé** du serveur (`tickets/<ticket>/<pièce>`, hors `public_html`),
   seulement depuis le CDN de Discord, sans suivre de redirection, sous la taille réglée (8 Mo par défaut) ; sinon
   seulement **référencées** (adresse Discord, qui expire). Choix fait plutôt qu'un dossier du Drive : le Drive est

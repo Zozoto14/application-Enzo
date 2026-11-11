@@ -66,6 +66,7 @@ import { routesTrombi } from './trombi/routes.mjs';
 import { routesRoles, servicesRoles } from './roles/service.mjs';
 import { servicesDevblog } from './devblog/service.mjs';
 import { routesDevblog } from './devblog/routes.mjs';
+import { routesEcriture, servicesEcriture } from './ia/ecriture.mjs';
 import { traiterDevblogDiscord } from './devblog/discord.mjs';
 import { routesDeploiement } from './deploiement.mjs';
 import { servicesCentre } from './notifications/centre.mjs';
@@ -246,6 +247,9 @@ export function creerApi({
   // Centre de notifications (migration 0038) : fil filtré par les droits du moment, préférences par compte.
   const nc = servicesCentre({ base, maintenant });
   const dv = servicesDevblog({ base, maintenant, discuterPour: jx.discuterPour, cle: secretDiscord, source: devblogSource });
+  // Assistant d'écriture (docs/esport/ia-api.md) : corriger, traduire, reformuler le texte d'UN champ non confidentiel,
+  // par le répartiteur des profils de jeu (tâches légères « ecriture » / « traduction », comptées dans les plafonds).
+  const ec = servicesEcriture({ base, maintenant, discuterPour: jx.discuterPour, fournisseurDe: jx.fournisseurDe });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -524,6 +528,8 @@ export function creerApi({
     if (rolesPermissions !== undefined) return rolesPermissions;
     const devblog = await routesDevblog({ dv, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (devblog !== undefined) return devblog;
+    const ecriture = await routesEcriture({ ec, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
+    if (ecriture !== undefined) return ecriture;
     const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
     if (trombi !== undefined) return trombi;
     const administrationBot = await routesBotAdmin(botAdmin, { acteur, chemin, methode: m, limite });

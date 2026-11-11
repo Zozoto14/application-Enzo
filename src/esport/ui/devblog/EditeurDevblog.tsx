@@ -22,6 +22,7 @@ import { Badge, Carte, ESP, EnTetePage, TitreCarte, attenue, texte } from '../de
 import { ApercuDiscord, VueDevblog } from './Contenu';
 import { Programmation, ToutPublier, dateHeureClub } from './Automatique';
 import { ChampDate } from '../../../ui/dates';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 type Langue = 'fr' | 'en';
 interface Brouillon {
@@ -109,7 +110,9 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
         </View>
       ) : null}
       <Champ theme={theme} libelle={trDv('champ_titre')} placeholder={trDv('champ_titre_aide')} valeur={c.titre} onChanger={v => changer(langue, x => ({ ...x, titre: v }))} maxLength={120} testID={`esport-devblog-${langue}-titre`} />
-      <Champ theme={theme} libelle={trDv('champ_intro')} placeholder={trDv('champ_intro_aide')} valeur={c.intro} onChanger={v => changer(langue, x => ({ ...x, intro: v }))} multiligne maxLength={1000} testID={`esport-devblog-${langue}-intro`} />
+      <ZoneEcriture theme={theme} champ="devblog" valeur={c.intro} onChanger={v => changer(langue, x => ({ ...x, intro: v }))} maxLength={1000} testID={`esport-devblog-${langue}-intro-ecriture`}>
+        <Champ theme={theme} libelle={trDv('champ_intro')} placeholder={trDv('champ_intro_aide')} valeur={c.intro} onChanger={v => changer(langue, x => ({ ...x, intro: v }))} multiligne maxLength={1000} testID={`esport-devblog-${langue}-intro`} />
+      </ZoneEcriture>
       {c.sections.map((s, i) => (
         <View key={i} style={{ gap: ESP.xs, padding: ESP.s, borderWidth: 1, borderColor: theme.ligne, borderRadius: 12 }} testID={`esport-devblog-${langue}-section-${i}`}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: ESP.xs, flexWrap: 'wrap' }}>
@@ -152,7 +155,9 @@ export function EditeurDevblog({ theme, client, large, entree: initiale, onRetou
         {/* emoji-autorise : emoji de section proposé par défaut, que l'utilisateur choisit (devblog Discord) */}
         <BoutonHub theme={theme} titre={`+ ${trDv('section_ajouter')}`} onPress={() => changer(langue, x => ({ ...x, sections: [...x.sections, { emoji: '✨', titre: '', puces: [{ nom: '', description: '' }] }] }))} testID={`esport-devblog-${langue}-section-ajouter`} />
       </View>
-      <Champ theme={theme} libelle={trDv('champ_conclusion')} placeholder={trDv('champ_conclusion_aide')} valeur={c.conclusion} onChanger={v => changer(langue, x => ({ ...x, conclusion: v }))} multiligne maxLength={600} testID={`esport-devblog-${langue}-conclusion`} />
+      <ZoneEcriture theme={theme} champ="devblog" valeur={c.conclusion} onChanger={v => changer(langue, x => ({ ...x, conclusion: v }))} maxLength={600} testID={`esport-devblog-${langue}-conclusion-ecriture`}>
+        <Champ theme={theme} libelle={trDv('champ_conclusion')} placeholder={trDv('champ_conclusion_aide')} valeur={c.conclusion} onChanger={v => changer(langue, x => ({ ...x, conclusion: v }))} multiligne maxLength={600} testID={`esport-devblog-${langue}-conclusion`} />
+      </ZoneEcriture>
     </Carte>
   );
 

@@ -22,6 +22,7 @@ import { traduireServeur } from '../i18n/erreurs';
 import { ChoixLangue } from './ChoixLangue';
 import { TestMpDiscord } from './TestMpDiscord';
 import { ReglagesRolesTemp } from './rolesTemp/ReglagesRolesTemp';
+import { ZoneEcriture } from './ecriture/ZoneEcriture';
 
 const STATUTS: Record<EnvoiDiscord['statut'], string> = { get attente() {
       return tr('demandesCompte.en_attente');
@@ -66,7 +67,9 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
       ) : null}
       {ouvert && parametre.disponible ? (
         <View style={{ gap: 10 }}>
-          <Champ theme={theme} libelle={tr('discord.modele_du_message_vide')} valeur={modele} onChanger={setModele} multiligne maxLength={500} placeholder={parametre.modeleDefaut} testID={`esport-discord-modele-${id}`} />
+          <ZoneEcriture theme={theme} champ="discord.annonce" valeur={modele} onChanger={setModele} maxLength={500} testID={`esport-discord-modele-${id}-ecriture`}>
+            <Champ theme={theme} libelle={tr('discord.modele_du_message_vide')} valeur={modele} onChanger={setModele} multiligne maxLength={500} placeholder={parametre.modeleDefaut} testID={`esport-discord-modele-${id}`} />
+          </ZoneEcriture>
           <Text style={attenue}>
             {tr('discord.variables', { v: parametre.variables.map(v => `{${v.nom}}`).join(' '), v2: parametre.variables.map(v => `{${v.nom}} = ${v.description}`).join(' ; ') })}</Text>
           <Champ

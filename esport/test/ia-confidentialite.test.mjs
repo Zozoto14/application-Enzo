@@ -140,7 +140,7 @@ test('service : Administration IA affiche local/externe ; seul le Fondateur lèv
   const app = servicesJeux({ base, maintenant: () => horloge.t, socle: {}, ia: { config: configIa(ENV), fetch: ia.fetch }, travauxIa: 'synchrone', journal });
   let e = await app.etatIa(fondateur);
   assert.deepEqual(e.confidentialite.locales.map(t => [t.cle, t.externeAutorise]), Object.keys(TACHES_CONFIDENTIELLES).map(t => [t, false]));
-  assert.deepEqual(e.confidentialite.externes.map(t => t.cle), ['profils', 'traduction', 'cm', 'devblog']);
+  assert.deepEqual(e.confidentialite.externes.map(t => t.cle), ['profils', 'traduction', 'ecriture', 'cm', 'devblog']);
   // Ordre léger réglé sur les API : la relecture d'une réunion reste refusée sans IA locale.
   await app.reglerIa(fondateur, { ordres: { leger: ['api2', 'api'] } });
   assert.equal((await app.discuterPour('correction', msg).catch(x => x)).code, 'ia-confidentielle-sans-local');

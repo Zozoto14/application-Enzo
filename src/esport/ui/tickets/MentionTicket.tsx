@@ -16,6 +16,7 @@ import type { ApiTickets, CibleMention, DetailTicket, Mentionnables } from '../.
 import { Glyphe } from '../../../ui/icones';
 import { Intertitre, Retours, styles, useAgir } from '../commun';
 import { ESP, Squelette, Volet, attenue, texte } from '../design';
+import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 
 const cle = (c: Pick<CibleMention, 'type' | 'id'>) => `${c.type === 'role' ? 'r' : 'm'}:${c.id}`;
 
@@ -138,7 +139,9 @@ export function DialogueMention({ theme, api, ticketId, gerer, large, onFermer, 
                 </View>
               ) : null}
             </View>
-            <Champ theme={theme} libelle={trTk('vue.mentionner_message')} valeur={message} onChanger={setMessage} multiligne maxLength={500} testID="esport-tk-mention-message" />
+            <ZoneEcriture theme={theme} champ="tickets.mention" valeur={message} onChanger={setMessage} maxLength={500} testID="esport-tk-mention-ecriture">
+              <Champ theme={theme} libelle={trTk('vue.mentionner_message')} valeur={message} onChanger={setMessage} multiligne maxLength={500} testID="esport-tk-mention-message" />
+            </ZoneEcriture>
             <View style={styles.ligne}>
               <BoutonHub theme={theme} variante="plein" titre={trTk('vue.mentionner_envoyer', { n: choix.size })} onPress={envoyer} desactive={!choix.size || enCours === 'mentionner'} testID="esport-tk-mention-envoyer" />
               <BoutonHub theme={theme} titre={trTk('annuler')} onPress={onFermer} testID="esport-tk-mention-annuler" />
