@@ -48,7 +48,7 @@ import {
   type ObjetStrat,
   type Vue,
 } from '../../strats/document';
-import { MODELES, type Economie, type GenreMarqueur } from '../../strats/modeles';
+import { definitionPour, type Economie, type GenreMarqueur, type ModeJeuStrat } from '../../strats/modeles';
 import { LIBELLES_SIDE } from '../../strats/libelles';
 import { Retours, styles, useAgir, Intertitre, Panneau, Choix } from '../commun';
 import { MenuActions } from '../design';
@@ -213,7 +213,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   }, [agir, charger]);
 
   const doc = h?.present;
-  const def = MODELES[doc?.modele ?? 'generique'];
+  const def = definitionPour(doc?.modele ?? 'generique', doc?.mode);
   const peutModifier = Boolean(strat?.moi.modifier);
   const modifie = Boolean(doc && enregistre && doc !== enregistre);
   const agents = agentsActifs(assets);
@@ -409,6 +409,14 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         ev.preventDefault();
         const pas = ev.shiftKey ? 20 : 4;
         faire({ type: 'deplacer', etape: iEtape, id: selection, dx: k === 'arrowleft' ? -pas : k === 'arrowright' ? pas : 0, dy: k === 'arrowup' ? -pas : k === 'arrowdown' ? pas : 0 });
+      } else if ((k === ',' || k === '.' || k === ';' || k === ':') && choisi && (choisi.type === 'capacite' || choisi.type === 'vision' || choisi.type === 'agent')) {
+        // Orientation fine de la sélection : 5° (Maj : 1°).
+        ev.preventDefault();
+        const pas = (k === ',' || k === ';' ? -1 : 1) * (ev.shiftKey ? 1 : 5);
+        const tourner = (x: number) => Math.round((((x + pas) % 360) + 360) % 360);
+        if (choisi.type === 'capacite' && choisi.zone && 'angle' in choisi.zone) faire({ type: 'modifier', etape: iEtape, id: choisi.id, champs: { zone: { ...choisi.zone, angle: tourner(choisi.zone.angle) } } });
+        else if (choisi.type === 'vision') faire({ type: 'modifier', etape: iEtape, id: choisi.id, champs: { angle: tourner(choisi.angle) } });
+        else if (choisi.type === 'agent') faire({ type: 'modifier', etape: iEtape, id: choisi.id, champs: { angle: tourner(choisi.angle ?? -90) } });
       } else if (k === '?') setAide(a => !a);
       else if (k === 'g') setAimant(a => (a ? 0 : 10));
       else if (TOUCHES_OUTILS[k]) setOutil(TOUCHES_OUTILS[k]);
@@ -664,6 +672,16 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
 
   const reglagesStrat = (
     <View style={[styles.ligne, { gap: 8 }]} testID="esport-editeur-reglages">
+      {def.modes.length && peutModifier ? (
+        <Segments<ModeJeuStrat>
+          theme={theme}
+          libelle={trSt('mode.titre')}
+          valeur={doc.mode ?? def.modes[0]}
+          options={def.modes.map(m => [m, trSt(`mode.${m}` as CleSt)] as const)}
+          onChoisir={mode => faire({ type: 'mode', mode })}
+          testID="esport-editeur-mode"
+        />
+      ) : null}
       {def.sides && peutModifier ? (
         <Segments theme={theme} libelle={tr('scouting.scouting.side')} valeur={doc.side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]] as const} onChoisir={side => faire({ type: 'side', side })} testID="esport-editeur-side" />
       ) : null}
@@ -736,7 +754,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
           </Text>
         </View>
         <Text style={attenue} testID="esport-editeur-resume">
-          {[doc.carte.nom, def.sides ? LIBELLES_SIDE[doc.side] : '', doc.economie ? trSt(`economie.${doc.economie}` as CleSt) : '', trSt(`modele.${doc.modele}` as CleSt), tr('strats.editeur.version', { n: revision })].filter(Boolean).join(' · ')}
+          {[doc.carte.nom, doc.mode ? trSt(`mode.${doc.mode}` as CleSt) : '', def.sides ? LIBELLES_SIDE[doc.side] : '', doc.economie ? trSt(`economie.${doc.economie}` as CleSt) : '', trSt(`modele.${doc.modele}` as CleSt), tr('strats.editeur.version', { n: revision })].filter(Boolean).join(' · ')}
           {modifie ? tr('strats.editeur.modifications_non_enregistrees') : ''}
         </Text>
         <View style={[styles.ligne, { gap: 8 }]}>

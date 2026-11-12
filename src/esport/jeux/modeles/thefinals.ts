@@ -2,7 +2,7 @@
  * Modèle « The Finals » : jeu de données PRÉ-REMPLI de connaissances générales (aucune requête réseau),
  * TOUT « à vérifier » : classes Light / Medium / Heavy, leurs spécialisations, gadgets et armes (formes et
  * dimensions approximatives en mètres), maps (noms seulement : AUCUNE image, le Fondateur dépose les
- * siennes), modes et formats (3v3v3v3 en Cashout). Fusionné dans un profil existant par « Compléter avec
+ * siennes), modes et formats (Cashout en 3v3v3v3, Final Round en 3v3). Fusionné dans un profil existant par « Compléter avec
  * le modèle The Finals » (Administration › Jeux) : rien de ce qui existe n'est écrasé.
  */
 
@@ -135,16 +135,13 @@ export function modeleTheFinals(etages: string[]): Pick<DonneesJeu, 'formats' | 
   return {
     formats: [
       { cle: '3v3v3v3', nom: '3v3v3v3', equipes: 4, joueursParEquipe: 3, bo: [1, 3], notes: '' },
-      { cle: '3v3v3', nom: '3v3v3', equipes: 3, joueursParEquipe: 3, bo: [1], notes: '' },
-      { cle: '5v5', nom: '5v5', equipes: 2, joueursParEquipe: 5, bo: [1, 3], notes: '' },
+      { cle: '3v3', nom: '3v3', equipes: 2, joueursParEquipe: 3, bo: [1, 3, 5], notes: '' },
     ],
     modes: [
       { cle: 'cashout', nom: 'Cashout', description: '', formats: ['3v3v3v3'], actif: true },
-      { cle: 'final-round', nom: 'Final Round', description: '', formats: ['3v3v3'], actif: true },
-      { cle: 'quick-cash', nom: 'Quick Cash', description: '', formats: ['3v3v3'], actif: true },
-      { cle: 'power-shift', nom: 'Power Shift', description: '', formats: ['5v5'], actif: true },
+      { cle: 'final-round', nom: 'Final Round', description: '', formats: ['3v3'], actif: true },
     ],
-    cartes: CARTES.map(nom => ({ cle: cleDe(nom), nom, image: null, actif: true, modes: ['cashout', 'final-round', 'quick-cash'], niveaux: etages.map(n => ({ cle: cleDe(n), nom: n })) })),
+    cartes: CARTES.map(nom => ({ cle: cleDe(nom), nom, image: null, actif: true, modes: ['cashout', 'final-round'], niveaux: etages.map(n => ({ cle: cleDe(n), nom: n })) })),
     classes: Object.entries(CLASSES).map(([cle, c]) => ({ cle, nom: c.nom })),
     personnages: Object.entries(CLASSES).map(([cle, c]) => ({ cle, nom: c.nom, classe: cle, image: null, actif: true, capacites: capacitesTheFinals(cle) })),
     roster: { titulaires: 3, remplacants: 1 },

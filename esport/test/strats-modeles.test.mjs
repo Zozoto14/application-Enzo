@@ -78,6 +78,10 @@ test('document v3 : The Finals à trois joueurs, phases et économie propres au 
   refuse(x => (x.etapes[0].objets[0].genre = 'licorne'));
   refuse(x => (x.etapes[0].objets[4].zone = { forme: 'cercle', rayon: 500 }), 'rayon en mètres borné');
   refuse(x => (x.etapes[0].duree = 0));
+  refuse(x => (x.mode = 'power-shift'), 'mode inconnu');
+  assert.equal(v.mode, 'cashout', 'Cashout par défaut');
+  assert.equal(validerDocument({ ...v, mode: 'final-round' }).mode, 'final-round');
+  assert.equal(validerDocument(documentVide({ carte: ASCENT })).mode, undefined, 'pas de mode pour Valorant');
   const val = documentVide({ carte: ASCENT, modele: 'valorant' });
   val.economie = 'full';
   val.etapes[0].phase = 'post-plant';
@@ -315,4 +319,119 @@ test('images de maps : dépôt (gestionnaire), vérifiées aux octets, lien sign
   assert.equal((await b.appel('/jeux/jeu-test', { methode: 'DELETE', jeton: f })).statut, 200);
   assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM jeu_images WHERE jeu_cle = ?', ['jeu-test'])).n), 0);
   assert.ok(autre.corps.id);
+});
+
+// ------------------------------------------------------------------ Import serveur des images et de l'échelle
+
+function pngOctets(l = 512, h = 512) {
+  return new Uint8Array(Buffer.from(pngBase64(l, h), 'base64'));
+}
+
+/** Faux web : valorant-api.com et quelques images ; note chaque adresse demandée. */
+function fauxWeb(maps, { images = {} } = {}) {
+  const demandes = [];
+  const fetchImport = async (url, init) => {
+    demandes.push({ url, redirect: init?.redirect });
+    if (url === 'https://valorant-api.com/v1/maps') return new Response(JSON.stringify({ status: 200, data: maps }), { headers: { 'content-type': 'application/json; charset=utf-8' } });
+    const img = images[url];
+    if (!img) return new Response('introuvable', { status: 404 });
+    return new Response(img.octets, { headers: { 'content-type': img.type ?? 'image/png' } });
+  };
+  return { fetchImport, demandes };
+}
+
+const MAP_ASCENT = {
+  uuid: '7eaecc1b-4337-bbf6-6ab9-04b8f06b3319',
+  displayName: 'Ascent',
+  tacticalDescription: 'A/B Sites',
+  displayIcon: 'https://media.valorant-api.com/maps/7eaecc1b/displayicon.png',
+  xMultiplier: 7e-5,
+  yMultiplier: -7e-5,
+  xScalarToAdd: 0.813895,
+  yScalarToAdd: 0.573242,
+  callouts: [
+    { regionName: 'Site', superRegionName: 'A', location: { x: 6000, y: -5000 } },
+    { regionName: 'Spawn', superRegionName: 'Defender Side', location: { x: 8000, y: -1000 } },
+    { regionName: 'Main', superRegionName: 'A', location: { x: 3000, y: -4000 } },
+  ],
+};
+
+test('import Valorant (faux valorant-api.com) : minimap déposée, échelle calculée, callouts ; idempotent ; adresses et types contrôlés', async () => {
+  const nouvelle = { ...MAP_ASCENT, uuid: 'n', displayName: 'Novamap', displayIcon: 'https://media.valorant-api.com/maps/n/displayicon.png', callouts: [] };
+  const range = { ...MAP_ASCENT, displayName: 'The Range', tacticalDescription: null, displayIcon: 'https://media.valorant-api.com/maps/r/displayicon.png' };
+  const piege = { ...MAP_ASCENT, displayName: 'Bind', displayIcon: 'https://exemple.invalid/bind.png' };
+  const web = fauxWeb([MAP_ASCENT, nouvelle, range, piege], {
+    images: {
+      [MAP_ASCENT.displayIcon]: { octets: pngOctets(1024, 1024) },
+      [nouvelle.displayIcon]: { octets: pngOctets(512, 512), type: 'text/html' },
+    },
+  });
+  const b = await banc({ fetchImportJeux: web.fetchImport });
+  const f = await b.session('principal', 'Fondateur');
+  const team = await teamAvecMembres(b, { membres: { lea12345: { pseudo: 'Léa', role: 'joueur' } } });
+  assert.equal((await b.appel('/jeux/valorant/importer', { methode: 'POST', jeton: team.sessions.lea12345, corps: {} })).statut, 403);
+  let r = await b.appel('/jeux/valorant/importer', { methode: 'POST', jeton: f, corps: {} });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  const lignes = Object.fromEntries(r.corps.rapport.map(l => [l.carte, l]));
+  assert.deepEqual(lignes.Ascent, { carte: 'Ascent', image: 'importee', echelle: 'importee', reperes: 3 });
+  assert.equal(lignes.Novamap.erreur, 'import-type', 'type annoncé vérifié');
+  assert.equal(lignes.Bind.erreur, 'import-adresse', 'hôte hors de la liste autorisée');
+  assert.equal(lignes['The Range'], undefined, 'map hors compétition ignorée');
+  assert.ok(web.demandes.every(d => d.redirect === 'error'), 'jamais de redirection suivie');
+  assert.ok(!web.demandes.some(d => d.url.includes('exemple.invalid')), 'aucune requête vers un hôte refusé');
+  const ascent = r.corps.jeu.donnees.cartes.find(c => c.cle === 'ascent');
+  assert.equal(ascent.echelle.pxParMetre, 7, '7e-5 × 100 unités par mètre × 1000');
+  assert.equal(ascent.echelle.methode, 'import');
+  assert.equal(ascent.source.fournisseur, 'valorant-api.com');
+  assert.ok(r.corps.jeu.images[ascent.fichier].url);
+  const site = ascent.reperes.find(x => x.type === 'site');
+  assert.deepEqual([site.nom, site.x, site.y, site.importe], ['A Site', Math.round((-5000 * 7e-5 + 0.813895) * 10000) / 10, Math.round((6000 * -7e-5 + 0.573242) * 10000) / 10, true]);
+  assert.equal(ascent.reperes.find(x => x.nom === 'Spawn').type, 'spawn-defense');
+  const nova = r.corps.jeu.donnees.cartes.find(c => c.cle === 'novamap');
+  assert.equal(nova.actif, false, 'map ajoutée hors du pool');
+  // Calibrage à la main, repère à la main : gardés ; second import idempotent (aucune nouvelle image).
+  const d = structuredClone(r.corps.jeu.donnees);
+  const a = d.cartes.find(c => c.cle === 'ascent');
+  a.echelle = { points: [0, 0, 0, 500], distance: 50 };
+  a.reperes.push({ nom: 'Mon repère', type: 'autre', x: 1, y: 1 });
+  r = await b.appel('/jeux/valorant', { methode: 'PATCH', jeton: f, corps: { version: r.corps.jeu.version, donnees: d } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  const avant = Number((await b.base.premier('SELECT COUNT(*) AS n FROM jeu_images', [])).n);
+  r = await b.appel('/jeux/valorant/importer', { methode: 'POST', jeton: f, corps: { version: r.corps.version } });
+  assert.equal(r.statut, 200);
+  assert.equal(r.corps.rapport.find(l => l.carte === 'Ascent').image, 'inchangee');
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM jeu_images', [])).n), avant);
+  const a2 = r.corps.jeu.donnees.cartes.find(c => c.cle === 'ascent');
+  assert.equal(a2.echelle.pxParMetre, 10, 'calibrage manuel gardé');
+  assert.equal(a2.reperes.filter(x => x.importe).length, 3);
+  assert.ok(a2.reperes.some(x => x.nom === 'Mon repère'));
+  // Réseau absent : erreur claire, profil intact.
+  const b2 = await banc();
+  const f2 = await b2.session('principal', 'Fondateur');
+  r = await b2.appel('/jeux/valorant/importer', { methode: 'POST', jeton: f2, corps: {} });
+  assert.equal(r.statut, 502);
+  assert.equal(r.corps.code, 'import-reseau');
+});
+
+test('import The Finals : adresses fournies, échelle approximative à vérifier, maps courantes ajoutées ; générique refusé', async () => {
+  const url = 'https://images.exemple-wiki.org/monaco.png';
+  const web = fauxWeb([], { images: { [url]: { octets: pngOctets(2000, 1000) } } });
+  const b = await banc({ fetchImportJeux: web.fetchImport });
+  const f = await b.session('principal', 'Fondateur');
+  await avecJeu(b, f, 'the-finals', { nom: 'The Finals', modeleStrat: 'thefinals', donnees: { cartes: [{ nom: 'Monaco' }] } });
+  await avecJeu(b, f, 'rl', { nom: 'Rocket League' });
+  assert.equal((await b.appel('/jeux/rl/importer', { methode: 'POST', jeton: f, corps: {} })).corps.code, 'import-modele');
+  const r = await b.appel('/jeux/the-finals/importer', { methode: 'POST', jeton: f, corps: { urls: { monaco: url, seoul: 'http://non-securise.exemple/seoul.png' } } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  const lignes = Object.fromEntries(r.corps.rapport.map(l => [l.carte, l]));
+  assert.equal(lignes.Monaco.image, 'importee');
+  assert.equal(lignes.Monaco.echelle, 'approximative');
+  assert.equal(lignes.Seoul.erreur, 'import-adresse');
+  assert.equal(lignes.Kyoto.image, 'sans-adresse');
+  const monaco = r.corps.jeu.donnees.cartes.find(c => c.cle === 'monaco');
+  assert.equal(monaco.echelle.methode, 'approx');
+  assert.equal(monaco.echelle.pxParMetre, 4, '1000 unités ≈ 250 m');
+  assert.equal(monaco.source.aVerifier, true);
+  assert.equal(r.corps.jeu.images[monaco.fichier].largeur, 2000);
+  assert.ok(r.corps.jeu.donnees.cartes.some(c => c.cle === 'sys-horizon'));
 });

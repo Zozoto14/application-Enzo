@@ -13,7 +13,7 @@ Chaque profil de jeu (Administration › Jeux, [profils-jeu.md](profils-jeu.md))
 | Modèle | Joueurs | Plan | Outils propres |
 |---|---|---|---|
 | `valorant` | 5 | attaque / défense, sites | agents et capacités à l'échelle, économie du round (pistol, éco, force, bonus, full), phases setup · exécution · post-plant · retake · mid-round |
-| `thefinals` | 3 (3v3v3v3) | cashout, coffres, étages | classes Light / Medium / Heavy, spécialisations, gadgets et armes, marqueurs de destruction (mur, sol), équipes adverses 1 à 3, tiers (third-party), phases approche · prise · tenue · vol · tiers · fin |
+| `thefinals` | 3 | **mode par strat** : Cashout (3v3v3v3 : stations de cashout, coffres, équipes adverses 1 à 3, tiers) ou Final Round (3v3 en manches, élimination : une équipe en face, phases approche · engagement · élimination · fin), étages | classes Light / Medium / Heavy, spécialisations, gadgets et armes, marqueurs de destruction (mur, sol), équipes adverses 1 à 3, tiers (third-party), phases approche · prise · tenue · vol · tiers · fin |
 | `generique` | celui du premier format du profil (10 au plus) | attaque / défense | pions, flèches, zones, textes, marqueurs |
 
 Une strat reçoit le modèle du jeu de sa team **à sa création** (`strats.modele`) et le garde : changer le
@@ -55,6 +55,11 @@ de taille ; sans longueur connue, sa poignée l'allonge.
 
 ## L'éditeur (site et app PC)
 
+**Priorité : placer les utilitaires au mètre près.** Avec l'outil Capacité, la forme réelle suit le pointeur AVANT
+de poser (aperçu à l'échelle, orienté depuis le pion du joueur, cote affichée : « r 4.1 m », « 18 m · 30° ») ;
+une fois posée, ses poignées l'orientent ou la courbent (cote mise à jour pendant le geste), « , » et « . » la
+tournent de 5° (Maj : 1°), les flèches la déplacent, l'inspecteur règle chaque dimension en mètres.
+
 - Outils : sélection, main, pion, capacité, flèche (trajet du joueur, animé), ligne, forme, texte, marqueur,
   cône de vision, gomme ; poignées sur la sélection (orienter un mur ou un cône, courber un mur courbable,
   déplacer l'origine d'un trajet, tourner le regard d'un pion) ; inspecteur (dimensions en mètres, ordre,
@@ -78,13 +83,16 @@ de taille ; sans longueur connue, sa poignée l'allonge.
 V sélection · H main · A pion · C capacité · F flèche · L ligne · R forme · T texte · M marqueur · O vision ·
 E gomme · G aimantation · 1 à 5 joueur · Espace lecture · Ctrl+Z / Ctrl+Maj+Z (ou Ctrl+Y) · Ctrl+C / Ctrl+V ·
 Suppr · Ctrl+S · Ctrl+D dupliquer l'étape · [ et ] étapes · flèches : déplacer la sélection (Maj : plus loin) ·
+, et . : tourner la sélection de 5° (Maj : 1°) · ? aide ·
 + / - / 0 zoom · Échap.
 
 ## Ce que le Fondateur prépare (Administration › Jeux)
 
 1. Choisir le **modèle de strat** de chaque jeu (Valorant : déjà `valorant` ; The Finals : `thefinals`).
-2. **Déposer les images** des maps (vue de dessus) : aucune image officielle n'est livrée avec l'app.
-3. **Calibrer** chaque map (deux points d'une distance connue).
+2. **Importer les images et l'échelle** (fiche du jeu, carte « Images et échelle des maps ») : pour Valorant, un clic
+   (minimaps de valorant-api.com, échelle calculée, callouts) ; pour The Finals, collez une adresse d'image par map
+   (ou déposez les images à la main) ; aucune image n'est dans le dépôt de code.
+3. **Calibrer** ce qui reste approximatif (The Finals : échelle par défaut « à vérifier ») avec deux points.
 4. Tracer les **callouts** et poser les **repères** (sites A/B/C, spawns ; cashouts et coffres pour The Finals ;
    étages).
 5. **Vérifier** les capacités pré-remplies (« Pré-remplir les capacités », « Compléter avec le modèle The

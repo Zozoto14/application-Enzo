@@ -23,6 +23,7 @@
  *   GET    /jeux/ia/travaux/:id                   détail (brouillon complet)
  *   POST   /jeux/ia/travaux/:id/valider           le Fondateur valide le brouillon corrigé
  *   DELETE /jeux/ia/travaux/:id                   abandonner
+ *   POST   /jeux/:cle/importer                    images des maps et échelle téléchargées par le serveur (jeux.gerer) { version, urls?, remplacer? }
  *   POST   /jeux/:cle/images                      dépôt d'une image (fond de map) { type, donnees base64, nom } (jeux.gerer)
  *   GET    /jeux/images/:id?c&exp&sig             image par lien signé (sans session, routeImageJeu)
  *   GET    /teams/:id/jeu                         profil du jeu de la team (tout membre)
@@ -109,6 +110,11 @@ async function routesJeuxBrutes({ jeux, acteur, chemin, methode: m, url, lireCor
     if (m === 'DELETE') return jeux.supprimer(acteur, cle);
   }
   if (p[1] === 'archiver' && p.length === 2 && m === 'POST') return jeux.archiver(acteur, cle, await lireCorps());
+  if (p[1] === 'importer' && p.length === 2 && m === 'POST') {
+    const corps = await lireCorps();
+    await limite('ia', acteur.compte);
+    return jeux.importerCartes(acteur, cle, corps);
+  }
   if (p[1] === 'images' && p.length === 2 && m === 'POST') return jeux.deposerImage(acteur, cle, await lireCorps(TAILLE_MAX_CORPS_IMAGE_JEU));
   if (p[1] === 'maj' && p.length === 2 && m === 'PUT') return jeux.reglerMaj(acteur, cle, await lireCorps());
   if (p[1] === 'verifier' && p.length === 2 && m === 'POST') {

@@ -41,13 +41,15 @@ export interface ModeJeu {
   formats: string[];
   actif: boolean;
 }
-export type TypeRepere = 'site' | 'spawn-attaque' | 'spawn-defense' | 'cashout' | 'coffre' | 'spawn' | 'plant' | 'autre';
-export const TYPES_REPERES: readonly TypeRepere[] = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'autre'];
+export type TypeRepere = 'site' | 'spawn-attaque' | 'spawn-defense' | 'cashout' | 'coffre' | 'spawn' | 'plant' | 'callout' | 'autre';
+export const TYPES_REPERES: readonly TypeRepere[] = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'callout', 'autre'];
 /** Calibrage d'une map : deux points du repère carré (1000) et la distance réelle qui les sépare. */
 export interface EchelleCarte {
   pxParMetre: number;
   points: number[];
   distance: number;
+  /** Absent : calibrée à la main ; `import` : calculée depuis les données du jeu ; `approx` : approximative, à vérifier. */
+  methode?: 'import' | 'approx';
 }
 /** Callout : zone nommée (polygone) sur la map. */
 export interface ZoneCarte {
@@ -64,6 +66,8 @@ export interface RepereCarte {
   x: number;
   y: number;
   niveau?: number;
+  /** Repère importé (remplacé au prochain import). */
+  importe?: boolean;
 }
 export interface NiveauCarte {
   cle: string;
@@ -82,6 +86,7 @@ export interface CarteJeu {
   zones?: ZoneCarte[];
   reperes?: RepereCarte[];
   niveaux?: NiveauCarte[];
+  source?: SourceCarte;
 }
 export type FormeCapacite = 'cercle' | 'mur' | 'cone' | 'trajet' | 'ligne' | 'rect' | 'point';
 export const FORMES_CAPACITE: readonly FormeCapacite[] = ['cercle', 'mur', 'cone', 'trajet', 'ligne', 'rect', 'point'];
@@ -162,6 +167,23 @@ export interface EnteteJeu {
   statut: 'actif' | 'archive';
   version: number;
 }
+/** Compte rendu de l'import d'une map. */
+export interface LigneImport {
+  carte: string;
+  image: 'importee' | 'inchangee' | 'gardee' | 'sans-adresse';
+  echelle: 'importee' | 'approximative' | 'gardee';
+  reperes: number;
+  erreur?: string;
+}
+/** Source d'une image importée. */
+export interface SourceCarte {
+  fournisseur: string;
+  url: string;
+  le?: string;
+  empreinte?: string;
+  aVerifier: boolean;
+}
+
 /** Lien signé (6 h) d'une image déposée, et ses dimensions en pixels. */
 export interface ImageJeu {
   url: string | null;
@@ -413,6 +435,9 @@ export function apiJeux(client: ClientEsport) {
     /** Dépôt d'une image (fond d'une map) : base64 (sans en-tête « data: »). */
     deposerImage: (cle: string, corps: { type: string; donnees: string; nom?: string }) =>
       client.requete<{ id: string; url: string | null; expire: string | null; largeur: number; hauteur: number; type: string; taille: number; nom: string }>(`${j(cle)}/images`, 'POST', corps),
+    /** Import serveur des images de maps et de l'échelle (Valorant : valorant-api.com ; The Finals : `urls`). */
+    importer: (cle: string, corps: { version?: number; urls?: Record<string, string>; remplacer?: boolean }) =>
+      client.requete<{ rapport: LigneImport[]; inchange: boolean; jeu: ProfilJeu }>(`${j(cle)}/importer`, 'POST', corps),
     archiver: (cle: string, archive: boolean) => client.requete<ProfilJeu>(`${j(cle)}/archiver`, 'POST', { archive }),
     supprimer: (cle: string) => client.requete<{ ok: boolean }>(j(cle), 'DELETE'),
     versions: async (cle: string) => (await client.requete<{ versions: VersionJeu[] }>(`${j(cle)}/versions`)).versions,

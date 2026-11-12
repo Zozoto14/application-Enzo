@@ -17,9 +17,10 @@ export const ECHELLE_MIN = 0.5;
 export const ECHELLE_MAX = 100;
 
 export const MODELES = {
-  valorant: { joueurs: 5, joueursMax: 5, phases: ['setup', 'execute', 'post-plant', 'retake', 'mid-round'], sides: true, economie: ['pistol', 'eco', 'force', 'bonus', 'full'] },
-  thefinals: { joueurs: 3, joueursMax: 3, phases: ['approche', 'prise', 'tenue', 'vol', 'troisieme', 'fin'], sides: false, economie: [] },
-  generique: { joueurs: 5, joueursMax: 10, phases: ['debut', 'milieu', 'fin'], sides: true, economie: [] },
+  valorant: { joueurs: 5, joueursMax: 5, phases: ['setup', 'execute', 'post-plant', 'retake', 'mid-round'], sides: true, economie: ['pistol', 'eco', 'force', 'bonus', 'full'], modes: [] },
+  // The Finals : Cashout (3v3v3v3, stations et coffres) ou Final Round (3v3 en manches, élimination).
+  thefinals: { joueurs: 3, joueursMax: 3, phases: ['approche', 'prise', 'tenue', 'vol', 'troisieme', 'engagement', 'elimination', 'fin'], sides: false, economie: [], modes: ['cashout', 'final-round'] },
+  generique: { joueurs: 5, joueursMax: 10, phases: ['debut', 'milieu', 'fin'], sides: true, economie: [], modes: [] },
 };
 
 /** Modèle d'un profil de jeu (colonne `modele_strat`), avec repli sur la clé historique du jeu. */

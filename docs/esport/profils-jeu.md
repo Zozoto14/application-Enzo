@@ -40,6 +40,19 @@ dans le stockage du serveur (table `jeu_images`, comme les fichiers du Drive) et
 sont **propres au club** : l'assistant IA ne les reçoit pas et ne peut ni les proposer ni les effacer (brouillons et
 mises à jour les gardent).
 
+**Importer les images et l'échelle** (fiche du jeu, `POST /jeux/:cle/importer`) : le SERVEUR télécharge les images
+dans son stockage, avec leur source (fournisseur, adresse, date, empreinte) :
+- **Valorant** : API communautaire publique valorant-api.com (`/v1/maps`) : minimap (`displayIcon`), échelle calculée
+  depuis `xMultiplier` (1 m = 100 unités du jeu : unités par mètre = |xMultiplier| × 100 × 1000), callouts
+  (`regionName`, `superRegionName`, `location` → repères : sites, spawns, callouts). Les maps de compétition absentes
+  du profil sont ajoutées **hors du pool** (à cocher) ;
+- **The Finals** : pas d'API officielle : une adresse https d'image par map, saisie dans la carte d'import (aucune
+  adresse fiable n'est pré-remplie) ; échelle **approximative** par défaut (1000 unités ≈ 250 m), marquée « à vérifier ».
+Sécurité : https vers un site public (Valorant : `valorant-api.com`, `media.valorant-api.com` seulement), aucune
+redirection suivie, 15 s, 10 Mo par image, type annoncé et contenu vérifiés. Idempotent : une image inchangée n'est
+pas re-déposée, les callouts importés sont remplacés, un calibrage fait à la main et une image déposée à la main sont
+gardés (case « Remplacer aussi les images déposées à la main » pour forcer).
+
 **Données pré-remplies, à vérifier** : « Pré-remplir les capacités » (agents de Valorant, classes de The Finals) et
 « Compléter avec le modèle The Finals » (formats 3v3v3v3, modes, maps sans image avec leurs étages, classes Light /
 Medium / Heavy avec spécialisations, gadgets et armes) ajoutent des données de connaissances générales, **toutes
@@ -186,6 +199,7 @@ sont comptées à part, sans plafond (rien n'est payé), mais bornées en durée
 | `GET /jeux` (`?tous=1`) | tout compte (tous : gestionnaire) | Profils actifs et leur résumé ; pour un gestionnaire, teams, propositions, état de l'IA |
 | `POST /jeux` · `GET` / `PATCH` / `DELETE /jeux/:cle` | jeux.gerer (`GET` d'un profil actif : tous) | Créer, lire, modifier (`version` attendue), supprimer |
 | `POST /jeux/:cle/archiver` · `PUT /jeux/:cle/maj` | jeux.gerer | Archiver ; vérification automatique et fréquence |
+| `POST /jeux/:cle/importer` | jeux.gerer | Import serveur des images et de l'échelle `{ version, urls?, remplacer? }` ; rend `{ rapport, jeu }` |
 | `POST /jeux/:cle/images` | jeux.gerer | Dépôt d'une image de map `{ type, donnees (base64), nom }` ; à citer ensuite dans `cartes[].fichier` |
 | `GET /jeux/images/:id?c&exp&sig` | lien signé | Image déposée (les profils rendus portent `images` : liens signés de 6 h) |
 | `GET /jeux/:cle/versions` · `GET …/versions/:n` · `POST …/versions/:n/restaurer` | jeux.gerer | Historique, restauration |

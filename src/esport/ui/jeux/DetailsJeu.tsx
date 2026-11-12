@@ -11,7 +11,8 @@ import React, { Suspense, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { type ThemeHub } from '../../../hub/themes';
-import { CATEGORIES_CAPACITE, FORMES_CAPACITE, TYPES_REPERES, type CapaciteJeu, type CarteJeu, type DonneesJeu, type ImageJeu, type PersonnageJeu, type TypeRepere } from '../../jeux/api';
+import { CATEGORIES_CAPACITE, FORMES_CAPACITE, TYPES_REPERES, type CapaciteJeu, type CarteJeu, type DonneesJeu, type ImageJeu, type LigneImport, type PersonnageJeu, type TypeRepere } from '../../jeux/api';
+import { cleDe } from '../../jeux/profil';
 import { ajouterNiveau, ajouterRepere, ajouterZone, avecEchelle, avecImage, echelleDepuis, retirer, renommer } from '../../jeux/cartes';
 import { trSt } from '../../i18n/strats2';
 import { capacitesPrereplies, fusionnerTheFinals, preremplirCapacites } from '../../jeux/modeles';
@@ -173,6 +174,7 @@ export function DetailsCarte({
         {c.fichier ? <BoutonHub theme={theme} titre={trJc('carte.image_retirer')} variante="danger" onPress={() => (setLocale(undefined), onCarte(avecImage(c, null)))} testID={`${testID}-image-retirer`} /> : null}
       </View>
       {!deposer ? <Text style={attenue(theme, 12)}>{trJc('carte.image_enregistrer_dabord')}</Text> : null}
+      {c.source ? <Text style={attenue(theme, 12)} testID={`${testID}-source`}>{trJc('carte.source', { fournisseur: c.source.fournisseur, le: c.source.le?.slice(0, 10) ?? '' })}{c.source.aVerifier ? ` ${trJc('carte.source_a_verifier')}` : ''}</Text> : null}
       {avis ? <Text style={{ ...texte(theme, 13), color: theme.ok }}>{avis}</Text> : null}
       {erreur ? <Text style={{ ...texte(theme, 13), color: theme.critique }} testID={`${testID}-erreur`}>{erreur}</Text> : null}
 
@@ -234,7 +236,7 @@ export function DetailsCarte({
         </View>
       ) : null}
       <Text style={{ ...texte(theme, 13) }} testID={`${testID}-echelle`}>
-        {echelle ? trJc('carte.echelle_actuelle', { v: echelle.pxParMetre, m: Math.round(1000 / echelle.pxParMetre) }) : trJc('carte.echelle_aucune')}
+        {echelle ? `${trJc('carte.echelle_actuelle', { v: echelle.pxParMetre, m: Math.round(1000 / echelle.pxParMetre) })}${echelle.methode === 'import' ? ` ${trJc('carte.echelle_importee')}` : echelle.methode === 'approx' ? ` ${trJc('carte.echelle_approx')}` : ''}` : trJc('carte.echelle_aucune')}
       </Text>
 
       <Suspense fallback={null}>
@@ -306,6 +308,72 @@ export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites,
         <BoutonHub theme={theme} titre={trJc('capacites.ajouter')} desactive={liste.length >= 40} onPress={() => onCapacites([...liste, { cle: '', nom: '', touche: '', categorie: 'basique', forme: 'cercle', aVerifier: false }])} testID={`${testID}-ajouter`} />
         {prerempli.length && liste.length === 0 ? <BoutonHub theme={theme} titre={trJc('capacites.prerempli')} onPress={() => onCapacites(prerempli)} testID={`${testID}-prerempli`} /> : null}
       </View>
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ Import serveur des images et de l'échelle
+
+/** Maps de The Finals proposées pour l'import (noms courants, à vérifier). */
+export const CARTES_IMPORT_THEFINALS = ['Monaco', 'Seoul', 'Skyway Stadium', 'SYS$HORIZON', 'Las Vegas', 'Kyoto', 'Bernal', 'Fortune Stadium', 'Nozomi Citadel'];
+
+export function ImportCartes({
+  theme,
+  profil,
+  importer,
+  onFini,
+}: {
+  theme: ThemeHub;
+  profil: { cle: string; version: number; modeleStrat?: ModeleStrat; donnees: DonneesJeu };
+  importer(corps: { version?: number; urls?: Record<string, string>; remplacer?: boolean }): Promise<{ rapport: LigneImport[]; inchange: boolean }>;
+  onFini(): void;
+}) {
+  const modele = profil.modeleStrat ?? 'generique';
+  const [enCours, setEnCours] = useState(false);
+  const [rapport, setRapport] = useState<LigneImport[] | undefined>();
+  const [erreur, setErreur] = useState<string | undefined>();
+  const [remplacer, setRemplacer] = useState(false);
+  const cartesTf = Array.from(new Set([...profil.donnees.cartes.map(c => c.nom), ...CARTES_IMPORT_THEFINALS]));
+  const [urls, setUrls] = useState<Record<string, string>>(() => Object.fromEntries(profil.donnees.cartes.filter(c => c.source?.url).map(c => [c.cle, c.source?.url ?? ''])));
+  if (modele === 'generique') return <Text style={attenue(theme, 12)} testID="esport-jeu-import-generique">{trJc('import.generique')}</Text>;
+  const lancer = async () => {
+    setEnCours(true);
+    setErreur(undefined);
+    setRapport(undefined);
+    try {
+      const r = await importer({ version: profil.version, ...(modele === 'thefinals' ? { urls: Object.fromEntries(Object.entries(urls).filter(([, u]) => u.trim())) } : {}), ...(remplacer ? { remplacer: true } : {}) });
+      setRapport(r.rapport);
+      onFini();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnCours(false);
+    }
+  };
+  return (
+    <View style={{ gap: 8 }} testID="esport-jeu-import">
+      <Text style={attenue(theme, 12)}>{modele === 'valorant' ? trJc('import.aide_valorant') : trJc('import.aide_thefinals')}</Text>
+      {modele === 'thefinals'
+        ? cartesTf.map(nom => {
+            const cle = cleDe(nom);
+            return <Champ key={cle} theme={theme} libelle={trJc('import.adresse', { nom })} valeur={urls[cle] ?? ''} onChanger={v => setUrls(x => ({ ...x, [cle]: v }))} placeholder="https://" maxLength={500} testID={`esport-jeu-import-url-${cle}`} />;
+          })
+        : null}
+      <View style={[styles.ligne, { gap: 8 }]}>
+        <Case theme={theme} coche={remplacer} libelle={trJc('import.remplacer')} onChanger={setRemplacer} testID="esport-jeu-import-remplacer" />
+        <Text style={texte(theme, 13)}>{trJc('import.remplacer')}</Text>
+      </View>
+      <BoutonHub theme={theme} titre={enCours ? trJc('import.en_cours') : trJc('import.lancer')} variante="plein" desactive={enCours} onPress={() => void lancer()} testID="esport-jeu-import-lancer" />
+      {erreur ? <Text style={{ ...texte(theme, 13), color: theme.critique }} testID="esport-jeu-import-erreur">{erreur}</Text> : null}
+      {rapport ? (
+        <View style={{ gap: 2 }} testID="esport-jeu-import-rapport">
+          {rapport.map(l => (
+            <Text key={l.carte} style={{ ...texte(theme, 12), color: l.erreur ? theme.critique : theme.texte }}>
+              {`${l.carte} : ${trJc(`import.image.${l.image}` as CleJc)} · ${trJc(`import.echelle.${l.echelle}` as CleJc)}${l.reperes ? ` · ${trJc('import.reperes', { n: l.reperes })}` : ''}${l.erreur ? ` · ${trJc('import.erreur', { code: l.erreur })}` : ''}`}
+            </Text>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }

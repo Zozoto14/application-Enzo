@@ -320,6 +320,24 @@ function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe
   }
 }
 
+/** Cote lisible d'une zone (mètres, degrés) : « r 4.1 m », « 18 m · 30° »… */
+export function cote(z: Zone): string {
+  const a = (n: number) => `${Math.round(((n % 360) + 360) % 360)}°`;
+  switch (z.forme) {
+    case 'cercle':
+      return `r ${z.rayon} m`;
+    case 'cone':
+      return `${z.portee} m · ${z.ouverture}° · ${a(z.angle)}`;
+    case 'mur':
+      return `${z.longueur} m · ${a(z.angle)}${z.courbure ? ` · ${Math.round(z.courbure * 100)} %` : ''}`;
+    case 'ligne':
+    case 'rect':
+      return `${z.longueur} m · ${a(z.angle)}`;
+    case 'trajet':
+      return z.rayon ? `r ${z.rayon} m` : '';
+  }
+}
+
 /** Contenu tourné autour du centre du repère (map retournée). Composant stable : les nœuds ne sont pas recréés. */
 const Tourne = React.forwardRef<Konva.Group, { rotation: number; children: React.ReactNode }>(function Tourne({ rotation, children }, ref) {
   return (
@@ -338,6 +356,7 @@ export default function CanevasStrat(p: PropsCanevas) {
   const scene = useRef<Konva.Stage>(null);
   const repere = useRef<Konva.Group>(null);
   const [brouillon, setBrouillon] = useState<Brouillon | undefined>();
+  const [fantome, setFantome] = useState<{ x: number; y: number } | undefined>();
   const [apercu, setApercu] = useState<{ id: string; zone?: Zone; vision?: { angle: number; portee: number } } | undefined>();
   const pincement = useRef<{ distance: number; centre: { x: number; y: number } } | undefined>(undefined);
   const fondImg = useImage(carte?.minimap ?? p.fond, images);
@@ -385,6 +404,19 @@ export default function CanevasStrat(p: PropsCanevas) {
   /** Pion du joueur courant dans l'étape (origine d'un lancer, direction d'un cône). */
   const pionJoueur = (j: number | null) => (j === null ? undefined : e?.objets.find(o => o.type === 'agent' && o.joueur === j) as { x: number; y: number } | undefined);
 
+  /** Zone d'une capacité posée en `pt` : à sa taille réelle, orientée depuis le pion du joueur (un trajet part du pion). */
+  function zonePourPose(pt: { x: number; y: number }): Zone | null {
+    let zone = p.formeZone === 'auto' ? zoneDepuisCapacite(p.capacite?.donnees) : zoneParDefaut(p.formeZone);
+    const pion = pionJoueur(p.joueur);
+    if (zone && pion && Math.hypot(pt.x - pion.x, pt.y - pion.y) > 4) {
+      const angle = Math.round(((Math.atan2(pt.y - pion.y, pt.x - pion.x) * 180) / Math.PI) * 10) / 10;
+      if (zone.forme === 'trajet') zone = { ...zone, dx: Math.round((pion.x - pt.x) * 10) / 10, dy: Math.round((pion.y - pt.y) * 10) / 10 };
+      else if (zone.forme === 'cone' || zone.forme === 'ligne' || zone.forme === 'rect') zone = { ...zone, angle };
+      else if (zone.forme === 'mur') zone = { ...zone, angle: angle + 90 };
+    }
+    return zone;
+  }
+
   function auPointeurBas(ev: Konva.KonvaEventObject<PointerEvent>) {
     if (!editable || pincement.current || (ev.evt && ev.evt.isPrimary === false)) return;
     if (ev.target.hasName('poignee')) return;
@@ -406,18 +438,11 @@ export default function CanevasStrat(p: PropsCanevas) {
         return;
       case 'capacite': {
         if (!p.agent || !p.capacite) return;
-        let zone = p.formeZone === 'auto' ? zoneDepuisCapacite(p.capacite.donnees) : zoneParDefaut(p.formeZone);
-        // Orientée depuis le pion du joueur (mur, cône, ligne) ; un trajet part du pion.
-        const pion = pionJoueur(p.joueur);
-        if (zone && pion && Math.hypot(pt.x - pion.x, pt.y - pion.y) > 4) {
-          const angle = Math.round(((Math.atan2(pt.y - pion.y, pt.x - pion.x) * 180) / Math.PI) * 10) / 10;
-          if (zone.forme === 'trajet') zone = { ...zone, dx: Math.round((pion.x - pt.x) * 10) / 10, dy: Math.round((pion.y - pt.y) * 10) / 10 };
-          else if (zone.forme === 'cone' || zone.forme === 'ligne' || zone.forme === 'rect') zone = { ...zone, angle };
-          else if (zone.forme === 'mur') zone = { ...zone, angle: angle + 90 };
-        }
+        const zone = zonePourPose(pt);
         const id = idUnique(ids());
         ajouter({ id, type: 'capacite', x: pt.x, y: pt.y, agent: p.agent.cle, capacite: p.capacite.cle, nom: p.capacite.nom, icone: p.capacite.icone, joueur: p.joueur, couleur, zone, ordre: p.ordreSuivant ?? null });
         p.onSelection(id);
+        setFantome(undefined);
         return;
       }
       case 'marqueur':
@@ -447,6 +472,11 @@ export default function CanevasStrat(p: PropsCanevas) {
 
   const calloutSous = useRef<string | undefined>(undefined);
   function auPointeurBouge() {
+    // Aperçu de la capacité sous le pointeur, à sa taille réelle, avant de la poser.
+    if (outil === 'capacite' && editable && p.capacite && !pincement.current) {
+      const pt = position();
+      if (pt) setFantome(pt);
+    }
     if (p.onCallout && carte?.zones?.length) {
       const pt = position(false);
       const z = pt ? carte.zones.find(x => dansPolygone(pt.x, pt.y, x.points)) : undefined;
@@ -634,7 +664,10 @@ export default function CanevasStrat(p: PropsCanevas) {
         onPointerDown={auPointeurBas}
         onPointerMove={auPointeurBouge}
         onPointerUp={auPointeurHaut}
-        onPointerLeave={auPointeurHaut}
+        onPointerLeave={() => {
+          setFantome(undefined);
+          auPointeurHaut();
+        }}
         onWheel={molette}
         onTouchMove={toucheBouge}
         onTouchEnd={() => {
@@ -670,8 +703,17 @@ export default function CanevasStrat(p: PropsCanevas) {
             })}
             {(carte?.reperes ?? []).map(r => (
               <Group key={r.cle} x={r.x} y={r.y} opacity={niveau !== null && typeof r.niveau === 'number' && r.niveau !== niveau ? 0.35 : 1}>
-                <Rect x={-10} y={-10} width={20} height={20} rotation={45} fill={r.type === 'site' || r.type === 'plant' ? '#f59e0b' : r.type === 'cashout' || r.type === 'coffre' ? '#22c55e' : '#94a3b8'} stroke="#0b0f17" strokeWidth={2} />
-                <Etiquette x={0} y={26} texte={r.nom} taille={16} rotation={-rotation} />
+                {r.type === 'callout' ? (
+                  <>
+                    <Circle radius={3} fill="#e5e7eb" opacity={0.8} />
+                    <Etiquette x={0} y={-12} texte={r.nom} taille={13} couleur="#e5e7eb" rotation={-rotation} />
+                  </>
+                ) : (
+                  <>
+                    <Rect x={-10} y={-10} width={20} height={20} rotation={45} fill={r.type === 'site' || r.type === 'plant' ? '#f59e0b' : r.type === 'cashout' || r.type === 'coffre' ? '#22c55e' : '#94a3b8'} stroke="#0b0f17" strokeWidth={2} />
+                    <Etiquette x={0} y={26} texte={r.nom} taille={16} rotation={-rotation} />
+                  </>
+                )}
               </Group>
             ))}
           </Tourne>
@@ -697,6 +739,30 @@ export default function CanevasStrat(p: PropsCanevas) {
             </Tourne>
           </Layer>
         ))}
+        {fantome && outil === 'capacite' && p.capacite ? (
+          <Layer listening={false}>
+            <Tourne rotation={rotation}>
+              {(() => {
+                const z = zonePourPose(fantome);
+                const c = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
+                return (
+                  <Group opacity={0.55}>
+                    {z ? <FormeZone p={primitiveZone(fantome.x, fantome.y, z, echelle)} couleur={c} ox={0} oy={0} /> : null}
+                    <Circle x={fantome.x} y={fantome.y} radius={5} fill={c} stroke="#ffffff" strokeWidth={1.5} />
+                    {z ? <Etiquette x={fantome.x} y={fantome.y - 30} texte={cote(z)} taille={16} rotation={-rotation} /> : null}
+                  </Group>
+                );
+              })()}
+            </Tourne>
+          </Layer>
+        ) : null}
+        {capaciteChoisie && (apercu?.id === capaciteChoisie.id ? apercu.zone : capaciteChoisie.zone) ? (
+          <Layer listening={false}>
+            <Tourne rotation={rotation}>
+              <Etiquette x={capaciteChoisie.x} y={capaciteChoisie.y + 32} texte={cote((apercu?.id === capaciteChoisie.id ? apercu.zone : capaciteChoisie.zone) as Zone)} taille={16} couleur="#fde68a" rotation={-rotation} />
+            </Tourne>
+          </Layer>
+        ) : null}
         {mesPoignees.length ? (
           <Layer>
             <Tourne rotation={rotation}>

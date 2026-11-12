@@ -17,6 +17,7 @@ export const ECHELLE_DEFAUT = 8;
 export const ECHELLE_MIN = 0.5;
 export const ECHELLE_MAX = 100;
 
+export type ModeJeuStrat = 'cashout' | 'final-round';
 export type Economie = 'pistol' | 'eco' | 'force' | 'bonus' | 'full';
 export type GenreMarqueur =
   | 'objectif'
@@ -46,6 +47,8 @@ export interface DefinitionModele {
   equipesAdverses: number;
   /** Étages (tags de niveau) proposés. */
   etages: boolean;
+  /** Modes de jeu d'une strat (The Finals : cashout, final-round) ; [] : aucun choix. */
+  modes: readonly ModeJeuStrat[];
   /** Types de strat proposés (pistol et éco n'ont pas de sens hors Valorant). */
   types: readonly ('default' | 'execute' | 'eco' | 'pistol' | 'retake' | 'other')[];
 }
@@ -55,6 +58,7 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
     joueurs: 5,
     joueursMax: 5,
     phases: ['setup', 'execute', 'post-plant', 'retake', 'mid-round'],
+    modes: [],
     sides: true,
     economie: ['pistol', 'eco', 'force', 'bonus', 'full'],
     marqueurs: ['plant', 'defuse', 'ennemi', 'danger', 'info', 'rotation', 'spawn'],
@@ -65,7 +69,8 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
   thefinals: {
     joueurs: 3,
     joueursMax: 3,
-    phases: ['approche', 'prise', 'tenue', 'vol', 'troisieme', 'fin'],
+    phases: ['approche', 'prise', 'tenue', 'vol', 'troisieme', 'engagement', 'elimination', 'fin'],
+    modes: ['cashout', 'final-round'],
     sides: false,
     economie: [],
     marqueurs: ['cashout', 'coffre', 'ennemi', 'destruction-mur', 'destruction-sol', 'tiers', 'danger', 'rotation', 'spawn', 'info'],
@@ -77,6 +82,7 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
     joueurs: 5,
     joueursMax: 10,
     phases: ['debut', 'milieu', 'fin'],
+    modes: [],
     sides: true,
     economie: [],
     marqueurs: ['objectif', 'ennemi', 'danger', 'spawn', 'rotation', 'info'],
@@ -107,4 +113,14 @@ export function calibrer(points: readonly number[], distance: number): number | 
   const d = Math.hypot(points[2] - points[0], points[3] - points[1]);
   const e = Math.round((d / distance) * 1000) / 1000;
   return d < 5 || e < ECHELLE_MIN || e > ECHELLE_MAX ? null : e;
+}
+
+/** Variante d'un modèle selon le mode de la strat (The Finals Final Round : 3v3 en manches, une équipe en face, pas de cashout). */
+export function definitionPour(modele: ModeleStrat, mode?: ModeJeuStrat | null): DefinitionModele {
+  const d = MODELES[modele];
+  if (modele !== 'thefinals') return d;
+  if (mode === 'final-round') {
+    return { ...d, phases: ['approche', 'engagement', 'elimination', 'fin'], marqueurs: ['ennemi', 'destruction-mur', 'destruction-sol', 'danger', 'rotation', 'spawn', 'info'], equipesAdverses: 1 };
+  }
+  return { ...d, phases: ['approche', 'prise', 'tenue', 'vol', 'troisieme', 'fin'] };
 }

@@ -197,6 +197,8 @@ export function creerApi({
   tempsReel = {},
   // Client de l'API du site LigneZero (tests : faux site) ; défaut : clé lue sur l'hébergement (site-lz/client.mjs).
   siteLz = null,
+  /** Import des images de maps (profils de jeu) : réseau simulé en test ; absent : fetch global. */
+  fetchImportJeux,
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -231,7 +233,7 @@ export function creerApi({
   const us = servicesCollecte({ base, maintenant });
   const sts = servicesStatistiques({ base, maintenant });
   // Profils de jeu (migration 0021) et assistant IA (clé d'API dans esport.env, jamais renvoyée).
-  const jx = servicesJeux({ base, stockage, cleSession, maintenant, socle: s, ia, travauxIa });
+  const jx = servicesJeux({ base, stockage, cleSession, ...(fetchImportJeux ? { fetchImport: fetchImportJeux } : {}), maintenant, socle: s, ia, travauxIa });
   // Section CM (migration 0023) : espace du club et partie CM des teams ; fichiers par envoi par morceaux (usage « cm »).
   // Drive de la section (migration 0027) : quota, plafond d'un fichier, ZIP (ESPORT_DRIVE_*).
   const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage, drive: configDuDrive, planning: p });

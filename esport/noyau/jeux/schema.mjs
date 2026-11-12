@@ -51,10 +51,12 @@ export const SECTIONS_LISTES = ['formats', 'modes', 'cartes', 'classes', 'person
 export const SECTIONS_OBJETS = ['score', 'roster'];
 export const FORMES_CAPACITE = ['cercle', 'mur', 'cone', 'trajet', 'ligne', 'rect', 'point'];
 export const CATEGORIES_CAPACITE = ['basique', 'signature', 'ultime', 'passif', 'specialisation', 'gadget', 'arme'];
-export const TYPES_REPERES = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'autre'];
-export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 60, niveaux: 12 };
+export const TYPES_REPERES = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'callout', 'autre'];
+/** Origine d'un calibrage : à la main (deux points), importé (données du jeu), approximatif (à vérifier). */
+export const METHODES_ECHELLE = ['manuel', 'import', 'approx'];
+export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 120, niveaux: 12 };
 /** Champs propres au club, jamais proposés par l'IA. */
-export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux'], personnages: ['capacites'] };
+export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux', 'source'], personnages: ['capacites'] };
 export const MAX_ELEMENTS = { formats: 20, modes: 40, cartes: 80, classes: 20, personnages: 200, rolesJoueurs: 30, champs: 40, sources: 20 };
 /** Taille max d'un profil sérialisé (octets UTF-8). */
 export const TAILLE_MAX_PROFIL = 1024 * 1024;
@@ -251,7 +253,7 @@ function lireRepere(v, c) {
   const nom = texte(v.nom, `${c}.nom`, { max: 30 });
   const type = TYPES_REPERES.includes(v.type) ? v.type : 'autre';
   const niveau = entier(v.niveau, `${c}.niveau`, -5, 20, { facultatif: true });
-  return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, type, x: coordonnee(v.x, `${c}.x`), y: coordonnee(v.y, `${c}.y`), ...(niveau !== null ? { niveau } : {}) };
+  return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, type, x: coordonnee(v.x, `${c}.x`), y: coordonnee(v.y, `${c}.y`), ...(niveau !== null ? { niveau } : {}), ...(v.importe === true ? { importe: true } : {}) };
 }
 
 function lireNiveau(v, c) {
@@ -269,7 +271,19 @@ function lireEchelle(v, c) {
   const d = Math.hypot(points[2] - points[0], points[3] - points[1]);
   const pxParMetre = Math.round((d / distance) * 1000) / 1000;
   if (d < 5 || pxParMetre < 0.5 || pxParMetre > 100) throw new Invalide(`${c}.distance`, 'echelle');
-  return { pxParMetre, points, distance };
+  const methode = METHODES_ECHELLE.includes(v.methode) ? v.methode : 'manuel';
+  return { pxParMetre, points, distance, ...(methode !== 'manuel' ? { methode } : {}) };
+}
+
+/** Source d'une image importée : fournisseur, adresse https publique, date, empreinte (import idempotent). */
+function lireSource(v, c) {
+  if (v === undefined || v === null) return null;
+  if (!estObjet(v)) throw new Invalide(c, 'objet');
+  const url = imageSure(v.url, `${c}.url`);
+  if (!url) throw new Invalide(`${c}.url`, 'image');
+  const le = typeof v.le === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v.le) ? v.le : null;
+  const empreinte = typeof v.empreinte === 'string' && /^[0-9a-f]{64}$/.test(v.empreinte) ? v.empreinte : null;
+  return { fournisseur: texteNettoye(v.fournisseur, 60) || 'web', url, ...(le ? { le } : {}), ...(empreinte ? { empreinte } : {}), aVerifier: booleen(v.aVerifier, false) };
 }
 
 /** Détails facultatifs d'une map (absents quand vides). */
@@ -281,6 +295,8 @@ function detailsCarte(v, c) {
   }
   const echelle = lireEchelle(v.echelle, `${c}.echelle`);
   if (echelle) sortie.echelle = echelle;
+  const source = lireSource(v.source, `${c}.source`);
+  if (source) sortie.source = source;
   const zones = listeDetails(v.zones, `${c}.zones`, MAX_DETAILS.zones, lireZone);
   if (zones.length) sortie.zones = zones;
   const reperes = listeDetails(v.reperes, `${c}.reperes`, MAX_DETAILS.reperes, lireRepere);

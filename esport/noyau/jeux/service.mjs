@@ -37,7 +37,8 @@ import { TACHES_CONFIDENTIELLES, TACHES_EXTERNES_OK, autorisationsDepuisBase, cl
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
 import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, reporterChampsLocaux, validerDonnees, validerEntete } from './schema.mjs';
-import { servicesImagesJeux } from './images.mjs';
+import { servicesImagesJeux, verifierOctetsImage, TYPES_IMAGE_JEU } from './images.mjs';
+import { CARTES_THEFINALS, HOTES_VALORANT, TAILLE_MAX_IMAGE_IMPORT, TAILLE_MAX_JSON_IMPORT, URL_MAPS_VALORANT, echelleApproxTheFinals, echelleDepuisUnitesParMetre, mapValorant, telechargerBorne } from './import.mjs';
 import { modeleDuJeu } from '../strats/modeles.mjs';
 
 export const PERMISSION_JEUX = 'jeux.gerer';
@@ -101,7 +102,7 @@ export async function aPermissionJeux(base, acteur) {
  * { connecteur (creerConnecteurLocal), disponible(), raison, info: { modele, nomModele, moteur, threads,
  * contexte, delaiMs, benchmark }, etat() (en marche, dernière vitesse…), lancerTravailleur() }.
  */
-export function servicesJeux({ base, stockage, cleSession, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
+export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) => globalThis.fetch(...a), maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
   const images = servicesImagesJeux({ base, stockage, cleSession, maintenant });
   const config = ia.config ?? null;
   // Moteurs d'API : principal (IA_API_*) et secondaire (IA_API2_*, porté par la config du principal).
@@ -210,6 +211,112 @@ export function servicesJeux({ base, stockage, cleSession, maintenant = () => Da
     if (!j) return { cle: ctx.team.jeu, nom: ctx.team.jeu, couleur: '#8b8b9a', icone: null, base: ctx.team.jeu === 'valorant' ? 'valorant' : null, modeleStrat: modeleDuJeu(null, ctx.team.jeu), statut: 'actif', version: 0, donnees: validerDonnees({}).donnees, images: {} };
     const donnees = donneesDe(j);
     return { ...entetePublic(j), donnees, images: await images.liens(j.cle, donnees, acteur.compte, origine) };
+  }
+
+  /** Télécharge une image (bornée, vérifiée) et la dépose si elle a changé ; rend `{ fichier, empreinte, statut }`. */
+  async function importerImage(acteur, j, url, ancienFichier, { hotes, nom }) {
+    const { octets, type } = await telechargerBorne(fetchImport, url, { hotes, max: TAILLE_MAX_IMAGE_IMPORT, types: Object.keys(TYPES_IMAGE_JEU) });
+    const v = verifierOctetsImage(octets, type, TAILLE_MAX_IMAGE_IMPORT);
+    const { empreinteSha256 } = await import('../fichiers.mjs');
+    const empreinte = await empreinteSha256(octets);
+    if (ancienFichier && (await images.empreinteDe(j.cle, ancienFichier)) === empreinte) return { fichier: ancienFichier, empreinte, statut: 'inchangee' };
+    const r = await images.deposerVerifiee(acteur, j.cle, v, nom);
+    return { fichier: r.id, empreinte, statut: 'importee' };
+  }
+
+  /**
+   * `POST /jeux/:cle/importer` : images des maps et échelle, téléchargées par le serveur (voir import.mjs).
+   * Valorant : valorant-api.com (minimaps, échelle calculée, callouts) ; The Finals : `{ urls: { [carte]: adresse } }`
+   * fournies par le gestionnaire, échelle approximative « à vérifier ». Rend le profil et un compte rendu par map.
+   * Idempotent ; un calibrage fait à la main et une image déposée à la main (sans source) ne sont jamais remplacés,
+   * sauf `{ remplacer: true }` pour les images.
+   */
+  async function importerCartes(acteur, cle, corps = {}) {
+    await exigerGestion(acteur);
+    const j = await ligneJeu(cle);
+    const modele = modeleDuJeu(j.modele_strat, j.cle);
+    const d = structuredClone(donneesDe(j));
+    const t = new Date(maintenant()).toISOString();
+    const rapport = [];
+    const remplacer = corps?.remplacer === true;
+    const peutRemplacerImage = c => !c.fichier || remplacer || Boolean(c.source);
+    if (modele === 'valorant') {
+      const { octets } = await telechargerBorne(fetchImport, URL_MAPS_VALORANT, { hotes: HOTES_VALORANT, max: TAILLE_MAX_JSON_IMPORT, types: ['application/json'] });
+      let json;
+      try {
+        json = JSON.parse(new TextDecoder().decode(octets));
+      } catch {
+        throw echec(502, 'import-json', 'Réponse de valorant-api.com illisible.');
+      }
+      const maps = (Array.isArray(json?.data) ? json.data : []).map(mapValorant).filter(Boolean);
+      if (maps.length === 0) throw echec(502, 'import-vide', 'valorant-api.com ne donne aucune map exploitable.');
+      for (const m of maps) {
+        let c = d.cartes.find(x => x.cle === m.cle);
+        if (!c) {
+          // Map absente du profil : ajoutée HORS du pool (le Fondateur choisit le pool compétitif) ; seulement les maps de compétition.
+          if (!m.competitive || d.cartes.length >= 80) continue;
+          c = { cle: m.cle, nom: m.nom, image: null, actif: false, modes: [] };
+          d.cartes.push(c);
+        }
+        const ligne = { carte: c.nom, image: 'gardee', echelle: 'gardee', reperes: 0 };
+        try {
+          if (peutRemplacerImage(c)) {
+            const r = await importerImage(acteur, j, m.minimap, c.fichier, { hotes: HOTES_VALORANT, nom: `${m.cle}.png` });
+            c.fichier = r.fichier;
+            c.source = { fournisseur: 'valorant-api.com', url: m.minimap, le: t, empreinte: r.empreinte, aVerifier: false };
+            ligne.image = r.statut;
+          }
+          if (!c.echelle || c.echelle.methode === 'import' || c.echelle.methode === 'approx') {
+            const e = echelleDepuisUnitesParMetre(m.pxParMetre, 'import');
+            if (e) {
+              c.echelle = e;
+              ligne.echelle = 'importee';
+            }
+          }
+          // Callouts importés : remplacés à chaque import ; les repères posés à la main restent.
+          const manuels = (c.reperes ?? []).filter(r => !r.importe);
+          const pris = new Set(manuels.map(r => r.cle));
+          const importes = m.reperes
+            .map(r => ({ ...r, cle: cleDe(r.nom) }))
+            .filter(r => r.cle && !pris.has(r.cle) && (pris.add(r.cle), true))
+            .slice(0, Math.max(0, 120 - manuels.length));
+          c.reperes = [...manuels, ...importes.map(r => ({ ...r, importe: true }))];
+          ligne.reperes = importes.length;
+        } catch (e) {
+          if (!e?.code) throw e;
+          ligne.erreur = e.code;
+        }
+        rapport.push(ligne);
+      }
+    } else if (modele === 'thefinals') {
+      const urls = corps?.urls && typeof corps.urls === 'object' ? corps.urls : {};
+      for (const nom of CARTES_THEFINALS) {
+        const k = cleDe(nom);
+        if (!d.cartes.some(c => c.cle === k) && d.cartes.length < 80) d.cartes.push({ cle: k, nom, image: null, actif: true, modes: [] });
+      }
+      for (const c of d.cartes) {
+        const ligne = { carte: c.nom, image: 'gardee', echelle: 'gardee', reperes: 0 };
+        const url = typeof urls[c.cle] === 'string' ? urls[c.cle].trim() : '';
+        try {
+          if (url && peutRemplacerImage(c)) {
+            const r = await importerImage(acteur, j, url, c.fichier, { nom: `${c.cle}` });
+            c.fichier = r.fichier;
+            c.source = { fournisseur: new URL(url).hostname, url, le: t, empreinte: r.empreinte, aVerifier: true };
+            ligne.image = r.statut;
+          } else if (!url && !c.fichier) ligne.image = 'sans-adresse';
+          if (!c.echelle) {
+            c.echelle = echelleApproxTheFinals();
+            ligne.echelle = 'approximative';
+          }
+        } catch (e) {
+          if (!e?.code) throw e;
+          ligne.erreur = e.code;
+        }
+        rapport.push(ligne);
+      }
+    } else throw echec(400, 'import-modele', 'Import automatique : Valorant et The Finals seulement (déposez les images à la main).');
+    const r = await ecrireVersion(acteur, j, { donnees: validerDonnees(d).donnees, versionAttendue: corps?.version, motif: 'import' });
+    return { rapport, inchange: Boolean(r.inchange), jeu: await detail(acteur, cle) };
   }
 
   /** `POST /jeux/:cle/images` : dépôt d'une image (fond d'une map), à citer ensuite dans le profil (`cartes[].fichier`). */
@@ -1299,6 +1406,7 @@ export function servicesJeux({ base, stockage, cleSession, maintenant = () => Da
     detail,
     pourTeam,
     deposerImage,
+    importerCartes,
     servirImage: images.servir,
     creer,
     modifier,

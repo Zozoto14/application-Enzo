@@ -29,6 +29,7 @@ import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, SqueletteCartes, TitreCarte, attenue, texte } from '../design';
 import { EditeurProfil, libelleChemin, libelleRaison } from './EditeurProfil';
 import { trJc } from '../../i18n/jeuxCartes';
+import { ImportCartes } from './DetailsJeu';
 import { ReglagesEcriture } from '../ecriture/ReglagesEcriture';
 
 type Onglet = 'profils' | 'maj' | 'ia' | 'admin';
@@ -286,6 +287,10 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
         <Text style={attenue(theme, 13)}>{trnJeux('jeux.n_teams', profil.teams ?? 0)}</Text>
         {profil.statut === 'archive' ? <Badge theme={theme} texte={trJeux('jeux.archive_aide')} /> : null}
         <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-jeu-fiche" />
+      </Carte>
+      <Carte theme={theme} testID="esport-jeu-images">
+        <TitreCarte theme={theme} titre={trJc('import.titre')} />
+        <ImportCartes theme={theme} profil={profil} importer={corps => api.importer(cle, corps)} onFini={() => void charger().then(() => oublierProfilsTeams())} />
       </Carte>
       <Carte theme={theme} testID="esport-jeu-maj">
         <TitreCarte theme={theme} titre={trJeux('jeux.maj_titre')} sous={trJeux('jeux.maj_aide')} />

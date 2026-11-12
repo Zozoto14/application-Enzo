@@ -1,6 +1,13 @@
 {
  "_": "Messages d'erreur de l'API (français, avec un code stable) -> anglais. Utilisé par l'app (src/esport/i18n) et le bot Discord ; contrôlé par esport/test/langues.test.mjs.",
  "messages": {
+  "Réponse de valorant-api.com illisible.": "Unreadable response from valorant-api.com.",
+  "valorant-api.com ne donne aucune map exploitable.": "valorant-api.com gives no usable map.",
+  "Import automatique : Valorant et The Finals seulement (déposez les images à la main).": "Automatic import: Valorant and The Finals only (upload images manually).",
+  "Fichier distant trop volumineux.": "Remote file too large.",
+  "Adresse refusée (https vers un site public autorisé seulement).": "Address refused (https to an allowed public site only).",
+  "Site distant injoignable (réseau, délai dépassé ou redirection).": "Remote site unreachable (network, timeout or redirect).",
+  "Type de fichier distant inattendu.": "Unexpected remote file type.",
   "Requête trop volumineuse.": "Request too large.",
   "Surcharge de méthode refusée (X-Methode : PATCH, PUT ou DELETE).": "Method override refused (X-Methode: PATCH, PUT or DELETE).",
   "Corps JSON attendu (Content-Type: application/json).": "JSON body expected (Content-Type: application/json).",

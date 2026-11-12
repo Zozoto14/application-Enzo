@@ -13,7 +13,7 @@
  */
 
 import { tr } from '../i18n';
-import { ECHELLE_DEFAUT, MODELES, modeleDuJeu, type Economie, type GenreMarqueur, type ModeleStrat } from './modeles';
+import { ECHELLE_DEFAUT, MODELES, modeleDuJeu, type Economie, type GenreMarqueur, type ModeJeuStrat, type ModeleStrat } from './modeles';
 
 export const FORMAT_STRAT = 'esport-strat';
 export const VERSION_DOCUMENT = 3;
@@ -165,6 +165,8 @@ export interface DocumentStrat {
   /** Clé du jeu de la team (profil de jeu). */
   jeu: string;
   modele: ModeleStrat;
+  /** Mode de jeu (The Finals : cashout ou final-round). */
+  mode?: ModeJeuStrat | null;
   carte: Carte;
   side: Side;
   economie?: Economie | null;
@@ -192,6 +194,7 @@ export function documentVide(carte: Carte, side: Side = 'attaque', jeu = 'valora
     version: VERSION_DOCUMENT,
     jeu,
     modele: m,
+    ...(MODELES[m].modes.length ? { mode: MODELES[m].modes[0] } : {}),
     carte,
     side,
     economie: null,
@@ -237,6 +240,7 @@ export type Action =
   | { type: 'carte'; carte: Carte }
   | { type: 'side'; side: Side }
   | { type: 'economie'; economie: Economie | null }
+  | { type: 'mode'; mode: ModeJeuStrat }
   | { type: 'joueur'; index: number; champs: Partial<JoueurStrat> }
   | { type: 'calque'; calque: Calque; champs: Partial<{ visible: boolean; verrou: boolean }> }
   /** Remplace tout le document (restauration d'une ancienne version : annulable). */
@@ -365,6 +369,8 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
       if ((d.economie ?? null) === a.economie) return d;
       if (a.economie !== null && !MODELES[d.modele].economie.includes(a.economie)) return d;
       return { ...d, economie: a.economie };
+    case 'mode':
+      return d.mode === a.mode || !MODELES[d.modele].modes.includes(a.mode) ? d : { ...d, mode: a.mode };
     case 'joueur': {
       if (!d.joueurs[a.index]) return d;
       const joueurs = d.joueurs.slice();
@@ -525,6 +531,7 @@ export function lireDocument(source: string | unknown, modele?: ModeleStrat): Do
     version: VERSION_DOCUMENT,
     jeu,
     modele: m,
+    ...(MODELES[m].modes.length ? { mode: MODELES[m].modes.includes(d.mode as ModeJeuStrat) ? (d.mode as ModeJeuStrat) : MODELES[m].modes[0] } : {}),
     carte: { cle: carte.cle, nom: carte.nom ?? carte.cle, image: carte.image ?? null, echelle: carte.echelle ?? null },
     side: d.side === 'defense' ? 'defense' : 'attaque',
     economie: (d.economie as Economie | null | undefined) ?? null,

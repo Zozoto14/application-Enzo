@@ -18,7 +18,7 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ base: baseFournie, creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia, devblogSource, deploiement, siteLz } = {}) {
+export async function banc({ base: baseFournie, creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere, medias, drive, transcriptionExterne, fetchTranscription, transcriptionServeur, apercuLiens, ia, devblogSource, deploiement, siteLz, fetchImportJeux } = {}) {
   // `base` : une base déjà migrée (fixture d'une base de production, esport/test/team-cm.test.mjs).
   const base = baseFournie ?? (await baseMigree());
   const stockage = sansStockage ? undefined : stockageMemoire();
@@ -37,6 +37,8 @@ export async function banc({ base: baseFournie, creationTeams = 'fondateur', rel
     verifierJeton: verificateurRelais({ liaison }),
     creationTeams,
     maintenant: () => horloge.t,
+    // Import des images de maps : jamais de réseau réel en test.
+    fetchImportJeux: fetchImportJeux ?? (async () => { throw new Error('réseau interdit en test'); }),
     // Discord : jamais de réseau réel en test (fetch simulé ; sans lui, un appel échouerait bruyamment).
     fetchDiscord: fetchDiscord ?? (async () => { throw new Error('réseau Discord interdit en test'); }),
     cleDiscord,

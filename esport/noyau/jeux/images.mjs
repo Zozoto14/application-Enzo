@@ -31,17 +31,24 @@ export function octetsDepuisBase64(texte, max = TAILLE_MAX_IMAGE_JEU) {
   return new Uint8Array(Buffer.from(t, 'base64'));
 }
 
-/** Vérifie une image déposée : type annoncé = contenu réel, taille, dimensions. Rend `{ octets, format, largeur, hauteur }`. */
-export function verifierImageJeu({ type, donnees }) {
+/** Vérifie des octets d'image : format réel = type annoncé, taille, dimensions. Rend `{ octets, format, largeur, hauteur }`. */
+export function verifierOctetsImage(octets, type, max = TAILLE_MAX_IMAGE_JEU) {
   const format = TYPES_IMAGE_JEU[type];
   if (!format) throw echec(415, 'image-format', 'Image : JPEG, PNG ou WebP.');
-  const octets = octetsDepuisBase64(donnees);
   if (!octets || octets.length === 0) throw echec(400, 'image-illisible', 'Image illisible.');
-  if (octets.length > TAILLE_MAX_IMAGE_JEU) throw echec(413, 'image-trop-grosse', 'Image trop lourde (12 Mo au plus).');
+  if (octets.length > max) throw echec(413, 'image-trop-grosse', 'Image trop lourde (12 Mo au plus).');
   const d = dimensionsImage(octets);
   if (!d || d.format !== format) throw echec(415, 'image-format', 'Le contenu n’est pas une image JPEG, PNG ou WebP du type annoncé.');
   if (!(d.largeur >= 16 && d.hauteur >= 16 && d.largeur <= COTE_MAX_IMAGE_JEU && d.hauteur <= COTE_MAX_IMAGE_JEU)) throw echec(400, 'image-dimensions', 'Image : de 16 à 8192 pixels de côté.');
   return { octets, format, largeur: d.largeur, hauteur: d.hauteur };
+}
+
+/** Vérifie une image déposée (base64) : type annoncé = contenu réel, taille, dimensions. */
+export function verifierImageJeu({ type, donnees }) {
+  if (!TYPES_IMAGE_JEU[type]) throw echec(415, 'image-format', 'Image : JPEG, PNG ou WebP.');
+  const octets = octetsDepuisBase64(donnees);
+  if (!octets || octets.length === 0) throw echec(400, 'image-illisible', 'Image illisible.');
+  return verifierOctetsImage(octets, type);
 }
 
 /** Identifiants des images citées par des données de profil (maps). */
@@ -50,23 +57,36 @@ export const imagesCitees = donnees => [...new Set((donnees?.cartes ?? []).map(c
 export function servicesImagesJeux({ base, stockage, cleSession, maintenant = () => Date.now() }) {
   /** Dépose une image (le gestionnaire est déjà vérifié) ; rend sa description et un lien signé. */
   async function deposer(acteur, cleJeu, corps, { origine = '' } = {}) {
+    const v = verifierImageJeu(corps ?? {});
+    return deposerVerifiee(acteur, cleJeu, v, corps?.nom, { origine });
+  }
+
+  /** Dépose des octets déjà vérifiés (`verifierOctetsImage`) ; rend aussi l'empreinte SHA-256. */
+  async function deposerVerifiee(acteur, cleJeu, { octets, format, largeur, hauteur }, nomBrut, { origine = '' } = {}) {
     if (!stockage) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché.');
-    const { octets, format, largeur, hauteur } = verifierImageJeu(corps ?? {});
     const id = nouvelId();
     const cle = `jeux/${cleJeu}/images/${nouvelId()}.${EXTENSIONS[format]}`;
     const type = Object.keys(TYPES_IMAGE_JEU).find(k => TYPES_IMAGE_JEU[k] === format);
-    const nom = texteNettoye(corps?.nom, 120).replace(/[\\/:*?"<>|]/g, '_') || `image.${EXTENSIONS[format]}`;
+    const nom = texteNettoye(nomBrut, 120).replace(/[\\/:*?"<>|]/g, '_') || `image.${EXTENSIONS[format]}`;
+    const empreinte = await empreinteSha256(octets);
     await stockage.deposer(cle, octets, { type });
     try {
       await base.executer(
         'INSERT INTO jeu_images (id, jeu_cle, cle_stockage, type_mime, taille, largeur, hauteur, nom_original, empreinte, depose_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, cleJeu, cle, type, octets.length, largeur, hauteur, nom, await empreinteSha256(octets), acteur.compte, iso(maintenant())],
+        [id, cleJeu, cle, type, octets.length, largeur, hauteur, nom, empreinte, acteur.compte, iso(maintenant())],
       );
     } catch (e) {
       await stockage.supprimer(cle).catch(() => undefined);
       throw e;
     }
-    return { id, largeur, hauteur, type, taille: octets.length, nom, ...(await lien(id, acteur.compte, origine)) };
+    return { id, largeur, hauteur, type, taille: octets.length, nom, empreinte, ...(await lien(id, acteur.compte, origine)) };
+  }
+
+  /** Empreinte de l'image déposée `id` du jeu (import idempotent) ; null si absente. */
+  async function empreinteDe(cleJeu, id) {
+    if (!id) return null;
+    const l = await base.premier('SELECT empreinte FROM jeu_images WHERE id = ? AND jeu_cle = ? AND supprime_le IS NULL', [id, cleJeu]);
+    return l?.empreinte ?? null;
   }
 
   async function lien(id, compte, origine = '') {
@@ -107,5 +127,5 @@ export function servicesImagesJeux({ base, stockage, cleSession, maintenant = ()
     };
   }
 
-  return { deposer, liens, servir, preparerPurge };
+  return { deposer, deposerVerifiee, empreinteDe, liens, servir, preparerPurge };
 }

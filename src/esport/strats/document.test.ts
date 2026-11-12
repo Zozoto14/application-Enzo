@@ -137,6 +137,10 @@ describe('version 3 : modèles, phases, économie, utilitaires', () => {
     expect(d.etapes[1].phase).toBe('prise');
     d = appliquer(d, { type: 'dureeEtape', etape: 1, duree: 500 });
     expect(d.etapes[1].duree).toBe(120);
+    expect(d.mode).toBe('cashout');
+    d = appliquer(d, { type: 'mode', mode: 'final-round' });
+    expect(d.mode).toBe('final-round');
+    expect(appliquer(documentVide(ASCENT), { type: 'mode', mode: 'cashout' }).mode).toBeUndefined();
     const v = appliquer(documentVide(ASCENT), { type: 'economie', economie: 'eco' });
     expect(v.economie).toBe('eco');
   });

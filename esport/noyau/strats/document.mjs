@@ -340,6 +340,13 @@ export function validerDocument(brut, options = {}) {
     if (!def.economie.includes(v.economie)) throw invalide('économie du round');
     economie = v.economie;
   }
+  // Mode de jeu de la strat (The Finals : cashout par défaut, ou final-round).
+  let mode = null;
+  if (def.modes.length) {
+    if (v.mode === undefined || v.mode === null || v.mode === '') mode = def.modes[0];
+    else if (def.modes.includes(v.mode)) mode = v.mode;
+    else throw invalide('mode de jeu');
+  }
   const joueursBruts = Array.isArray(v.joueurs) ? v.joueurs : [];
   if (joueursBruts.length > Math.min(JOUEURS_MAX, def.joueursMax)) throw invalide('trop de joueurs');
   const joueurs = joueursBruts.map((j, i) => ({
@@ -382,7 +389,7 @@ export function validerDocument(brut, options = {}) {
       }),
     };
   });
-  return { format: FORMAT_STRAT, version: VERSION_DOCUMENT, jeu, modele, carte, side: v.side, economie, joueurs, calques, etapes };
+  return { format: FORMAT_STRAT, version: VERSION_DOCUMENT, jeu, modele, ...(mode ? { mode } : {}), carte, side: v.side, economie, joueurs, calques, etapes };
 }
 
 /** Document vide d'une nouvelle strat (`joueurs` : nombre de joueurs, celui du modèle par défaut). */

@@ -14,7 +14,7 @@ import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { AgentAsset, CapaciteAsset } from '../../strats/assets';
 import { ETAPES_MAX, ordreUtilitaires, type Action, type ChampsObjet, type DocumentStrat, type ObjetStrat, type Zone } from '../../strats/document';
-import { MODELES, type GenreMarqueur } from '../../strats/modeles';
+import { definitionPour, type GenreMarqueur } from '../../strats/modeles';
 import { trSt } from '../../i18n/strats2';
 import { ChampNote } from '../ChampNote';
 import { Choix, Intertitre, Panneau, styles } from '../commun';
@@ -30,6 +30,8 @@ const COULEURS_PHASES: Record<string, string> = {
   prise: '#ef4444',
   tenue: '#22c55e',
   vol: '#f59e0b',
+  engagement: '#ef4444',
+  elimination: '#a855f7',
   troisieme: '#a855f7',
   fin: '#3b82f6',
   debut: '#64748b',
@@ -90,7 +92,7 @@ export interface PropsChronologie {
 
 export function Chronologie({ theme, doc, etape, onEtape, faire, modifiable, temps, enLecture, onLire, onPause, onArreter }: PropsChronologie) {
   const e = doc.etapes[etape];
-  const phases = MODELES[doc.modele].phases;
+  const phases = definitionPour(doc.modele, doc.mode).phases;
   const total = doc.etapes.reduce((n, x) => n + (x.duree ?? 5), 0);
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
@@ -350,7 +352,7 @@ export interface PropsInspecteur {
 export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres, onFermer, onSupprimer, onDupliquer }: PropsInspecteur) {
   const champs = (c: ChampsObjet) => faire({ type: 'modifier', etape, id: o.id, champs: c });
   const zone = (z: Partial<Zone>) => o.type === 'capacite' && o.zone && champs({ zone: { ...o.zone, ...z } as Zone });
-  const def = MODELES[doc.modele];
+  const def = definitionPour(doc.modele, doc.mode);
   const optionsJoueurs = [{ id: '', nom: trSt('joueurs.aucun') }, ...doc.joueurs.map((j, i) => ({ id: String(i), nom: `${i + 1}. ${j.nom}`, couleur: j.couleur }))];
   return (
     <Panneau theme={theme} testID="esport-inspecteur">

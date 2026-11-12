@@ -12,7 +12,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
 import { documentVide, appliquer, executer, historique, type Action, type DocumentStrat, type Historique, type ObjetStrat } from './strats/document';
 import { Chronologie, FicheCapacite, Inspecteur, ListeUtilitaires, PanneauJoueurs } from './ui/strats/Panneaux';
-import { CapacitesPersonnage, DetailsCarte, ModeleProfil } from './ui/jeux/DetailsJeu';
+import { CapacitesPersonnage, DetailsCarte, ImportCartes, ModeleProfil } from './ui/jeux/DetailsJeu';
 import type { CarteJeu, DonneesJeu, PersonnageJeu } from './jeux/api';
 import { donneesVides } from './jeux/profil';
 import { capacitesValorant } from './jeux/modeles';
@@ -158,6 +158,31 @@ describe('lecture seule (app native)', () => {
     expect((await screen.findByTestId('esport-strat-lecture-phase')).props.children).toMatch(/Prise du cashout/);
     expect(screen.getByTestId('esport-strat-lecture-utilitaire').props.children).toMatch(/1\. Dome Shield \(Joueur 3\) · 3 s/);
     expect(screen.queryByText('Attaque')).toBeNull();
+  });
+});
+
+describe('import des images et de l’échelle', () => {
+  it('The Finals : adresses par map envoyées, compte rendu affiché (échelle approximative, échecs)', async () => {
+    const importer = jest.fn(async () => ({ inchange: false, rapport: [{ carte: 'Monaco', image: 'importee' as const, echelle: 'approximative' as const, reperes: 0 }, { carte: 'Seoul', image: 'gardee' as const, echelle: 'approximative' as const, reperes: 0, erreur: 'import-adresse' }] }));
+    const onFini = jest.fn();
+    await render(<ImportCartes theme={theme} profil={{ cle: 'the-finals', version: 3, modeleStrat: 'thefinals', donnees: donneesVides() }} importer={importer} onFini={onFini} />);
+    await fireEvent.changeText(screen.getByTestId('esport-jeu-import-url-monaco'), 'https://exemple.org/monaco.png');
+    await fireEvent.press(screen.getByTestId('esport-jeu-import-lancer'));
+    expect(importer).toHaveBeenCalledWith({ version: 3, urls: { monaco: 'https://exemple.org/monaco.png' } });
+    expect(await screen.findByTestId('esport-jeu-import-rapport')).toBeTruthy();
+    expect(screen.getByText(/Monaco : image importée · échelle approximative/)).toBeTruthy();
+    expect(screen.getByText(/échec \(import-adresse\)/)).toBeTruthy();
+    expect(onFini).toHaveBeenCalled();
+  });
+
+  it('Valorant : un seul bouton (pas d’adresse à saisir) ; générique : import indisponible', async () => {
+    const importer = jest.fn(async () => ({ inchange: true, rapport: [] }));
+    const vue = await render(<ImportCartes theme={theme} profil={{ cle: 'valorant', version: 1, modeleStrat: 'valorant', donnees: donneesVides() }} importer={importer} onFini={jest.fn()} />);
+    expect(screen.queryByTestId('esport-jeu-import-url-monaco')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-jeu-import-lancer'));
+    expect(importer).toHaveBeenCalledWith({ version: 1 });
+    await vue.rerender(<ImportCartes theme={theme} profil={{ cle: 'rl', version: 1, modeleStrat: 'generique', donnees: donneesVides() }} importer={importer} onFini={jest.fn()} />);
+    expect(screen.getByTestId('esport-jeu-import-generique')).toBeTruthy();
   });
 });
 
