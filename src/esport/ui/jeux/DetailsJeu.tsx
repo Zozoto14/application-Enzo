@@ -89,6 +89,7 @@ export function ModeleProfil({ theme, modele, onModele, d, onDonnees, testID }: 
 // ------------------------------------------------------------------ Map détaillée
 
 type Mode = 'zone' | 'repere' | 'echelle';
+const COULEURS_ZONES = ['#e5e7eb', '#f59e0b', '#22c55e', '#38bdf8', '#f43f5e', '#a855f7'];
 
 export function DetailsCarte({
   theme,
@@ -113,6 +114,7 @@ export function DetailsCarte({
   const [type, setType] = useState<TypeRepere>('site');
   const [niveau, setNiveau] = useState<string>('');
   const [distance, setDistance] = useState('');
+  const [couleurZone, setCouleurZone] = useState<string>(COULEURS_ZONES[0]);
   const [erreur, setErreur] = useState<string | undefined>();
   const [avis, setAvis] = useState<string | undefined>();
   const [envoi, setEnvoi] = useState(false);
@@ -185,14 +187,16 @@ export function DetailsCarte({
               titre={trJc('carte.zone_fermer')}
               desactive={points.length < 6 || !nom.trim()}
               onPress={() => {
-                onCarte(ajouterZone(c, nom, points));
+                onCarte(ajouterZone(c, nom, points, couleurZone));
                 setPoints([]);
                 setNom('');
               }}
               testID={`${testID}-zone-fermer`}
             />
+            <BoutonHub theme={theme} titre={trJc('carte.zone_dernier')} desactive={points.length === 0} onPress={() => setPoints(p => p.slice(0, -2))} testID={`${testID}-zone-dernier`} />
             <BoutonHub theme={theme} titre={trJc('carte.zone_annuler')} desactive={points.length === 0} onPress={() => setPoints([])} testID={`${testID}-zone-annuler`} />
           </View>
+          <Choix theme={theme} libelle={trJc('carte.zone_couleur')} valeur={couleurZone} options={COULEURS_ZONES.map(x => ({ id: x, nom: x, couleur: x }))} onChoisir={setCouleurZone} repliable={false} testID={`${testID}-zone-couleur`} />
           <Text style={attenue(theme, 12)} testID={`${testID}-points`}>{trJc('carte.points_poses', { n: points.length / 2 })}</Text>
         </View>
       ) : null}

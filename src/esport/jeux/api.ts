@@ -190,6 +190,11 @@ export interface JeuListe extends EnteteJeu {
     cartesActives: number;
     personnages: number;
     modes: number;
+    /** Absents : serveur ancien. */
+    cartesImages?: number;
+    cartesCalibrees?: number;
+    capacites?: number;
+    capacitesAVerifier?: number;
   };
   teams?: number;
   propositions?: number;

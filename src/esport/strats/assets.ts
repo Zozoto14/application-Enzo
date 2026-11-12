@@ -326,7 +326,9 @@ export function creerCacheImages({
   const memoire = new Map<string, Promise<string | null>>();
   async function charger(url: string): Promise<string | null> {
     try {
-      const boite = cachesI ? await cachesI.open('esport-assets-v1').catch(() => undefined) : undefined;
+      // Lien signé (image déposée dans un profil de jeu) : jamais gardé dans Cache Storage (il change à chaque lecture du profil).
+      const signe = /[?&]sig=/.test(url);
+      const boite = cachesI && !signe ? await cachesI.open('esport-assets-v1').catch(() => undefined) : undefined;
       const deja = boite ? await boite.match(url).catch(() => undefined) : undefined;
       if (deja?.ok) return creerUrl(await deja.blob());
       const r = await fetchI(url, { mode: 'cors' });

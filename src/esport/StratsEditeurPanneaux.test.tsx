@@ -146,6 +146,21 @@ describe('utilitaires, joueurs, inspecteur', () => {
   });
 });
 
+describe('lecture seule (app native)', () => {
+  it('phases, durées et ordre des utilitaires de chaque étape ; pas d’attaque / défense pour The Finals', async () => {
+    let doc = documentVide(ASCENT, 'attaque', 'the-finals', 'thefinals');
+    doc = appliquer(doc, { type: 'phaseEtape', etape: 0, phase: 'prise' });
+    doc = appliquer(doc, { type: 'ajouter', etape: 0, objet: { id: 'c', type: 'capacite', x: 0, y: 0, agent: 'heavy', capacite: 'dome-shield', nom: 'Dome Shield', icone: null, joueur: 2, couleur: '#22c55e', zone: null, ordre: 1, t: 3 } });
+    const strat = { id: 's1', jeu: 'the-finals', modele: 'thefinals', titre: 'Cashout', carte: { cle: 'monaco', nom: 'Monaco' }, side: 'attaque', type: 'execute', tags: [], notes: '', visibilite: 'team', revision: 1, versionDocument: 3, miniature: null, origine: null, creePar: { compte: 'x', pseudo: null }, majPar: { compte: 'x', pseudo: null }, creeLe: '', majLe: '', moi: { modifier: false, supprimer: false, partager: false }, donnees: doc };
+    const { Editeur } = require('./ui/strats/Editeur');
+    const api = { detail: jest.fn(async () => strat) };
+    await render(<Editeur theme={theme} api={api} teamId="t1" stratId="s1" large assets={undefined} onRetour={jest.fn()} onOuvrir={jest.fn()} onSupprimee={jest.fn()} />);
+    expect((await screen.findByTestId('esport-strat-lecture-phase')).props.children).toMatch(/Prise du cashout/);
+    expect(screen.getByTestId('esport-strat-lecture-utilitaire').props.children).toMatch(/1\. Dome Shield \(Joueur 3\) · 3 s/);
+    expect(screen.queryByText('Attaque')).toBeNull();
+  });
+});
+
 describe('profils de jeu précis', () => {
   it('modèle de strat et pré-remplissage des capacités (à vérifier)', async () => {
     const onModele = jest.fn();
@@ -213,6 +228,18 @@ describe('profils de jeu précis', () => {
     await fireEvent.changeText(screen.getByTestId('m-repere-nom'), 'Site A');
     await fireEvent.press(screen.getByTestId('plan-c'));
     expect(carte.reperes?.[0]).toMatchObject({ nom: 'Site A', type: 'site', x: 400, y: 600 });
+    await vue.rerender(monter());
+    // Callout coloré, dernier sommet retiré.
+    await fireEvent.press(screen.getByTestId('m-mode-zone'));
+    await fireEvent.changeText(screen.getByTestId('m-zone-nom'), 'Mid');
+    await fireEvent.press(screen.getByTestId('m-zone-couleur-#22c55e'));
+    await fireEvent.press(screen.getByTestId('plan-a'));
+    await fireEvent.press(screen.getByTestId('plan-b'));
+    await fireEvent.press(screen.getByTestId('plan-c'));
+    await fireEvent.press(screen.getByTestId('plan-a'));
+    await fireEvent.press(screen.getByTestId('m-zone-dernier'));
+    await fireEvent.press(screen.getByTestId('m-zone-fermer'));
+    expect(carte.zones?.[1]).toMatchObject({ cle: 'mid', couleur: '#22c55e', points: [100, 100, 100, 600, 400, 600] });
     expect(Pressable).toBeTruthy();
     expect(Text).toBeTruthy();
   });

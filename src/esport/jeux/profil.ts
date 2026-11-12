@@ -98,7 +98,8 @@ export function fusionnerCapacites(riot: CapaciteAsset[], donnees: CapaciteJeu[]
     const sortie = riot.map(c => {
       const x = donnees.find(y => y.touche && y.touche.toUpperCase() === c.touche.toUpperCase() && !utilisees.has(y));
       if (x) utilisees.add(x);
-      return x ? { ...c, donnees: x } : c;
+      // Repli générique sans réseau (« Capacité E », sans icône) : le nom du profil est plus parlant.
+      return x ? { ...c, nom: c.icone ? c.nom : x.nom, donnees: x } : c;
     });
     // Capacités du profil sans équivalent Riot (gadgets, ajouts du Fondateur).
     for (const x of donnees) if (!utilisees.has(x)) sortie.push({ cle: x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x });

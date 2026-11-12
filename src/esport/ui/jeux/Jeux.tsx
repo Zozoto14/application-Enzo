@@ -28,6 +28,7 @@ import { PageEsport } from '../CadreEsport';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, SqueletteCartes, TitreCarte, attenue, texte } from '../design';
 import { EditeurProfil, libelleChemin, libelleRaison } from './EditeurProfil';
+import { trJc } from '../../i18n/jeuxCartes';
 import { ReglagesEcriture } from '../ecriture/ReglagesEcriture';
 
 type Onglet = 'profils' | 'maj' | 'ia' | 'admin';
@@ -173,6 +174,18 @@ function CarteJeu({ theme, jeu, onPress }: { theme: ThemeHub; jeu: JeuListe; onP
           .filter(Boolean)
           .join(' · ')}
       </Text>
+      {jeu.modeleStrat ? (
+        <Text style={attenue(theme, 12)} testID={`esport-jeu-${jeu.cle}-precision`}>
+          {[
+            trJc(`modele.${jeu.modeleStrat}`),
+            r.cartes && r.cartesImages !== undefined ? trJc('liste.images', { n: r.cartesImages, total: r.cartes }) : '',
+            r.cartes && r.cartesCalibrees !== undefined ? trJc('liste.calibrees', { n: r.cartesCalibrees }) : '',
+            r.capacitesAVerifier ? trJc('capacites.n_a_verifier', { n: r.capacitesAVerifier }) : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </Text>
+      ) : null}
       {jeu.teams !== undefined ? <Text style={attenue(theme, 12)}>{trnJeux('jeux.n_teams', jeu.teams)}</Text> : null}
     </Carte>
   );

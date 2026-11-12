@@ -17,6 +17,10 @@ import type { PropsEditeur } from './types';
 import { tr } from '../../i18n';
 import { trSs } from '../../i18n/stratsSuppr';
 import { ConfirmationSuppression } from './Suppression';
+import { libellePhase } from './Panneaux';
+import { ordreUtilitaires } from '../../strats/document';
+import { MODELES } from '../../strats/modeles';
+import { trSt, type CleSt } from '../../i18n/strats2';
 
 export type { PropsEditeur };
 
@@ -57,15 +61,24 @@ export function Editeur({ theme, api, teamId, stratId, onRetour, onSupprimee }: 
           <TitreSection theme={theme} titre={strat.titre} sous={tr('strats.editeur.lecture_seule_sur_iphone')} />
           <View style={[styles.ligne, { gap: 4 }]}>
             <Etiquette theme={theme} texte={strat.carte.nom} />
-            <Etiquette theme={theme} texte={LIBELLES_SIDE[strat.side]} />
+            {MODELES[strat.modele ?? 'valorant'].sides ? <Etiquette theme={theme} texte={LIBELLES_SIDE[strat.side]} /> : null}
             <Etiquette theme={theme} texte={LIBELLES_TYPE_STRAT[strat.type]} />
+            {strat.donnees?.economie ? <Etiquette theme={theme} texte={trSt(`economie.${strat.donnees.economie}` as CleSt)} /> : null}
           </View>
           <Miniature theme={theme} url={strat.miniature?.url} carte={strat.carte.nom} taille={220} testID="esport-strat-lecture-miniature" />
           {strat.notes ? <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{strat.notes}</Text> : null}
           {strat.donnees?.etapes.map((e, i) => (
             <Panneau key={e.id} theme={theme} testID="esport-strat-lecture-etape">
               <Intertitre theme={theme}>{`${i + 1}. ${e.titre}`}</Intertitre>
+              <Text style={attenue} testID="esport-strat-lecture-phase">
+                {[e.phase ? libellePhase(e.phase) : '', trSt('etape.secondes', { s: e.duree ?? 5 })].filter(Boolean).join(' · ')}
+              </Text>
               {e.note ? <NoteMarkdown theme={theme} source={e.note} /> : <Text style={attenue}>{tr('strats.editeur.pas_de_note')}</Text>}
+              {ordreUtilitaires(e).map(c => (
+                <Text key={c.id} style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }} testID="esport-strat-lecture-utilitaire">
+                  {`${c.ordre ?? '–'}. ${c.nom}${c.joueur !== null && strat.donnees?.joueurs[c.joueur] ? ` (${strat.donnees.joueurs[c.joueur].nom})` : ''}${typeof c.t === 'number' ? ` · ${c.t} s` : ''}`}
+                </Text>
+              ))}
             </Panneau>
           ))}
           <MentionRiot theme={theme} jeu={strat.jeu} />

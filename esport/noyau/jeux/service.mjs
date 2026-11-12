@@ -150,6 +150,11 @@ export function servicesJeux({ base, stockage, cleSession, maintenant = () => Da
       cartesActives: d.cartes.filter(c => c.actif).length,
       personnages: d.personnages.length,
       modes: d.modes.length,
+      // Précision des maps et des capacités (éditeur de strats) : ce qu'il reste à préparer.
+      cartesImages: d.cartes.filter(c => c.fichier).length,
+      cartesCalibrees: d.cartes.filter(c => c.echelle).length,
+      capacites: d.personnages.reduce((n, p) => n + (p.capacites?.length ?? 0), 0),
+      capacitesAVerifier: d.personnages.reduce((n, p) => n + (p.capacites ?? []).filter(c => c.aVerifier).length, 0),
     };
   }
 

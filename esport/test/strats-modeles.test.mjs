@@ -236,6 +236,9 @@ test('profil : détails des maps (calibrage, callouts, repères, étages) et cap
   assert.equal(a.reperes[1].type, 'spawn-attaque');
   assert.deepEqual(r.corps.donnees.personnages.find(p => p.cle === 'omen').capacites[0], { cle: 'dark-cover', nom: 'Dark Cover', touche: 'E', categorie: 'signature', forme: 'cercle', rayon: 4.1, duree: 15, charges: 2, cout: 150, aVerifier: true });
   assert.equal(r.corps.donnees.cartes.find(c => c.cle === 'bind').zones, undefined, 'champs vides absents');
+  const resume = (await b.appel('/jeux?tous=1', { jeton: f })).corps.jeux.find(j => j.cle === 'valorant');
+  assert.equal(resume.modeleStrat, 'valorant');
+  assert.deepEqual([resume.resume.cartesCalibrees, resume.resume.cartesImages, resume.resume.capacites, resume.resume.capacitesAVerifier], [1, 0, 1, 1], 'ce qu’il reste à préparer');
   const invalide = async (modif, chemin) => {
     const x = structuredClone(r.corps.donnees);
     modif(x);
