@@ -796,6 +796,9 @@ export function servicesEvenements({
       { sql: 'DELETE FROM club_evenement_staff WHERE evenement_id = ?', params: [id] },
       // Salons de match : lignes et historiques effacés avec l'événement (salons fermés au nettoyage ci-dessus).
       { sql: 'DELETE FROM club_salons_match WHERE evenement_id = ?', params: [id] },
+      // File d'envoi des messages et avis du site reçus (migration 0079).
+      { sql: 'DELETE FROM club_salons_match_envois WHERE evenement_id = ?', params: [id] },
+      { sql: 'DELETE FROM site_lz_pousses WHERE evenement_id = ?', params: [id] },
       { sql: "DELETE FROM tickets_reglages WHERE cle = ?", params: [`salons_match:${id}`] },
       { sql: 'DELETE FROM club_evenements WHERE id = ?', params: [id] },
     ]);

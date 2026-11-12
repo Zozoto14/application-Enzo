@@ -168,11 +168,11 @@ test('clé du site lue dans ~/.lignezero/api.env (même hébergement), variables
   const PONT = 'p'.repeat(40);
   // Site à jour : la clé du pont ; l'ancienne clé (celle du bot) n'est plus lue.
   const lire = () => `URL_SITE=https://lz.example\nCLE_SERVICE="cle-secrete"\nCLE_PONT='${PONT}'\n`;
-  assert.deepEqual(configSite({}, lire), { url: 'https://lz.example/api', clePont: PONT, cle: '' });
+  assert.deepEqual(configSite({}, lire), { url: 'https://lz.example/api', clePont: PONT, cle: '', clesPont: [PONT] });
   // Site pas encore à jour : ancien accès (compatibilité de déploiement).
   const ancien = () => 'URL_SITE=https://lz.example\nCLE_SERVICE="cle-secrete"\n';
-  assert.deepEqual(configSite({}, ancien), { url: 'https://lz.example/api', clePont: '', cle: 'cle-secrete' });
-  assert.deepEqual(configSite({ LZ_CLE: 'x', LZ_API_URL: 'https://autre/api/' }, ancien), { url: 'https://autre/api', clePont: '', cle: 'x' });
+  assert.deepEqual(configSite({}, ancien), { url: 'https://lz.example/api', clePont: '', cle: 'cle-secrete', clesPont: [] });
+  assert.deepEqual(configSite({ LZ_CLE: 'x', LZ_API_URL: 'https://autre/api/' }, ancien), { url: 'https://autre/api', clePont: '', cle: 'x', clesPont: [] });
   // Clé du pont trop courte : ignorée.
   assert.equal(configSite({}, () => 'CLE_PONT=courte\n').clePont, '');
   assert.equal(configSite({}, () => { throw new Error('absent'); }).cle, '');

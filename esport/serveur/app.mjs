@@ -31,6 +31,7 @@ import { journalIaLocaleParDefaut } from './ia-locale/installation.mjs';
 import { sourceGitDepot } from './devblog-source.mjs';
 import { creerServiceDeploiement } from './deploiement.mjs';
 import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
+import { creerBoucleSalonsMatch } from '../noyau/evenements-club/boucle-salons.mjs';
 import { creerFetchDiscordNode } from '../adaptateurs/fetchDiscordNode.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp, resumeSmtp, suivreVerificationSmtp } from './courriel-smtp.mjs';
 import { installerJournal } from './journal-fichier.mjs';
@@ -103,6 +104,11 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     ? creerSuperviseurTickets({ base: b, jetonBot: config.discordBot.jetonBot, botId: config.discordBot.applicationId || null, stockage: st, reveil, ...(fetchDiscord ? { fetch: fetchDiscord } : {}), ...(fetchRest ? { fetchRest } : {}), ...api.ticketsGateway })
     : null;
   superviseur?.demarrer();
+  // Salons de match des événements : boucle rapide (avis du site, relecture toutes les 60 s des événements en cours,
+  // file d'envoi) tenue par un seul processus, même quand la Gateway n'est pas tenue (tickets, bienvenue et salons
+  // vocaux désactivés, TICKETS_GATEWAY=non) ; elle garde l'app éveillée tant qu'un événement est en cours.
+  const boucleSalons = demarrerTickets && config.discordBot?.jetonBot ? creerBoucleSalonsMatch({ base: b, salonsMatch: api.salonsMatch, reveil }) : null;
+  boucleSalons?.demarrer();
   return {
     traiter: api,
     base: b,
@@ -110,7 +116,9 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     config,
     problemes,
     superviseurTickets: superviseur,
+    boucleSalons,
     fermer: async () => {
+      await boucleSalons?.arreter();
       await superviseur?.arreter();
       fetchRest?.fermer();
       await api.tempsReel?.fermer();

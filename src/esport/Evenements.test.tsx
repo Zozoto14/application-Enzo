@@ -411,6 +411,11 @@ function fauxClient(
       salonsMatch.salons = salonsMatch.salons.map(x => (x.id === 'sm1' ? { ...x, statut: 'supprime' as const, lien: null, historique: true, supprimeLe: '2026-11-21T19:00:00.000Z' } : x));
       return salonsMatch;
     }
+    if (chemin === '/evenements/ev1/salons-match/renvoyer' && methode === 'POST') {
+      salonsMatch.envois = { envoyes: 4, attente: 0, echecs: 0 };
+      salonsMatch.salons = salonsMatch.salons.map(x => ({ ...x, envois: { envoyes: 4, attente: 0, echecs: 0, raisons: [] } }));
+      return { ...salonsMatch, renvoyes: 1 };
+    }
     if (chemin === '/evenements/ev1/salons-match/sm1/historique')
       return { salon: salonsMatch.salons[0], messages: [{ id: 'msg1', auteur: 'Kira', auteurId: '810000000000000101', bot: false, contenu: 'Prêts !', le: '2026-11-21T18:00:00.000Z', pieces: [{ nom: 'lineup.png', url: 'https://cdn.discordapp.com/a/lineup.png', taille: 2048 }], embeds: [] }] };
     if (chemin === '/vocaux/discord')
@@ -828,6 +833,24 @@ test('salons de match : liste (statut, équipe sans rôle, suppression programm�
   expect(screen.getByText('Pièce jointe : lineup.png')).toBeTruthy();
   await fireEvent.press(screen.getByTestId('esport-ev-sm-historique-fermer'));
   expect(screen.queryByTestId('esport-ev-sm-historique')).toBeNull();
+});
+
+test('salons de match : dernière synchro (poussée par le site), messages du bot par salon, « Renvoyer les messages en échec »', async () => {
+  salonsMatch.etat = { ...salonsMatch.etat!, le: new Date(Date.now() - 4_000).toISOString(), origine: 'poussee', avertissements: ['embed-manquant'] };
+  salonsMatch.envois = { envoyes: 3, attente: 0, echecs: 1 };
+  salonsMatch.salons = salonsMatch.salons.map(x => ({ ...x, envois: { envoyes: 3, attente: 0, echecs: 1, raisons: [{ genre: 'accueil', raison: 'permission-50013' }] } }));
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-sm-synchro-derniere')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-synchro-derniere').props.children).toMatch(/^Dernière synchro : il y a [45] s \(poussée par le site\)\.$/);
+  expect(screen.getByTestId('esport-ev-sm-avert-embed-manquant')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-envois').props.children).toBe('Messages du bot : 3 envoyé(s), 0 en attente, 1 en échec.');
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-envois').props.children).toBe('messages : 3 envoyé(s), 1 en échec · accueil : le bot n’a pas la permission (écrire, intégrer des liens ou joindre des fichiers dans ce salon)');
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-renvoyer'));
+  expect(await screen.findByText('1 message(s) remis en file et renvoyé(s).')).toBeTruthy();
+  expect(appels.some(a => a.chemin === '/evenements/ev1/salons-match/renvoyer' && a.methode === 'POST')).toBe(true);
+  expect(screen.queryByTestId('esport-ev-sm-renvoyer')).toBeNull();
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-envois').props.children).toBe('messages : 4 envoyé(s)');
 });
 
 test('salons de match : anglais, événement non lié au site', async () => {

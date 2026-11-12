@@ -85,6 +85,8 @@ export const LIMITES = {
   tickets_reponse: { max: 300, fenetreS: 3600 },
   tickets_ouverture: { max: 10, fenetreS: 3600 },
   tickets_ping: { max: 3, fenetreS: 60 },
+  // Avis signés du site LigneZero (salons de match, migration 0079), par adresse : largement au-dessus d'une saisie.
+  site_lz_poussee: { max: 600, fenetreS: 600 },
 };
 
 /**

@@ -54,9 +54,20 @@ terminé en gardant son **historique dans l'app**.
   sur Discord : les salons sont créés dans la catégorie choisie (sans elle, aucune création), le staff est averti une
   fois dans un salon de match, et le dernier passage l'indique. Sans repère : la catégorie choisie, salons ajoutés à la
   fin.
-- **Quand** : toutes les 5 minutes (cron) et, tant que l'événement est **en cours** (statut, ou dates du jour),
-  **chaque minute** par le processus qui tient la Gateway Discord (tickets, bienvenue ou salons vocaux activés) ;
-  « Synchroniser maintenant » à la demande. Les matchs sont lus sur le site par le pont signé, en **lecture seule**.
+- **Quand** (quasi temps réel, migration 0079) :
+  - **poussée par le site** : chaque modification d'un match, lobby (équipes comprises), phase, résultat, horaire, stream
+    ou staff assigné sur le site (déclencheurs de sa base, donc tous les éditeurs de l'admin) envoie un **avis signé** à
+    `POST https://esport.appdashboard.fr/site-lz/evenement` (voir « Synchronisation poussée » ci-dessous) ; l'app relit
+    alors le tournoi par le pont et traite **d'abord les matchs annoncés**, 2,5 s après le dernier avis (anti-rebond,
+    6 s au plus) : l'embed est modifié en quelques secondes ;
+  - **relecture** : toutes les **60 s** tant que l'événement est **en cours** (statut, ou dates du jour), par la boucle
+    du processus meneur (`evenements-club/boucle-salons.mjs`, bail `salons-match-boucle`), que les tickets, la
+    bienvenue ou les salons vocaux soient activés ou non (avant : seulement avec la Gateway, sinon 5 min) ; 15 s quand
+    le passage précédent n'a pas tout fait (plafond, limite de débit) ; sinon toutes les 5 minutes (cron, qui réveille
+    l'app tant qu'un événement est en cours) ; « Synchroniser maintenant » à la demande. Si un avis se perd, la
+    relecture rattrape. Les matchs sont lus sur le site par le pont signé, en **lecture seule** ;
+  - la fiche affiche **« Dernière synchro : il y a 4 s (poussée par le site / relecture / depuis l'app) »**, relue
+    toutes les 20 s.
 - **Création** : match avec au moins deux équipes connues, pas encore terminé (« terminé » = statut `finished` **et** un
   résultat : vainqueur ou score pour un 1v1, au moins un placement ou un abandon pour un lobby ; un lobby marqué terminé
   sans aucun résultat, ancien comportement du bouton « Enregistrer » du site, est traité comme à jouer). Équipes du
@@ -77,8 +88,12 @@ terminé en gardant son **historique dans l'app**.
   l'embed (« Staff assigné ») ; une personne absente du serveur Discord (ou sans Discord lié) y est notée, n'a pas
   d'accès, et le staff de l'événement est averti une fois. Assignation changée sur le site → accès et embed mis à jour,
   message « Mise à jour du match : staff assigné » qui mentionne le nouveau staff (pas les équipes).
-- **Mise à jour** : horaire, équipes ou phase changés sur le site → l'embed est modifié, les accès suivent les équipes,
-  et un court message « Mise à jour du match : horaire, équipes » mentionne les équipes.
+- **Mise à jour** : horaire, équipes (composition d'un lobby comprise), phase ou titre (round, poule, nom du lobby),
+  lien du stream, statut « en cours » ou staff assigné changés sur le site → l'embed est modifié **tout de suite**, les
+  accès suivent les équipes, et un court message « Mise à jour du match : horaire, lien du stream, statut (en cours) »
+  mentionne les équipes ; il part **30 s après le premier changement** et regroupe tous ceux de cette fenêtre (un seul
+  message pour une série de modifications). Un autre message (rappel, résultat) fait partir la mise à jour en attente
+  d'abord. Statut passé à « terminé » : annoncé par le résultat.
 - **Rappel** : 10 minutes avant l'horaire, une seule fois (jamais en retard : un salon créé à moins de 10 minutes du
   match ne l'envoie pas ; nouvel horaire : rappel réarmé). Pas de rappel 30 minutes avant.
 - **Résultat** saisi sur le site (match terminé) → posté (scores et vainqueur, ou classement du lobby avec points), avec
@@ -94,19 +109,59 @@ terminé en gardant son **historique dans l'app**.
   création automatique est coupée ou pas encore due). L'historique est visible avec `evenements.gerer` (le Fondateur
   l'a) ou par une personne du **staff de l'événement** (compte de l'app lié). C'est du contenu de l'événement, pas un
   ticket confidentiel ; il n'est **jamais envoyé à une IA**.
+- **Envoi fiable** (migration 0079, table `club_salons_match_envois`) : chaque message du bot (accueil et mentions,
+  avertissements du staff, mises à jour, modification de l'embed, rappel, résultat, correction, retrait, avis
+  d'annulation, avis de suppression) entre dans une **file persistante** avec une clé stable (salon, genre, version),
+  écrite dans la même transaction que l'état qui l'a décidé : un passage interrompu ne perd ni ne double rien. La file
+  part **dans l'ordre par salon** ; limite de débit (429), Discord en panne (5xx) ou réseau coupé → nouvel essai après
+  5 s, 10 s, 20 s… (10 min au plus, 12 essais) ; un **nonce Discord** (`enforce_nonce`) empêche tout doublon si une
+  réponse se perd ; plafond de 40 actions atteint → la suite part au passage suivant (15 s). Refus (403, 50013, 50001) :
+  la surcharge du bot est réparée et le message réessayé une fois, puis l'échec est noté avec sa **raison précise** et
+  le staff reçoit l'alerte « Salon de match : message refusé… ». Message d'accueil supprimé à la main : reposté à la
+  modification suivante. Messages en attente : la suppression du salon les attend (une heure au plus). Messages partis
+  effacés de la file après 7 jours.
+- **Statut des envois** (liste) : par salon, « messages : 5 envoyé(s), 1 en attente, 1 en échec · accueil : le bot n'a
+  pas la permission… » ; total de l'événement ; bouton **« Renvoyer les messages en échec »** (après correction des
+  droits sur Discord).
+- **Contrôle des accès** : à chaque passage (au plus une fois par minute), les surcharges du salon sont vérifiées : le
+  bot (voir, écrire, **intégrer des liens** — sans lui Discord masque les embeds —, fichiers, historique, gérer les
+  messages et le salon, mentionner tout le monde s'il en a le droit), les rôles des équipes, le staff, le staff
+  assigné, `@everyone` sans accès ; ce qui manque est complété (un `PATCH`, les surcharges ajoutées à la main restent).
+  Bot sans « Intégrer des liens » sur le serveur : avertissement dans la fiche et alerte.
+- **Mentions** : `allowed_mentions` liste explicitement les rôles et les membres (jamais `@everyone`). Les rôles des
+  équipes créés par l'app ne sont pas mentionnables : si le bot n'a pas « Mentionner @everyone, @here et tous les
+  rôles », Discord poste le message sans notifier personne ; les **joueurs** de l'équipe (sur le serveur) sont alors
+  mentionnés un par un, en plus des capitaines (la fiche le signale).
 - **Sûreté** : une ligne par match (clé unique événement + match) et un bail par événement : jamais deux salons pour un
   même match (plusieurs processus, redémarrage) ; un salon créé juste avant un arrêt brutal est retrouvé par son sujet
   (`esport-hq:match:…`). 5 créations et 40 actions Discord au plus par passage, arrêt au premier refus pour limite de
   débit (la suite au passage suivant). Discord limite une catégorie à 50 salons : les matchs suivants attendent.
 - **Permissions du bot** : Gérer les salons, Gérer les rôles (accès des salons), Voir les salons, Envoyer des messages,
-  Lire l'historique ; « Gérer les messages » pour la donner au staff (sinon le staff écrit sans pouvoir modérer) ; pour
-  que la mention d'un rôle d'équipe (non mentionnable) notifie, « Mentionner @everyone, @here et tous les rôles » (les
-  capitaines sont toujours notifiés).
-- Code : `esport/noyau/evenements-club/salons-match.mjs`, `src/esport/ui/evenements/SalonsMatch.tsx`. Migration 0073
-  (`club_evenements.salons_match`, table `club_salons_match`). Côté site : lecture des matchs, lobbies, résultats et
-  phases, et du staff assigné (vue `tournament_match_staff_discord` : nom et Discord ID) ouverte à la clé du pont
-  (`api/serveur/cles.mjs`, migration 0008 du site). Tests : `esport/test/salons-match.test.mjs`,
-  `src/esport/Evenements.test.tsx`.
+  **Intégrer des liens** (embeds), Joindre des fichiers, Lire l'historique ; « Gérer les messages » pour la donner au
+  staff (sinon le staff écrit sans pouvoir modérer) ; « Mentionner @everyone, @here et tous les rôles » pour que la
+  mention d'un rôle d'équipe notifie (sans elle, les joueurs sont mentionnés un par un).
+- Code : `esport/noyau/evenements-club/salons-match.mjs`, `boucle-salons.mjs`, `esport/noyau/site-lz/poussee.mjs`,
+  `src/esport/ui/evenements/SalonsMatch.tsx`. Migrations 0073 (`club_evenements.salons_match`, table
+  `club_salons_match`) et 0079 (file `club_salons_match_envois`, avis `site_lz_pousses`, nonces `site_lz_nonces`).
+  Côté site : lecture des matchs, lobbies, résultats et phases, et du staff assigné (vue
+  `tournament_match_staff_discord` : nom et Discord ID) ouverte à la clé du pont (`api/serveur/cles.mjs`, migration
+  0008 du site) ; avis poussés (`api/serveur/pousse.mjs`, migration 0009 du site). Tests :
+  `esport/test/salons-match.test.mjs`, `esport/test/salons-match-fiables.test.mjs`, `src/esport/Evenements.test.tsx`.
+
+### Synchronisation poussée (site → AppDashboard)
+
+- **Adresse** : `POST https://esport.appdashboard.fr/site-lz/evenement` (aussi sous `/api/esport/…`), sans session.
+- **Corps** (16 Ko au plus, aucune donnée du site) : `{ "tournoi": "<uuid>", "matchs": ["<uuid>"…], "lobbies": ["<uuid>"…] }`,
+  ou `"tout": true` (phase, équipe, joueurs : tout le tournoi).
+- **Signature** : même secret que le pont (`CLE_PONT` de `~/.lignezero/api.env`, jamais transmis ; `CLE_PONT_ANCIENNE`
+  acceptée pendant une rotation), en-têtes `x-lz-horodatage` (ms), `x-lz-nonce`, `x-lz-signature` = HMAC-SHA256
+  base64url de `LZ1\nPOST\n/site-lz/evenement\n<horodatage>\n<nonce>\n<sha256 hex du corps>`. Fenêtre de 5 minutes,
+  nonce à usage unique (table `site_lz_nonces`), comparaison en temps constant. Réponses : 200 `{ ok, evenements }`
+  (tournoi non lié ou avis inconnu : accepté et ignoré), 401 (en-têtes, horloge, signature, rejeu), 503 (clé absente),
+  429 (plus de 600 avis en 10 min par adresse).
+- **Côté site** : l'avis part sans ralentir l'enregistrement (file en base, envoi en arrière-plan, 5 s au plus,
+  réessais) ; s'il n'arrive pas, la relecture de 60 s rattrape.
+- **Ordre de déploiement** : AppDashboard d'abord (l'adresse existe et ignore ce qu'elle ne connaît pas), puis le site.
 
 ## Droits
 
@@ -326,9 +381,13 @@ Routes (`evenements.gerer`, 403 sinon) :
 | `POST /evenements/:id/salons-match/creer` | Créer maintenant `{ cle }` (`m:<id>` match, `l:<id>` lobby) |
 | `POST /evenements/:id/salons-match/:s/supprimer` | Supprimer maintenant (historique enregistré) |
 | `GET /evenements/:id/salons-match/:s/historique` | Historique (`evenements.gerer` ou staff de l'événement) |
+| `GET /evenements/:id/salons-match/etat` | État léger : dernier passage (origine, heure), envois par salon |
+| `POST /evenements/:id/salons-match/renvoyer` | Renvoyer les messages en échec (`renvoyes`) |
+| `POST /site-lz/evenement` | Avis signé du site (synchronisation poussée, sans session) |
 
 ## Données
 
-`club_evenements`, `club_evenement_equipes`, `club_evenement_membres`, `club_evenement_staff` et `club_salons_match`
-suivent l'export de la base (Administration). RGPD : l'effacement d'un compte (par son Discord ID) retire la personne des
-équipes et du staff des événements, et efface les historiques de salons de match où elle a écrit.
+`club_evenements`, `club_evenement_equipes`, `club_evenement_membres`, `club_evenement_staff`, `club_salons_match` et
+`club_salons_match_envois` suivent l'export de la base (Administration). RGPD : l'effacement d'un compte (par son Discord
+ID) retire la personne des équipes et du staff des événements, efface les historiques de salons de match où elle a écrit
+et les messages de la file qui la mentionnent.

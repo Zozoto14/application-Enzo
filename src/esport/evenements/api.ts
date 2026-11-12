@@ -307,6 +307,15 @@ export interface SalonMatch {
   historique: boolean;
   nbMessages: number;
   erreur: string | null;
+  /** Messages du bot pour ce salon (file d'envoi, migration 0079) ; absent d'un serveur plus ancien. */
+  envois?: EnvoisSalonMatch;
+}
+/** File d'envoi d'un salon : envoyés, en attente, en échec ; raisons (échecs, réessais en cours). */
+export interface EnvoisSalonMatch {
+  envoyes: number;
+  attente: number;
+  echecs: number;
+  raisons?: Array<{ genre: string; raison: string | null }>;
 }
 export interface MatchSiteSansSalon {
   cle: string;
@@ -330,6 +339,16 @@ export interface VueSalonsMatch {
   salons: SalonMatch[];
   matchs: MatchSiteSansSalon[];
   etat: EtatSalonsMatch | null;
+  /** Totaux de la file d'envoi de l'événement. */
+  envois?: EnvoisSalonMatch;
+}
+/** État léger (GET …/salons-match/etat, relu toutes les 20 s) : dernier passage et envois par salon. */
+export interface EtatLegerSalonsMatch {
+  etat: EtatSalonsMatch | null;
+  envois: EnvoisSalonMatch;
+  salons: Array<{ id: string; statut: StatutSalonMatch; erreur: string | null; envois: EnvoisSalonMatch }>;
+  /** Heure du serveur (calcul de « il y a X s » sans dépendre de l'horloge de l'appareil). */
+  heure: number;
 }
 /** Raison pour laquelle un match du site n'a pas eu de salon au dernier passage. */
 export type RaisonIgnore = 'termine' | 'equipes' | 'delai' | 'ferme' | 'attente' | 'categorie' | 'echec';
@@ -350,6 +369,13 @@ export interface EtatSalonsMatch {
   ignores?: { termine: number; equipes: number; delai: number; ferme: number };
   echecs?: number;
   details?: Array<{ cle: string; titre: string; raison: RaisonIgnore; n?: number; prevu?: string | null; statut?: string; code?: string | null }>;
+  /** Qui a déclenché le passage : avis du site (poussée), relecture régulière, action dans l'app. */
+  origine?: 'poussee' | 'relecture' | 'manuel';
+  envois?: { envoyes: number; attente: number; echecs: number };
+  /** `embed-manquant` (bot sans « Intégrer des liens »), `mentions-joueurs` (rôles non mentionnables : joueurs mentionnés un par un). */
+  avertissements?: string[];
+  /** Surcharges d'accès complétées par le passage. */
+  acces?: number;
 }
 export interface MessageHistorique {
   id: string;
@@ -414,6 +440,8 @@ export function apiEvenements(client: ClientEsport) {
     salonsMatch: (id: string) => r<VueSalonsMatch>(`${un(id)}/salons-match`),
     reglerSalonsMatch: (id: string, c: Partial<ReglagesSalonsMatch>) => r<VueSalonsMatch>(`${un(id)}/salons-match`, 'PUT', c),
     synchroniserSalonsMatch: (id: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/synchro`, 'POST', {}),
+    etatSalonsMatch: (id: string) => r<EtatLegerSalonsMatch>(`${un(id)}/salons-match/etat`),
+    renvoyerSalonsMatch: (id: string) => r<VueSalonsMatch & { renvoyes: number }>(`${un(id)}/salons-match/renvoyer`, 'POST', {}),
     creerSalonMatch: (id: string, cle: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/creer`, 'POST', { cle }),
     supprimerSalonMatch: (id: string, salonId: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/${encodeURIComponent(salonId)}/supprimer`, 'POST', {}),
     historiqueSalonMatch: (id: string, salonId: string) => r<{ salon: SalonMatch; messages: MessageHistorique[] }>(`${un(id)}/salons-match/${encodeURIComponent(salonId)}/historique`),

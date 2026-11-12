@@ -1008,7 +1008,9 @@
   "Une synchronisation est en cours, réessayez dans un instant.": "A sync is running, please try again in a moment.",
   "Discord limite les requêtes : réessayez dans une minute.": "Discord is rate limiting requests: please try again in a minute.",
   "Discord a refusé la suppression du salon (permission « Gérer les salons »).": "Discord refused to delete the channel (“Manage Channels” permission).",
-  "Salon repère invalide.": "Invalid anchor channel."
+  "Salon repère invalide.": "Invalid anchor channel.",
+  "Clé du pont absente sur cet hébergement.": "Bridge key missing on this host.",
+  "Avis trop volumineux.": "Notification too large."
  },
  "motifs": [
   [
@@ -1538,6 +1540,10 @@
   [
    "^Discord a refusé de créer le rôle \\((.*)\\)\\. Le bot a-t-il « Gérer les rôles » \\?$",
    "Discord refused to create the role ($1). Does the bot have “Manage roles”?"
+  ],
+  [
+   "^Avis du site refusé \\((.+)\\)\\.$",
+   "Website notification refused ($1)."
   ]
  ]
 }

@@ -25,6 +25,7 @@ export const LONGUEUR_MIN_CLE = 32;
 
 export function configSite(env = process.env, lire = chemin => readFileSync(chemin, 'utf8')) {
   let clePont = env.LZ_CLE_PONT || '';
+  let ancienne = env.LZ_CLE_PONT_ANCIENNE || '';
   let cle = env.LZ_CLE || '';
   let url = env.LZ_API_URL || '';
   if (!clePont || !url) {
@@ -37,6 +38,8 @@ export function configSite(env = process.env, lire = chemin => readFileSync(chem
           .map(m => [m[1], m[2].replace(/^(['"])(.*)\1$/, '$2')]),
       );
       clePont ||= v.CLE_PONT || '';
+      // Rotation (docs/securite.md du site) : l'ancienne clé signe encore les avis du site le temps de basculer.
+      ancienne ||= v.CLE_PONT_ANCIENNE || '';
       // L'ancienne clé (celle du bot) ne sert plus dès que la clé du pont existe.
       if (!clePont) cle ||= v.CLE_SERVICE || '';
       url ||= v.URL_API || (v.URL_SITE ? `${v.URL_SITE.replace(/\/$/, '')}/api` : '');
@@ -45,7 +48,9 @@ export function configSite(env = process.env, lire = chemin => readFileSync(chem
     }
   }
   if (clePont.length < LONGUEUR_MIN_CLE) clePont = '';
-  return { url: (url || 'https://lz.appdashboard.fr/api').replace(/\/$/, ''), clePont, cle: clePont ? '' : cle };
+  if (ancienne.length < LONGUEUR_MIN_CLE) ancienne = '';
+  // `clesPont` : clés acceptées pour les avis signés par le site (site-lz/poussee.mjs).
+  return { url: (url || 'https://lz.appdashboard.fr/api').replace(/\/$/, ''), clePont, cle: clePont ? '' : cle, clesPont: [clePont, ancienne].filter(Boolean) };
 }
 
 /** Adresse acceptable : HTTPS, ou http://localhost pour les essais. */

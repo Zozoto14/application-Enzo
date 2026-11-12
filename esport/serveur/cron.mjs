@@ -60,6 +60,16 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
       rapport.push({ tache: 'tickets : réveil de l’app', ok: false, erreur: String(e?.message ?? e) });
     }
   }
+  // Salons de match : un événement est en cours mais l'app dort peut-être (Passenger) → réveillée, pour que sa boucle
+  // rapide (relecture toutes les 60 s, avis du site, file d'envoi) reprenne (evenements-club/boucle-salons.mjs).
+  if (rapport.salonsMatch?.enCours > 0 && config.urlPublique && !(rapport.tickets?.actif && !rapport.tickets.meneur && config.ticketsGateway !== false)) {
+    try {
+      await (fetch ?? globalThis.fetch)(`${String(config.urlPublique).replace(/\/+$/, '')}/sante`, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(10_000) });
+      rapport.push({ tache: 'salons de match : réveil de l’app', ok: true });
+    } catch (e) {
+      rapport.push({ tache: 'salons de match : réveil de l’app', ok: false, erreur: String(e?.message ?? e) });
+    }
+  }
   // Récapitulatif e-mail (Node seulement : SMTP de esport.env) ; sans SMTP, rien n'est fait.
   if (config.smtp) {
     const envoyer = await creerEnvoyeur(config.smtp, { creerTransport });

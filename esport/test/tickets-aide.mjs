@@ -246,6 +246,9 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
     const msgs = /^\/channels\/(\d+)\/messages$/.exec(chemin);
     if (msgs) {
       if (methode === 'POST') {
+        // `enforce_nonce` (comme Discord) : un message au même nonce déjà posté dans le salon est rendu, pas doublé.
+        const deja = corps?.enforce_nonce && corps.nonce ? (etat.messages.get(msgs[1]) ?? []).find(x => x.nonce === corps.nonce) : null;
+        if (deja) return rep(deja);
         const m = { id: id(), channel_id: msgs[1], author: { id: bot, bot: true }, ...corps, timestamp: new Date().toISOString() };
         if (!etat.messages.has(msgs[1])) etat.messages.set(msgs[1], []);
         etat.messages.get(msgs[1]).push(m);
@@ -287,13 +290,13 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
  * envoie une interaction signée ; `config(corps)` règle les tickets en Fondateur. `modeles` : catégories par défaut
  * semées à la première lecture de la configuration (sinon, réglage `categories_defaut` déjà posé : base vierge).
  */
-export async function bancTickets({ banc, attenteDiffere, modeles = false, siteLz } = {}) {
+export async function bancTickets({ banc, attenteDiffere, modeles = false, siteLz, clesPontSite, antiRebondSalons } = {}) {
   const APP = '424242424242424242';
   const hexa = o => Buffer.from(o).toString('hex');
   const paire = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
   const publique = hexa(await crypto.subtle.exportKey('raw', paire.publicKey));
   const discord = fauxDiscordRest();
-  const b = await banc({ fetchDiscord: discord.fetch, lienApp: 'https://app.exemple/esport', discordBot: { applicationId: APP, publicKey: publique, jetonBot: 'jeton-bot-de-test-jamais-reel' }, attenteDiffere: attenteDiffere ?? (() => new Promise(() => {})), ...(siteLz ? { siteLz } : {}) });
+  const b = await banc({ fetchDiscord: discord.fetch, lienApp: 'https://app.exemple/esport', discordBot: { applicationId: APP, publicKey: publique, jetonBot: 'jeton-bot-de-test-jamais-reel' }, attenteDiffere: attenteDiffere ?? (() => new Promise(() => {})), ...(siteLz ? { siteLz } : {}), ...(clesPontSite ? { clesPontSite } : {}), ...(antiRebondSalons !== undefined ? { antiRebondSalons } : {}) });
   const fondateur = await b.session('principal', 'Fondateur');
   if (!modeles) await b.base.executer("INSERT INTO tickets_reglages (cle, valeur, maj_le) VALUES ('categories_defaut', '{}', '2026-01-01T00:00:00.000Z')", []);
   const differes = [];

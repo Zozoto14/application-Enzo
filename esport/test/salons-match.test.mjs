@@ -9,117 +9,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { banc } from './aide.mjs';
-import { bancTickets, fauxDiscordRest, fauxGateway } from './tickets-aide.mjs';
+import { fauxDiscordRest, fauxGateway } from './tickets-aide.mjs';
 import { baseMigree } from './base.mjs';
 import { creerSuperviseurTickets } from '../noyau/tickets/superviseur.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
 import { DROITS_EQUIPE, DROITS_STAFF, creerSalonsMatch, lireReglages, nomSalon, validerReglages } from '../noyau/evenements-club/salons-match.mjs';
-import { oublierLimites } from '../noyau/tickets/discord.mjs';
 import { TABLES } from '../noyau/transfert.mjs';
 import { effacementParDiscord } from '../noyau/tickets/rgpd.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 
-const T1 = '11111111-1111-4111-8111-111111111111';
-const EA = '22222222-2222-4222-8222-00000000000a';
-const EB = '22222222-2222-4222-8222-00000000000b';
-const EC = '22222222-2222-4222-8222-00000000000c';
-const ED = '22222222-2222-4222-8222-00000000000d';
-const M1 = '44444444-4444-4444-8444-000000000001';
-const L1 = '55555555-5555-4555-8555-000000000001';
-const CAT = '710000000000000099';
-const CAP_A = '810000000000000201';
-const J_A = '810000000000000202';
-const CAP_B = '810000000000000203';
-const CAP_C = '810000000000000204';
-const STAFF = '810000000000000299';
-const SILENCE = { error() {}, warn() {}, log() {} };
-
-function fauxSite() {
-  const tables = {
-    tournaments: [{ id: T1, name: 'The Nuke End', status: 'running', created_at: '2026-11-02' }],
-    tournament_teams: [
-      { id: EA, tournament_id: T1, name: 'Alpha', tag: 'ALP' },
-      { id: EB, tournament_id: T1, name: 'Bravo', tag: 'BRV' },
-      { id: EC, tournament_id: T1, name: 'Charlie', tag: 'CHA' },
-    ],
-    tournament_players: [
-      { id: 'p1', team_id: EA, pseudo: 'CapA', role: null, is_captain: true, discord_id: CAP_A, embark_id: null, sort_order: 0 },
-      { id: 'p2', team_id: EA, pseudo: 'Joueur', role: null, is_captain: false, discord_id: J_A, embark_id: null, sort_order: 1 },
-      { id: 'p3', team_id: EB, pseudo: 'CapB', role: null, is_captain: true, discord_id: CAP_B, embark_id: null, sort_order: 0 },
-      { id: 'p4', team_id: EC, pseudo: 'CapC', role: null, is_captain: true, discord_id: CAP_C, embark_id: null, sort_order: 0 },
-    ],
-    tournament_stages: [],
-    tournament_matches: [{ id: M1, tournament_id: T1, stage_id: null, bracket: 'winner', round: 1, position: 1, group_label: null, team_a_id: EA, team_b_id: EB, score_a: null, score_b: null, winner_id: null, status: 'pending', scheduled_at: '2026-10-20T12:00:00.000Z', stream_url: null }],
-    tournament_lobbies: [{ id: L1, tournament_id: T1, round: 1, position: 1, label: null, status: 'pending', scheduled_at: '2026-10-20T14:00:00.000Z', stream_url: null }],
-    tournament_match_staff_discord: [],
-    tournament_lobby_entries: [
-      { id: 'e1', lobby_id: L1, team_id: EA, placement: null, points: 0, dnf: false, sort_order: 0 },
-      { id: 'e2', lobby_id: L1, team_id: EB, placement: null, points: 0, dnf: false, sort_order: 1 },
-      { id: 'e3', lobby_id: L1, team_id: EC, placement: null, points: 0, dnf: false, sort_order: 2 },
-    ],
-  };
-  let n = 0;
-  const filtre = filters => r => filters.every(f => (f.op === 'in' ? f.val.includes(r[f.col]) : r[f.col] === f.val));
-  return {
-    tables,
-    configure: true,
-    lectures: [],
-    async lister(t, filters = []) {
-      this.lectures.push(t);
-      return structuredClone((tables[t] ?? []).filter(filtre(filters)));
-    },
-    inserer: async (t, rows) => rows.map(r => (tables[t].push({ id: `33333333-3333-4333-8333-${String(++n).padStart(12, '0')}`, ...r }), structuredClone(tables[t].at(-1)))),
-    modifier: async (t, id, v) => [Object.assign(tables[t].find(x => x.id === id), v)],
-    supprimer: async (t, id) => {
-      tables[t] = tables[t].filter(x => x.id !== id);
-    },
-    supprimerOu: async (t, col, val) => {
-      tables[t] = tables[t].filter(x => x[col] !== val);
-    },
-  };
-}
-
-async function monter() {
-  oublierLimites();
-  const site = fauxSite();
-  const k = await bancTickets({ banc, siteLz: site });
-  k.discord.etat.salons.set(CAT, { id: CAT, type: 4, name: 'Matchs', guild_id: k.GUILD, permission_overwrites: [], position: 5 });
-  await k.api('/tickets/config/general', undefined, { methode: 'PUT', corps: { guildId: k.GUILD, guildNom: 'Club', langue: 'fr' } });
-  const e = await k.api('/evenements', undefined, { methode: 'POST', corps: { nom: 'The Nuke End', debut: '2026-10-20', fin: '2026-10-21' } });
-  assert.equal(e.statut, 200, JSON.stringify(e.corps));
-  const id = e.corps.evenement.id;
-  const chemin = `/evenements/${id}`;
-  // Lien au tournoi : les équipes du site sont reprises dans l'événement (rôles Discord créés automatiquement).
-  const lie = await k.api(`${chemin}/site`, undefined, { methode: 'PUT', corps: { tournoiId: T1 } });
-  assert.equal(lie.statut, 200, JSON.stringify(lie.corps));
-  const st = await k.api(`${chemin}/staff`, undefined, { methode: 'POST', corps: { discordId: STAFF, nom: 'Arbitre' } });
-  assert.equal(st.statut, 200, JSON.stringify(st.corps));
-  const fiche = (await k.api(chemin)).corps;
-  const roles = Object.fromEntries(fiche.equipes.map(x => [x.tag, x.roleId]));
-  assert.ok(roles.ALP && roles.BRV && roles.CHA, JSON.stringify(roles));
-  const r = { ...k, site, id, chemin, sm: `${chemin}/salons-match`, roles, staffRole: fiche.evenement.discord.staffRoleId, jeton: k.fondateur };
-  // Session du Fondateur rouverte après un saut d'horloge (les sessions expirent).
-  r.api = async (c, jeton, options = {}) => {
-    if (!jeton) r.jeton = await k.b.session('principal');
-    return k.b.appel(c, { jeton: jeton ?? r.jeton, ...options });
-  };
-  return r;
-}
-
-const salonsCrees = k => k.discord.appels.filter(a => a.methode === 'POST' && a.chemin === `/guilds/${k.GUILD}/channels`);
-const messagesDe = (k, salonId) => k.discord.etat.messages.get(salonId) ?? [];
-const lignes = async k => k.b.base.tous('SELECT * FROM club_salons_match WHERE evenement_id = ? ORDER BY cree_le, site_match_id', [k.id]);
-const synchro = async k => {
-  const r = await k.api(`${k.sm}/synchro`, undefined, { methode: 'POST', corps: {} });
-  assert.equal(r.statut, 200, JSON.stringify(r.corps));
-  return r.corps;
-};
-const activer = async (k, extra = {}) => {
-  const r = await k.api(k.sm, undefined, { methode: 'PUT', corps: { actif: true, categorieId: CAT, ...extra } });
-  assert.equal(r.statut, 200, JSON.stringify(r.corps));
-  return r.corps;
-};
+import { T1, EA, EB, EC, ED, M1, L1, CAT, CAP_A, J_A, CAP_B, CAP_C, STAFF, SILENCE, fauxSite, monter, salonsCrees, messagesDe, lignes, synchro, activer } from './salons-match-aide.mjs';
 
 test('réglages : défauts, bornes, nom de salon nettoyé', () => {
   assert.deepEqual(lireReglages(null).delaiSuppressionMin, 30);
@@ -162,7 +61,15 @@ test('création : salon privé par match (lobby à 3 équipes compris), accès, 
   const [accueil] = messagesDe(k, lm.salon_id);
   assert.match(accueil.content, new RegExp(`<@&${k.roles.ALP}>`));
   assert.match(accueil.content, new RegExp(`<@${CAP_A}>`));
-  assert.deepEqual(accueil.allowed_mentions.users.sort(), [CAP_A, CAP_B].sort());
+  // Rôles des équipes non mentionnables (créés ainsi par l'app) et bot sans « Mentionner @everyone » : les joueurs sont
+  // mentionnés un par un, sinon personne n'était notifié.
+  assert.deepEqual(accueil.allowed_mentions.users.sort(), [CAP_A, J_A, CAP_B].sort());
+  assert.deepEqual(accueil.allowed_mentions.parse, []);
+  assert.ok(accueil.allowed_mentions.roles.includes(k.roles.ALP));
+  assert.match(accueil.content, new RegExp(`<@${J_A}>`));
+  // Envoi par la file : nonce Discord (jamais de doublon), message envoyé noté.
+  assert.equal(typeof accueil.nonce, 'string');
+  assert.equal(accueil.enforce_nonce, true);
   const ts = Date.parse('2026-10-20T12:00:00.000Z') / 1000;
   assert.match(accueil.embeds[0].description, new RegExp(`<t:${ts}:F> \\(<t:${ts}:R>\\)`));
   assert.ok(accueil.embeds[0].fields.some(f => f.name === '[ALP] Alpha' && f.value.includes(`<@${J_A}>`) && f.value.includes('(capitaine)')));
@@ -226,8 +133,12 @@ test('mise à jour : horaire et équipes changés → embed modifié, accès sui
   Object.assign(k.site.tables.tournament_matches[0], { scheduled_at: '2026-10-20T12:30:00.000Z', team_b_id: EC });
   await synchro(k);
   const patch = k.discord.appels.filter(a => a.methode === 'PATCH' && a.chemin === `/channels/${lm.salon_id}/messages/${lm.message_id}`);
-  assert.equal(patch.length, 1);
+  assert.equal(patch.length, 1, 'embed modifié tout de suite');
   assert.match(patch[0].corps.embeds[0].description, new RegExp(`<t:${Date.parse('2026-10-20T12:30:00.000Z') / 1000}:F>`));
+  // « Mise à jour » : regroupe les changements des 30 secondes (envoyée au passage suivant la fenêtre).
+  assert.equal(messagesDe(k, lm.salon_id).length, avant);
+  k.b.horloge.t += 31_000;
+  await synchro(k);
   const msgs = messagesDe(k, lm.salon_id);
   assert.equal(msgs.length, avant + 1);
   assert.match(msgs.at(-1).content, /Mise à jour du match : horaire, équipes/);
@@ -447,12 +358,12 @@ test('cron et passage rapide du meneur (une fois par minute, événement en cour
   // Passage rapide : seulement les événements en cours (dates du jour), au plus une fois par minute.
   const sm = k.b.traiter.salonsMatch;
   k.site.lectures.length = 0;
-  assert.deepEqual(await sm.tacheRapide(), { evenements: 1 });
+  assert.deepEqual(await sm.tacheRapide(), { evenements: 1, enCours: 1 });
   assert.equal(await sm.tacheRapide(), null);
   assert.ok(k.site.lectures.includes('tournament_matches'));
   k.b.horloge.t += 61_000;
   await k.b.base.executer("UPDATE club_evenements SET debut = '2026-12-01', fin = '2026-12-02' WHERE id = ?", [k.id]);
-  assert.deepEqual(await sm.tacheRapide(), { evenements: 0 });
+  assert.deepEqual(await sm.tacheRapide(), { evenements: 0, enCours: 0 });
 });
 
 test('données : table exportée ; effacement RGPD d’une personne : historiques où elle a écrit effacés', async () => {
@@ -596,6 +507,8 @@ test('staff assigné sur le site : accès par membre, mentionné dans l’embed,
   assert.equal(alertes().length, 1, 'une fois');
   // Assignation changée sur le site : ARB remplacé par ARB2.
   k.site.tables.tournament_match_staff_discord = [{ id: 's4', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p4', display_name: 'Arbitre 2', discord_id: ARB2 }];
+  await synchro(k);
+  k.b.horloge.t += 31_000;
   await synchro(k);
   assert.ok(salon().permission_overwrites.some(o => o.id === ARB2 && o.allow === DROITS_STAFF));
   assert.ok(!salon().permission_overwrites.some(o => o.id === ARB));

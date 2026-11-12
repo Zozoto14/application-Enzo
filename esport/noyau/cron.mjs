@@ -49,6 +49,7 @@ import { expirerRolesTemp } from './roles-temp/moteur.mjs';
  */
 export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive(), tickets, siteLz = null } = {}) {
   let rapportTickets = null;
+  let rapportSalons = null;
   const transcrire = async () => {
     if (!transcriptionExterne?.actif || !stockage) return 0;
     const socle = { contexteTeam: async () => { throw new Error('Contexte indisponible dans le cron.'); } };
@@ -85,7 +86,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
       return pont.tacheCron();
     }],
     // Salons de match Discord (migration 0073) : matchs du tournoi lié, rappels, résultats, suppressions avec historique.
-    ['salons de match', () => creerSalonsMatch({ base, site: siteLz ?? clientSite(() => configSite()), fetch: fetch ?? ((...a) => globalThis.fetch(...a)), jetonBot, maintenant, journal }).tacheCron()],
+    // `enCours` : événements en cours (serveur/cron.mjs réveille alors l'app, dont la boucle relit toutes les 60 s).
+    ['salons de match', async () => (rapportSalons = await creerSalonsMatch({ base, site: siteLz ?? clientSite(() => configSite()), fetch: fetch ?? ((...a) => globalThis.fetch(...a)), jetonBot, maintenant, journal }).tacheCron())],
     // Rôles Discord temporaires (migration 0066) : rôles arrivés à échéance retirés (réessais : limite de débit, hiérarchie).
     ['rôles Discord temporaires', () => expirerRolesTemp(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
@@ -122,5 +124,6 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
   }
   // Tickets : le cron serveur réveille l'app quand plus aucun processus ne tient la Gateway (serveur/cron.mjs).
   rapport.tickets = rapportTickets;
+  rapport.salonsMatch = rapportSalons;
   return rapport;
 }

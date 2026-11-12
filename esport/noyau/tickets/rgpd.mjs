@@ -66,6 +66,8 @@ export function effacementParDiscord(discordIds, compte = null, t = Date.now()) 
       { sql: `DELETE FROM club_evenement_staff WHERE discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },
       // Salons de match : historiques où la personne a écrit effacés (messages JSON, pas modifiables ligne à ligne).
       ...discordIds.map(id => ({ sql: 'UPDATE club_salons_match SET transcript = NULL, nb_messages = 0 WHERE transcript LIKE ?', params: [`%"auteurId":"${id}"%`] })),
+      // File d'envoi des salons de match (migration 0079) : messages qui mentionnent la personne effacés.
+      ...discordIds.map(id => ({ sql: 'DELETE FROM club_salons_match_envois WHERE corps LIKE ?', params: [`%${id}%`] })),
       // Rôles temporaires : octrois terminés effacés ; un octroi encore actif garde l'identifiant (le rôle doit être retiré
       // à l'échéance), sans nom ni raison.
       { sql: `DELETE FROM roles_temp_octrois WHERE statut <> 'actif' AND membre_discord_id IN (${discordIds.map(() => '?').join(', ')})`, params: discordIds },

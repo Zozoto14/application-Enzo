@@ -86,6 +86,7 @@ import { routesEvenements, servicesEvenements } from './evenements-club/service.
 import { clientSite, configSite } from './site-lz/client.mjs';
 import { creerPontSite } from './site-lz/pont.mjs';
 import { creerSalonsMatch } from './evenements-club/salons-match.mjs';
+import { CHEMIN_POUSSEE, creerRecepteurPoussees } from './site-lz/poussee.mjs';
 import { servicesCycleTickets } from './tickets/cycle.mjs';
 import { servicesRgpdTickets } from './tickets/rgpd.mjs';
 import { contexteTickets } from './tickets/acces.mjs';
@@ -197,6 +198,10 @@ export function creerApi({
   tempsReel = {},
   // Client de l'API du site LigneZero (tests : faux site) ; défaut : clé lue sur l'hébergement (site-lz/client.mjs).
   siteLz = null,
+  // Tests : clés du pont acceptées pour les avis du site (défaut : celles de ~/.lignezero/api.env).
+  clesPontSite = null,
+  // Tests : anti-rebond des avis du site (ms ; défaut 2,5 s).
+  antiRebondSalons,
   /** Import des images de maps (profils de jeu) : réseau simulé en test ; absent : fetch global. */
   fetchImportJeux,
 }) {
@@ -285,10 +290,14 @@ export function creerApi({
   const ev = servicesEvenements({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Pont avec le site LigneZero (docs/esport/evenements.md, « Site LigneZero ») : équipes synchronisées avec un tournoi du site.
   const siteClient = siteLz ?? clientSite(() => configSite());
+  // Clés acceptées pour les avis signés du site (CLE_PONT, et l'ancienne pendant une rotation) ; tests : `clesPontSite`.
+  const clesPoussee = () => clesPontSite ?? configSite().clesPont;
   const pontSite = creerPontSite({ base, ev, site: siteClient, maintenant });
   ev.brancherPont(pontSite);
   // Salons de match Discord des événements liés (migration 0073) : un salon privé par match du tournoi du site.
-  const salonsMatch = creerSalonsMatch({ base, site: siteClient, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null, maintenant });
+  const salonsMatch = creerSalonsMatch({ base, site: siteClient, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null, maintenant, ...(antiRebondSalons !== undefined ? { antiRebondMs: antiRebondSalons } : {}) });
+  // Avis du site LigneZero (synchronisation poussée des salons de match) : POST /site-lz/evenement, signé, sans session.
+  const poussees = creerRecepteurPoussees({ base, cles: clesPoussee, salonsMatch, maintenant, limite: (genre, qui) => limiter(base, genre, qui, maintenant()) });
   const botVocaux = creerBotVocaux({ base, maintenant, fetch: envoiDiscord, jetonBot, botId: configBot.applicationId || null });
   // Rôles Discord temporaires des teams (migration 0066, docs/esport/bot-discord.md) : /role-temp et réglages de la team.
   const rt = servicesRolesTemp({ base, maintenant, noyau: s, fetch: envoiDiscord, jetonBot, applicationId: configBot.applicationId, botId: configBot.applicationId || null });
@@ -367,6 +376,7 @@ export function creerApi({
     // Abonnement iCal aux réunions de l'équipe CM (migration 0039) : jeton révocable, sans session.
     const icalReunions = await routePubliqueReunions(cm.reunions, { chemin, methode: m, url });
     if (icalReunions !== undefined) return icalReunions;
+    if (chemin === CHEMIN_POUSSEE && m === 'POST') return poussees.traiter(requete, ip);
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
     const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });
@@ -702,8 +712,8 @@ export function creerApi({
   // Serveur Node : fermeture propre (connexions tenues, écoute PostgreSQL) ; tests : mesures du canal.
   traiter.tempsReel = tr;
   // Serveur Node : rappels de la Gateway des tickets (staff reconnu, suites d'un message, salon supprimé).
-  // + passage rapide des salons de match (toutes les 60 s, événements en cours) par le seul meneur.
-  traiter.ticketsGateway = { ...cycleTickets.contexteIngestion, tachesMeneur: () => salonsMatch.tacheRapide() };
+  // Les salons de match ont leur propre boucle (evenements-club/boucle-salons.mjs), tenue même sans Gateway.
+  traiter.ticketsGateway = { ...cycleTickets.contexteIngestion };
   // Tests : salons de match (passage rapide, cron).
   traiter.salonsMatch = salonsMatch;
   // Cron : cycle de vie des tickets (fermeture automatique, archives, rétention), avec les mêmes réglages réseau.

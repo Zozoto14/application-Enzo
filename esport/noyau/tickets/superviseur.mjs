@@ -20,8 +20,8 @@
  * activés, avec l'intent GUILD_VOICE_STATES (non privilégié) ; le moteur reçoit les événements vocaux et salons, et
  * chaque passage du meneur supprime les salons vides arrivés au délai. Sans Gateway (relecture de secours), aucune
  * arrivée dans un hub n'est vue : l'app le dit (Administration › Bot Esport HQ › Fonctionnalités).
- * SALONS DE MATCH (evenements-club/salons-match.mjs) : le meneur fait aussi leur passage rapide (`tachesMeneur`, au
- * plus une fois par minute, événements en cours) ; sans meneur, le cron s'en charge toutes les 5 minutes.
+ * SALONS DE MATCH : ils ont leur propre boucle (evenements-club/boucle-salons.mjs), tenue même sans Gateway ;
+ * `tachesMeneur` (tâche lancée sans attendre par le meneur, une à la fois) reste disponible pour d'autres usages.
  * MAINTIEN EN ÉVEIL : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes) ; le meneur
  * appelle donc sa propre adresse publique (`reveil`, URL_PUBLIQUE/sante) toutes les 4 min pour garder la Gateway.
  *

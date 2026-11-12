@@ -4,6 +4,8 @@
  * suppression, rappels, langue, création anticipée, rétention des historiques), liste des salons (match, lien,
  * statut, suppression programmée), matchs du site sans salon, et actions manuelles : « Créer maintenant »,
  * « Supprimer maintenant », « Voir l'historique » (historique enregistré avant la suppression du salon).
+ * Fiabilité (migration 0079) : « Dernière synchro : il y a 4 s (poussée par le site) », messages du bot par salon
+ * (envoyés, en attente, en échec avec la raison), « Renvoyer les messages en échec » ; état relu toutes les 20 s.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -12,7 +14,7 @@ import { Avis, BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/comm
 import type { ThemeHub } from '../../../hub/themes';
 import { formaterDate } from '../../i18n';
 import { trEv, type CleEv } from '../../i18n/evenements';
-import type { EtatSalonsMatch, FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
+import type { EnvoisSalonMatch, EtatSalonsMatch, FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte, type Ton } from '../design';
 import { CibleSurlignee } from '../notifications/Cible';
@@ -70,6 +72,27 @@ function DiagnosticPassage({ theme, etat: e, avance = 0 }: { theme: ThemeHub; et
   );
 }
 
+/** Relecture de l'état léger (dernière synchro, envois) et rafraîchissement de « il y a X s ». */
+const RELECTURE_ETAT_MS = 20_000;
+const TIC_MS = 5_000;
+const ilYA = (ms: number) => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 120) return trEv('sm.il_y_a_s', { n: String(s) });
+  if (s < 7200) return trEv('sm.il_y_a_min', { n: String(Math.round(s / 60)) });
+  return trEv('sm.il_y_a_h', { n: String(Math.round(s / 3600)) });
+};
+const libelleCle = (prefixe: string, c: string) => {
+  const cle = `${prefixe}.${c}`;
+  const t = trEv(cle as CleEv);
+  return t === cle ? c : t;
+};
+/** « messages : 3 envoyé(s), 1 en échec » et la raison de chaque échec ou réessai. */
+const resumeEnvois = (e: EnvoisSalonMatch) =>
+  [
+    trEv('sm.envois_salon', { envoyes: String(e.envoyes), attente: e.attente ? trEv('sm.envois_attente', { n: String(e.attente) }) : '', echecs: e.echecs ? trEv('sm.envois_echecs', { n: String(e.echecs) }) : '' }),
+    ...(e.raisons ?? []).map(r => trEv('sm.envoi_raison', { genre: libelleCle('sm.genre', r.genre), raison: r.raison ? libelleCle('sm.raison', r.raison) : '?' })),
+  ].join(' · ');
+
 const nomsStaff = (staff: Array<{ nom: string; present: boolean }>) => staff.map(x => `${x.nom}${x.present ? '' : ` (${trEv('sm.staff_absent')})`}`).join(', ');
 const nomsEquipes = (equipes: EquipeSalonMatch[]) => equipes.map(e => `${e.tag ? `[${e.tag}] ` : ''}${e.nom}${e.role ? '' : ` (${trEv('sm.sans_role')})`}`).join(' - ');
 
@@ -79,6 +102,9 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
   const [f, setF] = useState<Saisie | undefined>();
   const [historique, setHistorique] = useState<{ salon: SalonMatch; messages: MessageHistorique[] } | undefined>();
   const { erreur, avis, agir, enCours } = useAgir();
+  // Écart entre l'horloge du serveur et celle de l'appareil (« il y a X s » juste même si l'appareil est mal réglé).
+  const [ecart, setEcart] = useState(0);
+  const [, setTic] = useState(0);
   const recevoir = useCallback((x: VueSalonsMatch) => {
     setV(x);
     setF(versSaisie(x.reglages));
@@ -86,6 +112,24 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
   useEffect(() => {
     void agir('charger', async () => recevoir(await api.salonsMatch(id)));
   }, [agir, api, id, recevoir]);
+  // État léger toutes les 20 s (dernier passage, envois par salon) : ni Discord ni le site ne sont appelés.
+  useEffect(() => {
+    if (typeof api.etatSalonsMatch !== 'function') return undefined;
+    const relire = setInterval(() => {
+      api
+        .etatSalonsMatch(id)
+        .then(x => {
+          setEcart(x.heure - Date.now());
+          setV(avant => (avant ? { ...avant, etat: x.etat, envois: x.envois, salons: avant.salons.map(sa => ({ ...sa, envois: x.salons.find(y => y.id === sa.id)?.envois ?? sa.envois })) } : avant));
+        })
+        .catch(() => undefined);
+    }, RELECTURE_ETAT_MS);
+    const tic = setInterval(() => setTic(n => n + 1), TIC_MS);
+    return () => {
+      clearInterval(relire);
+      clearInterval(tic);
+    };
+  }, [api, id]);
   if (!v || !f) return erreur ? <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-ev-sm" /> : null;
   const lim = v.choix.limites;
   const enregistrer = () =>
@@ -158,7 +202,27 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
           {e.attente ? ` ${trEv('sm.attente', { n: String(e.attente) })}` : ''}
         </Text>
       ) : null}
+      {e?.origine ? (
+        <Text style={attenue(theme, 13)} testID="esport-ev-sm-synchro-derniere">
+          {trEv('sm.synchro_derniere', { il_y_a: ilYA(Date.now() + ecart - Date.parse(e.le)), origine: trEv(`sm.origine.${e.origine}` as CleEv) })}
+        </Text>
+      ) : null}
       {e ? <DiagnosticPassage theme={theme} etat={e} avance={v.reglages.avanceH} /> : null}
+      {(e?.avertissements ?? []).filter(x => x === 'embed-manquant' || x === 'mentions-joueurs').map(x => (
+        <Avis key={x} theme={theme} genre={x === 'embed-manquant' ? 'alerte' : 'info'} texte={trEv(`sm.avert.${x}` as CleEv)} testID={`esport-ev-sm-avert-${x}`} />
+      ))}
+      {v.envois && v.envois.envoyes + v.envois.attente + v.envois.echecs > 0 ? (
+        <Text style={attenue(theme, 13)} testID="esport-ev-sm-envois">{trEv('sm.envois', { envoyes: String(v.envois.envoyes), attente: String(v.envois.attente), echecs: String(v.envois.echecs) })}</Text>
+      ) : null}
+      {v.envois?.echecs ? (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <BoutonHub theme={theme} titre={trEv('sm.renvoyer')} onPress={() => void agir('renvoyer', async () => {
+                  const x = await api.renvoyerSalonsMatch(id);
+                  recevoir(x);
+                  return trEv('sm.renvoyes', { n: String(x.renvoyes) });
+                })} desactive={enCours === 'renvoyer'} testID="esport-ev-sm-renvoyer" />
+        </View>
+      ) : null}
       {e?.erreur ? <Avis theme={theme} genre="alerte" texte={trEv('sm.erreur', { erreur: libelleErreur(e.erreur) })} testID="esport-ev-sm-erreur-etat" /> : null}
 
       {/* Salons */}
@@ -173,6 +237,9 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
           </View>
           {s.equipes.length ? <Text style={attenue(theme)}>{nomsEquipes(s.equipes)}</Text> : null}
           {s.staff?.length ? <Text style={attenue(theme)} testID={`esport-ev-sm-salon-${s.id}-staff`}>{trEv('sm.staff', { liste: nomsStaff(s.staff) })}</Text> : null}
+          {s.envois && s.envois.envoyes + s.envois.attente + s.envois.echecs > 0 ? (
+            <Text style={attenue(theme)} testID={`esport-ev-sm-salon-${s.id}-envois`}>{resumeEnvois(s.envois)}</Text>
+          ) : null}
           <Text style={attenue(theme)} testID={`esport-ev-sm-salon-${s.id}-dates`}>
             {[s.prevuLe ? trEv('sm.prevu', { le: date(s.prevuLe) }) : '', s.suppressionLe ? trEv('sm.suppression_le', { le: date(s.suppressionLe) }) : '', s.supprimeLe ? trEv('sm.supprime_le', { le: date(s.supprimeLe) }) : '', s.erreur ? trEv('sm.erreur_salon', { erreur: s.erreur }) : ''].filter(Boolean).join(' · ')}
           </Text>
