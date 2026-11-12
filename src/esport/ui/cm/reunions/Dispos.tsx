@@ -28,19 +28,19 @@ export function DisposCm({ theme, api, large, fuseau, onFuseau }: { theme: Theme
   }, [agir, api, fuseau]);
   return (
     <View style={{ gap: ESP.m }} testID="esport-cm-reunions-dispos">
-    <Text style={attenue(theme, 13)} testID="esport-cm-dispos-source">{trRe('dispos.source')}</Text>
-    <View style={large ? { flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' } : { gap: ESP.m }}>
-      <Retours theme={theme} erreur={erreur} prefixe="esport-cm-reunions-dispos" />
-      {mes ? (
-        <View style={{ flex: 1, gap: ESP.m, minWidth: 0 }}>
-          <MesCreneaux theme={theme} api={api} mes={mes} onChange={m => { setMes(m); onFuseau(); }} />
-          <MesAbsences theme={theme} api={api} mes={mes} onChange={setMes} />
+      <Text style={attenue(theme, 13)} testID="esport-cm-dispos-source">{trRe('dispos.source')}</Text>
+      <View style={large ? { flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' } : { gap: ESP.m }}>
+        <Retours theme={theme} erreur={erreur} prefixe="esport-cm-reunions-dispos" />
+        {mes ? (
+          <View style={{ flex: 1, gap: ESP.m, minWidth: 0 }}>
+            <MesCreneaux theme={theme} api={api} mes={mes} onChange={m => { setMes(m); onFuseau(); }} />
+            <MesAbsences theme={theme} api={api} mes={mes} onChange={setMes} />
+          </View>
+        ) : null}
+        <View style={{ flex: large ? 1.4 : undefined, minWidth: 0 }}>
+          <Grille theme={theme} api={api} fuseau={fuseau} />
         </View>
-      ) : null}
-      <View style={{ flex: large ? 1.4 : undefined, minWidth: 0 }}>
-        <Grille theme={theme} api={api} fuseau={fuseau} />
       </View>
-    </View>
     </View>
   );
 }
