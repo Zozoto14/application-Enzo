@@ -12,12 +12,12 @@ Page : **Esport › Administration › Jeux** (le Fondateur, et les comptes à q
 
 | Partie | Contenu |
 | --- | --- |
-| Le jeu | Nom, clé (adresse unique, ex. `the-finals`), couleur, icône (adresse https facultative) |
+| Le jeu | Nom, clé (adresse unique, ex. `the-finals`), couleur, icône (adresse https facultative), **modèle de strat** (`valorant`, `thefinals`, `generique` : l'éditeur de strats des teams du jeu, voir [strats.md](strats.md)) |
 | Formats de match | Taille des équipes et nombre d'équipes en même temps (5v5 = 2 × 5 ; 3v3v3v3 = 4 × 3), BO joués (1, 2, 3, 5, 7) |
 | Système de score | **Rounds** (rounds pour gagner, rounds par mi-temps, prolongations, leur règle et l'écart qui les termine, 2 par défaut), **points** (points pour gagner), **classement** (barème de points par place, jeux à plusieurs équipes), **manches** (manches pour gagner), notes |
 | Modes de jeu | Nom, description, formats où ils se jouent, joué en compétition ou non |
-| Maps | Nom, image facultative, **dans le pool** ou retirée, modes |
-| Classes et personnages | Rôles des personnages (Duelliste, Light…) ; agents / champions / builds avec leur classe, jouables ou non |
+| Maps | Nom, image facultative, **dans le pool** ou retirée, modes ; **détails** : image **déposée** (vue de dessus, PNG / JPEG / WebP, 12 Mo), **calibrage** (deux points et leur distance réelle → unités par mètre), **callouts** (zones nommées tracées en polygones), **repères** (sites, spawns attaque / défense, cashouts, coffres, plant…), **étages** |
+| Classes et personnages | Rôles des personnages (Duelliste, Light…) ; agents / champions / builds avec leur classe, jouables ou non ; **capacités** (touche, catégorie, forme, rayon, longueur, largeur, ouverture, portée en mètres, durée, charges, coût, courbable, « à vérifier ») |
 | Roster | Titulaires et remplaçants |
 | Rôles des joueurs | Postes propres au jeu (IGL, Entry, Support…) |
 | Champs libres | Toute autre donnée : texte, nombre, oui/non, liste |
@@ -33,6 +33,18 @@ des ajouts / modifications / retraits). La fiche d'un jeu montre l'historique ; 
 crée une nouvelle (rien n'est effacé). Deux personnes qui modifient le même profil en même temps : la seconde reçoit
 « modifié entre-temps, rechargez-le » (rien n'est écrasé).
 
+**Maps et capacités précises** (migration 0075) : dans la fiche d'un jeu, chaque map a « Détails de la map » (image,
+plan avec callouts, repères et calibrage, étages) et chaque personnage ses « Capacités ». Le plan s'édite sur le site et
+l'app PC. Aucune image officielle n'est livrée : **importez les vôtres** (« Importer une image… ») ; elles sont rangées
+dans le stockage du serveur (table `jeu_images`, comme les fichiers du Drive) et lues par lien signé (6 h). Ces données
+sont **propres au club** : l'assistant IA ne les reçoit pas et ne peut ni les proposer ni les effacer (brouillons et
+mises à jour les gardent).
+
+**Données pré-remplies, à vérifier** : « Pré-remplir les capacités » (agents de Valorant, classes de The Finals) et
+« Compléter avec le modèle The Finals » (formats 3v3v3v3, modes, maps sans image avec leurs étages, classes Light /
+Medium / Heavy avec spécialisations, gadgets et armes) ajoutent des données de connaissances générales, **toutes
+marquées « à vérifier »**, sans rien écraser ni rien télécharger. Corrigez-les, décochez « à vérifier », enregistrez.
+
 **Archiver** un profil : il n'est plus proposé à la création d'une team ; les teams qui l'ont le gardent. **Supprimer**
 n'est possible que si aucune team ne l'utilise.
 
@@ -44,7 +56,8 @@ n'est possible que si aucune team ne l'utilise.
   **Toutes les maps sont marquées « dans le pool »** : décochez celles qui n'y sont plus (ou laissez l'IA le proposer).
 - **Autre jeu** : profil vide, pour les teams créées avant les profils avec ce choix.
 - **The Finals n'est pas préconfiguré** : ses modes et maps compétitifs changent à chaque saison ; l'assistant IA le
-  prépare (brouillon relu par vous), ou créez-le à la main.
+  prépare (brouillon relu par vous), ou créez-le à la main, puis « Compléter avec le modèle The Finals ». La migration
+  0075 donne le modèle de strat `thefinals` à un profil existant dont la clé ou le nom est celui de The Finals.
 
 Les teams existantes sont rattachées par la migration : `valorant` reste Valorant, `autre` reste « Autre jeu », toute
 autre valeur devient Valorant.
@@ -173,6 +186,8 @@ sont comptées à part, sans plafond (rien n'est payé), mais bornées en durée
 | `GET /jeux` (`?tous=1`) | tout compte (tous : gestionnaire) | Profils actifs et leur résumé ; pour un gestionnaire, teams, propositions, état de l'IA |
 | `POST /jeux` · `GET` / `PATCH` / `DELETE /jeux/:cle` | jeux.gerer (`GET` d'un profil actif : tous) | Créer, lire, modifier (`version` attendue), supprimer |
 | `POST /jeux/:cle/archiver` · `PUT /jeux/:cle/maj` | jeux.gerer | Archiver ; vérification automatique et fréquence |
+| `POST /jeux/:cle/images` | jeux.gerer | Dépôt d'une image de map `{ type, donnees (base64), nom }` ; à citer ensuite dans `cartes[].fichier` |
+| `GET /jeux/images/:id?c&exp&sig` | lien signé | Image déposée (les profils rendus portent `images` : liens signés de 6 h) |
 | `GET /jeux/:cle/versions` · `GET …/versions/:n` · `POST …/versions/:n/restaurer` | jeux.gerer | Historique, restauration |
 | `POST /jeux/:cle/verifier` | jeux.gerer | Vérification manuelle |
 | `GET /jeux/propositions` (`?jeu=&statut=`) · `POST /jeux/:cle/propositions/decider` | jeux.gerer | Différences proposées ; `{ acceptees, refusees, corrections }` |
@@ -185,5 +200,8 @@ Tables (migration 0021, comprises dans l'export / import de la base) : `jeux`, `
 `ia_propositions`, `ia_appels`, `ia_reglages`, `permissions_globales`. À l'import dans une base neuve, les profils
 préconfigurés par la migration sont remplacés par ceux de l'export.
 
-Tests : `esport/test/profils-jeu.test.mjs`, `esport/test/ia-assistant.test.mjs` (faux serveur d'IA et faux web :
+Tables de la migration 0075 : colonne `jeux.modele_strat`, table `jeu_images`.
+
+Tests : `esport/test/profils-jeu.test.mjs`, `esport/test/strats-modeles.test.mjs` (modèle, détails des maps et des
+capacités, images), `esport/test/ia-assistant.test.mjs` (faux serveur d'IA et faux web :
 aucun appel réseau réel), `src/esport/ProfilsJeu.test.tsx`.

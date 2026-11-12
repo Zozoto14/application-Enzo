@@ -23,12 +23,48 @@
  *   GET    /jeux/ia/travaux/:id                   détail (brouillon complet)
  *   POST   /jeux/ia/travaux/:id/valider           le Fondateur valide le brouillon corrigé
  *   DELETE /jeux/ia/travaux/:id                   abandonner
+ *   POST   /jeux/:cle/images                      dépôt d'une image (fond de map) { type, donnees base64, nom } (jeux.gerer)
+ *   GET    /jeux/images/:id?c&exp&sig             image par lien signé (sans session, routeImageJeu)
  *   GET    /teams/:id/jeu                         profil du jeu de la team (tout membre)
+ *
+ * Les profils rendus portent `images` : liens signés (6 h) des images citées par les maps.
  */
 
 import { echec } from '../outils.mjs';
 
-export async function routesJeux({ jeux, acteur, chemin, methode: m, url, lireCorps, limite }) {
+/** Corps d'un dépôt d'image : 12 Mo en base64, avec de la marge. */
+export const TAILLE_MAX_CORPS_IMAGE_JEU = 17 * 1024 * 1024;
+/** Corps d'un profil (1 Mo de données, avec l'en-tête). */
+const TAILLE_MAX_CORPS_PROFIL = 1024 * 1024 + 8192;
+
+/** Image d'un profil par lien signé (avant la session). */
+export async function routeImageJeu(jeux, url, requete) {
+  const f = /^\/jeux\/images\/([^/]+)$/.exec(url.pathname.replace(/^\/api\/esport(?=\/|$)/, ''));
+  if (!f) return undefined;
+  return jeux.servirImage(decodeURIComponent(f[1]), url.searchParams, requete);
+}
+
+/** Les liens signés d'images sont relatifs : préfixés ici par l'adresse du serveur. */
+function prefixer(r, origine) {
+  const fixer = images => {
+    if (!images || typeof images !== 'object') return;
+    for (const v of Object.values(images)) if (v?.url && v.url.startsWith('/')) v.url = `${origine}${v.url}`;
+  };
+  if (r && typeof r === 'object') {
+    fixer(r.images);
+    fixer(r.jeu?.images);
+    if (typeof r.url === 'string' && r.url.startsWith('/jeux/images/')) r.url = `${origine}${r.url}`;
+  }
+  return r;
+}
+
+export async function routesJeux(params) {
+  const r = await routesJeuxBrutes(params);
+  const { url } = params;
+  return prefixer(r, `${url.origin}${url.pathname.startsWith('/api/esport') ? '/api/esport' : ''}`);
+}
+
+async function routesJeuxBrutes({ jeux, acteur, chemin, methode: m, url, lireCorps, limite }) {
   const tj = /^\/teams\/([^/]+)\/jeu$/.exec(chemin);
   if (tj && m === 'GET') return jeux.pourTeam(acteur, decodeURIComponent(tj[1]));
   if (chemin !== '/jeux' && !chemin.startsWith('/jeux/')) return undefined;
@@ -37,7 +73,7 @@ export async function routesJeux({ jeux, acteur, chemin, methode: m, url, lireCo
 
   if (p.length === 0) {
     if (m === 'GET') return jeux.liste(acteur, { tous: q.get('tous') === '1' });
-    if (m === 'POST') return jeux.creer(acteur, await lireCorps(256 * 1024 + 4096));
+    if (m === 'POST') return jeux.creer(acteur, await lireCorps(TAILLE_MAX_CORPS_PROFIL));
   }
   if (p[0] === 'propositions' && p.length === 1 && m === 'GET') return jeux.propositions(acteur, { jeu: q.get('jeu') || undefined, statut: q.get('statut') || undefined });
   if (p[0] === 'ia') {
@@ -62,17 +98,18 @@ export async function routesJeux({ jeux, acteur, chemin, methode: m, url, lireCo
       if (p.length === 2 && m === 'GET') return jeux.travaux(acteur, { genre: q.get('genre') || undefined, jeu: q.get('jeu') || undefined });
       if (p.length === 3 && m === 'GET') return jeux.travail(acteur, p[2]);
       if (p.length === 3 && m === 'DELETE') return jeux.abandonnerTravail(acteur, p[2]);
-      if (p.length === 4 && p[3] === 'valider' && m === 'POST') return jeux.validerBrouillon(acteur, p[2], await lireCorps(256 * 1024 + 4096));
+      if (p.length === 4 && p[3] === 'valider' && m === 'POST') return jeux.validerBrouillon(acteur, p[2], await lireCorps(TAILLE_MAX_CORPS_PROFIL));
     }
     throw echec(404, 'route', 'Adresse inconnue.');
   }
   const cle = p[0];
   if (p.length === 1) {
     if (m === 'GET') return jeux.detail(acteur, cle);
-    if (m === 'PATCH') return jeux.modifier(acteur, cle, await lireCorps(256 * 1024 + 4096));
+    if (m === 'PATCH') return jeux.modifier(acteur, cle, await lireCorps(TAILLE_MAX_CORPS_PROFIL));
     if (m === 'DELETE') return jeux.supprimer(acteur, cle);
   }
   if (p[1] === 'archiver' && p.length === 2 && m === 'POST') return jeux.archiver(acteur, cle, await lireCorps());
+  if (p[1] === 'images' && p.length === 2 && m === 'POST') return jeux.deposerImage(acteur, cle, await lireCorps(TAILLE_MAX_CORPS_IMAGE_JEU));
   if (p[1] === 'maj' && p.length === 2 && m === 'PUT') return jeux.reglerMaj(acteur, cle, await lireCorps());
   if (p[1] === 'verifier' && p.length === 2 && m === 'POST') {
     await limite('ia', acteur.compte);

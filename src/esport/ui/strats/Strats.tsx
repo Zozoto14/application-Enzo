@@ -25,10 +25,15 @@ import type { PropsModule } from '../modules';
 import { Editeur } from './Editeur';
 import { Etiquette, Filtre, MentionRiot, Miniature, prendreStratDemandee, useAssetsTeam } from './commun';
 import { cartesDuPool } from '../../jeux/profil';
+import { MODELES, modeleDuJeu } from '../../strats/modeles';
+import { trSt } from '../../i18n/strats2';
 import { tr } from '../../i18n';
 import { trSs, trnSs } from '../../i18n/stratsSuppr';
 import { BoutonPoubelle, ConfirmationSuppression, CorbeilleStrats, ToastAnnuler } from './Suppression';
 import { useTempsReel } from '../../tempsReel/hooks';
+
+/** Seules les images du CDN Riot entrent dans un document (une image déposée se lit dans le profil, lien signé). */
+const imageDocument = (url: string | null): string | null => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
 
 export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
@@ -96,6 +101,9 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   }
 
   const cartes = assets?.cartes ?? [];
+  // Modèle de strat du jeu de la team (Administration › Jeux) : Valorant, The Finals ou générique.
+  const modele = assets?.modele ?? modeleDuJeu(null, detail.team.jeu);
+  const def = MODELES[modele];
   const playbookActif = detail.modules.some(m => m.cle === 'playbook' && m.active) && peut('playbook.manage');
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   const peutCorbeille = peut('strats.delete') || peut('strats.create');
@@ -135,7 +143,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         theme={theme}
         large={large}
         titre={tr('strats.strats.strats')}
-        sous={tr('strats.strats.strategies_dessinees_sur_la')}
+        sous={`${tr('strats.strats.strategies_dessinees_sur_la')} · ${trSt(`modele.${modele}`)}`}
         action={peut('strats.create') ? <BoutonHub theme={theme} titre={creation ? tr('discord.fermer') : tr('strats.strats.nouvelle_strat_2')} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-strats-nouvelle" /> : undefined}
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-strats" />
@@ -191,7 +199,8 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       {creation ? (
         <NouvelleStrat
           theme={theme}
-          cartes={cartesDuPool(assets).map(c => ({ cle: c.cle, nom: c.nom, image: c.minimap }))}
+          sides={def.sides}
+          cartes={cartesDuPool(assets).map(c => ({ cle: c.cle, nom: c.nom, image: imageDocument(c.minimap) }))}
           onCreer={corps =>
             void agir('creation', async () => {
               const s = await api.creer(teamId, corps);
@@ -207,7 +216,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       <Pliable theme={theme} titre={tr('planning.planning.filtres')} resume={[filtres.carte ? cartes.find(c => c.cle === filtres.carte)?.nom : '', filtres.side ? LIBELLES_SIDE[filtres.side] : '', filtres.type ? LIBELLES_TYPE_STRAT[filtres.type] : ''].filter(Boolean).join(' · ') || tr('planning.planning.filtre_aucun')} ouvertParDefaut={large} testID="esport-strats-filtres-ouvrir">
       <Panneau theme={theme} testID="esport-strats-filtres">
         <Filtre theme={theme} libelle={tr('strats.editeur.carte')} valeur={filtres.carte ?? ''} options={[['', tr('journal.toutes')], ...cartes.map(c => [c.cle, c.nom] as const)]} onChoisir={v => setFiltres(f => ({ ...f, carte: v || undefined }))} testID="esport-strats-filtre-carte" />
-        <Filtre<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={filtres.side ?? ''} options={[['', tr('strats.playbook.les_deux')], ['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={v => setFiltres(f => ({ ...f, side: v || undefined }))} testID="esport-strats-filtre-side" />
+        {def.sides ? <Filtre<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={filtres.side ?? ''} options={[['', tr('strats.playbook.les_deux')], ['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={v => setFiltres(f => ({ ...f, side: v || undefined }))} testID="esport-strats-filtre-side" /> : null}
         <Filtre<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={filtres.type ?? ''} options={[['', tr('journal.tous')], ...TYPES_STRAT.map(t => [t, LIBELLES_TYPE_STRAT[t]] as const)]} onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))} testID="esport-strats-filtre-type" />
       </Panneau>
       </Pliable>
@@ -237,7 +246,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
             </View>
             <View style={[styles.ligne, { gap: 4 }]}>
               <Etiquette theme={theme} texte={s.carte.nom} />
-              <Etiquette theme={theme} texte={LIBELLES_SIDE[s.side]} couleur={s.side === 'attaque' ? theme.critique : theme.accent} />
+              {def.sides ? <Etiquette theme={theme} texte={LIBELLES_SIDE[s.side]} couleur={s.side === 'attaque' ? theme.critique : theme.accent} /> : null}
               <Etiquette theme={theme} texte={LIBELLES_TYPE_STRAT[s.type]} />
               {s.visibilite === 'privee' ? <Etiquette theme={theme} texte={tr('strats.strats.privee')} couleur={theme.alerte} /> : null}
               {s.tags.map(t => (
@@ -311,11 +320,13 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
 
 function NouvelleStrat({
   theme,
+  sides,
   cartes,
   onCreer,
   enCours,
 }: {
   theme: ThemeHub;
+  sides: boolean;
   cartes: Array<{ cle: string; nom: string; image: string | null }>;
   onCreer(corps: { titre: string; type: TypeStrat; carte: { cle: string; nom: string; image: string | null }; side: Side; tags: string[]; visibilite: 'team' | 'privee' }): void;
   enCours: boolean;
@@ -332,7 +343,7 @@ function NouvelleStrat({
       <Intertitre theme={theme}>{tr('strats.strats.nouvelle_strat')}</Intertitre>
       <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={80} placeholder={tr('strats.strats.execution_a_retake_b')} testID="esport-strats-titre" />
       <Choix theme={theme} libelle={tr('strats.editeur.carte')} valeur={carte} options={cartes.map(c => ({ id: c.cle, nom: c.nom }))} onChoisir={setCarte} testID="esport-strats-carte" />
-      <Segments<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={setSide} testID="esport-strats-side" />
+      {sides ? <Segments<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={setSide} testID="esport-strats-side" /> : null}
       <Choix<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={type} options={TYPES_STRAT.map(t => ({ id: t, nom: LIBELLES_TYPE_STRAT[t] }))} onChoisir={setType} testID="esport-strats-type" />
       <Champ theme={theme} libelle={tr('strats.playbook.tags_separes_par_des')} valeur={tags} onChanger={setTags} maxLength={200} testID="esport-strats-tags" />
       <Segments<'team' | 'privee'> theme={theme} libelle={tr('resumes.visibilite')} valeur={privee ? 'privee' : 'team'} options={[['team', tr('strats.strats.partagee_avec_la_team')], ['privee', tr('strats.strats.privee_brouillon')]]} onChoisir={v => setPrivee(v === 'privee')} testID="esport-strats-visibilite" />

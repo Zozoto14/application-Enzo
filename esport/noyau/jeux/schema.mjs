@@ -17,6 +17,18 @@
  *   libelles     { personnages, classes, cartes }     mots du jeu (« Agents », « Champions »…)
  *   sources      [{ url, titre }]                     pages de référence (mises à jour par l'IA)
  *
+ * Précision des maps et des personnages (éditeur de strats, migration 0075), champs FACULTATIFS (absents
+ * quand ils sont vides : un profil sans eux reste identique octet pour octet) :
+ *   cartes[].fichier   identifiant d'une image DÉPOSÉE par le Fondateur (`jeu_images`), lue par lien signé
+ *   cartes[].echelle   { pxParMetre, points: [x1, y1, x2, y2], distance }   calibrage (repère carré de 1000)
+ *   cartes[].zones     [{ cle, nom, points: [x, y, …], couleur }]            callouts (polygones nommés)
+ *   cartes[].reperes   [{ cle, nom, type, x, y, niveau }]                    sites, spawns, cashouts, coffres…
+ *   cartes[].niveaux   [{ cle, nom }]                                        étages (The Finals)
+ *   personnages[].capacites [{ cle, nom, touche, categorie, forme, rayon, longueur, largeur, ouverture,
+ *                      portee, duree, charges, cout, courbable, notes, aVerifier }]   dimensions en mètres
+ * Ces champs sont propres au club (images déposées, calibrages, données vérifiées par le Fondateur) :
+ * l'assistant IA ne les propose jamais (`CHAMPS_LOCAUX`, retirés de ses réponses).
+ *
  * Deux modes :
  *  - strict (saisie du Fondateur) : la première erreur lève 400 `profil-invalide` (détails : chemin, raison) ;
  *  - tolérant (réponse d'une IA, donnée NON FIABLE) : un élément invalide est retiré et signalé dans
@@ -28,6 +40,7 @@
 
 import { echec, texteLong, texteNettoye } from '../outils.mjs';
 import { adresseAutorisee } from '../ressources/apercu.mjs';
+import { MODELES_STRAT } from '../strats/modeles.mjs';
 
 export const TYPES_SCORE = ['rounds', 'points', 'placement', 'manches'];
 export const BO_PERMIS = [1, 2, 3, 5, 7];
@@ -36,15 +49,22 @@ export const TYPES_CHAMPS = ['texte', 'nombre', 'booleen', 'liste'];
 export const SECTIONS_LISTES = ['formats', 'modes', 'cartes', 'classes', 'personnages', 'rolesJoueurs', 'champs'];
 /** Sections objet (un seul bloc). */
 export const SECTIONS_OBJETS = ['score', 'roster'];
+export const FORMES_CAPACITE = ['cercle', 'mur', 'cone', 'trajet', 'ligne', 'rect', 'point'];
+export const CATEGORIES_CAPACITE = ['basique', 'signature', 'ultime', 'passif', 'specialisation', 'gadget', 'arme'];
+export const TYPES_REPERES = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'autre'];
+export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 60, niveaux: 12 };
+/** Champs propres au club, jamais proposés par l'IA. */
+export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux'], personnages: ['capacites'] };
 export const MAX_ELEMENTS = { formats: 20, modes: 40, cartes: 80, classes: 20, personnages: 200, rolesJoueurs: 30, champs: 40, sources: 20 };
 /** Taille max d'un profil sérialisé (octets UTF-8). */
-export const TAILLE_MAX_PROFIL = 256 * 1024;
+export const TAILLE_MAX_PROFIL = 1024 * 1024;
 
 export const MOTIF_CLE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const MOTIF_CLE_JEU = /^[a-z0-9][a-z0-9-]{1,39}$/;
 /** Clés réservées par les routes (/jeux/ia, /jeux/propositions). */
-export const CLES_RESERVEES = ['ia', 'propositions'];
+export const CLES_RESERVEES = ['ia', 'propositions', 'images'];
 const MOTIF_COULEUR = /^#[0-9a-fA-F]{6}$/;
+const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Clé stable d'un nom (« KAY/O » → « kay-o », « Skyway Stadium » → « skyway-stadium »). */
 export function cleDe(nom) {
@@ -134,7 +154,7 @@ const ELEMENTS = {
   },
   cartes(v, c, ctx) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
-    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, image: imageCtx(v.image, `${c}.image`, ctx), actif: booleen(v.actif), modes: listeCles(v.modes) };
+    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, image: imageCtx(v.image, `${c}.image`, ctx), actif: booleen(v.actif), modes: listeCles(v.modes), ...detailsCarte(v, c) };
   },
   classes(v, c) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
@@ -143,7 +163,8 @@ const ELEMENTS = {
   personnages(v, c, ctx) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
     const classe = typeof v.classe === 'string' && v.classe ? (MOTIF_CLE.test(v.classe) ? v.classe : cleDe(v.classe)) : null;
-    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, classe: classe || null, image: imageCtx(v.image, `${c}.image`, ctx), actif: booleen(v.actif) };
+    const capacites = listeDetails(v.capacites, `${c}.capacites`, MAX_DETAILS.capacites, lireCapacite);
+    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, classe: classe || null, image: imageCtx(v.image, `${c}.image`, ctx), actif: booleen(v.actif), ...(capacites.length ? { capacites } : {}) };
   },
   rolesJoueurs(v, c) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
@@ -165,6 +186,148 @@ const ELEMENTS = {
     return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, type, valeur };
   },
 };
+
+// ------------------------------------------------------------------ Détails des maps et des personnages
+
+function decimal(v, chemin, min, max, { facultatif = false } = {}) {
+  if (facultatif && (v === undefined || v === null || v === '')) return null;
+  const n = typeof v === 'string' && v.trim() !== '' ? Number(v.replace(',', '.')) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < min || n > max) throw new Invalide(chemin, 'nombre-hors-limites');
+  return Math.round(n * 1000) / 1000;
+}
+
+/** Liste d'éléments identifiés par `cle` (doublons refusés), bornée. */
+function listeDetails(v, chemin, max, lire) {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new Invalide(chemin, 'liste');
+  if (v.length > max) throw new Invalide(chemin, 'trop-elements');
+  const vues = new Set();
+  return v.map((x, i) => {
+    if (!estObjet(x)) throw new Invalide(`${chemin}.${i}`, 'objet');
+    const e = lire(x, `${chemin}.${i}`);
+    if (vues.has(e.cle)) throw new Invalide(`${chemin}.${i}.cle`, 'doublon');
+    vues.add(e.cle);
+    return e;
+  });
+}
+
+const coordonnee = (v, chemin) => decimal(v, chemin, -10, 1010);
+
+/** Capacité d'un personnage : forme et dimensions en mètres, durée (s), charges, coût ; « à vérifier ». */
+function lireCapacite(v, c) {
+  const nom = texte(v.nom, `${c}.nom`, { max: 40 });
+  const forme = FORMES_CAPACITE.includes(v.forme) ? v.forme : 'point';
+  const sortie = {
+    cle: cleElement(v.cle, nom, `${c}.cle`),
+    nom,
+    touche: texteNettoye(v.touche, 6),
+    categorie: CATEGORIES_CAPACITE.includes(v.categorie) ? v.categorie : 'basique',
+    forme,
+  };
+  for (const [champ, max] of [['rayon', 100], ['longueur', 200], ['largeur', 100], ['ouverture', 360], ['portee', 300], ['duree', 600]]) {
+    const n = decimal(v[champ], `${c}.${champ}`, 0, max, { facultatif: true });
+    if (n !== null) sortie[champ] = n;
+  }
+  const charges = entier(v.charges, `${c}.charges`, 0, 20, { facultatif: true });
+  if (charges !== null) sortie.charges = charges;
+  const cout = entier(v.cout, `${c}.cout`, 0, 100_000, { facultatif: true });
+  if (cout !== null) sortie.cout = cout;
+  if (booleen(v.courbable, false)) sortie.courbable = true;
+  const notes = texteLong(v.notes, 300);
+  if (notes) sortie.notes = notes;
+  sortie.aVerifier = booleen(v.aVerifier, false);
+  return sortie;
+}
+
+function lireZone(v, c) {
+  const nom = texte(v.nom, `${c}.nom`, { max: 30 });
+  const pts = v.points;
+  if (!Array.isArray(pts) || pts.length < 6 || pts.length > MAX_DETAILS.pointsZone || pts.length % 2 !== 0) throw new Invalide(`${c}.points`, 'points');
+  const couleur = typeof v.couleur === 'string' && MOTIF_COULEUR.test(v.couleur) ? v.couleur.toLowerCase() : null;
+  return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, points: pts.map((n, i) => coordonnee(n, `${c}.points.${i}`)), ...(couleur ? { couleur } : {}) };
+}
+
+function lireRepere(v, c) {
+  const nom = texte(v.nom, `${c}.nom`, { max: 30 });
+  const type = TYPES_REPERES.includes(v.type) ? v.type : 'autre';
+  const niveau = entier(v.niveau, `${c}.niveau`, -5, 20, { facultatif: true });
+  return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, type, x: coordonnee(v.x, `${c}.x`), y: coordonnee(v.y, `${c}.y`), ...(niveau !== null ? { niveau } : {}) };
+}
+
+function lireNiveau(v, c) {
+  const nom = texte(v.nom, `${c}.nom`, { max: 30 });
+  return { cle: cleElement(v.cle, nom, `${c}.cle`), nom };
+}
+
+/** Échelle : deux points du repère et la distance réelle (m) ; unités par mètre recalculées ici. */
+function lireEchelle(v, c) {
+  if (v === undefined || v === null) return null;
+  if (!estObjet(v)) throw new Invalide(c, 'objet');
+  const points = Array.isArray(v.points) && v.points.length === 4 ? v.points.map((n, i) => coordonnee(n, `${c}.points.${i}`)) : null;
+  if (!points) throw new Invalide(`${c}.points`, 'points');
+  const distance = decimal(v.distance, `${c}.distance`, 0.5, 2000);
+  const d = Math.hypot(points[2] - points[0], points[3] - points[1]);
+  const pxParMetre = Math.round((d / distance) * 1000) / 1000;
+  if (d < 5 || pxParMetre < 0.5 || pxParMetre > 100) throw new Invalide(`${c}.distance`, 'echelle');
+  return { pxParMetre, points, distance };
+}
+
+/** Détails facultatifs d'une map (absents quand vides). */
+function detailsCarte(v, c) {
+  const sortie = {};
+  if (v.fichier !== undefined && v.fichier !== null && v.fichier !== '') {
+    if (typeof v.fichier !== 'string' || !MOTIF_UUID.test(v.fichier)) throw new Invalide(`${c}.fichier`, 'fichier');
+    sortie.fichier = v.fichier;
+  }
+  const echelle = lireEchelle(v.echelle, `${c}.echelle`);
+  if (echelle) sortie.echelle = echelle;
+  const zones = listeDetails(v.zones, `${c}.zones`, MAX_DETAILS.zones, lireZone);
+  if (zones.length) sortie.zones = zones;
+  const reperes = listeDetails(v.reperes, `${c}.reperes`, MAX_DETAILS.reperes, lireRepere);
+  if (reperes.length) sortie.reperes = reperes;
+  const niveaux = listeDetails(v.niveaux, `${c}.niveaux`, MAX_DETAILS.niveaux, lireNiveau);
+  if (niveaux.length) sortie.niveaux = niveaux;
+  return sortie;
+}
+
+/** Retire d'une valeur proposée par l'IA les champs propres au club (images déposées, calibrages…). */
+export function sansChampsLocaux(section, v) {
+  const champs = CHAMPS_LOCAUX[section];
+  if (!champs || !estObjet(v)) return v;
+  const copie = { ...v };
+  for (const k of champs) delete copie[k];
+  return copie;
+}
+
+/**
+ * Reporte les champs propres au club (images déposées, calibrages, callouts, capacités) des éléments de
+ * `avant` sur ceux de `apres` qui ne les ont pas (même clé) : un brouillon ou une proposition de l'IA,
+ * préparés sans eux, ne les effacent jamais.
+ */
+export function reporterChampsLocaux(avant, apres) {
+  if (!avant || !apres) return apres;
+  const sortie = { ...apres };
+  for (const [section, champs] of Object.entries(CHAMPS_LOCAUX)) {
+    if (!Array.isArray(apres[section]) || !Array.isArray(avant[section])) continue;
+    const anciens = new Map(avant[section].map(e => [e.cle, e]));
+    sortie[section] = apres[section].map(e => {
+      const a = anciens.get(e.cle);
+      if (!a) return e;
+      const copie = { ...e };
+      for (const k of champs) if (copie[k] === undefined && a[k] !== undefined) copie[k] = a[k];
+      return copie;
+    });
+  }
+  return sortie;
+}
+
+/** Données d'un profil envoyées à l'IA : sans les champs propres au club (volumineux, jamais proposés). */
+export function donneesPourIa(d) {
+  if (!d) return d;
+  const sortie = { ...d };
+  for (const section of Object.keys(CHAMPS_LOCAUX)) if (Array.isArray(d[section])) sortie[section] = d[section].map(e => sansChampsLocaux(section, e));
+  return sortie;
+}
 
 /** Image d'un élément : en mode tolérant, une image refusée est retirée (avertissement), l'élément reste. */
 function imageCtx(v, chemin, ctx) {
@@ -350,6 +513,12 @@ export function validerEntete(brut, { partiel = false, avecCle = false } = {}) {
       sortie.couleur = couleur.toLowerCase();
     }
     if (!partiel || brut?.icone !== undefined) sortie.icone = imageSure(brut?.icone, 'icone');
+    // Modèle de strat des teams de ce jeu (éditeur de strats) ; absent : générique à la création.
+    if (brut?.modeleStrat !== undefined || (!partiel && avecCle)) {
+      const m = brut?.modeleStrat ?? 'generique';
+      if (!MODELES_STRAT.includes(m)) throw new Invalide('modeleStrat', 'modele-strat');
+      sortie.modeleStrat = m;
+    }
   } catch (e) {
     if (e instanceof Invalide) throw erreurProfil(e);
     throw e;

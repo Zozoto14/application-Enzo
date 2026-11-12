@@ -8,6 +8,7 @@
 
 import { requeteUrl, type ClientEsport } from '../client';
 import { trJeux } from '../i18n/jeux';
+import type { ModeleStrat } from '../strats/modeles';
 
 export type TypeScore = 'rounds' | 'points' | 'placement' | 'manches';
 export type TypeChamp = 'texte' | 'nombre' | 'booleen' | 'liste';
@@ -40,6 +41,34 @@ export interface ModeJeu {
   formats: string[];
   actif: boolean;
 }
+export type TypeRepere = 'site' | 'spawn-attaque' | 'spawn-defense' | 'cashout' | 'coffre' | 'spawn' | 'plant' | 'autre';
+export const TYPES_REPERES: readonly TypeRepere[] = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'autre'];
+/** Calibrage d'une map : deux points du repère carré (1000) et la distance réelle qui les sépare. */
+export interface EchelleCarte {
+  pxParMetre: number;
+  points: number[];
+  distance: number;
+}
+/** Callout : zone nommée (polygone) sur la map. */
+export interface ZoneCarte {
+  cle: string;
+  nom: string;
+  points: number[];
+  couleur?: string;
+}
+/** Repère : site, spawn, cashout, coffre… */
+export interface RepereCarte {
+  cle: string;
+  nom: string;
+  type: TypeRepere;
+  x: number;
+  y: number;
+  niveau?: number;
+}
+export interface NiveauCarte {
+  cle: string;
+  nom: string;
+}
 export interface CarteJeu {
   cle: string;
   nom: string;
@@ -47,6 +76,36 @@ export interface CarteJeu {
   /** Dans le pool compétitif. */
   actif: boolean;
   modes: string[];
+  /** Image déposée par le Fondateur (lien signé dans `ProfilJeu.images`). */
+  fichier?: string;
+  echelle?: EchelleCarte;
+  zones?: ZoneCarte[];
+  reperes?: RepereCarte[];
+  niveaux?: NiveauCarte[];
+}
+export type FormeCapacite = 'cercle' | 'mur' | 'cone' | 'trajet' | 'ligne' | 'rect' | 'point';
+export const FORMES_CAPACITE: readonly FormeCapacite[] = ['cercle', 'mur', 'cone', 'trajet', 'ligne', 'rect', 'point'];
+export type CategorieCapacite = 'basique' | 'signature' | 'ultime' | 'passif' | 'specialisation' | 'gadget' | 'arme';
+export const CATEGORIES_CAPACITE: readonly CategorieCapacite[] = ['basique', 'signature', 'ultime', 'passif', 'specialisation', 'gadget', 'arme'];
+/** Capacité d'un personnage (agent, classe) : dimensions en mètres, durée en secondes. */
+export interface CapaciteJeu {
+  cle: string;
+  nom: string;
+  touche: string;
+  categorie: CategorieCapacite;
+  forme: FormeCapacite;
+  rayon?: number;
+  longueur?: number;
+  largeur?: number;
+  ouverture?: number;
+  portee?: number;
+  duree?: number;
+  charges?: number;
+  cout?: number;
+  courbable?: boolean;
+  notes?: string;
+  /** Données pré-remplies, à vérifier par le Fondateur. */
+  aVerifier: boolean;
 }
 export interface ClasseJeu {
   cle: string;
@@ -58,6 +117,7 @@ export interface PersonnageJeu {
   classe: string | null;
   image: string | null;
   actif: boolean;
+  capacites?: CapaciteJeu[];
 }
 export interface RoleJoueurJeu {
   cle: string;
@@ -97,11 +157,22 @@ export interface EnteteJeu {
   icone: string | null;
   /** « valorant » : fonctions propres à Valorant (assets Riot). */
   base: string | null;
+  /** Modèle de l'éditeur de strats des teams de ce jeu (absent : serveur ancien). */
+  modeleStrat?: ModeleStrat;
   statut: 'actif' | 'archive';
   version: number;
 }
+/** Lien signé (6 h) d'une image déposée, et ses dimensions en pixels. */
+export interface ImageJeu {
+  url: string | null;
+  expire: string | null;
+  largeur: number;
+  hauteur: number;
+}
 export interface ProfilJeu extends EnteteJeu {
   donnees: DonneesJeu;
+  /** Images déposées citées par les maps : `{ [fichier]: lien signé }`. */
+  images?: Record<string, ImageJeu>;
   gerer?: boolean;
   teams?: number;
   propositions?: number;
@@ -308,6 +379,7 @@ export interface SaisieJeu {
   nom: string;
   couleur: string;
   icone: string | null;
+  modeleStrat?: ModeleStrat;
   donnees: DonneesJeu;
   version?: number;
 }
@@ -333,6 +405,9 @@ export function apiJeux(client: ClientEsport) {
     pourTeam: (teamId: string) => client.requete<ProfilJeu>(`/teams/${encodeURIComponent(teamId)}/jeu`),
     creer: (s: SaisieJeu) => client.requete<ProfilJeu>('/jeux', 'POST', s),
     modifier: (cle: string, s: Partial<SaisieJeu> & { version: number }) => client.requete<ProfilJeu>(j(cle), 'PATCH', s),
+    /** Dépôt d'une image (fond d'une map) : base64 (sans en-tête « data: »). */
+    deposerImage: (cle: string, corps: { type: string; donnees: string; nom?: string }) =>
+      client.requete<{ id: string; url: string | null; expire: string | null; largeur: number; hauteur: number; type: string; taille: number; nom: string }>(`${j(cle)}/images`, 'POST', corps),
     archiver: (cle: string, archive: boolean) => client.requete<ProfilJeu>(`${j(cle)}/archiver`, 'POST', { archive }),
     supprimer: (cle: string) => client.requete<{ ok: boolean }>(j(cle), 'DELETE'),
     versions: async (cle: string) => (await client.requete<{ versions: VersionJeu[] }>(`${j(cle)}/versions`)).versions,

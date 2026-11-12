@@ -50,7 +50,7 @@ import { routesCompetition } from './competition/routes.mjs';
 import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
 import { exigerLecteur, servicesStatistiques } from './usage/statistiques.mjs';
 import { servicesJeux } from './jeux/service.mjs';
-import { routesJeux } from './jeux/routes.mjs';
+import { routeImageJeu, routesJeux } from './jeux/routes.mjs';
 import { servicesCm } from './cm/service.mjs';
 import { routeFichierCm, routeRessourceSignee, routesCm } from './cm/routes.mjs';
 import { routePubliqueReunions } from './cm/reunions/routes.mjs';
@@ -231,7 +231,7 @@ export function creerApi({
   const us = servicesCollecte({ base, maintenant });
   const sts = servicesStatistiques({ base, maintenant });
   // Profils de jeu (migration 0021) et assistant IA (clé d'API dans esport.env, jamais renvoyée).
-  const jx = servicesJeux({ base, maintenant, socle: s, ia, travauxIa });
+  const jx = servicesJeux({ base, stockage, cleSession, maintenant, socle: s, ia, travauxIa });
   // Section CM (migration 0023) : espace du club et partie CM des teams ; fichiers par envoi par morceaux (usage « cm »).
   // Drive de la section (migration 0027) : quota, plafond d'un fichier, ZIP (ESPORT_DRIVE_*).
   const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage, drive: configDuDrive, planning: p });
@@ -360,6 +360,8 @@ export function creerApi({
     if (chemin.startsWith('/cm/liens/contenu/') && (m === 'GET' || m === 'HEAD')) return routeRessourceSignee(cm, url, requete);
     // Pièce jointe d'un ticket Discord (migration 0054) : lien signé, accès au ticket revérifié.
     if (chemin.startsWith('/tickets/pieces/') && (m === 'GET' || m === 'HEAD')) return routePieceTicket(tk, url, requete);
+    // Image d'un profil de jeu (fond de map de l'éditeur de strats, migration 0075) : lien signé.
+    if (chemin.startsWith('/jeux/images/') && (m === 'GET' || m === 'HEAD')) return routeImageJeu(jx, url, requete);
     // Abonnement iCal aux réunions de l'équipe CM (migration 0039) : jeton révocable, sans session.
     const icalReunions = await routePubliqueReunions(cm.reunions, { chemin, methode: m, url });
     if (icalReunions !== undefined) return icalReunions;

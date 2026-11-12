@@ -12,7 +12,7 @@
  */
 
 import { echec, texteLong } from '../outils.mjs';
-import { Invalide, MAX_ELEMENTS, SECTIONS_LISTES, SECTIONS_OBJETS, lireElement, lireObjet, lireSources, validerDonnees } from './schema.mjs';
+import { Invalide, MAX_ELEMENTS, SECTIONS_LISTES, SECTIONS_OBJETS, lireElement, lireObjet, lireSources, reporterChampsLocaux, sansChampsLocaux, validerDonnees } from './schema.mjs';
 
 export const OPERATIONS = ['ajout', 'modification', 'retrait'];
 export const CONFIANCES = ['basse', 'moyenne', 'haute'];
@@ -75,7 +75,8 @@ export function normaliserChangements(profil, brut) {
           if (!existants.has(cle)) throw new Invalide(`${chemin}.cle`, 'element-absent');
           avant = existants.get(cle);
         } else {
-          const brutValeur = c.valeur && typeof c.valeur === 'object' ? { ...c.valeur } : null;
+          // Les champs propres au club (images déposées, calibrages, callouts, capacités) ne viennent jamais de l'IA.
+          const brutValeur = c.valeur && typeof c.valeur === 'object' ? sansChampsLocaux(section, { ...c.valeur }) : null;
           if (!brutValeur) throw new Invalide(`${chemin}.valeur`, 'objet');
           if (typeof c.cle === 'string' && !brutValeur.cle) brutValeur.cle = c.cle;
           // On ne modifie qu'un élément qui existe (vérifié avant la valeur : la raison reste claire).
@@ -136,5 +137,5 @@ export function appliquerChangement(donnees, { section, operation, cle, apres })
       d[section].splice(i, 1);
     }
   } else throw obsolete();
-  return validerDonnees(d).donnees;
+  return validerDonnees(reporterChampsLocaux(donnees, d)).donnees;
 }

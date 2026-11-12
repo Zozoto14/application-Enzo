@@ -1,5 +1,8 @@
 # Esport : éditeur de strats et playbook
 
+> Modèles de strat par jeu (Valorant, The Finals, générique), capacités à l'échelle, phases, lecture animée,
+> exports PDF : voir [strats.md](strats.md).
+
 Deux modules de la phase 6, activables par team (Paramètres de la team) :
 
 - **Strats** (`strat_editor`) : un éditeur de stratégies sur la minimap, dans l'esprit de valoplant.gg ;

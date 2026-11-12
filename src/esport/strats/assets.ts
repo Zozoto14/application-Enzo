@@ -20,6 +20,8 @@
  */
 
 import { langueCourante, tr } from '../i18n';
+import type { CapaciteJeu, NiveauCarte, RepereCarte, ZoneCarte } from '../jeux/api';
+import type { ModeleStrat } from './modeles';
 
 export const URL_API_VALORANT = 'https://valorant-api.com/v1';
 export const ORIGINES_ASSETS = ['https://valorant-api.com', 'https://media.valorant-api.com'];
@@ -30,12 +32,14 @@ export const MENTION_RIOT =
   'AppDashboard was created under Riot Games\' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.';
 
 export interface CapaciteAsset {
-  /** Emplacement stable (Ability1, Ability2, Grenade, Ultimate). */
+  /** Emplacement stable (Ability1, Ability2, Grenade, Ultimate), ou clé de la capacité du profil. */
   cle: string;
   nom: string;
   icone: string | null;
   /** Touche par défaut du jeu (C, Q, E, X). */
   touche: string;
+  /** Caractéristiques (profil de jeu, sinon données pré-remplies « à vérifier ») : forme et dimensions en mètres. */
+  donnees?: CapaciteJeu;
 }
 export interface AgentAsset {
   cle: string;
@@ -55,10 +59,19 @@ export interface CarteAsset {
   vignette: string | null;
   /** Profil de jeu : map dans le pool compétitif (absent : oui). */
   actif?: boolean;
+  /** Profil de jeu : unités du repère par mètre (map calibrée), dimensions de l'image déposée. */
+  echelle?: number | null;
+  largeurImage?: number;
+  hauteurImage?: number;
+  zones?: ZoneCarte[];
+  reperes?: RepereCarte[];
+  niveaux?: NiveauCarte[];
 }
 export interface Assets {
   /** « valorant » (assets Riot), ou la clé du profil d'un autre jeu (src/esport/jeux/profil.ts). */
   jeu: string;
+  /** Modèle de strat du jeu (profil) ; absent : déduit du jeu. */
+  modele?: ModeleStrat;
   source: 'local' | 'cache' | 'api' | 'cache-perime' | 'repli' | 'profil';
   cartes: CarteAsset[];
   agents: AgentAsset[];
@@ -75,6 +88,8 @@ type ReponseMin = { ok: boolean; status: number; json(): Promise<unknown> };
 export type FetchAssets = (url: string, init?: { signal?: AbortSignal }) => Promise<ReponseMin>;
 
 const TOUCHES: Record<string, string> = { Ability1: 'Q', Ability2: 'E', Grenade: 'C', Ultimate: 'X' };
+/** Touche → emplacement Riot (clé stable des capacités dans les strats Valorant). */
+export const SLOTS: Record<string, string> = { Q: 'Ability1', E: 'Ability2', C: 'Grenade', X: 'Ultimate' };
 const ORDRE_SLOTS = ['Grenade', 'Ability1', 'Ability2', 'Ultimate'];
 
 /** Clé stable d'un nom (« KAY/O » → « kay-o », « Abyss » → « abyss »). */

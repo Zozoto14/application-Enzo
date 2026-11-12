@@ -22,8 +22,8 @@ import { ENTETES_SECURITE } from '../entetes.mjs';
 import { echec } from '../outils.mjs';
 import { CSP_PAGE_STRAT, pageStrat } from './svg.mjs';
 
-/** Corps d'un enregistrement : document (256 Ko) et miniature (256 Ko en base64). */
-export const TAILLE_MAX_CORPS_STRAT = 900 * 1024;
+/** Corps d’un enregistrement : document (384 Ko) et miniature (256 Ko en base64). */
+export const TAILLE_MAX_CORPS_STRAT = 1024 * 1024;
 
 const segment = s => {
   try {

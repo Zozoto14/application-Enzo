@@ -29,7 +29,9 @@ test('création, lecture et droits : Coach et Analyste créent, Joueur lit, Remp
   const r = await creer(sessions.coach123, { tags: ['A', 'rapide', 'a'] });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   assert.equal(r.corps.revision, 1);
-  assert.equal(r.corps.donnees.version, 2);
+  assert.equal(r.corps.donnees.version, 3);
+  assert.equal(r.corps.modele, 'valorant');
+  assert.equal(r.corps.donnees.modele, 'valorant');
   assert.equal(r.corps.donnees.carte.cle, 'ascent');
   assert.deepEqual(r.corps.tags, ['A', 'rapide'], 'tags sans doublon (casse ignorée)');
   assert.equal(r.corps.creePar.pseudo, 'Coach Zed');
@@ -76,7 +78,7 @@ test('enregistrement versionné : révisions, conflit (409), historique, documen
   assert.equal(r.statut, 400);
   assert.equal(r.corps.code, 'strat-invalide');
   const gros = docExemple();
-  gros.etapes[0].note = 'x'.repeat(300 * 1024);
+  gros.etapes[0].note = 'x'.repeat(400 * 1024);
   r = await b.appel(`${url}/${id}`, { methode: 'PUT', jeton: sessions.coach123, corps: { revision: 2, donnees: gros } });
   assert.equal(r.statut, 413);
   // Historique et lecture d'une version.

@@ -7,7 +7,7 @@ export function docExemple() {
   const d = documentVide({ carte: ASCENT, side: 'attaque' });
   d.etapes[0].objets.push(
     { id: 'a1', type: 'agent', x: 400, y: 600, agent: 'omen', nom: 'Omen', icone: 'https://media.valorant-api.com/agents/8e253930/displayicon.png', joueur: 1, couleur: '#3b82f6' },
-    { id: 'c1', type: 'capacite', x: 520, y: 380, agent: 'omen', capacite: 'Ability2', nom: 'Dark Cover', icone: null, joueur: 1, couleur: '#3b82f6', zone: { forme: 'cercle', rayon: 40 } },
+    { id: 'c1', type: 'capacite', x: 520, y: 380, agent: 'omen', capacite: 'Ability2', nom: 'Dark Cover', icone: null, joueur: 1, couleur: '#3b82f6', zone: { forme: 'cercle', rayon: 4.1 } },
     { id: 'f1', type: 'fleche', points: [400, 600, 450, 500, 520, 420], couleur: '#EF4444', epaisseur: 5 },
     { id: 't1', type: 'texte', x: 100, y: 100, texte: 'Exécution A', couleur: '#ffffff', taille: 28 },
   );

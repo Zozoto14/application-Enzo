@@ -230,7 +230,9 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
       theme={theme}
       large={large}
       nouveau={false}
-      initial={{ cle: profil.cle, nom: profil.nom, couleur: profil.couleur, icone: profil.icone, donnees: profil.donnees, version: profil.version }}
+      initial={{ cle: profil.cle, nom: profil.nom, couleur: profil.couleur, icone: profil.icone, modeleStrat: profil.modeleStrat, donnees: profil.donnees, version: profil.version }}
+      images={profil.images}
+      deposerImage={corps => api.deposerImage(cle, corps)}
       titreAction={trJeux('jeux.enregistrer_version')}
       enCours={enCours}
       erreur={erreurEdition}
@@ -239,7 +241,7 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
         setEnCours(true);
         setErreurEdition(undefined);
         api
-          .modifier(cle, { nom: s.nom, couleur: s.couleur, icone: s.icone, donnees: s.donnees, version: profil.version })
+          .modifier(cle, { nom: s.nom, couleur: s.couleur, icone: s.icone, modeleStrat: s.modeleStrat, donnees: s.donnees, version: profil.version })
           .then(() => {
             oublierProfilsTeams();
             return charger();

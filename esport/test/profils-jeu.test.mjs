@@ -76,7 +76,7 @@ test('schéma strict : la première erreur lève 400 profil-invalide avec son ch
   assert.ok(!('inconnu' in donnees));
   assert.throws(() => validerEntete({ nom: 'IA', cle: 'ia' }, { avecCle: true }), e => e.code === 'profil-invalide' && e.details.chemin === 'cle');
   assert.throws(() => validerEntete({ nom: 'X', couleur: 'rouge' }), e => e.details?.chemin === 'nom' || e.details?.chemin === 'couleur');
-  assert.deepEqual(validerEntete({ nom: 'The Finals', couleur: '#D31F3C' }, { avecCle: true }), { cle: 'the-finals', nom: 'The Finals', couleur: '#d31f3c', icone: null });
+  assert.deepEqual(validerEntete({ nom: 'The Finals', couleur: '#D31F3C' }, { avecCle: true }), { cle: 'the-finals', nom: 'The Finals', couleur: '#d31f3c', icone: null, modeleStrat: 'generique' });
 });
 
 test('schéma tolérant (réponse d’IA) : éléments invalides retirés avec avertissement, image refusée retirée seule', () => {

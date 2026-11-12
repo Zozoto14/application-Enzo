@@ -24,6 +24,7 @@ import { autorise } from '../permissions.mjs';
 import { ErreurEsport, base64url, depuisBase64url, echec, egal, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT, documentVide, validerDocument } from './document.mjs';
+import { joueursDuModele, modeleDuJeu } from './modeles.mjs';
 
 export const MODULE_STRATS = 'strat_editor';
 export const VERSIONS_GARDEES = 30;
@@ -108,6 +109,13 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
 
   const pseudos = ids => pseudosDe(base, ids);
 
+  /** Jeu, modèle de strat et nombre de joueurs de la team (profil de son jeu, sinon déduits de la clé). */
+  async function modeleDeTeam(team) {
+    const j = await base.premier('SELECT modele_strat, donnees FROM jeux WHERE cle = ?', [team.jeu]);
+    const modele = modeleDuJeu(j?.modele_strat, team.jeu);
+    return { jeu: team.jeu, modele, joueurs: joueursDuModele(modele, jsonOu(j?.donnees, {})?.formats) };
+  }
+
   /** Lien signé (1 h) vers la miniature, à préfixer par l'adresse du serveur (`origine`). */
   async function lienMiniature(fichierId, compte, origine = '') {
     if (!fichierId || !stockage || !cleSession) return null;
@@ -119,6 +127,7 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     return {
       id: s.id,
       jeu: s.jeu,
+      modele: s.modele ?? modeleDuJeu(null, s.jeu),
       titre: s.titre,
       carte: { cle: s.carte, nom: s.carte_nom },
       side: s.side,
@@ -139,7 +148,8 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
         supprimer: peut(ctx, 'strats.delete') || (s.cree_par === ctx.acteur.compte && peut(ctx, 'strats.create')),
         partager: peut(ctx, 'strats.share'),
       },
-      ...(avecDonnees ? { donnees: JSON.parse(s.donnees) } : {}),
+      // Le document est toujours rendu à la version courante (une ancienne strat est migrée à la lecture).
+      ...(avecDonnees ? { donnees: validerDocument(JSON.parse(s.donnees), { modele: s.modele }) } : {}),
     };
   }
 
@@ -149,7 +159,7 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'strats.view');
     const lignes = await base.tous(
-      'SELECT id, team_id, jeu, titre, carte, carte_nom, side, type, tags, notes, visibilite, revision, version_document, miniature_id, origine_id, cree_par, cree_le, maj_par, maj_le FROM strats WHERE team_id = ? AND supprime_le IS NULL ORDER BY maj_le DESC LIMIT 500',
+      'SELECT id, team_id, jeu, modele, titre, carte, carte_nom, side, type, tags, notes, visibilite, revision, version_document, miniature_id, origine_id, cree_par, cree_le, maj_par, maj_le FROM strats WHERE team_id = ? AND supprime_le IS NULL ORDER BY maj_le DESC LIMIT 500',
       [teamId],
     );
     const q = normaliser(filtres.q ?? '');
@@ -225,12 +235,13 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'strats.create');
     const m = meta(corps, false);
-    const jeu = ctx.team.jeu === 'valorant' ? 'valorant' : 'autre';
+    // Modèle de strat : celui du profil du jeu de la team (Administration › Jeux).
+    const { jeu, modele, joueurs } = await modeleDeTeam(ctx.team);
     let doc;
-    if (corps?.donnees !== undefined) doc = validerDocument(corps.donnees);
+    if (corps?.donnees !== undefined) doc = validerDocument({ ...corps.donnees, jeu, modele }, { modele });
     else {
       if (!SIDES.includes(corps?.side ?? 'attaque')) throw echec(400, 'side', 'Side : attaque ou défense.');
-      doc = documentVide({ carte: corps?.carte, side: corps?.side ?? 'attaque', jeu });
+      doc = documentVide({ carte: corps?.carte, side: corps?.side ?? 'attaque', jeu, modele, joueurs });
     }
     const t = maintenant();
     const id = nouvelId();
@@ -238,9 +249,9 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     const texte = JSON.stringify(doc);
     await base.lot([
       {
-        sql: `INSERT INTO strats (id, team_id, jeu, titre, carte, carte_nom, side, type, donnees, version_document, revision, miniature_id, tags, notes, visibilite, cree_par, cree_le, maj_par, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?)`,
-        params: [id, teamId, doc.jeu, m.titre, doc.carte.cle, doc.carte.nom, doc.side, m.type, texte, doc.version, m.tags, m.notes, m.visibilite ?? 'team', acteur.compte, iso(t), acteur.compte, iso(t)],
+        sql: `INSERT INTO strats (id, team_id, jeu, modele, titre, carte, carte_nom, side, type, donnees, version_document, revision, miniature_id, tags, notes, visibilite, cree_par, cree_le, maj_par, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        params: [id, teamId, doc.jeu, doc.modele, m.titre, doc.carte.cle, doc.carte.nom, doc.side, m.type, texte, doc.version, m.tags, m.notes, m.visibilite ?? 'team', acteur.compte, iso(t), acteur.compte, iso(t)],
       },
       ...miniature.instructions,
       ...(miniature.miniatureId ? [{ sql: 'UPDATE strats SET miniature_id = ? WHERE id = ?', params: [miniature.miniatureId, id] }] : []),
@@ -263,7 +274,9 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     }
     const m = meta(corps, true);
     if (m.visibilite && s.cree_par !== acteur.compte && !acteur.superAdmin && !peut(ctx, 'strats.delete')) throw echec(403, 'permission', 'Seul l’auteur (ou le staff) change la visibilité.');
-    const doc = corps.donnees === undefined ? JSON.parse(s.donnees) : validerDocument(corps.donnees);
+    // Le modèle d'une strat ne change jamais (celui de sa création) : le document reçu le garde.
+    const modele = s.modele ?? modeleDuJeu(null, s.jeu);
+    const doc = validerDocument(corps.donnees === undefined ? JSON.parse(s.donnees) : { ...corps.donnees, modele, jeu: s.jeu }, { modele });
     const texte = JSON.stringify(doc);
     const t = maintenant();
     const revision = Number(s.revision) + 1;
@@ -308,9 +321,9 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     const nouvel = nouvelId();
     await base.lot([
       {
-        sql: `INSERT INTO strats (id, team_id, jeu, titre, carte, carte_nom, side, type, donnees, version_document, revision, miniature_id, tags, notes, visibilite, origine_id, cree_par, cree_le, maj_par, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        params: [nouvel, teamId, s.jeu, titre, s.carte, s.carte_nom, s.side, s.type, s.donnees, s.version_document, s.tags, s.notes, 'team', s.id, acteur.compte, iso(t), acteur.compte, iso(t)],
+        sql: `INSERT INTO strats (id, team_id, jeu, modele, titre, carte, carte_nom, side, type, donnees, version_document, revision, miniature_id, tags, notes, visibilite, origine_id, cree_par, cree_le, maj_par, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        params: [nouvel, teamId, s.jeu, s.modele ?? modeleDuJeu(null, s.jeu), titre, s.carte, s.carte_nom, s.side, s.type, s.donnees, s.version_document, s.tags, s.notes, 'team', s.id, acteur.compte, iso(t), acteur.compte, iso(t)],
       },
       { sql: 'INSERT INTO strat_versions (id, strat_id, team_id, revision, donnees, cree_par, cree_le) VALUES (?, ?, ?, 1, ?, ?, ?)', params: [nouvelId(), nouvel, teamId, s.donnees, acteur.compte, iso(t)] },
       evenement('strat.duplicated', { teamId, acteur: acteur.compte, entiteType: 'strat', entiteId: nouvel, charge: { titre, source: s.id, sourceTitre: s.titre }, maintenant: t }),
@@ -439,13 +452,13 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
   async function version(acteur, teamId, id, revision) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'strats.view');
-    await stratDeTeam(ctx, id);
+    const s = await stratDeTeam(ctx, id);
     const r = Number(revision);
     if (!Number.isInteger(r) || r < 1) throw echec(404, 'version-introuvable', 'Version introuvable.');
     const l = await base.premier('SELECT * FROM strat_versions WHERE strat_id = ? AND revision = ?', [id, r]);
     if (!l) throw echec(404, 'version-introuvable', 'Version introuvable.');
     // Une ancienne version est relue à travers la migration : toujours au format courant.
-    return { revision: r, le: l.cree_le, donnees: validerDocument(JSON.parse(l.donnees)) };
+    return { revision: r, le: l.cree_le, donnees: validerDocument(JSON.parse(l.donnees), { modele: s.modele }) };
   }
 
   // -------------------------------------------------------------- Liens de lecture seule
@@ -535,7 +548,7 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
       notes: s.notes,
       tags: jsonOu(s.tags, []),
       majLe: s.maj_le,
-      donnees: validerDocument(JSON.parse(s.donnees)),
+      donnees: validerDocument(JSON.parse(s.donnees), { modele: s.modele }),
     };
   }
 

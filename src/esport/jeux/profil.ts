@@ -12,8 +12,10 @@
  */
 
 import type { ClientEsport } from '../client';
-import type { AgentAsset, Assets, CarteAsset } from '../strats/assets';
-import { apiJeux, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
+import { SLOTS, type AgentAsset, type Assets, type CapaciteAsset, type CarteAsset } from '../strats/assets';
+import { modeleDuJeu } from '../strats/modeles';
+import { apiJeux, type CapaciteJeu, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
+import { capacitesPrereplies } from './modeles';
 
 /** « 5v5 », « 3v3v3v3 » ; au-delà de 4 équipes « 20 × 3 ». */
 export function libelleFormat(f: Pick<FormatJeu, 'equipes' | 'joueursParEquipe'>): string {
@@ -55,18 +57,54 @@ export function hote(url: string | null | undefined): string {
  */
 export function assetsDepuisProfil(profil: ProfilJeu, riot?: Assets, maintenant = Date.now()): Assets {
   const valorant = estValorant(profil);
+  const modele = modeleDuJeu(profil.modeleStrat, profil.base === 'valorant' ? 'valorant' : profil.cle);
   const d = profil.donnees;
   const classes = new Map(d.classes.map(c => [c.cle, c.nom]));
   const cartes: CarteAsset[] = d.cartes.map(c => {
     const r = valorant ? riot?.cartes.find(x => x.cle === c.cle) : undefined;
-    return { cle: c.cle, nom: c.nom, minimap: r?.minimap ?? null, vignette: r?.vignette ?? c.image ?? null, actif: c.actif };
+    // Image DÉPOSÉE dans le profil (lien signé) d'abord, sinon la minimap Riot (Valorant).
+    const deposee = c.fichier ? profil.images?.[c.fichier] : undefined;
+    return {
+      cle: c.cle,
+      nom: c.nom,
+      minimap: deposee?.url ?? r?.minimap ?? null,
+      vignette: deposee?.url ?? r?.vignette ?? c.image ?? null,
+      actif: c.actif,
+      echelle: c.echelle?.pxParMetre ?? null,
+      ...(deposee ? { largeurImage: deposee.largeur, hauteurImage: deposee.hauteur } : {}),
+      zones: c.zones ?? [],
+      reperes: c.reperes ?? [],
+      niveaux: c.niveaux ?? [],
+    };
   });
   const agents: AgentAsset[] = d.personnages.map(p => {
     const r = valorant ? riot?.agents.find(x => x.cle === p.cle) : undefined;
+    // Caractéristiques des capacités : celles du profil, sinon les données pré-remplies du modèle (« à vérifier »).
+    const donnees = p.capacites?.length ? p.capacites : capacitesPrereplies(modele, p);
     // Valorant : le rôle traduit par valorant-api.com d'abord (langue de l'app), sinon la classe du profil.
-    return { cle: p.cle, nom: p.nom, role: r?.role ?? (p.classe ? classes.get(p.classe) : null) ?? null, icone: r?.icone ?? null, capacites: r?.capacites ?? [], actif: p.actif };
+    return { cle: p.cle, nom: p.nom, role: r?.role ?? (p.classe ? classes.get(p.classe) : null) ?? null, icone: r?.icone ?? null, capacites: fusionnerCapacites(r?.capacites ?? [], donnees), actif: p.actif };
   });
-  return { jeu: valorant ? 'valorant' : profil.cle, source: riot && valorant ? riot.source : 'profil', cartes, agents, majLe: maintenant };
+  return { jeu: valorant ? 'valorant' : profil.cle, modele, source: riot && valorant ? riot.source : 'profil', cartes, agents, majLe: maintenant };
+}
+
+/**
+ * Capacités d'un personnage : celles de Riot (icônes, noms traduits, emplacement stable) rapprochées des
+ * caractéristiques du profil par la touche (C, Q, E, X) ; sans Riot, celles du profil (clé : l'emplacement
+ * Riot quand la touche en donne un, pour rester lisible par les strats déjà dessinées).
+ */
+export function fusionnerCapacites(riot: CapaciteAsset[], donnees: CapaciteJeu[]): CapaciteAsset[] {
+  if (riot.length) {
+    const utilisees = new Set<CapaciteJeu>();
+    const sortie = riot.map(c => {
+      const x = donnees.find(y => y.touche && y.touche.toUpperCase() === c.touche.toUpperCase() && !utilisees.has(y));
+      if (x) utilisees.add(x);
+      return x ? { ...c, donnees: x } : c;
+    });
+    // Capacités du profil sans équivalent Riot (gadgets, ajouts du Fondateur).
+    for (const x of donnees) if (!utilisees.has(x)) sortie.push({ cle: x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x });
+    return sortie;
+  }
+  return donnees.map(x => ({ cle: SLOTS[x.touche.toUpperCase()] ?? x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x }));
 }
 
 /** Maps du pool (actives), plus celle déjà choisie (une strat sur une map sortie du pool reste éditable). */

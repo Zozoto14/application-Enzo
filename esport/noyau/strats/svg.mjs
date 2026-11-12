@@ -11,6 +11,7 @@
  */
 
 import { calqueDe } from './document.mjs';
+import { echelleEffective } from './modeles.mjs';
 
 export const MENTION_RIOT =
   'AppDashboard was created under Riot Games\' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.';
@@ -38,25 +39,61 @@ function jeton(x, y, rayon, couleur, nom, icone) {
   ].join('');
 }
 
-function cone(o, z) {
-  const a = ((z.angle - z.ouverture / 2) * Math.PI) / 180;
-  const b = ((z.angle + z.ouverture / 2) * Math.PI) / 180;
-  const p = (ang, r) => `${(o.x + r * Math.cos(ang)).toFixed(1)} ${(o.y + r * Math.sin(ang)).toFixed(1)}`;
-  return `<path d="M ${o.x} ${o.y} L ${p(a, z.rayon)} A ${z.rayon} ${z.rayon} 0 ${z.ouverture > 180 ? 1 : 0} 1 ${p(b, z.rayon)} Z" fill="${o.couleur}" fill-opacity="0.3" stroke="${o.couleur}" stroke-width="2"/>`;
+const rad = a => (a * Math.PI) / 180;
+const f1 = n => Number(n).toFixed(1);
+
+/** Secteur (cône de flash, de vision) : centre, angle et ouverture en degrés, portée en unités du repère. */
+function secteur(x, y, angleDeg, ouverture, r, couleur, opacite = 0.3) {
+  if (ouverture >= 359) return `<circle cx="${x}" cy="${y}" r="${f1(r)}" fill="${couleur}" fill-opacity="${opacite}" stroke="${couleur}" stroke-width="2"/>`;
+  const a = rad(angleDeg - ouverture / 2);
+  const b = rad(angleDeg + ouverture / 2);
+  const p = ang => `${f1(x + r * Math.cos(ang))} ${f1(y + r * Math.sin(ang))}`;
+  return `<path d="M ${x} ${y} L ${p(a)} A ${f1(r)} ${f1(r)} 0 ${ouverture > 180 ? 1 : 0} 1 ${p(b)} Z" fill="${couleur}" fill-opacity="${opacite}" stroke="${couleur}" stroke-width="2"/>`;
 }
 
-function objetSvg(o) {
+/** Forme d'une zone de capacité (mètres → unités avec l'échelle `k` de la map). */
+export function zoneSvg(o, z, k) {
+  const c = o.couleur;
+  switch (z?.forme) {
+    case 'cercle':
+      return `<circle cx="${o.x}" cy="${o.y}" r="${f1(z.rayon * k)}" fill="${c}" fill-opacity="0.35" stroke="${c}" stroke-width="2"/>`;
+    case 'cone':
+      return secteur(o.x, o.y, z.angle, z.ouverture, z.portee * k, c);
+    case 'mur':
+    case 'ligne': {
+      const l = z.longueur * k;
+      const x2 = o.x + l * Math.cos(rad(z.angle));
+      const y2 = o.y + l * Math.sin(rad(z.angle));
+      const ep = z.forme === 'mur' ? Math.max(2, z.largeur * k) : 3;
+      if (z.forme === 'mur' && z.courbure) {
+        const mx = (o.x + x2) / 2 - (l / 2) * z.courbure * Math.sin(rad(z.angle));
+        const my = (o.y + y2) / 2 + (l / 2) * z.courbure * Math.cos(rad(z.angle));
+        return `<path d="M ${o.x} ${o.y} Q ${f1(mx)} ${f1(my)} ${f1(x2)} ${f1(y2)}" fill="none" stroke="${c}" stroke-width="${f1(ep)}" stroke-linecap="round" stroke-opacity="0.8"/>`;
+      }
+      return `<line x1="${o.x}" y1="${o.y}" x2="${f1(x2)}" y2="${f1(y2)}" stroke="${c}" stroke-width="${f1(ep)}" stroke-linecap="round" stroke-opacity="0.8"${z.forme === 'ligne' ? ' stroke-dasharray="6 4"' : ''}/>`;
+    }
+    case 'rect': {
+      const l = z.longueur * k;
+      const h = z.largeur * k;
+      return `<rect x="${o.x}" y="${f1(o.y - h / 2)}" width="${f1(l)}" height="${f1(h)}" transform="rotate(${z.angle} ${o.x} ${o.y})" fill="${c}" fill-opacity="0.3" stroke="${c}" stroke-width="2"/>`;
+    }
+    case 'trajet':
+      return `<line x1="${f1(o.x + z.dx)}" y1="${f1(o.y + z.dy)}" x2="${o.x}" y2="${o.y}" stroke="${c}" stroke-width="2" stroke-dasharray="8 6"/>${z.rayon ? `<circle cx="${o.x}" cy="${o.y}" r="${f1(z.rayon * k)}" fill="${c}" fill-opacity="0.15" stroke="${c}" stroke-width="2" stroke-dasharray="4 4"/>` : ''}`;
+    default:
+      return '';
+  }
+}
+
+function objetSvg(o, k) {
   switch (o.type) {
     case 'agent':
       return jeton(o.x, o.y, 22, o.couleur, o.nom, o.icone);
-    case 'capacite': {
-      const z = o.zone;
-      let forme = '';
-      if (z?.forme === 'cercle') forme = `<circle cx="${o.x}" cy="${o.y}" r="${z.rayon}" fill="${o.couleur}" fill-opacity="0.35" stroke="${o.couleur}" stroke-width="2"/>`;
-      else if (z?.forme === 'mur') forme = `<line x1="${o.x}" y1="${o.y}" x2="${o.x + z.dx}" y2="${o.y + z.dy}" stroke="${o.couleur}" stroke-width="${z.epaisseur}" stroke-linecap="round" stroke-opacity="0.8"/>`;
-      else if (z?.forme === 'cone') forme = cone(o, z);
-      return forme + jeton(o.x, o.y, 14, o.couleur, o.nom, o.icone);
-    }
+    case 'capacite':
+      return zoneSvg(o, o.zone, k) + jeton(o.x, o.y, 14, o.couleur, o.nom, o.icone) + (o.ordre ? `<text x="${o.x + 14}" y="${o.y - 12}" font-size="16" font-family="sans-serif" font-weight="700" fill="#ffffff" stroke="#000000" stroke-width="0.6" paint-order="stroke">${o.ordre}</text>` : '');
+    case 'vision':
+      return secteur(o.x, o.y, o.angle, o.ouverture, o.portee * k, o.couleur, 0.15);
+    case 'marqueur':
+      return `<rect x="${o.x - 12}" y="${o.y - 12}" width="24" height="24" transform="rotate(45 ${o.x} ${o.y})" fill="${o.couleur}" stroke="#000000" stroke-width="2"/>${o.etiquette ? `<text x="${o.x}" y="${o.y + 34}" text-anchor="middle" font-size="18" font-family="sans-serif" font-weight="700" fill="#ffffff" stroke="#000000" stroke-width="0.6" paint-order="stroke">${echapper(o.etiquette)}</text>` : ''}`;
     case 'fleche':
     case 'ligne': {
       const pts = [];
@@ -84,7 +121,8 @@ export function svgEtape(doc, index = 0) {
     .join('');
   const fond = imageDistante(doc.carte.image);
   const visibles = etape.objets.filter(o => doc.calques?.[calqueDe(o)]?.visible !== false);
-  const ordre = ['utilitaires', 'dessins', 'texte'];
+  const ordre = ['vision', 'utilitaires', 'marqueurs', 'dessins', 'texte'];
+  const k = echelleEffective(doc.carte.echelle);
   visibles.sort((a, b) => ordre.indexOf(calqueDe(a)) - ordre.indexOf(calqueDe(b)));
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="${echapper(`${doc.carte.nom}, ${etape.titre}`)}">`,
@@ -92,7 +130,7 @@ export function svgEtape(doc, index = 0) {
     '<rect width="1000" height="1000" fill="#1f2937"/>',
     `<text x="500" y="520" text-anchor="middle" font-size="64" font-family="sans-serif" fill="#374151">${echapper(doc.carte.nom)}</text>`,
     fond && doc.calques?.fond?.visible !== false ? `<image href="${echapper(fond)}" x="0" y="0" width="1000" height="1000"/>` : '',
-    visibles.map(objetSvg).join(''),
+    visibles.map(o => objetSvg(o, k)).join(''),
     '</svg>',
   ].join('');
 }
@@ -113,7 +151,7 @@ body{margin:0;background:var(--fond);color:var(--texte);font-family:system-ui,-a
 main{max-width:860px;margin:0 auto;padding:16px}h1{font-size:24px;margin:8px 0}h2{font-size:18px}
 .meta,.mention,.note{color:var(--attenue)}.carte{border:1px solid var(--ligne);border-radius:10px;overflow:hidden}
 svg{display:block;width:100%;height:auto}.mention{font-size:12px;border-top:1px solid var(--ligne);padding-top:12px;margin-top:24px}
-</style></head><body><main><h1>${echapper(titre)}</h1><p class="meta">${echapper(doc.carte.nom)} · ${LIBELLES_SIDE[doc.side] ?? ''} · ${echapper(libelleType)} · lecture seule</p>${notes ? `<p>${echapper(notes).replace(/\n/g, '<br>')}</p>` : ''}${etapes}<p class="mention">${echapper(MENTION_RIOT)}</p></main></body></html>`;
+</style></head><body><main><h1>${echapper(titre)}</h1><p class="meta">${echapper(doc.carte.nom)}${doc.modele === 'thefinals' ? '' : ` · ${LIBELLES_SIDE[doc.side] ?? ''}`} · ${echapper(libelleType)} · lecture seule</p>${notes ? `<p>${echapper(notes).replace(/\n/g, '<br>')}</p>` : ''}${etapes}${doc.modele === 'valorant' || doc.jeu === 'valorant' ? `<p class="mention">${echapper(MENTION_RIOT)}</p>` : ''}</main></body></html>`;
 }
 
 /** En-têtes de la page publique : aucune ressource hors des images Riot (CDN valorant-api.com). */

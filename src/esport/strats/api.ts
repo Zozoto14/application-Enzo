@@ -6,6 +6,7 @@
 
 import { requeteUrl, type ClientEsport } from '../client';
 import type { DocumentStrat, Side, TypeStrat } from './document';
+import type { ModeleStrat } from './modeles';
 
 export interface LienSigne {
   url: string;
@@ -18,6 +19,8 @@ export interface Personne {
 export interface Strat {
   id: string;
   jeu: string;
+  /** Modèle de strat (fixé à la création, d'après le jeu de la team) ; absent : serveur ancien. */
+  modele?: ModeleStrat;
   titre: string;
   carte: { cle: string; nom: string };
   side: Side;

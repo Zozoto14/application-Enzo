@@ -22,6 +22,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [videos.md](videos.md) | Coach, Analyste, Fondateur | Vidéos déposées sur le site, lecteur maison, formats, espace utilisé |
 | [scouting.md](scouting.md) | Staff | Fiches adversaires, VODs |
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
+| [strats.md](strats.md) | Coach, Analyste, Fondateur | Strats par modèle de jeu (Valorant, The Finals), capacités à l'échelle, lecture animée, exports |
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |

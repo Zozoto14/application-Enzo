@@ -13,7 +13,10 @@ import React, { useMemo, useState } from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
-import type { Avertissement, ChampLibre, DonneesJeu, Incertitude, SaisieJeu, SourceJeu, TypeChamp, TypeScore } from '../../jeux/api';
+import type { Avertissement, ChampLibre, DonneesJeu, ImageJeu, Incertitude, SaisieJeu, SourceJeu, TypeChamp, TypeScore } from '../../jeux/api';
+import type { ModeleStrat } from '../../strats/modeles';
+import { trJc } from '../../i18n/jeuxCartes';
+import { CapacitesPersonnage, DetailsCarte, ModeleProfil, type DeposerImage } from './DetailsJeu';
 import { cleDe, hote, libelleFormat } from '../../jeux/profil';
 import { trJeux, type CleJeux } from '../../i18n/jeux';
 import { Choix, Retours, styles } from '../commun';
@@ -142,6 +145,8 @@ export function EditeurProfil({
   erreur,
   onEnregistrer,
   onAnnuler,
+  images,
+  deposerImage,
   testID = 'esport-jeu-editeur',
 }: {
   theme: ThemeHub;
@@ -155,6 +160,10 @@ export function EditeurProfil({
   erreur?: string;
   onEnregistrer(s: SaisieJeu): void;
   onAnnuler(): void;
+  /** Liens signés des images déposées (profil enregistré). */
+  images?: Record<string, ImageJeu>;
+  /** Dépôt d'une image de map (absent : profil pas encore enregistré). */
+  deposerImage?: DeposerImage;
   testID?: string;
 }) {
   const [nom, setNom] = useState(initial.nom);
@@ -162,6 +171,9 @@ export function EditeurProfil({
   const [couleur, setCouleur] = useState(initial.couleur);
   const [icone, setIcone] = useState<string | null>(initial.icone);
   const [d, setD] = useState<DonneesJeu>(() => structuredCloneSur(initial.donnees));
+  // Absent (brouillon de l'IA d'un profil existant) : le modèle du profil reste celui qu'il est, sauf choix explicite.
+  const [modeleStrat, setModeleStrat] = useState<ModeleStrat | undefined>(initial.modeleStrat);
+  const [details, setDetails] = useState<string | undefined>();
   const doutes = meta?.incertitudes ?? [];
 
   /** Points incertains d'une section (`cartes`) ou d'un élément (`cartes.ascent`, `cartes.3`). */
@@ -198,6 +210,7 @@ export function EditeurProfil({
       nom: nom.trim(),
       couleur,
       icone,
+      ...(modeleStrat ? { modeleStrat } : {}),
       donnees: {
         ...d,
         formats: avecCles(d.formats),
@@ -258,6 +271,7 @@ export function EditeurProfil({
           <View style={{ width: 28, height: 28, borderRadius: 14, marginBottom: 8, backgroundColor: MOTIF_COULEUR.test(couleur) ? couleur : theme.ligne }} />
         </View>
         <ChampImage theme={theme} valeur={icone} onChanger={setIcone} testID={`${testID}-icone`} />
+        <ModeleProfil theme={theme} modele={modeleStrat ?? 'generique'} onModele={setModeleStrat} d={d} onDonnees={setD} testID={testID} />
       </Carte>
 
       {section(
@@ -358,6 +372,17 @@ export function EditeurProfil({
               <ChampImage theme={theme} valeur={c.image} onChanger={image => maj('cartes', i, { image })} testID={`${testID}-carte-${i}-image`} />
               <ActifCase theme={theme} libelle={trJeux('jeux.dans_le_pool')} valeur={c.actif} onChanger={actif => maj('cartes', i, { actif })} testID={`${testID}-carte-${i}-actif`} />
               <Bascules theme={theme} libelle={trJeux('jeux.section.modes')} options={modes} valeurs={c.modes} onChanger={v => maj('cartes', i, { modes: v })} testID={`${testID}-carte-${i}-modes`} />
+              <View style={{ width: '100%', gap: ESP.s }}>
+                <View style={[styles.ligne, { gap: ESP.s }]}>
+                  <BoutonHub theme={theme} titre={details === `c${i}` ? trJc('carte.masquer_details') : trJc('carte.details')} onPress={() => setDetails(x => (x === `c${i}` ? undefined : `c${i}`))} testID={`${testID}-carte-${i}-details`} />
+                  <Text style={attenue(theme, 12)}>
+                    {`${c.fichier ? '' : `${trJc('carte.image_vide')} `}${trJc('carte.resume', { zones: c.zones?.length ?? 0, reperes: c.reperes?.length ?? 0, echelle: c.echelle ? trJc('carte.resume_echelle') : trJc('carte.resume_non_calibree') })}`}
+                  </Text>
+                </View>
+                {details === `c${i}` ? (
+                  <DetailsCarte theme={theme} carte={c} onCarte={carte => setD(x => ({ ...x, cartes: x.cartes.map((e, j) => (j === i ? carte : e)) }))} image={c.fichier ? images?.[c.fichier] : undefined} deposer={deposerImage} testID={`${testID}-carte-${i}-plan`} />
+                ) : null}
+              </View>
             </Ligne>
           ))}
           <BoutonHub theme={theme} titre={trJeux('jeux.ajouter_carte')} onPress={() => ajouter('cartes', { cle: '', nom: '', image: null, actif: true, modes: [] })} testID={`${testID}-ajouter-carte`} />
@@ -387,6 +412,18 @@ export function EditeurProfil({
               {classes.length ? <Choix theme={theme} libelle={trJeux('jeux.classe')} valeur={p.classe ?? ''} options={[{ id: '', nom: trJeux('jeux.aucune') }, ...classes]} onChoisir={v => maj('personnages', i, { classe: v || null })} testID={`${testID}-personnage-${i}-classe`} /> : null}
               <ChampImage theme={theme} valeur={p.image} onChanger={image => maj('personnages', i, { image })} testID={`${testID}-personnage-${i}-image`} />
               <ActifCase theme={theme} libelle={trJeux('jeux.jouable')} valeur={p.actif} onChanger={actif => maj('personnages', i, { actif })} testID={`${testID}-personnage-${i}-actif`} />
+              <View style={{ width: '100%', gap: ESP.s }}>
+                <BoutonHub theme={theme} titre={`${trJc('capacites.titre', { n: p.capacites?.length ?? 0 })}${details === `p${i}` ? ' ▴' : ' ▾'}`} onPress={() => setDetails(x => (x === `p${i}` ? undefined : `p${i}`))} testID={`${testID}-personnage-${i}-capacites-ouvrir`} />
+                {details === `p${i}` ? (
+                  <CapacitesPersonnage
+                    theme={theme}
+                    personnage={p}
+                    modele={modeleStrat ?? 'generique'}
+                    onCapacites={capacites => setD(x => ({ ...x, personnages: x.personnages.map((e, j) => (j === i ? (capacites?.length ? { ...e, capacites } : (({ capacites: _, ...reste }) => reste)(e)) : e)) }))}
+                    testID={`${testID}-personnage-${i}-capacites`}
+                  />
+                ) : null}
+              </View>
             </Ligne>
           ))}
           <BoutonHub theme={theme} titre={trJeux('jeux.ajouter_personnage')} onPress={() => ajouter('personnages', { cle: '', nom: '', classe: null, image: null, actif: true })} testID={`${testID}-ajouter-personnage`} />

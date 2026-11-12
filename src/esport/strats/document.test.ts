@@ -20,13 +20,18 @@ import {
   retablir,
   serialiser,
   tailleDocument,
+  zoneDepuisV2,
   zoneParDefaut,
   zoomer,
+  ordreUtilitaires,
+  prochainOrdre,
+  COULEURS_JOUEURS,
   type DocumentStrat,
+  type ObjetCapacite,
   type ObjetStrat,
 } from './document';
 
-const ASCENT = { cle: 'ascent', nom: 'Ascent', image: null };
+const ASCENT = { cle: 'ascent', nom: 'Ascent', image: null, echelle: null };
 const agent = (id: string, x = 100, y = 100): ObjetStrat => ({ id, type: 'agent', x, y, agent: 'omen', nom: 'Omen', icone: null, joueur: 1, couleur: '#3b82f6' });
 const fleche = (id: string): ObjetStrat => ({ id, type: 'fleche', points: [0, 0, 50, 50, 100, 60], couleur: '#ef4444', epaisseur: 5, tirets: false });
 
@@ -113,10 +118,42 @@ describe('document', () => {
     for (let i = 0; i < 500; i++) pris.add(idUnique(pris));
     expect(pris.size).toBe(500);
     expect([...pris].every(id => /^[A-Za-z0-9_-]{1,24}$/.test(id))).toBe(true);
-    expect(zoneParDefaut('cercle')).toEqual({ forme: 'cercle', rayon: 40 });
+    expect(zoneParDefaut('cercle')).toEqual({ forme: 'cercle', rayon: 4 });
     expect(zoneParDefaut('mur')?.forme).toBe('mur');
     expect(zoneParDefaut('cone')).toMatchObject({ forme: 'cone', ouverture: 60 });
     expect(zoneParDefaut('aucune')).toBeNull();
+  });
+});
+
+describe('version 3 : modèles, phases, économie, utilitaires', () => {
+  it('The Finals : trois joueurs, phases et économie propres au modèle', () => {
+    let d = documentVide(ASCENT, 'attaque', 'the-finals', 'thefinals');
+    expect(d.joueurs).toHaveLength(3);
+    expect(appliquer(d, { type: 'phaseEtape', etape: 0, phase: 'post-plant' })).toBe(d);
+    d = appliquer(d, { type: 'phaseEtape', etape: 0, phase: 'prise' });
+    expect(d.etapes[0].phase).toBe('prise');
+    expect(appliquer(d, { type: 'economie', economie: 'full' })).toBe(d);
+    d = appliquer(d, { type: 'ajouterEtape', apres: 0 });
+    expect(d.etapes[1].phase).toBe('prise');
+    d = appliquer(d, { type: 'dureeEtape', etape: 1, duree: 500 });
+    expect(d.etapes[1].duree).toBe(120);
+    const v = appliquer(documentVide(ASCENT), { type: 'economie', economie: 'eco' });
+    expect(v.economie).toBe('eco');
+  });
+
+  it('ordre des utilitaires, coller avec de nouveaux identifiants, recoloration des trajets du joueur', () => {
+    const cap = (id: string, ordre: number | null, t: number | null): ObjetStrat => ({ id, type: 'capacite', x: 0, y: 0, agent: 'omen', capacite: 'Ability2', nom: id, icone: null, joueur: 0, couleur: '#ef4444', zone: null, ordre, t });
+    let d = documentVide(ASCENT);
+    for (const o of [cap('c', 2, null), cap('a', null, 3), cap('b', 1, null), cap('d', null, 1)]) d = appliquer(d, { type: 'ajouter', etape: 0, objet: o });
+    expect(ordreUtilitaires(d.etapes[0]).map(o => o.id)).toEqual(['b', 'c', 'd', 'a']);
+    expect(prochainOrdre(d.etapes[0])).toBe(3);
+    d = appliquer(d, { type: 'ajouter', etape: 0, objet: { ...fleche('f1'), joueur: 0, t0: 0, t1: 4 } as ObjetStrat });
+    d = appliquer(d, { type: 'coller', etape: 0, objets: [d.etapes[0].objets[0]], decalage: 20 });
+    expect(d.etapes[0].objets).toHaveLength(6);
+    expect(new Set(d.etapes[0].objets.map(o => o.id)).size).toBe(6);
+    expect(d.etapes[0].objets[5]).toMatchObject({ x: 20, y: 20, nom: 'c' });
+    d = appliquer(d, { type: 'joueur', index: 0, champs: { couleur: '#000000' } });
+    expect(d.etapes[0].objets.every(o => (o as { couleur: string }).couleur === '#000000')).toBe(true);
   });
 });
 
@@ -162,11 +199,12 @@ describe('sérialisation et migration', () => {
     expect(lireDocument(serialiser(d))).toEqual(d);
   });
 
-  it('migre un document version 1 (une seule frame) vers la version 2', () => {
+  it('migre un document version 1 (une seule frame) vers la version courante', () => {
     const v1 = { version: 1, carte: 'bind', side: 'defense', notes: 'Retake', objets: [agent('a1')] };
     const d = lireDocument(JSON.stringify(v1));
-    expect(d.version).toBe(2);
-    expect(d.carte).toEqual({ cle: 'bind', nom: 'bind', image: null });
+    expect(d.version).toBe(3);
+    expect(d.modele).toBe('valorant');
+    expect(d.carte).toEqual({ cle: 'bind', nom: 'bind', image: null, echelle: null });
     expect(d.etapes).toHaveLength(1);
     expect(d.etapes[0].note).toBe('Retake');
     expect(d.etapes[0].objets[0].id).toBe('a1');
@@ -180,7 +218,29 @@ describe('sérialisation et migration', () => {
     expect(() => lireDocument({ ...documentVide(ASCENT), version: 9 })).toThrow('plus récente');
   });
 
-  it('taille en octets UTF-8 (limite du serveur : 256 Ko)', () => {
+  it('migre un document version 2 : zones en mètres (dessin inchangé sans calibrage), modèle de la strat, trois joueurs pour The Finals', () => {
+    const v2 = {
+      version: 2,
+      jeu: 'autre',
+      carte: { cle: 'monaco', nom: 'Monaco', image: null },
+      side: 'attaque',
+      joueurs: COULEURS_JOUEURS.slice(0, 5).map((couleur, i) => ({ nom: `J${i}`, couleur, agent: null })),
+      calques: { fond: { visible: true, verrou: false }, utilitaires: { visible: false, verrou: false }, dessins: { visible: true, verrou: true }, texte: { visible: true, verrou: false } },
+      etapes: [{ id: 'e1', titre: 'A', note: '', objets: [{ id: 'c', type: 'capacite', x: 1, y: 2, agent: 'x', capacite: 'q', nom: 'Q', icone: null, joueur: 4, couleur: '#ffffff', zone: { forme: 'mur', dx: 0, dy: 80, epaisseur: 8 } }] }],
+    };
+    const d = lireDocument(v2, 'thefinals');
+    expect(d.modele).toBe('thefinals');
+    expect(d.joueurs).toHaveLength(3);
+    expect(d.calques.utilitaires.visible).toBe(false);
+    expect(d.calques.callouts.visible).toBe(true);
+    expect(d.etapes[0].duree).toBe(5);
+    const c = d.etapes[0].objets[0] as ObjetCapacite;
+    expect(c.joueur).toBeNull();
+    expect(c.zone).toEqual({ forme: 'mur', angle: 90, longueur: 10, largeur: 1, courbure: 0 });
+    expect(zoneDepuisV2({ forme: 'cercle', rayon: 40 })).toEqual({ forme: 'cercle', rayon: 5 });
+  });
+
+  it('taille en octets UTF-8 (limite du serveur : 384 Ko)', () => {
     expect(octetsUtf8('aé€😀')).toBe(1 + 2 + 3 + 4);
     const d = documentVide(ASCENT);
     expect(tailleDocument(d)).toBe(octetsUtf8(JSON.stringify(d)));
@@ -194,7 +254,7 @@ describe('vue', () => {
     // Point écran (100, 50) → point document identique avant et après.
     const doc = (vue: typeof v, p: { x: number; y: number }) => ({ x: (p.x - vue.x) / vue.echelle, y: (p.y - vue.y) / vue.echelle });
     expect(doc(v, { x: 100, y: 50 })).toEqual(doc({ echelle: 1, x: 0, y: 0 }, { x: 100, y: 50 }));
-    expect(zoomer(v, 100, { x: 0, y: 0 }).echelle).toBe(4);
+    expect(zoomer(v, 100, { x: 0, y: 0 }).echelle).toBe(6);
     expect(zoomer(v, 0.001, { x: 0, y: 0 }).echelle).toBe(0.5);
   });
 });

@@ -24,7 +24,9 @@ test('document vide : version courante, cinq joueurs colorés, une étape, calqu
   assert.equal(d.version, VERSION_DOCUMENT);
   assert.equal(d.format, 'esport-strat');
   assert.equal(d.joueurs.length, 5);
-  assert.deepEqual(Object.keys(d.calques), ['fond', 'utilitaires', 'dessins', 'texte']);
+  assert.deepEqual(Object.keys(d.calques), ['fond', 'callouts', 'utilitaires', 'vision', 'marqueurs', 'dessins', 'texte']);
+  assert.equal(d.modele, 'valorant');
+  assert.equal(d.etapes[0].duree, 5);
   assert.ok(Object.values(d.calques).every(c => c.visible && !c.verrou));
   assert.equal(d.etapes.length, 1);
   assert.equal(d.side, 'defense');
@@ -71,13 +73,13 @@ test('validation : refus explicites (400) des valeurs dangereuses ou hors bornes
   refuse(d => (d.version = 99), 'strat-version');
 });
 
-test('taille maximale : un document de plus de 256 Ko est refusé (413)', () => {
+test('taille maximale : un document de plus de 384 Ko est refusé (413)', () => {
   const d = docExemple();
   d.etapes[0].note = 'x'.repeat(TAILLE_MAX_DOCUMENT);
   assert.throws(() => validerDocument(d), e => e.statut === 413 && e.code === 'strat-trop-grosse');
 });
 
-test('migration : un document version 1 (une seule frame) devient une étape de la version 2', () => {
+test('migration : un document version 1 (une seule frame) devient une étape de la version courante', () => {
   const v1 = {
     version: 1,
     carte: 'bind',
@@ -86,7 +88,7 @@ test('migration : un document version 1 (une seule frame) devient une étape de 
     objets: [{ id: 'a', type: 'agent', x: 10, y: 20, agent: 'sage', nom: 'Sage', couleur: '#22c55e' }],
   };
   const m = migrerDocument(v1);
-  assert.equal(m.version, 2);
+  assert.equal(m.version, 3);
   assert.equal(m.etapes.length, 1);
   const v = validerDocument(v1);
   assert.equal(v.version, VERSION_DOCUMENT);

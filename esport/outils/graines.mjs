@@ -22,7 +22,7 @@ import { servicesResumes } from '../noyau/resumes.mjs';
 import { servicesEsport } from '../noyau/service.mjs';
 import { semerPlanning } from './graines-planning.mjs';
 import { semerReview } from './graines-review.mjs';
-import { semerStrats } from './graines-strats.mjs';
+import { semerStrats, semerTheFinals } from './graines-strats.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -108,6 +108,7 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
   await semerReview(base, team.id, { maintenant, noyau: s });
   await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
+  await semerTheFinals(base, { maintenant, noyau: s, stockage });
   await semerCompetition(base, team.id, { maintenant, noyau: s });
   // DATA › Ressources de l'espace CM : un lien et un fichier (migration 0051).
   await semerRessources(base, { maintenant, stockage });

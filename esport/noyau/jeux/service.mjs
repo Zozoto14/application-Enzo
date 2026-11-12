@@ -36,7 +36,9 @@ import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assist
 import { TACHES_CONFIDENTIELLES, TACHES_EXTERNES_OK, autorisationsDepuisBase, cleExterne, lireAutorisationsExternes } from '../ia/confidentialite.mjs';
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
-import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, validerDonnees, validerEntete } from './schema.mjs';
+import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, reporterChampsLocaux, validerDonnees, validerEntete } from './schema.mjs';
+import { servicesImagesJeux } from './images.mjs';
+import { modeleDuJeu } from '../strats/modeles.mjs';
 
 export const PERMISSION_JEUX = 'jeux.gerer';
 export const PERMISSIONS_GLOBALES = [PERMISSION_JEUX];
@@ -99,7 +101,8 @@ export async function aPermissionJeux(base, acteur) {
  * { connecteur (creerConnecteurLocal), disponible(), raison, info: { modele, nomModele, moteur, threads,
  * contexte, delaiMs, benchmark }, etat() (en marche, dernière vitesse…), lancerTravailleur() }.
  */
-export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
+export function servicesJeux({ base, stockage, cleSession, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
+  const images = servicesImagesJeux({ base, stockage, cleSession, maintenant });
   const config = ia.config ?? null;
   // Moteurs d'API : principal (IA_API_*) et secondaire (IA_API2_*, porté par la config du principal).
   const configs = { api: config, api2: ia.config2 ?? config?.secondaire ?? null, claude: ia.configClaude ?? config?.claude ?? null };
@@ -150,7 +153,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     };
   }
 
-  const entetePublic = j => ({ cle: j.cle, nom: j.nom, couleur: j.couleur, icone: j.icone ?? null, base: j.base ?? null, statut: j.statut, version: Number(j.version) });
+  const entetePublic = j => ({ cle: j.cle, nom: j.nom, couleur: j.couleur, icone: j.icone ?? null, base: j.base ?? null, modeleStrat: modeleDuJeu(j.modele_strat, j.cle), statut: j.statut, version: Number(j.version) });
 
   async function teamsParJeu() {
     const lignes = await base.tous('SELECT jeu, COUNT(*) AS n FROM teams WHERE supprimee_le IS NULL GROUP BY jeu', []);
@@ -182,11 +185,13 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   }
 
   /** `GET /jeux/:cle` : profil complet (actif ; tout profil pour un gestionnaire). */
-  async function detail(acteur, cle) {
+  async function detail(acteur, cle, { origine = '' } = {}) {
     const j = await ligneJeu(cle);
     const gerer = await peutGerer(acteur);
     if (j.statut !== 'actif' && !gerer) throw echec(404, 'jeu-introuvable', 'Jeu introuvable.');
-    const sortie = { ...entetePublic(j), donnees: donneesDe(j) };
+    const donnees = donneesDe(j);
+    // Images déposées (fonds des maps) : liens signés de lecture, 6 h.
+    const sortie = { ...entetePublic(j), donnees, images: await images.liens(j.cle, donnees, acteur.compte, origine) };
     if (!gerer) return sortie;
     const teams = await teamsParJeu();
     const attente = await base.premier("SELECT COUNT(*) AS n FROM ia_propositions WHERE jeu_cle = ? AND statut = 'en_attente'", [cle]);
@@ -194,11 +199,19 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   }
 
   /** `GET /teams/:id/jeu` : profil du jeu de la team (tout membre), même archivé. */
-  async function pourTeam(acteur, teamId) {
+  async function pourTeam(acteur, teamId, { origine = '' } = {}) {
     const ctx = await socle.contexteTeam(acteur, teamId);
     const j = await base.premier('SELECT * FROM jeux WHERE cle = ?', [ctx.team.jeu]);
-    if (!j) return { cle: ctx.team.jeu, nom: ctx.team.jeu, couleur: '#8b8b9a', icone: null, base: ctx.team.jeu === 'valorant' ? 'valorant' : null, statut: 'actif', version: 0, donnees: validerDonnees({}).donnees };
-    return { ...entetePublic(j), donnees: donneesDe(j) };
+    if (!j) return { cle: ctx.team.jeu, nom: ctx.team.jeu, couleur: '#8b8b9a', icone: null, base: ctx.team.jeu === 'valorant' ? 'valorant' : null, modeleStrat: modeleDuJeu(null, ctx.team.jeu), statut: 'actif', version: 0, donnees: validerDonnees({}).donnees, images: {} };
+    const donnees = donneesDe(j);
+    return { ...entetePublic(j), donnees, images: await images.liens(j.cle, donnees, acteur.compte, origine) };
+  }
+
+  /** `POST /jeux/:cle/images` : dépôt d'une image (fond d'une map), à citer ensuite dans le profil (`cartes[].fichier`). */
+  async function deposerImage(acteur, cle, corps, { origine = '' } = {}) {
+    await exigerGestion(acteur);
+    const j = await ligneJeu(cle);
+    return images.deposer(acteur, j.cle, corps, { origine });
   }
 
   const nomsJeux = () => nomsDesJeux(base);
@@ -220,9 +233,9 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const j = { ...entete };
     await base.lot([
       {
-        sql: `INSERT INTO jeux (cle, nom, couleur, icone, base, statut, donnees, version, maj_auto, frequence_jours, cree_par, cree_le, maj_par, maj_le)
-              VALUES (?, ?, ?, ?, NULL, 'actif', ?, 1, 1, 7, ?, ?, ?, ?)`,
-        params: [j.cle, j.nom, j.couleur, j.icone, JSON.stringify(donnees), acteur.compte, iso(t), acteur.compte, iso(t)],
+        sql: `INSERT INTO jeux (cle, nom, couleur, icone, base, statut, donnees, version, maj_auto, frequence_jours, modele_strat, cree_par, cree_le, maj_par, maj_le)
+              VALUES (?, ?, ?, ?, NULL, 'actif', ?, 1, 1, 7, ?, ?, ?, ?, ?)`,
+        params: [j.cle, j.nom, j.couleur, j.icone, JSON.stringify(donnees), j.modeleStrat ?? 'generique', acteur.compte, iso(t), acteur.compte, iso(t)],
       },
       insertionVersion(j, { version: 1, donnees, motif, resume: resumeDifferences(null, donnees), auteur: acteur.compte, t }),
       ...extra,
@@ -244,15 +257,18 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const avant = donneesDe(j);
     const apres = donnees ?? avant;
     const nouveau = { cle: j.cle, nom: entete.nom ?? j.nom, couleur: entete.couleur ?? j.couleur, icone: entete.icone !== undefined ? entete.icone : (j.icone ?? null) };
+    const modeleAvant = modeleDuJeu(j.modele_strat, j.cle);
+    const modele = entete.modeleStrat ?? modeleAvant;
     const resume = resumeDifferences(avant, apres);
     for (const champ of ['nom', 'couleur', 'icone']) if ((nouveau[champ] ?? null) !== (j[champ] ?? null)) resume[champ] = true;
+    if (modele !== modeleAvant) resume.modeleStrat = true;
     if (Object.keys(resume).length === 0) return { inchange: true };
     const t = maintenant();
     const version = Number(j.version) + 1;
     const [maj] = await base.lot([
       {
-        sql: 'UPDATE jeux SET nom = ?, couleur = ?, icone = ?, donnees = ?, version = ?, maj_par = ?, maj_le = ? WHERE cle = ? AND version = ?',
-        params: [nouveau.nom, nouveau.couleur, nouveau.icone, JSON.stringify(apres), version, acteur.compte, iso(t), j.cle, Number(j.version)],
+        sql: 'UPDATE jeux SET nom = ?, couleur = ?, icone = ?, donnees = ?, modele_strat = ?, version = ?, maj_par = ?, maj_le = ? WHERE cle = ? AND version = ?',
+        params: [nouveau.nom, nouveau.couleur, nouveau.icone, JSON.stringify(apres), modele, version, acteur.compte, iso(t), j.cle, Number(j.version)],
       },
       insertionVersion(nouveau, { version, donnees: apres, motif, resume, auteur: acteur.compte, t }),
       ...extra,
@@ -304,13 +320,16 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       throw e;
     }
     const t = maintenant();
+    const purge = await images.preparerPurge(cle);
     await base.lot([
+      ...purge.instructions,
       { sql: 'DELETE FROM ia_propositions WHERE jeu_cle = ?', params: [cle] },
       { sql: "UPDATE ia_travaux SET statut = 'abandonne', maj_le = ? WHERE jeu_cle = ? AND statut IN ('attente', 'pret')", params: [iso(t), cle] },
       { sql: 'DELETE FROM jeu_versions WHERE jeu_cle = ?', params: [cle] },
       { sql: 'DELETE FROM jeux WHERE cle = ?', params: [cle] },
       evenement('game.deleted', { acteur: acteur.compte, entiteType: 'jeu', entiteId: cle, charge: { nom: j.nom }, maintenant: t }),
     ]);
+    await purge.effacer();
     return { ok: true };
   }
 
@@ -1088,7 +1107,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     if (x.jeu_cle) {
       const j = await ligneJeu(x.jeu_cle);
       const entete = validerEntete(corps, { partiel: true });
-      const { donnees } = validerDonnees(corps?.donnees ?? {});
+      // Le brouillon a été préparé sans les champs propres au club (images, calibrages, callouts, capacités) : ils restent.
+      const { donnees } = validerDonnees(reporterChampsLocaux(donneesDe(j), validerDonnees(corps?.donnees ?? {}).donnees));
       const r = await ecrireVersion(acteur, j, { entete, donnees, versionAttendue: corps?.version, motif: 'ia-brouillon', extra: [fini] });
       if (r.inchange) await base.lot([fini]);
       return detail(acteur, j.cle);
@@ -1273,6 +1293,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     liste,
     detail,
     pourTeam,
+    deposerImage,
+    servirImage: images.servir,
     creer,
     modifier,
     archiver,
