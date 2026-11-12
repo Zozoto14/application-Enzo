@@ -21,7 +21,7 @@
 import { rest } from '../tickets/discord.mjs';
 import { iso, jsonOu } from '../outils.mjs';
 import { hubMasque } from './reglages.mjs';
-import { PV, appliquerSurcharges, salonsDuServeur } from './salons.mjs';
+import { DROITS_PASSE_PARTOUT, PV, appliquerSurcharges, salonsDuServeur } from './salons.mjs';
 import { rolesEquipe, rolesStaffEvenement } from './tournoi.mjs';
 
 export const CLE_ORIGINES = 'vocaux_hubs_origine';
@@ -56,7 +56,7 @@ export async function rolesAdmisHub(base, hub, reglages) {
 }
 
 /** Surcharges du hub caché : celles d'origine, @everyone sans « voir », admis et bot avec. */
-export function surchargesHubMasque(origine, { guildId, botId, admis }) {
+export function surchargesHubMasque(origine, { guildId, botId, admis, rolesPasse = [] }) {
   const m = new Map((origine ?? []).map(o => [String(o.id), { ...propre(o), allow: BigInt(o.allow ?? '0'), deny: BigInt(o.deny ?? '0') }]));
   const regler = (id, type, allow = 0n, deny = 0n) => {
     const o = m.get(id) ?? { id, type, allow: 0n, deny: 0n };
@@ -67,6 +67,8 @@ export function surchargesHubMasque(origine, { guildId, botId, admis }) {
   regler(guildId, 0, 0n, PV.VOIR);
   for (const r of admis) if (r !== guildId) regler(r, 0, ENTRER);
   if (botId) regler(botId, 1, DROITS_BOT_HUB);
+  // Rôles passe-partout (Goat) : voient et rejoignent aussi un hub caché (droits limités, vocaux.md).
+  for (const r of rolesPasse) if (r && r !== guildId) regler(r, 0, DROITS_PASSE_PARTOUT);
   return [...m.values()].map(o => ({ id: o.id, type: o.type, allow: o.allow.toString(), deny: o.deny.toString() }));
 }
 
@@ -106,7 +108,7 @@ export async function synchroniserHubs(ctx, reglages, { seulement = null } = {})
       change = true;
     }
     const admis = await rolesAdmisHub(base, hub, reglages);
-    const surcharges = surchargesHubMasque(origines[hub.id], { guildId: ctx.guildId, botId: ctx.botId, admis });
+    const surcharges = surchargesHubMasque(origines[hub.id], { guildId: ctx.guildId, botId: ctx.botId, admis, rolesPasse: reglages?.rolesPassePartout ?? [] });
     const r = await rest(ctx.fetch, ctx.jetonBot, 'PATCH', `/channels/${hub.id}`, { permission_overwrites: surcharges }, { raison: 'Esport HQ : hub vocal réservé' });
     if (r.ok) b.caches++;
     else b.echecs.push({ hub: hub.id, quoi: 'cacher', statut: r.statut, code: r.code ?? null });

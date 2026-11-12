@@ -336,14 +336,14 @@ test('application : réglages (vocaux.configurer), serveur Discord lu (salons vo
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   assert.equal(r.corps.reglages.hubs[0].limite, 4);
   assert.equal(r.corps.connexion.mode, 'hors_ligne', 'aucune Gateway en test : l’écran prévient');
-  assert.match(r.corps.lienInvitation, /permissions=378243632208/);
+  assert.match(r.corps.lienInvitation, /permissions=378279284304/);
   // Serveur Discord : les salons vocaux sont proposés comme hubs, avec les permissions du bot.
   k.discord.etat.salons.set(HUB, { id: HUB, type: 2, name: 'Créer un salon', guild_id: k.GUILD, parent_id: '710000000000000010', position: 1, permission_overwrites: [] });
   const d = await k.api('/vocaux/discord');
   assert.equal(d.statut, 200, JSON.stringify(d.corps));
   assert.ok(d.corps.salons.some(s => s.id === HUB && s.type === 'vocal'));
   assert.ok(d.corps.salons.some(s => s.type === 'categorie'));
-  assert.deepEqual(d.corps.permissions.serveur, ['connecter', 'deplacer_membres'], 'le faux bot n’a pas encore ces deux permissions');
+  assert.deepEqual(d.corps.permissions.serveur, ['connecter', 'parler', 'flux', 'vad', 'deplacer_membres'], 'le faux bot n’a pas encore ces permissions');
   assert.equal(d.corps.permissions.hubs[0].id, HUB);
   // Sans la permission : 403.
   const voir = await k.compteAvec('voir1234', 'Voir', ['tickets.voir']);

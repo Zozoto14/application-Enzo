@@ -17,6 +17,8 @@ import { echec, jsonOu } from '../outils.mjs';
 export const COMMANDES_VOCAUX = Object.freeze(['renommer', 'verrouiller', 'deverrouiller', 'expulser', 'ami-ajouter', 'ami-retirer', 'limite', 'proprietaire']);
 /** Quand le propriétaire quitte son salon : la propriété passe à une personne restée, ou il la garde (il peut revenir). */
 export const MODES_PROPRIETAIRE = Object.freeze(['transferer', 'garder']);
+/** Rôle « Goat » créé par le bot : nom et couleur par défaut. */
+export const NOM_ROLE_GOAT = 'Goat';
 export const LIMITES_VOCAUX = Object.freeze({ hubs: 10, roles: 20, amis: 25, places: 99, delaiMinS: 5, delaiMaxS: 300, parMembreMax: 5, modele: 90 });
 export const MODELE_DEFAUT = 'Salon de {pseudo}';
 export const MODELE_TOURNOI_DEFAUT = '{tag} — {nom}';
@@ -57,6 +59,8 @@ export const VOCAUX_DEFAUT = Object.freeze({
   maxParMembre: 1,
   quandProprietairePart: 'transferer',
   salonJournaux: null,
+  rolesPassePartout: [],
+  passePartoutTous: true,
 });
 
 const ID = /^\d{5,25}$/;
@@ -117,6 +121,8 @@ export async function lireVocaux(base) {
   s.hubs = (Array.isArray(s.hubs) ? s.hubs : []).filter(h => h && ID.test(String(h.id))).map(hubPropre);
   s.rolesStaff = Array.isArray(s.rolesStaff) ? s.rolesStaff.filter(x => ID.test(String(x))) : [];
   s.etiquettesStaff = etiquettes(s.etiquettesStaff);
+  s.rolesPassePartout = Array.isArray(s.rolesPassePartout) ? [...new Set(s.rolesPassePartout.map(String).filter(x => ID.test(x)))] : [];
+  s.passePartoutTous = s.passePartoutTous !== false;
   if (!MODES_PROPRIETAIRE.includes(s.quandProprietairePart)) s.quandProprietairePart = 'transferer';
   return s;
 }
@@ -175,6 +181,9 @@ export function validerVocaux(c, actuel) {
     if (new Set(s.hubs.map(h => h.id)).size !== s.hubs.length) throw echec(400, 'vocaux-hub', 'Le même salon est choisi pour deux hubs.');
   }
   if (c.rolesStaff !== undefined) s.rolesStaff = ids(c.rolesStaff, LIMITES_VOCAUX.roles, 'vocaux-staff');
+  // Rôles passe-partout (Goat) : accès à toutes les vocs, par surcharges de salons seulement (vocaux.md).
+  if (c.rolesPassePartout !== undefined) s.rolesPassePartout = ids(c.rolesPassePartout, LIMITES_VOCAUX.roles, 'vocaux-passe-partout');
+  if (c.passePartoutTous !== undefined) s.passePartoutTous = c.passePartoutTous === true;
   // Libellés courts des rôles du staff (salon du staff d'un hub d'événement : `{role}`).
   if (c.etiquettesStaff !== undefined) s.etiquettesStaff = etiquettes(c.etiquettesStaff, true);
   s.delaiSuppressionS = entier(c.delaiSuppressionS, LIMITES_VOCAUX.delaiMinS, LIMITES_VOCAUX.delaiMaxS, 'vocaux-delai', s.delaiSuppressionS);

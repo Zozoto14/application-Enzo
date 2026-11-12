@@ -41,6 +41,22 @@ export interface ReglagesVocaux {
   salonJournaux: string | null;
   /** Libellés courts des rôles du staff ({role} du salon du staff d'un hub d'événement). */
   etiquettesStaff?: Record<string, string>;
+  /** Rôles « passe-partout » (Goat) : entrent dans toutes les vocs par surcharges de salons, aucune permission de serveur. */
+  rolesPassePartout?: string[];
+  /** Aussi sur tous les salons vocaux existants du serveur (oui par défaut). */
+  passePartoutTous?: boolean;
+}
+
+/** Bilan de la dernière synchronisation de l'accès passe-partout. */
+export interface BilanPasse {
+  cibles: number;
+  couverts: number;
+  ajoutes: number;
+  restaures: number;
+  echecs: Array<{ id: string; nom: string; statut: number; code: number | null }>;
+  reste: number;
+  limiteDebit: boolean;
+  le: string;
 }
 
 export type CommandesVocaux = Record<string, { actif: boolean; roles: string[] }>;
@@ -67,9 +83,9 @@ export interface ConfigVocaux {
   serveur: { id: string; nom: string } | null;
   connexion: Connexion;
   gatewayActivee: boolean;
-  etat: { derniereErreur?: { motif: string; statut: number; code: number | null; le: string }; dernierSalon?: { le: string; ok: boolean }; derniereCreation?: DerniereCreation };
+  etat: { derniereErreur?: { motif: string; statut: number; code: number | null; le: string }; dernierSalon?: { le: string; ok: boolean }; derniereCreation?: DerniereCreation; passePartout?: BilanPasse };
   salons: SalonTemporaire[];
-  choix: { commandes: string[]; modesProprietaire: ModeProprietaire[]; limites: { hubs: number; roles: number; amis: number; places: number; delaiMinS: number; delaiMaxS: number; parMembreMax: number; modele: number }; modeleDefaut: string; modeleTournoiDefaut: string; permissionsBot: string[] };
+  choix: { passePartout?: { droits: string[]; nomDefaut: string }; commandes: string[]; modesProprietaire: ModeProprietaire[]; limites: { hubs: number; roles: number; amis: number; places: number; delaiMinS: number; delaiMaxS: number; parMembreMax: number; modele: number }; modeleDefaut: string; modeleTournoiDefaut: string; permissionsBot: string[] };
   bot: boolean;
   lienInvitation: string | null;
   /** Événements du club proposés pour un hub d'équipe (Administration › Événements) ; clé `tournoiId` du hub. */
@@ -103,6 +119,9 @@ export function apiVocaux(client: ClientEsport) {
     changer: (c: Partial<ReglagesVocaux>) => r<ConfigVocaux>('/vocaux/config', 'PUT', c),
     changerCommandes: (c: CommandesVocaux) => r<ConfigVocaux>('/vocaux/config/commandes', 'PUT', c),
     discord: () => r<ServeurVocaux>('/vocaux/discord'),
+    /** Crée le rôle Goat (aucune permission) et l'ajoute aux rôles passe-partout. */
+    creerGoat: (c: { nom?: string; couleur?: string }) => r<ConfigVocaux & { roleCree: { id: string; nom: string; positionne: boolean } }>('/vocaux/goat', 'POST', c),
+    synchroniserPasse: () => r<ConfigVocaux>('/vocaux/passe-partout/synchroniser', 'POST', {}),
   };
 }
 

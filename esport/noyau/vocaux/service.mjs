@@ -15,15 +15,18 @@ import { instructionReglage, lireGeneral } from '../tickets/reglages.mjs';
 import { diagnosticConnexion } from '../tickets/superviseur.mjs';
 import { permissionsMembre, rest } from '../tickets/discord.mjs';
 import { FONCTIONNALITES_PERMISSIONS, entierPermissions, lienInvitationBot } from '../discord/permissions-bot.mjs';
-import { COMMANDES_VOCAUX, LIMITES_VOCAUX, MODELE_DEFAUT, MODELE_STAFF_DEFAUT, MODELE_TOURNOI_DEFAUT, MODES_PROPRIETAIRE, lireCommandesVocaux, lireVocaux, validerCommandesVocaux, validerVocaux } from './reglages.mjs';
+import { COMMANDES_VOCAUX, LIMITES_VOCAUX, MODELE_DEFAUT, MODELE_STAFF_DEFAUT, MODELE_TOURNOI_DEFAUT, MODES_PROPRIETAIRE, NOM_ROLE_GOAT, lireCommandesVocaux, lireVocaux, validerCommandesVocaux, validerVocaux } from './reglages.mjs';
 import { lireEtatVocaux } from './moteur.mjs';
 import { salonsDuServeur } from './salons.mjs';
 import { apresReglages } from './hubs.mjs';
+import { appliquerPasse, creerRolePasse } from './passepartout.mjs';
 
 export const PERMISSION_VOCAUX = 'vocaux.configurer';
 const PERMISSION_EVENEMENTS = 'evenements.gerer';
 /** Permissions du bot nécessaires aux salons vocaux temporaires : celles de la liste centrale (discord/permissions-bot.mjs). */
 export const PERMISSIONS_VOCAUX = Object.freeze(FONCTIONNALITES_PERMISSIONS.find(f => f.id === 'vocaux').permissions);
+/** Droits accordés aux rôles passe-partout (clés de permissions-bot.mjs). */
+const DROITS_PASSE_PARTOUT_CLES = Object.freeze(['voir_salons', 'connecter', 'parler', 'flux', 'vad']);
 const manquantesVocaux = p => PERMISSIONS_VOCAUX.filter(cle => (p & entierPermissions([cle])) === 0n);
 
 export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fetchDiscord, jetonBot, applicationId = '', serveurTickets = {}, journal = console }) {
@@ -31,7 +34,11 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
   async function apres(avant, reglages) {
     try {
       const general = await lireGeneral(base);
-      return await apresReglages({ base, fetch: fetchDiscord, jetonBot, guildId: general.guildId, botId: applicationId || null, maintenant, journal }, avant, reglages);
+      const ctx = { base, fetch: fetchDiscord, jetonBot, guildId: general.guildId, botId: applicationId || null, maintenant, journal };
+      const bilan = await apresReglages(ctx, avant, reglages);
+      // Accès passe-partout (rôle Goat) : après les hubs (un hub caché a ses propres surcharges).
+      await appliquerPasse(ctx, avant, reglages);
+      return bilan;
     } catch (e) {
       journal.warn?.('[esport] vocaux : hubs non synchronisés', e?.message ?? e);
       return null;
@@ -57,7 +64,7 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
       gatewayActivee: serveurTickets.gateway !== false,
       etat: await lireEtatVocaux(base),
       salons: salons.map(s => ({ id: s.salonId, nom: s.nom, hubId: s.hubId, proprietaireId: s.proprietaireId, proprietaireNom: s.proprietaireNom, verrouille: s.verrouille, limite: s.limite, presents: s.occupants.length, amis: s.amis.length, tournoiId: s.tournoiId, equipeId: s.equipeId, videDepuis: s.videDepuis, creeLe: s.creeLe })),
-      choix: { commandes: COMMANDES_VOCAUX, modesProprietaire: MODES_PROPRIETAIRE, limites: LIMITES_VOCAUX, modeleDefaut: MODELE_DEFAUT, modeleTournoiDefaut: MODELE_TOURNOI_DEFAUT, permissionsBot: [...PERMISSIONS_VOCAUX] },
+      choix: { passePartout: { droits: DROITS_PASSE_PARTOUT_CLES, nomDefaut: NOM_ROLE_GOAT }, commandes: COMMANDES_VOCAUX, modesProprietaire: MODES_PROPRIETAIRE, limites: LIMITES_VOCAUX, modeleDefaut: MODELE_DEFAUT, modeleTournoiDefaut: MODELE_TOURNOI_DEFAUT, permissionsBot: [...PERMISSIONS_VOCAUX] },
       bot: Boolean(jetonBot),
       lienInvitation: lienInvitationBot(applicationId),
       // Événements du club proposés pour un hub d'équipe (Administration › Événements) : ceux qui ne sont ni terminés ni
@@ -98,6 +105,32 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     const t = maintenant();
     await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux' }, maintenant: t })]);
     await apres(actuel, reglages);
+    return config(acteur);
+  }
+
+  /**
+   * Crée le rôle « Goat » (ou le nom choisi) SANS aucune permission, sous le rôle du bot, l'ajoute aux rôles
+   * passe-partout et applique l'accès aux salons vocaux. Journal `tickets.config_modifiee` (clé `vocaux`).
+   */
+  async function creerGoat(acteur, corps) {
+    await exiger(acteur);
+    const general = await lireGeneral(base);
+    if (!general.guildId) throw echec(400, 'vocaux-serveur', 'Choisissez d’abord le serveur Discord (Tickets › Configuration › Général).');
+    const actuel = await lireVocaux(base);
+    if (actuel.rolesPassePartout.length >= LIMITES_VOCAUX.roles) throw echec(400, 'vocaux-passe-partout', `${LIMITES_VOCAUX.roles} rôles au plus.`);
+    const { role, positionne } = await creerRolePasse({ fetch: fetchDiscord, jetonBot, guildId: general.guildId, botId: applicationId || null }, { nom: corps?.nom, couleur: corps?.couleur });
+    const reglages = validerVocaux({ rolesPassePartout: [...actuel.rolesPassePartout, role.id] }, actuel);
+    const t = maintenant();
+    await base.lot([instructionReglage('vocaux', reglages, acteur.compte, t), evenement('tickets.config_modifiee', { acteur: acteur.compte, entiteType: 'tickets', entiteId: 'vocaux', charge: { cle: 'vocaux', roleGoat: role.id }, maintenant: t })]);
+    await apres(actuel, reglages);
+    return { ...(await config(acteur)), roleCree: { ...role, positionne } };
+  }
+
+  /** Resynchronise l'accès passe-partout à la demande (bouton de la carte). */
+  async function synchroniserPasse(acteur) {
+    await exiger(acteur);
+    const reglages = await lireVocaux(base);
+    await apres(reglages, reglages);
     return config(acteur);
   }
 
@@ -244,5 +277,5 @@ export function servicesVocaux({ base, maintenant = () => Date.now(), fetch: fet
     };
   }
 
-  return { config, changer, changerCommandes, discord, exiger, hubsEvenement, ajouterHubEvenement, modifierHubEvenement, retirerHubEvenement };
+  return { config, changer, creerGoat, synchroniserPasse, changerCommandes, discord, exiger, hubsEvenement, ajouterHubEvenement, modifierHubEvenement, retirerHubEvenement };
 }

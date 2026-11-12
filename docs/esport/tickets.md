@@ -30,7 +30,7 @@ puis effacé : voir « Supprimer un ticket fermé »).
    **Gérer les salons** (créer, déplacer, renommer, supprimer les salons de tickets), **Gérer les rôles** (droits de
    chaque salon : l'auteur, les rôles de la catégorie), **Joindre des fichiers**. Le plus simple : **Tickets ›
    Configuration › Connexion › Inviter le bot (ou mettre ses permissions à jour)**, qui ouvre le lien d'invitation avec
-   toutes les permissions du bot (`permissions=378243632208`, liste centrale `esport/noyau/discord/permissions-bot.mjs` ;
+   toutes les permissions du bot (`permissions=378279284304`, liste centrale `esport/noyau/discord/permissions-bot.mjs` ;
    aussi dans Administration › Bot Esport HQ). La même page **vérifie** ce que le bot a vraiment, au niveau du
    serveur puis dans les catégories et le salon choisis, et dit ce qui manque.
 4. Le rôle du bot doit être **au-dessus** des rôles qu'il place sur les salons (Paramètres du serveur › Rôles : glisser

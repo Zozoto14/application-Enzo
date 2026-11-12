@@ -37,6 +37,7 @@ import { lireGeneral } from '../tickets/reglages.mjs';
 import { hubMasque, lireVocaux, nomSalon } from './reglages.mjs';
 import { gererHubTournoi, rolesEquipe } from './tournoi.mjs';
 import { lireOrigines, placerSousHub } from './hubs.mjs';
+import { noterBilanPasse, synchroniserPasse } from './passepartout.mjs';
 import {
   annoncerProprietaire,
   chargePanneau,
@@ -111,6 +112,10 @@ export function creerMoteurVocaux({
   const travaux = new Set();
   let etatFile = Promise.resolve();
   let chaud = null;
+  /** Accès passe-partout (rôle Goat) : synchronisations l'une après l'autre, hors de la file d'état. */
+  let passeChaine = Promise.resolve();
+  const echecsPasse = new Map();
+  let dernierBilanPasse = '';
   let actifConnu = false;
   let arrete = false;
 
@@ -205,6 +210,29 @@ export function creerMoteurVocaux({
   function arreterChaud() {
     if (chaud) clearInterval(chaud);
     chaud = null;
+  }
+
+  // ---------------------------------------------------------------- Accès passe-partout (rôle Goat)
+
+  /**
+   * Synchronise l'accès des rôles passe-partout depuis le cache de la Gateway (aucune requête si rien ne dérive), hors de
+   * la file d'état : un salon qui arrive ou une dérive détectée n'attend jamais derrière une arrivée dans un hub.
+   * `seulement` : ids de salons (création d'un salon vocal). Bilan noté pour la carte seulement s'il change.
+   */
+  function lancerPasse(ctx, { seulement = null } = {}) {
+    const reglages = ctx.reglages;
+    if (!ctx.jetonBot || !ctx.guildId || !cache.pret || cache.guildId !== ctx.guildId) return undefined;
+    const p = passeChaine.then(async () => {
+      if (arrete) return;
+      const bilan = await synchroniserPasse(ctx, reglages, { salons: [...cache.salons.values()], seulement, memo: echecsPasse });
+      if (!bilan) return;
+      const cle = JSON.stringify({ ...bilan, le: null });
+      if (cle === dernierBilanPasse) return;
+      dernierBilanPasse = cle;
+      await noterBilanPasse(base, bilan, ctx.maintenant());
+    });
+    passeChaine = p.catch(e => erreur('accès passe-partout', e));
+    return differer(ctx, () => passeChaine);
   }
 
   // ---------------------------------------------------------------- Suppression des salons vides
@@ -374,10 +402,17 @@ export function creerMoteurVocaux({
       // Dans le corps de la création (aucun PATCH de position ensuite).
       position: Number(hubSalon.position ?? 0) + 1,
       ...(s.limite ? { user_limit: s.limite } : {}),
-      permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe, visibleNonJoignable: hub.visibleNonJoignable === true }),
+      permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe, rolesPasse: ctx.reglages.rolesPassePartout ?? [], visibleNonJoignable: hub.visibleNonJoignable === true }),
     };
     m.envoi = horloge();
-    const r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${ctx.guildId}/channels`, corps, { raison: `Esport HQ : salon vocal temporaire de ${membre.nom || membre.id}`.slice(0, 200) });
+    const raisonCreation = { raison: `Esport HQ : salon vocal temporaire de ${membre.nom || membre.id}`.slice(0, 200) };
+    let r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${ctx.guildId}/channels`, corps, raisonCreation);
+    // Le bot n'a pas (encore) parler, partager l'écran ou la détection de la voix, qu'il doit avoir pour les accorder aux
+    // rôles passe-partout : le salon est créé sans eux plutôt que de ne pas l'être (la synchronisation les signale).
+    if (r.statut === 403 && (ctx.reglages.rolesPassePartout ?? []).length) {
+      journal.warn?.('[esport] vocaux : création refusée avec les rôles passe-partout, nouvel essai sans eux (permissions du bot ?)');
+      r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${ctx.guildId}/channels`, { ...corps, permission_overwrites: surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe, visibleNonJoignable: hub.visibleNonJoignable === true }) }, raisonCreation);
+    }
     m.cree = horloge();
     if (!r.ok || !r.corps?.id) {
       journal.error?.('[esport] vocaux : création refusée par Discord', r.statut, r.code ?? '');
@@ -502,6 +537,8 @@ export function creerMoteurVocaux({
       await ecrireSalon(base, suivant, t);
       if ((!s.proprietaireId || !ordre.some(o => o.id === s.proprietaireId)) && ctx.reglages.quandProprietairePart === 'transferer') await transmettre(ctx, suivant);
     }
+    // Accès passe-partout : salons existants rattrapés après (re)connexion.
+    lancerPasse(ctx);
     // Personnes restées dans un hub pendant que le bot était absent : servies maintenant (chacune dans sa voie).
     if (!ctx.reglages.actif) return;
     for (const [userId, v] of [...cache.vocal.entries()]) {
@@ -553,8 +590,14 @@ export function creerMoteurVocaux({
       case 'CHANNEL_CREATE':
       case 'CHANNEL_UPDATE':
         // Cache du salon d'un hub, de sa catégorie, de leurs surcharges et positions (file : après un GUILD_CREATE).
-        await enFile(async () => {
-          if (d?.id) cache.salons.set(String(d.id), d);
+        await enFile(async apres => {
+          if (!d?.id) return;
+          cache.salons.set(String(d.id), d);
+          // Nouveau salon vocal (créé par une personne) : accès passe-partout posé tout de suite.
+          if (type === 'CHANNEL_CREATE' && [2, 13].includes(Number(d.type)) && cache.pret) {
+            const ctx = await contexte(apres);
+            if (ctx.reglages.rolesPassePartout.length && ctx.reglages.passePartoutTous) lancerPasse(ctx, { seulement: [String(d.id)] });
+          }
         });
         return;
       case 'GUILD_ROLE_CREATE':
@@ -595,6 +638,8 @@ export function creerMoteurVocaux({
         } else if (t - Date.parse(s.videDepuis) >= delaiDe(ctx)) await supprimerSiVide(ctx, s.salonId);
         else if (!minuteries.has(s.salonId)) planifier(ctx, s.salonId, s.videDepuis);
       }
+      // Dérive de l'accès passe-partout (surcharge retirée à la main, salon non vu) : rattrapée au passage.
+      lancerPasse(ctx);
     });
   }
 

@@ -49,6 +49,8 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
   const [r, setR] = useState<ReglagesVocaux | undefined>();
   const [serveur, setServeur] = useState<ServeurVocaux | undefined>();
   const [cmd, setCmd] = useState<CommandesVocaux>({});
+  const [nomGoat, setNomGoat] = useState('');
+  const [couleurGoat, setCouleurGoat] = useState('#f1c40f');
   // Hubs dépliés (index) : repliés par défaut s'il y en a plusieurs, pour que la page reste lisible.
   const [deplies, setDeplies] = useState<Set<number>>(new Set());
   const { erreur, avis, agir, enCours } = useAgir();
@@ -81,6 +83,9 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
   const ton: Ton = mode === 'direct' ? 'ok' : mode === 'secours' ? 'alerte' : 'critique';
   const hub = (i: number, maj: Partial<Hub>) => setR({ ...r, hubs: r.hubs.map((h, j) => (j === i ? { ...h, ...maj } : h)) });
   const manquantes = serveur?.permissions?.serveur ?? [];
+  const bilan = conf.etat?.passePartout;
+  // Rôles passe-partout placés au-dessus du rôle du bot : Discord refuserait les surcharges.
+  const rolesAuDessus = serveur?.positionBot ? roles.filter(o => (r.rolesPassePartout ?? []).includes(o.id) && Number((serveur.roles ?? []).find(x => x.id === o.id)?.position ?? 0) >= (serveur.positionBot ?? 0)) : [];
   const nomPerm = (cle: string) => trVc(`perm.${cle}` as CleVc);
   const enregistrer = () =>
     void agir('enregistrer', async () => {
@@ -235,6 +240,65 @@ export function ConfigVocaux({ theme, client, large, integre = false, onEvenemen
         <Choix theme={theme} libelle={trVc('proprietaire_part')} valeur={r.quandProprietairePart} options={conf.choix.modesProprietaire.map(m => ({ id: m, nom: trVc(`mode.${m}` as CleVc) }))} onChoisir={quandProprietairePart => setR({ ...r, quandProprietairePart })} testID="esport-vc-proprietaire" />
         {textes.length > 1 ? <SelecteurRepliable theme={theme} nature="salon" libelle={trVc('journaux')} valeur={r.salonJournaux ?? AUCUN} options={textes} onChoisir={id => setR({ ...r, salonJournaux: id === AUCUN ? null : id })} testID="esport-vc-journaux" /> : null}
         <BoutonHub theme={theme} variante="plein" titre={trVc('enregistrer')} onPress={enregistrer} desactive={enCours === 'enregistrer'} testID="esport-vc-enregistrer" />
+      </Bloc>
+
+      <Bloc theme={theme} testID="esport-vc-passe-partout">
+        <Intertitre theme={theme}>{trVc('passe_titre')}</Intertitre>
+        <Text style={attenue(theme)}>{trVc('passe_aide')}</Text>
+        <ChoixMultiple theme={theme} libelle={trVc('passe_roles')} valeurs={r.rolesPassePartout ?? []} options={roles} onChanger={rolesPassePartout => setR({ ...r, rolesPassePartout })} max={conf.choix.limites.roles} testID="esport-vc-passe-roles" />
+        {rolesAuDessus.length ? <Avis theme={theme} genre="alerte" texte={trVc('passe_au_dessus', { liste: rolesAuDessus.map(o => o.nom).join(', ') })} testID="esport-vc-passe-au-dessus" /> : null}
+        <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
+          <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trVc('passe_tous')}</Text>
+          <Interrupteur theme={theme} libelle={trVc('passe_tous')} valeur={r.passePartoutTous !== false} onChanger={passePartoutTous => setR({ ...r, passePartoutTous })} testID="esport-vc-passe-tous" />
+        </View>
+        <Text style={attenue(theme)}>{trVc('passe_tous_aide')}</Text>
+        <Text style={attenue(theme)}>{trVc('passe_expulser')}</Text>
+        <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
+          <Champ theme={theme} libelle={trVc('passe_nom')} valeur={nomGoat} placeholder={conf.choix.passePartout?.nomDefaut ?? 'Goat'} onChanger={setNomGoat} maxLength={100} testID="esport-vc-goat-nom" style={{ flexGrow: 2, flexBasis: 200, minWidth: 0 }} />
+          <Champ theme={theme} libelle={trVc('passe_couleur')} valeur={couleurGoat} onChanger={setCouleurGoat} maxLength={7} testID="esport-vc-goat-couleur" style={{ flexGrow: 1, flexBasis: 140, minWidth: 0 }} />
+        </View>
+        <Text style={attenue(theme)}>{trVc('passe_creer_aide')}</Text>
+        <View style={[styles.ligne, { flexWrap: 'wrap' }]}>
+          <BoutonHub
+            theme={theme}
+            titre={trVc('passe_creer')}
+            onPress={() =>
+              void agir('goat', async () => {
+                const c = await api.creerGoat({ nom: nomGoat.trim() || undefined, couleur: couleurGoat.trim() || undefined });
+                recevoir(c);
+                setServeur(await api.discord().catch(() => undefined));
+                return trVc(c.roleCree.positionne ? 'passe_cree' : 'passe_cree_position', { nom: c.roleCree.nom });
+              })
+            }
+            desactive={enCours === 'goat'}
+            testID="esport-vc-goat-creer"
+          />
+          <BoutonHub
+            theme={theme}
+            variante="plein"
+            titre={trVc('passe_enregistrer')}
+            onPress={() =>
+              void agir('passe', async () => {
+                recevoir(await api.changer({ rolesPassePartout: r.rolesPassePartout ?? [], passePartoutTous: r.passePartoutTous !== false }));
+                return trVc('enregistre');
+              })
+            }
+            desactive={enCours === 'passe'}
+            testID="esport-vc-passe-enregistrer"
+          />
+          <BoutonHub theme={theme} titre={trVc('passe_synchroniser')} onPress={() => void agir('passe-sync', async () => recevoir(await api.synchroniserPasse()))} desactive={enCours === 'passe-sync'} testID="esport-vc-passe-synchroniser" />
+        </View>
+        {conf.etat?.passePartout ? (
+          <View style={{ gap: ESP.xs }} testID="esport-vc-passe-etat">
+            <Text style={attenue(theme)}>
+              {trVc('passe_etat', { couverts: String(bilan?.couverts), cibles: String(bilan?.cibles), ajoutes: String(bilan?.ajoutes), restaures: String(bilan?.restaures), echecs: String(bilan?.echecs.length), reste: String(bilan?.reste), le: quand(bilan?.le) })}
+            </Text>
+            {bilan?.limiteDebit ? <Avis theme={theme} genre="alerte" texte={trVc('passe_limite')} /> : null}
+            {(bilan?.echecs ?? []).slice(0, 10).map(e => (
+              <Avis key={e.id} theme={theme} genre="alerte" texte={trVc('passe_echec', { nom: e.nom || e.id, code: String(e.code ?? e.statut) })} testID={`esport-vc-passe-echec-${e.id}`} />
+            ))}
+          </View>
+        ) : null}
       </Bloc>
 
       <Bloc theme={theme} testID="esport-vc-commandes">

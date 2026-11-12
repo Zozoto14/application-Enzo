@@ -101,8 +101,10 @@ administrateurs verraient. À revoir seulement si les mesures montrent une créa
 ## Permissions du bot
 
 **Voir les salons, Gérer les salons** (créer, renommer, supprimer), **Gérer les rôles** (droits des salons :
-verrouillage), **Se connecter**, **Déplacer des membres** (déplacer, expulser). Le lien d'invitation de l'app les
-demande toutes (`permissions=378243632208`, Tickets › Configuration › Connexion ou Administration › Bot Esport HQ › Fonctionnalités) ;
+verrouillage), **Se connecter**, **Parler**, **Vidéo** (partage d'écran) et **Détection de la voix** (Discord ne
+laisse accorder dans un salon que ce que le bot a lui-même : indispensables au rôle Goat, voir « Accès à toutes les
+vocs »), **Déplacer des membres** (déplacer, expulser). Le lien d'invitation de l'app les
+demande toutes (`permissions=378279284304`, Tickets › Configuration › Connexion ou Administration › Bot Esport HQ › Fonctionnalités) ;
 un bot invité avant doit être réinvité avec ce lien (ou recevoir ces permissions sur son rôle). Dans la catégorie des
 hubs, le bot doit pouvoir voir et gérer les salons.
 
@@ -199,6 +201,40 @@ Pour **tous** les hubs (ordinaires dans le Bot Esport HQ, d'événement dans la 
 Code : `esport/noyau/vocaux/hubs.mjs`. Au mieux : un refus de Discord est noté au journal du serveur, l'enregistrement
 n'est pas bloqué. Les hubs d'événement déjà enregistrés sont **cachés par défaut** dès le prochain enregistrement ou
 la prochaine synchronisation de leurs rôles (couper l'option dans la fiche pour l'éviter).
+
+## Accès à toutes les vocs (rôle Goat)
+
+Carte **Accès à toutes les vocs** (Administration › Bot Esport HQ › Salons vocaux). Un rôle « passe-partout » entre dans
+**toutes** les vocs sans avoir la moindre permission de serveur : pas d'administrateur, ni gérer le serveur, les salons
+ou les rôles, ni déplacer, ni couper le micro ou le son. Seules des **surcharges de salons** lui sont posées (une
+autorisation de rôle sur un salon l'emporte sur les refus de @everyone, de la catégorie et du verrouillage) :
+**Voir le salon, Se connecter, Parler, Partager l'écran (Vidéo), Détection de la voix**, et rien d'autre.
+
+- **Rôles passe-partout** : liste de rôles du serveur (par ordre de hiérarchie). Bouton **Créer le rôle Goat** : crée un
+  rôle (nom et couleur modifiables, « Goat » en or par défaut) avec `permissions: "0"`, non affiché à part, non
+  mentionnable, placé juste sous le rôle du bot, et l'ajoute à la liste. Donner ensuite le rôle aux membres (Discord).
+  Le rôle du bot doit rester **au-dessus** des rôles passe-partout (la carte prévient sinon).
+- **Salons du bot** (temporaires ouverts ou verrouillés, salons d'équipe et du staff d'un hub d'événement, hubs, y compris
+  cachés) : les surcharges sont calculées avec celles du salon (`surchargesSalon`, `surchargesHubMasque`) ; un salon
+  verrouillé laisse donc entrer ces rôles. Si Discord refuse la création (le bot n'a pas encore Parler, Vidéo et
+  Détection de la voix), le salon est créé sans eux et la carte « Lire le serveur Discord » signale ce qui manque.
+- **Aussi sur tous les salons vocaux existants du serveur** (activé par défaut) : le bot pose la surcharge du rôle sur
+  chaque salon vocal et de scène (PUT d'une seule surcharge, jamais celles des autres rôles) ; salons écrits jamais
+  touchés. Option coupée : seuls les hubs gardent l'accès.
+- **Quand** : à l'enregistrement, à la création d'un salon vocal par une personne (CHANNEL_CREATE), à la (re)connexion de
+  la Gateway, et à chaque passage du superviseur (une surcharge retirée à la main est reposée). Bouton **Resynchroniser**.
+- **Retrait** : retirer un rôle de la liste (ou couper l'option) rend **exactement l'état d'origine** noté salon par
+  salon (`tickets_reglages`, clé `vocaux_passepartout` : la surcharge existait ou non, ses bits) ; une surcharge
+  antérieure du même rôle est restaurée, celles des autres rôles ne sont jamais touchées. Salons temporaires ouverts :
+  surcharges recalculées sans le rôle.
+- **Travail borné** : 60 requêtes au plus par passage (le reste au passage suivant), arrêt au premier 429, un salon
+  refusé par Discord (le bot n'y gère pas les permissions) est noté et réessayé au plus toutes les 10 minutes. La carte
+  affiche les salons couverts, les ajouts, les échecs (salon, code Discord) et le reste à faire ; les refus sont aussi au
+  journal du serveur.
+- **Expulser** : l'expulsion par le propriétaire d'un salon temporaire déconnecte une fois ; elle ne retire pas l'accès
+  du rôle (la surcharge de salon reste), la personne peut revenir.
+- Routes (permission `vocaux.configurer`) : `POST /vocaux/goat` (`{ nom?, couleur? }`), `POST /vocaux/passe-partout/synchroniser`,
+  réglages `rolesPassePartout` et `passePartoutTous` de `PUT /vocaux/config`.
 
 ## Données
 

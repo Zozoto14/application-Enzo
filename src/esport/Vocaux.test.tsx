@@ -34,13 +34,15 @@ function configDe(): Config {
   };
 }
 
-function fauxClient(conf: Config) {
+function fauxClient(conf: Config, rolesPlus: Array<{ id: string; nom: string; couleur: string | null; position: number }> = []) {
   const appels: Array<{ chemin: string; methode?: string; corps?: unknown }> = [];
   const requete = async (chemin: string, methode?: string, corps?: unknown): Promise<unknown> => {
     appels.push({ chemin, methode, corps });
     if (chemin === '/vocaux/config' && !methode) return conf;
     if (chemin === '/vocaux/config' && methode === 'PUT') return { ...conf, reglages: { ...conf.reglages, ...(corps as object) } };
     if (chemin === '/vocaux/config/commandes' && methode === 'PUT') return { ...conf, commandes: { ...conf.commandes, ...(corps as object) } };
+    if (chemin === '/vocaux/goat' && methode === 'POST') return { ...conf, reglages: { ...conf.reglages, rolesPassePartout: [...(conf.reglages.rolesPassePartout ?? []), '731'] }, etat: { passePartout: { cibles: 4, couverts: 3, ajoutes: 3, restaures: 0, echecs: [{ id: '905', nom: 'Salle privée', statut: 403, code: 50013 }], reste: 0, limiteDebit: false, le: '2026-11-04T10:00:00.000Z' } }, roleCree: { id: '731', nom: 'Goat', positionne: true } };
+    if (chemin === '/vocaux/passe-partout/synchroniser' && methode === 'POST') return conf;
     if (chemin === '/vocaux/discord')
       return {
         bot: true,
@@ -50,7 +52,8 @@ function fauxClient(conf: Config) {
           { id: '751', nom: 'Créer un salon', type: 'vocal', parent: '750', position: 2 },
           { id: '713', nom: 'journaux', type: 'texte', parent: null, position: 3 },
         ],
-        roles: [{ id: '720', nom: 'Staff', couleur: null, position: 2 }],
+        roles: [{ id: '720', nom: 'Staff', couleur: null, position: 2 }, ...rolesPlus],
+        positionBot: 5,
         permissions: { membreTrouve: true, serveur: ['deplacer_membres'], hubs: [] },
       };
     throw new Error(`inattendu : ${methode ?? 'GET'} ${chemin}`);
@@ -200,4 +203,35 @@ test('anglais ; onglet Bot Esport HQ : carte « Salons vocaux temporaires » ave
   await unmount();
   await render(<ReglagesVocaux {...ctx} etat={{ vocaux: { actif: false, configurer: false } } as unknown as EtatBotAdmin} />);
   expect(screen.getByText(/réservés à la permission/)).toBeTruthy();
+});
+
+test('carte « Accès à toutes les vocs » : créer le rôle Goat (sans permission côté serveur), liste des rôles, option « tous les salons », bilan et échecs, enregistrement partiel', async () => {
+  const conf = configDe();
+  const { client, appels } = fauxClient(conf, [{ id: '740', nom: 'Légende', couleur: null, position: 9 }]);
+  await render(<ConfigVocaux theme={theme} client={client} large />);
+  await screen.findByTestId('esport-vc-passe-partout');
+  expect(screen.getByText(/Aucune permission de serveur/)).toBeTruthy();
+  expect(screen.queryByTestId('esport-vc-passe-etat')).toBeNull();
+  // Création : nom vide (défaut Goat côté serveur), couleur modifiable.
+  expect(screen.getByTestId('esport-vc-goat-nom').props.placeholder).toBe('Goat');
+  await fireEvent.changeText(screen.getByTestId('esport-vc-goat-couleur'), '#ff8800');
+  await fireEvent.press(screen.getByTestId('esport-vc-goat-creer'));
+  await screen.findByText(/Rôle « Goat » créé et ajouté/);
+  const creation = appels.find(a => a.chemin === '/vocaux/goat')!;
+  expect(creation).toMatchObject({ methode: 'POST', corps: { couleur: '#ff8800' } });
+  expect(JSON.stringify(creation.corps)).not.toMatch(/permission/);
+  // Bilan : salons couverts, échec noté avec le code de Discord.
+  expect(screen.getByTestId('esport-vc-passe-etat')).toBeTruthy();
+  expect(screen.getByText(/Salons couverts : 3 sur 4 · ajoutés : 3 · rendus : 0 · échecs : 1/)).toBeTruthy();
+  expect(screen.getByTestId('esport-vc-passe-echec-905').props.children).toBe('Refusé par Discord : Salle privée (code 50013).');
+  // Rôle placé au-dessus du bot : avertissement ; option coupée ; enregistrement partiel (hubs non envoyés).
+  await choisirDans('esport-vc-passe-roles', '740');
+  expect(screen.getByTestId('esport-vc-passe-au-dessus').props.children).toMatch(/Légende/);
+  await fireEvent(screen.getByTestId('esport-vc-passe-tous'), 'valueChange', false);
+  await fireEvent.press(screen.getByTestId('esport-vc-passe-enregistrer'));
+  await screen.findByText('Enregistré.');
+  const put = appels.find(a => a.chemin === '/vocaux/config' && a.methode === 'PUT')!.corps as Record<string, unknown>;
+  expect(put).toEqual({ rolesPassePartout: ['731', '740'], passePartoutTous: false });
+  await fireEvent.press(screen.getByTestId('esport-vc-passe-synchroniser'));
+  expect(appels.some(a => a.chemin === '/vocaux/passe-partout/synchroniser' && a.methode === 'POST')).toBe(true);
 });

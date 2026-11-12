@@ -115,7 +115,7 @@ test('vérifier le serveur : ce qui manque au bot, par fonctionnalité ; bot abs
   assert.deepEqual(v.fonctionnalites, [
     { id: 'annonces', manquantes: ['mentionner', 'creer_fils_publics', 'envoyer_fils'] },
     { id: 'tickets', manquantes: ['reactions', 'creer_fils_prives', 'creer_fils_publics', 'envoyer_fils'] },
-    { id: 'vocaux', manquantes: ['connecter', 'deplacer_membres'] },
+    { id: 'vocaux', manquantes: ['connecter', 'parler', 'flux', 'vad', 'deplacer_membres'] },
     { id: 'roles_temp', manquantes: [] },
   ]);
   // Bot retiré du serveur.

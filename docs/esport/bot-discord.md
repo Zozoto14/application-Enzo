@@ -77,7 +77,7 @@ Le plus simple : dans l'app, **Esport › votre team › Réglages › Discord �
 bouton apparaît après l'étape 6). Sinon, remplacez `APPLICATION_ID` dans ce lien et ouvrez-le :
 
 ```
-https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=378243632208
+https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=378279284304
 ```
 
 (Ce nombre réunit les permissions de **toutes** les fonctionnalités du bot : annonces, tickets, salons vocaux

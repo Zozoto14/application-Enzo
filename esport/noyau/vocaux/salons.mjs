@@ -17,6 +17,7 @@ import { libelleVocal, tv, tv2 } from './textes.mjs';
 /** Bits de permissions Discord utiles ici. */
 export const PV = Object.freeze({
   GERER_SALONS: 1n << 4n,
+  FLUX: 1n << 9n,
   VOIR: 1n << 10n,
   ENVOYER: 1n << 11n,
   INTEGRER: 1n << 14n,
@@ -24,11 +25,18 @@ export const PV = Object.freeze({
   CONNECTER: 1n << 20n,
   PARLER: 1n << 21n,
   DEPLACER: 1n << 24n,
+  VAD: 1n << 25n,
   GERER_ROLES: 1n << 28n,
 });
 /** Droits du bot dans un salon temporaire (déplacer, renommer, écrire le panneau dans le salon). */
 export const DROITS_BOT_VOCAL = PV.VOIR | PV.CONNECTER | PV.DEPLACER | PV.GERER_SALONS | PV.ENVOYER | PV.INTEGRER | PV.HISTORIQUE;
 const ENTRER = PV.VOIR | PV.CONNECTER;
+/**
+ * Accès « passe-partout » (rôle Goat, docs/esport/vocaux.md) : voir, se connecter, parler, partager l'écran, détection
+ * de la voix. JAMAIS déplacer, couper le micro ou le son, gérer le salon ni gérer les rôles : le rôle n'a que ces
+ * surcharges de salon, aucune permission de serveur.
+ */
+export const DROITS_PASSE_PARTOUT = PV.VOIR | PV.CONNECTER | PV.PARLER | PV.FLUX | PV.VAD;
 
 /** Refus lisible (clé de textes.mjs) : rendu en message éphémère. */
 export class RefusVocal extends Error {
@@ -120,7 +128,7 @@ export const supprimerLigne = (base, salonId) => base.executer('DELETE FROM voca
  * privée : on n'élargit pas). Rôles autorisés, propriétaire, amis, staff, rôle de l'équipe et bot : voir et se
  * connecter. Salon ouvert : surcharges du hub, plus le propriétaire et le bot.
  */
-export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquipe = [], visibleNonJoignable = false }) {
+export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquipe = [], rolesPasse = [], visibleNonJoignable = false }) {
   const m = new Map();
   for (const o of s.basePermissions ?? []) {
     if (!o?.id) continue;
@@ -133,7 +141,8 @@ export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquip
     m.set(id, o);
   };
   if (s.verrouille) {
-    const admis = new Set([...rolesStaff, ...rolesEquipe].filter(Boolean));
+    const passe = rolesPasse.filter(r => r && r !== guildId);
+    const admis = new Set([...rolesStaff, ...rolesEquipe, ...passe].filter(Boolean));
     const cachePrive = ((m.get(guildId)?.deny ?? 0n) & PV.VOIR) !== 0n;
     const sansAcces = id => {
       if (visibleNonJoignable && !cachePrive) regler(id, 0, PV.VOIR, PV.CONNECTER);
@@ -144,6 +153,9 @@ export function surchargesSalon(s, { guildId, botId, rolesStaff = [], rolesEquip
     for (const r of admis) if (r !== guildId) regler(r, 0, ENTRER);
     for (const a of s.amis ?? []) regler(a.id, 1, ENTRER);
   }
+  // Passe-partout : l'autorisation du rôle l'emporte sur les refus de @everyone, de la catégorie et du verrouillage (le
+  // salon peut être verrouillé, ces rôles y entrent). Ajoutée en dernier : seules les droits ci-dessus, rien d'autre.
+  for (const r of rolesPasse) if (r && r !== guildId) regler(r, 0, DROITS_PASSE_PARTOUT);
   if (s.proprietaireId) regler(s.proprietaireId, 1, ENTRER);
   if (botId) regler(botId, 1, DROITS_BOT_VOCAL);
   return [...m.values()].map(o => ({ id: o.id, type: o.type, allow: o.allow.toString(), deny: o.deny.toString() }));
@@ -168,7 +180,7 @@ async function rolesEquipeDe(ctx, s) {
 export const visibleDe = (reglages, s) => Boolean(reglages?.hubs?.find(h => h.id === s.hubId)?.visibleNonJoignable);
 
 export async function appliquerSurcharges(ctx, s) {
-  const surcharges = surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe: await rolesEquipeDe(ctx, s), visibleNonJoignable: visibleDe(ctx.reglages, s) });
+  const surcharges = surchargesSalon(s, { guildId: ctx.guildId, botId: ctx.botId, rolesStaff: ctx.reglages.rolesStaff, rolesEquipe: await rolesEquipeDe(ctx, s), rolesPasse: ctx.reglages.rolesPassePartout ?? [], visibleNonJoignable: visibleDe(ctx.reglages, s) });
   const r = await rest(ctx.fetch, ctx.jetonBot, 'PATCH', `/channels/${s.salonId}`, { permission_overwrites: surcharges }, { raison: 'Esport HQ : salon vocal temporaire' });
   if (!r.ok) throw refusDiscord(r);
   return surcharges;

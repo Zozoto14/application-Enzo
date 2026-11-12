@@ -11,6 +11,7 @@
 /** Bits des permissions Discord (https://discord.com/developers/docs/topics/permissions). */
 export const BITS = Object.freeze({
   gerer_salons: 1n << 4n,
+  flux: 1n << 9n,
   reactions: 1n << 6n,
   voir_salons: 1n << 10n,
   envoyer: 1n << 11n,
@@ -19,7 +20,9 @@ export const BITS = Object.freeze({
   historique: 1n << 16n,
   mentionner: 1n << 17n,
   connecter: 1n << 20n,
+  parler: 1n << 21n,
   deplacer_membres: 1n << 24n,
+  vad: 1n << 25n,
   gerer_roles: 1n << 28n,
   creer_fils_publics: 1n << 35n,
   creer_fils_prives: 1n << 36n,
@@ -40,7 +43,7 @@ export const BITS = Object.freeze({
 export const FONCTIONNALITES_PERMISSIONS = [
   { id: 'annonces', permissions: ['voir_salons', 'envoyer', 'integrer', 'historique', 'mentionner', 'creer_fils_publics', 'envoyer_fils'] },
   { id: 'tickets', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'envoyer', 'historique', 'joindre', 'integrer', 'reactions', 'creer_fils_prives', 'creer_fils_publics', 'envoyer_fils'] },
-  { id: 'vocaux', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'connecter', 'deplacer_membres', 'envoyer', 'integrer', 'historique'] },
+  { id: 'vocaux', permissions: ['voir_salons', 'gerer_salons', 'gerer_roles', 'connecter', 'parler', 'flux', 'vad', 'deplacer_membres', 'envoyer', 'integrer', 'historique'] },
   { id: 'roles_temp', permissions: ['gerer_roles', 'voir_salons', 'envoyer'] },
 ];
 
