@@ -17,6 +17,7 @@ import { lireTags } from './strats/libelles';
 import { PageTeam, entreesBarre } from './ui/PageTeam';
 import { fournirAssets } from './ui/strats/commun';
 import { choisirDans } from '../ui/selecteurs/deplier';
+import { donneesVides, oublierProfilsTeams } from './jeux/profil';
 
 const theme = themeHub('nuit');
 const TOUS = ['activity_log', 'strat_editor', 'playbook'];
@@ -235,5 +236,29 @@ describe('strats', () => {
       expect(requete).toHaveBeenCalledWith('/teams/t1/strats', 'POST', { titre: 'Retake B', type: 'retake', carte: { cle: 'bind', nom: 'Bind', image: null }, side: 'defense', tags: [], visibilite: 'team' }),
     );
     expect(await screen.findByTestId('esport-strat-lecture')).toBeTruthy();
+  });
+
+  it('team The Finals : modèle du jeu (sous-titre), pas d’attaque / défense ni de pistol, création sans side', async () => {
+    oublierProfilsTeams();
+    const profil = { cle: 'the-finals', nom: 'The Finals', couleur: '#d31f3c', icone: null, base: null, modeleStrat: 'thefinals', statut: 'actif', version: 1, images: {}, donnees: { ...donneesVides(), cartes: [{ cle: 'monaco', nom: 'Monaco', image: null, actif: true, modes: [] }], personnages: [{ cle: 'heavy', nom: 'Heavy', classe: null, image: null, actif: true }] } };
+    const requete = jest.fn(async (chemin: string, methode?: string, corps?: unknown) => {
+      if (chemin === '/teams/t1/jeu') return profil;
+      if (chemin === '/teams/t1/strats' && methode === 'POST') return strat({ id: 's9', jeu: 'the-finals', modele: 'thefinals', titre: (corps as { titre: string }).titre });
+      if (chemin === '/teams/t1/strats/s9') return { ...strat({ id: 's9', jeu: 'the-finals', modele: 'thefinals' }), donnees: documentVide({ cle: 'monaco', nom: 'Monaco', image: null }, 'attaque', 'the-finals', 'thefinals') };
+      if (chemin.startsWith('/teams/t1/strats')) return { strats: [strat({ jeu: 'the-finals', modele: 'thefinals', moi: { modifier: true, supprimer: true, partager: true } })] };
+      throw new Error(`inattendu : ${chemin}`);
+    });
+    const d = detail(COACH);
+    await monter(fauxClient(requete), { ...d, team: { ...d.team, jeu: 'the-finals' } }, 'module:strat_editor');
+    expect(await screen.findByText(/Modèle The Finals/)).toBeTruthy();
+    expect(screen.queryByTestId('esport-strats-filtre-side-attaque')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-strats-nouvelle'));
+    await fireEvent.changeText(await screen.findByTestId('esport-strats-titre'), 'Cashout Monaco');
+    expect(screen.queryByTestId('esport-strats-side-defense')).toBeNull();
+    expect(screen.queryByTestId('esport-strats-type-pistol')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-strats-carte-monaco'));
+    await fireEvent.press(screen.getByTestId('esport-strats-creer'));
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/teams/t1/strats', 'POST', { titre: 'Cashout Monaco', type: 'default', carte: { cle: 'monaco', nom: 'Monaco', image: null }, side: 'attaque', tags: [], visibilite: 'team' }));
+    oublierProfilsTeams();
   });
 });

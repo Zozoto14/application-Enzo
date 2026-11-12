@@ -46,6 +46,8 @@ export interface DefinitionModele {
   equipesAdverses: number;
   /** Étages (tags de niveau) proposés. */
   etages: boolean;
+  /** Types de strat proposés (pistol et éco n'ont pas de sens hors Valorant). */
+  types: readonly ('default' | 'execute' | 'eco' | 'pistol' | 'retake' | 'other')[];
 }
 
 export const MODELES: Record<ModeleStrat, DefinitionModele> = {
@@ -58,6 +60,7 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
     marqueurs: ['plant', 'defuse', 'ennemi', 'danger', 'info', 'rotation', 'spawn'],
     equipesAdverses: 1,
     etages: false,
+    types: ['default', 'execute', 'eco', 'pistol', 'retake', 'other'],
   },
   thefinals: {
     joueurs: 3,
@@ -68,6 +71,7 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
     marqueurs: ['cashout', 'coffre', 'ennemi', 'destruction-mur', 'destruction-sol', 'tiers', 'danger', 'rotation', 'spawn', 'info'],
     equipesAdverses: 3,
     etages: true,
+    types: ['default', 'execute', 'retake', 'other'],
   },
   generique: {
     joueurs: 5,
@@ -78,6 +82,7 @@ export const MODELES: Record<ModeleStrat, DefinitionModele> = {
     marqueurs: ['objectif', 'ennemi', 'danger', 'spawn', 'rotation', 'info'],
     equipesAdverses: 1,
     etages: false,
+    types: ['default', 'execute', 'eco', 'pistol', 'retake', 'other'],
   },
 };
 

@@ -206,6 +206,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         <NouvelleStrat
           theme={theme}
           sides={def.sides}
+          types={def.types}
           cartes={cartesDuPool(assets).map(c => ({ cle: c.cle, nom: c.nom, image: imageDocument(c.minimap) }))}
           onCreer={corps =>
             void agir('creation', async () => {
@@ -223,7 +224,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       <Panneau theme={theme} testID="esport-strats-filtres">
         <Filtre theme={theme} libelle={tr('strats.editeur.carte')} valeur={filtres.carte ?? ''} options={[['', tr('journal.toutes')], ...cartes.map(c => [c.cle, c.nom] as const)]} onChoisir={v => setFiltres(f => ({ ...f, carte: v || undefined }))} testID="esport-strats-filtre-carte" />
         {def.sides ? <Filtre<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={filtres.side ?? ''} options={[['', tr('strats.playbook.les_deux')], ['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={v => setFiltres(f => ({ ...f, side: v || undefined }))} testID="esport-strats-filtre-side" /> : null}
-        <Filtre<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={filtres.type ?? ''} options={[['', tr('journal.tous')], ...TYPES_STRAT.map(t => [t, LIBELLES_TYPE_STRAT[t]] as const)]} onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))} testID="esport-strats-filtre-type" />
+        <Filtre<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={filtres.type ?? ''} options={[['', tr('journal.tous')], ...TYPES_STRAT.filter(t => def.types.includes(t)).map(t => [t, LIBELLES_TYPE_STRAT[t]] as const)]} onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))} testID="esport-strats-filtre-type" />
       </Panneau>
       </Pliable>
       </View>
@@ -327,12 +328,14 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
 function NouvelleStrat({
   theme,
   sides,
+  types,
   cartes,
   onCreer,
   enCours,
 }: {
   theme: ThemeHub;
   sides: boolean;
+  types: readonly TypeStrat[];
   cartes: Array<{ cle: string; nom: string; image: string | null }>;
   onCreer(corps: { titre: string; type: TypeStrat; carte: { cle: string; nom: string; image: string | null }; side: Side; tags: string[]; visibilite: 'team' | 'privee' }): void;
   enCours: boolean;
@@ -350,7 +353,7 @@ function NouvelleStrat({
       <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={80} placeholder={tr('strats.strats.execution_a_retake_b')} testID="esport-strats-titre" />
       <Choix theme={theme} libelle={tr('strats.editeur.carte')} valeur={carte} options={cartes.map(c => ({ id: c.cle, nom: c.nom }))} onChoisir={setCarte} testID="esport-strats-carte" />
       {sides ? <Segments<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={setSide} testID="esport-strats-side" /> : null}
-      <Choix<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={type} options={TYPES_STRAT.map(t => ({ id: t, nom: LIBELLES_TYPE_STRAT[t] }))} onChoisir={setType} testID="esport-strats-type" />
+      <Choix<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={type} options={TYPES_STRAT.filter(t => types.includes(t)).map(t => ({ id: t, nom: LIBELLES_TYPE_STRAT[t] }))} onChoisir={setType} testID="esport-strats-type" />
       <Champ theme={theme} libelle={tr('strats.playbook.tags_separes_par_des')} valeur={tags} onChanger={setTags} maxLength={200} testID="esport-strats-tags" />
       <Segments<'team' | 'privee'> theme={theme} libelle={tr('resumes.visibilite')} valeur={privee ? 'privee' : 'team'} options={[['team', tr('strats.strats.partagee_avec_la_team')], ['privee', tr('strats.strats.privee_brouillon')]]} onChoisir={v => setPrivee(v === 'privee')} testID="esport-strats-visibilite" />
       <BoutonHub
