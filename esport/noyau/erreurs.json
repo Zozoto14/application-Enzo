@@ -874,6 +874,8 @@
   "64 équipes au plus par tournoi.": "64 teams at most per tournament.",
   "Équipe introuvable.": "Team not found.",
   "10 hubs au plus.": "10 hubs at most.",
+  "Couleur invalide (format #RRGGBB).": "Invalid color (#RRGGBB format).",
+  "Le bot Esport HQ n’est pas configuré sur le serveur de l’app.": "The Esport HQ bot is not configured on the app server.",
   "Modèle du nom : 90 caractères au plus.": "Name template: 90 characters at most.",
   "Choisissez le salon vocal de chaque hub.": "Choose the voice channel of each hub.",
   "Le même salon est choisi pour deux hubs.": "The same channel is chosen for two hubs.",
@@ -1507,6 +1509,14 @@
   [
    "^Salon non créé(.*)\\.$",
    "Channel not created$1."
+  ],
+  [
+   "^(\\d+) rôles au plus\\.$",
+   "$1 roles at most."
+  ],
+  [
+   "^Discord a refusé de créer le rôle \\((.*)\\)\\. Le bot a-t-il « Gérer les rôles » \\?$",
+   "Discord refused to create the role ($1). Does the bot have “Manage roles”?"
   ]
  ]
 }
