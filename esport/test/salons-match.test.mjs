@@ -18,6 +18,7 @@ import { DROITS_EQUIPE, DROITS_STAFF, creerSalonsMatch, lireReglages, nomSalon, 
 import { oublierLimites } from '../noyau/tickets/discord.mjs';
 import { TABLES } from '../noyau/transfert.mjs';
 import { effacementParDiscord } from '../noyau/tickets/rgpd.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
 
 const T1 = '11111111-1111-4111-8111-111111111111';
 const EA = '22222222-2222-4222-8222-00000000000a';
@@ -545,4 +546,78 @@ test('staff assigné sur le site : accès par membre, mentionné dans l’embed,
   // Liste dans l'app : staff assigné.
   const v = (await k.api(k.sm)).corps;
   assert.deepEqual(v.salons.find(x => x.id === lm.id).staff, [{ nom: 'Arbitre 2', present: true }]);
+});
+
+// ------------------------------------------------------------------ Alertes pour le staff (notifications, migration 0077)
+
+/** Alertes `salon-match-alerte` reçues par un compte (liste du centre ; la distribution est faite avant). */
+async function alertes(k, compte) {
+  await distribuer(k.b.base, { maintenant: k.b.horloge.t });
+  const r = await k.api('/notifications/centre?limite=100', await k.b.session(compte));
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  return r.corps.liste.filter(n => n.type === 'salon-match-alerte');
+}
+
+test('alertes : équipe sans rôle et staff introuvable → evenements.gerer et Fondateur, lien vers le match ; une fois', async () => {
+  const k = await monter();
+  const gestion = await k.compteAvec('gest1234', 'Gestion', ['evenements.gerer']);
+  const autre = await k.compteAvec('autr1234', 'Autre', ['vocaux.configurer']);
+  const ABS = '810000000000000303';
+  k.discord.etat.absents.add(ABS);
+  k.site.tables.tournament_match_staff_discord.push({ id: 's2', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p2', display_name: 'Absent', discord_id: ABS });
+  k.site.tables.tournament_teams.push({ id: ED, tournament_id: T1, name: 'Delta', tag: 'DLT' });
+  k.site.tables.tournament_lobby_entries.push({ id: 'e4', lobby_id: L1, team_id: ED, placement: null, points: 0, dnf: false, sort_order: 3 });
+  await activer(k);
+  const recues = await alertes(k, 'gest1234');
+  const parCode = Object.fromEntries(recues.map(n => [n.charge.code, n]));
+  assert.deepEqual(Object.keys(parCode).sort(), ['equipe-sans-role', 'staff-introuvable']);
+  assert.equal(parCode['equipe-sans-role'].charge.nom, '[DLT] Delta');
+  assert.deepEqual(parCode['equipe-sans-role'].cible, { v: 1, g: 'salon_match', evenement: k.id, match: `l:${L1}` });
+  assert.deepEqual(parCode['staff-introuvable'].cible, { v: 1, g: 'salon_match', evenement: k.id, match: `m:${M1}` });
+  assert.equal(parCode['staff-introuvable'].charge.nom, 'Absent');
+  assert.equal((await alertes(k, 'principal')).length, 2, 'le Fondateur aussi');
+  assert.equal((await alertes(k, 'autr1234')).length, 0, 'ni les autres permissions');
+  // Le lien mène à la fiche de l'événement, ligne du match.
+  const verif = await k.api('/notifications/cible', await k.b.session('gest1234'), { methode: 'POST', corps: { cible: parCode['equipe-sans-role'].cible } });
+  assert.equal(verif.corps.etat, 'ok');
+  assert.equal(verif.corps.cible.match, `l:${L1}`);
+  // Passages suivants : rien de plus (déjà signalé).
+  k.b.horloge.t += 20 * 60_000;
+  await synchro(k);
+  assert.equal((await alertes(k, 'gest1234')).length, 2);
+});
+
+test('alertes : création refusée par Discord (hiérarchie), catégorie pleine (50 salons), repère supprimé → compteur sans doublon', async () => {
+  const k = await monterAncre();
+  const gestion = await k.compteAvec('gest1234', 'Gestion', ['evenements.gerer']);
+  // Repère supprimé sur Discord (catégorie choisie gardée), puis catégorie pleine.
+  await activer(k, { ancreId: ANCRE });
+  k.discord.etat.salons.delete(ANCRE);
+  for (let i = 0; i < 50; i++) k.discord.etat.salons.set(`75000000000000${String(i).padStart(4, '0')}`, { id: `75000000000000${String(i).padStart(4, '0')}`, type: 0, name: `s${i}`, parent_id: CAT, guild_id: k.GUILD, permission_overwrites: [] });
+  k.site.tables.tournament_matches.push({ ...k.site.tables.tournament_matches[0], id: '44444444-4444-4444-8444-000000000020', position: 7, scheduled_at: null });
+  k.b.horloge.t += 20 * 60_000;
+  assert.equal((await synchro(k)).etat.erreur, 'categorie-pleine');
+  let liste = await alertes(k, 'gest1234');
+  const codes = liste.map(n => n.charge.code).sort();
+  assert.ok(codes.includes('ancre-supprimee'), JSON.stringify(codes));
+  assert.ok(codes.includes('categorie-pleine'), JSON.stringify(codes));
+  assert.equal(liste.find(n => n.charge.code === 'categorie-pleine').cible.g, 'salon_match');
+  // Repassages toutes les 20 minutes : le compteur monte, pas de nouvelle notification.
+  for (let i = 0; i < 2; i++) {
+    k.b.horloge.t += 20 * 60_000;
+    await synchro(k);
+  }
+  liste = await alertes(k, 'gest1234');
+  assert.equal(liste.length, codes.length);
+  assert.ok(liste.find(n => n.charge.code === 'categorie-pleine').charge.compteur >= 3);
+  // Création refusée par Discord : salon non créé, alerte « création refusée (hiérarchie) ».
+  for (let i = 0; i < 50; i++) k.discord.etat.salons.delete(`75000000000000${String(i).padStart(4, '0')}`);
+  k.discord.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${k.GUILD}/channels`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  k.discord.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${k.GUILD}/channels`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  k.b.horloge.t += 20 * 60_000;
+  await synchro(k);
+  const refus = (await alertes(k, 'gest1234')).find(n => n.charge.code === 'creation-hierarchie');
+  assert.ok(refus, 'création refusée signalée');
+  assert.equal(refus.cible.match, 'm:44444444-4444-4444-8444-000000000020');
+  assert.equal(refus.charge.statut, 403);
 });

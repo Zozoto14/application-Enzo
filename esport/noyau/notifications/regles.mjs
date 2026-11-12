@@ -103,6 +103,9 @@ export const REGLES = Object.freeze({
   // jamais dans le fil ; seules les notifications personnelles `tk-*` (catégorie relue à chaque lecture : droits.mjs).
   'ticket.*': { categorie: 'tickets', acces: 'aucun', lien: { vue: 'tickets' } },
   'tickets.*': { categorie: 'tickets', acces: 'aucun', lien: { vue: 'tickets' } },
+  // Alertes techniques (migration 0077) : jamais dans le fil ; seules les notifications personnelles (alertes.mjs), dont
+  // l'accès est relu à chaque lecture.
+  'alerte.*': AUCUN,
   // ---- Membres, rôles, invitations, comptes, trombinoscope, badges.
   'team.*': { categorie: 'membres', acces: 'team:*', lien: TEAM('accueil') },
   'modules.changed': { categorie: 'membres', acces: 'team:*', lien: TEAM('accueil') },
@@ -256,6 +259,12 @@ export const CATEGORIES_PERSO = Object.freeze({
   'cm-reunion-reponse': 'reunions',
   'cm-reunion-rappel': 'reunions',
   'cm-rdv-reserve': 'reunions',
+  // Avis de tickets et alertes techniques (migration 0077, alertes.mjs).
+  'tk-avis': 'tickets',
+  'salon-match-alerte': 'discord',
+  'vocal-alerte': 'discord',
+  'role-evenement-alerte': 'discord',
+  'role-temp-alerte': 'discord',
 });
 
 /** Catégorie d'une notification personnelle (préfixes des modules : `cm-`, `sp-`, planning, review…). */

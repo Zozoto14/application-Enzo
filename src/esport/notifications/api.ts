@@ -10,6 +10,7 @@
 
 import { requeteUrl, type ClientEsport } from '../client';
 import type { CibleNotification } from './cibles';
+import type { TypeAlerte } from './alertes';
 
 export const CATEGORIES_NOTIFICATIONS = ['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'tickets', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme'] as const;
 export type CategorieNotification = (typeof CATEGORIES_NOTIFICATIONS)[number];
@@ -68,6 +69,10 @@ export interface PreferencesNotifications {
   masquees: CategorieNotification[];
   silencieuses: CategorieNotification[];
   teams: string[];
+  /** Avis et alertes coupés un par un (migration 0077). */
+  typesMasques?: TypeAlerte[];
+  /** Avis et alertes que le rôle du compte permet de recevoir. */
+  types?: TypeAlerte[];
   categories: CategorieNotification[];
 }
 
@@ -94,7 +99,7 @@ export function apiNotifications(client: ClientEsport) {
     preferences: () => r<PreferencesNotifications>('/notifications/preferences'),
     /** Lien direct : l'élément existe-t-il encore, et le compte y a-t-il encore accès ? (cible complétée pour l'ouvrir) */
     verifierCible: (cible: CibleNotification) => r<{ etat: 'ok'; cible: CibleNotification } | { etat: 'supprime' | 'interdit' }>('/notifications/cible', 'POST', { cible }),
-    changerPreferences: (p: Partial<Pick<PreferencesNotifications, 'masquees' | 'silencieuses' | 'teams'>>) => r<PreferencesNotifications>('/notifications/preferences', 'PUT', p),
+    changerPreferences: (p: Partial<Pick<PreferencesNotifications, 'masquees' | 'silencieuses' | 'teams' | 'typesMasques'>>) => r<PreferencesNotifications>('/notifications/preferences', 'PUT', p),
   };
 }
 

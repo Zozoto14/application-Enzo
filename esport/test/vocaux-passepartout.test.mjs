@@ -273,6 +273,11 @@ test('dérive : surcharge retirée à la main, rattrapée au passage périodique
   await k.moteur.attendre();
   const etat = JSON.parse((await k.base.premier("SELECT valeur FROM tickets_etat WHERE cle = 'vocaux'", [])).valeur);
   assert.deepEqual(etat.passePartout.echecs, [{ id: N, nom: 'Réservé', statut: 403, code: 50013 }]);
+  // Alerte pour ceux qui configurent les salons vocaux (notification `vocal-alerte`) : accès passe-partout refusé.
+  const alerte = await k.base.tous("SELECT entite_id, charge FROM evenements WHERE type = 'alerte.vocal'", []);
+  assert.equal(alerte.length, 1);
+  assert.equal(alerte[0].entite_id, 'vocal:passe-partout:hierarchie');
+  assert.deepEqual([JSON.parse(alerte[0].charge).code, JSON.parse(alerte[0].charge).quoi, JSON.parse(alerte[0].charge).nombre], ['hierarchie', 'passe-partout', 1]);
   const essais = putsM(k.rest, N).length;
   await k.moteur.passage();
   await k.moteur.attendre();

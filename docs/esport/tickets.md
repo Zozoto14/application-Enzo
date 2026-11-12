@@ -135,7 +135,9 @@ comme ticket (créés, fermés, ouverts) mais son avis reste compté, sauf si l'
 ### Avis (`tickets.gerer`, ou `tickets.configurer`)
 
 Demande du Fondateur : « voir les avis » (migration `0056_tickets_avis.sql`). Les **notes de 1 à 5** et les
-**commentaires** facultatifs laissés par les auteurs dans le MP reçu à la fermeture :
+**commentaires** facultatifs laissés par les auteurs dans le MP reçu à la fermeture. Chaque nouvelle note prévient ceux qui
+traitent la catégorie (notification `tk-avis`, voir [notifications.md](notifications.md) « Alertes et avis »), avec un lien
+vers cet onglet, filtré sur le ticket :
 
 - **note moyenne**, **nombre d'avis**, **répartition** des cinq notes (barres, vert pour 4-5, ambre pour 3, rouge pour
   1-2) ;
@@ -582,7 +584,7 @@ notifications. Elles n'entrent pas dans le récapitulatif e-mail.
 | `POST /tickets/rgpd/(export\|effacer)` `{ discordId }` | RGPD d'une personne sans compte (Fondateur) |
 | `GET /tickets?statut&categorie&priorite&responsable&auteur&du&au&q` | liste (catégories visibles), non lus |
 | `GET /tickets/compteur` ; `GET /tickets/stats?du&au` ; `GET\|PUT /tickets/preferences` | compteur, statistiques (`gerer`), MP |
-| `GET /tickets/avis?categorie&note&du&au&responsable&tri` | avis (`gerer`, ou `configurer` : ses catégories) : `{ total, moyenne, repartition[5], avis[], categories, responsables, voirTickets }` ; `tri` : `recent` (défaut), `ancien`, `note_haut`, `note_bas` |
+| `GET /tickets/avis?categorie&note&du&au&responsable&ticket&tri` | avis (`ticket` : l'avis d'un seul ticket, lien d'une notification d'avis) (`gerer`, ou `configurer` : ses catégories) : `{ total, moyenne, repartition[5], avis[], categories, responsables, voirTickets }` ; `tri` : `recent` (défaut), `ancien`, `note_haut`, `note_bas` |
 | `POST /tickets/:id/supprimer` `{ garderAvis? }` ; `POST /tickets/supprimer` `{ ids, garderAvis? }` | supprimer un ticket **fermé** (409 sinon) : salon Discord supprimé, ticket lisible dans « Supprimés » ; groupé : `{ supprimes: [numéros], echecs: [{ id, code }] }` ; `GET /tickets/:id` donne `droits.supprimer`, `noteLe`, `supprime { le, par, effaceLe, garderAvis }` |
 | `POST /tickets/:id/restaurer` `{ rouvrir? }` ; `POST /tickets/:id/effacer` `{ garderAvis? }` ; `GET /tickets?statut=supprimes` | restaurer un ticket supprimé (avec `rouvrir`, un nouveau salon est créé) ; l'effacer définitivement tout de suite (409 s'il n'est pas supprimé) ; liste des supprimés (`nbSupprimes`, `retentionSuppressionJours` dans la réponse de la liste) |
 | `GET /tickets/:id` ; `POST /tickets/:id/lu` | ticket et conversation ; marquer lu |

@@ -14,7 +14,7 @@
  *   POST          /tickets/config/liste-noire ; DELETE /tickets/config/liste-noire/:discordId
  *   POST          /tickets/rgpd/(export|effacer) { discordId }   (Fondateur)
  *   GET           /tickets?statut&categorie&priorite&responsable&auteur&du&au&q ; /tickets/compteur ; /tickets/stats
- *   GET           /tickets/avis?categorie&note&du&au&responsable&tri   (tickets.gerer, ou configurer : ses catégories)
+ *   GET           /tickets/avis?categorie&note&du&au&responsable&ticket&tri   (tickets.gerer, ou configurer : ses catégories)
  *   POST          /tickets/supprimer { ids, garderAvis } ; /tickets/:id/supprimer { garderAvis }   (ticket FERMÉ : salon Discord supprimé,
  *                 ticket lisible 30 j dans « Supprimés ») ; /tickets/:id/restaurer { rouvrir } ; /tickets/:id/effacer { garderAvis }
  *                 (ticket supprimé : effacement définitif tout de suite)
@@ -58,7 +58,7 @@ export async function routesTickets({ tk, acteur, chemin, methode: m, url, lireC
   if (n === 0 && m === 'GET') return v.liste(acteur, Object.fromEntries(['statut', 'categorie', 'priorite', 'responsable', 'auteur', 'du', 'au', 'q'].map(k => [k, q.get(k) || undefined])));
   if (n === 1 && a === 'compteur' && m === 'GET') return v.compteur(acteur);
   if (n === 1 && a === 'stats' && m === 'GET') return v.stats(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined });
-  if (n === 1 && a === 'avis' && m === 'GET') return v.avis(acteur, Object.fromEntries(['categorie', 'note', 'du', 'au', 'responsable', 'tri'].map(k => [k, q.get(k) || undefined])));
+  if (n === 1 && a === 'avis' && m === 'GET') return v.avis(acteur, Object.fromEntries(['categorie', 'note', 'du', 'au', 'responsable', 'ticket', 'tri'].map(k => [k, q.get(k) || undefined])));
   if (n === 1 && a === 'supprimer' && m === 'POST') return v.supprimerPlusieurs(acteur, await lireCorps());
   if (n === 1 && a === 'preferences') {
     if (m === 'GET') return v.preferences(acteur);

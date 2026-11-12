@@ -22,6 +22,8 @@
 import { droitsLecteur, voit } from './droits.mjs';
 import { regleDe, sousDossierRestreint } from './regles.mjs';
 import { jsonOu } from '../outils.mjs';
+import { droitsTickets, gereAvis, voitCategorie } from '../tickets/acces.mjs';
+import { ZONES_ALERTE } from './alertes.mjs';
 
 export const VERSION_CIBLE = 1;
 
@@ -49,6 +51,9 @@ export const GENRES_CIBLES = Object.freeze([
   'sponsor',
   'jeu',
   'devblog',
+  'avis_ticket',
+  'salon_match',
+  'alerte_discord',
 ]);
 
 /** Identifiants permis par genre (les autres clés sont ignorées : rien d'autre ne voyage dans une cible). */
@@ -75,6 +80,9 @@ export const CHAMPS_CIBLES = Object.freeze({
   sponsor: ['prospect', 'partenaire'],
   jeu: ['jeu'],
   devblog: ['entree', 'brouillon'],
+  avis_ticket: ['ticket'],
+  salon_match: ['evenement', 'match'],
+  alerte_discord: ['zone', 'evenement', 'team'],
 });
 
 /** Champ OBLIGATOIRE de chaque genre (sans lui, pas de cible : le lien de section reste). */
@@ -101,6 +109,9 @@ const PRINCIPAL = Object.freeze({
   sponsor: null,
   jeu: 'jeu',
   devblog: null,
+  avis_ticket: 'ticket',
+  salon_match: 'evenement',
+  alerte_discord: 'zone',
 });
 
 const MOTIF_ID = /^[A-Za-z0-9:._@-]{1,200}$/;
@@ -120,6 +131,12 @@ export function normaliserCible(brute) {
   if (principal && !sortie[principal]) return null;
   if (c.g === 'drive' && !sortie.fichier && !sortie.dossier) return null;
   if (c.g === 'sponsor' && !sortie.prospect && !sortie.partenaire) return null;
+  if (c.g === 'alerte_discord') {
+    // Zone connue ; l'événement (rôles d'un événement) et la team (rôles temporaires) sont obligatoires pour leur zone.
+    if (!ZONES_ALERTE.includes(sortie.zone)) return null;
+    if (sortie.zone === 'evenement' && !sortie.evenement) return null;
+    if (sortie.zone === 'role_temp' && !sortie.team) return null;
+  }
   return sortie;
 }
 
@@ -222,6 +239,7 @@ export const CIBLES_EVENEMENTS = Object.freeze({
     'review.marker_updated', 'review.marker_deleted', 'review.comment_deleted', 'review.reaction_changed',
     'resource.comment_deleted', 'resource.reaction_changed',
     'cm.liste_fin', 'cm.rdv_reserve',
+    'alerte.salon_match', 'alerte.vocal', 'alerte.role_evenement', 'alerte.role_temp',
   ],
 });
 
@@ -260,6 +278,9 @@ const DEPUIS_PERSONNELLE = {
   sponsor: c => (c.prospect ? { prospect: c.prospect } : c.genre === 'prospect' ? { prospect: c.id } : { partenaire: c.partenaire ?? (c.genre === 'partenaire' ? c.id : undefined) }),
   jeu: c => ({ jeu: c.jeu }),
   devblog: c => (c.etat === 'publie' ? { entree: c.entree } : { brouillon: c.entree ?? 'oui' }),
+  avis_ticket: c => ({ ticket: c.ticket }),
+  salon_match: c => ({ evenement: c.evenement, match: c.match }),
+  alerte_discord: (c, l) => ({ zone: c.zone, evenement: c.evenement, team: l.team_id ?? c.team }),
 };
 
 /** Message d'un `tk-message` : son identifiant de notification est `<message>:<compte>` (cycle.mjs). */
@@ -288,6 +309,9 @@ export const CIBLES_PERSONNELLES = Object.freeze({
   sponsor: ['sp-action', 'sp-obligation', 'sp-contrat', 'sp-responsable'],
   jeu: ['jeu-maj-proposee'],
   devblog: ['devblog-auto'],
+  avis_ticket: ['tk-avis'],
+  salon_match: ['salon-match-alerte'],
+  alerte_discord: ['vocal-alerte', 'role-evenement-alerte', 'role-temp-alerte'],
   section: ['bienvenue', 'role-change', 'retire', 'modules', 'note-partagee', 'jeu-brouillon-pret', 'evenement-annule', 'cm-affecte', 'cm-rdv-reserve', 'cm-drive-quota', 'cm-releve'],
 });
 
@@ -434,6 +458,37 @@ export async function verifierCible(base, acteur, brute) {
       }
       if (c.brouillon && !voit(droits, 'club:devblog.gerer', null)) return INTERDIT;
       return ok(c);
+    }
+    case 'avis_ticket': {
+      const l = await base.premier('SELECT categorie_id, supprime_le, purge_le FROM tickets WHERE id = ?', [c.ticket]);
+      if (!l || l.supprime_le || l.purge_le) return SUPPRIME;
+      const d = await droitsTickets(base, acteur);
+      // Avis : tickets.gerer, ou tickets.configurer pour les catégories de ses rôles. Sinon, qui traite la catégorie voit
+      // le ticket (et sa note) : le lien mène au ticket.
+      if (gereAvis(d, l.categorie_id)) return ok(c);
+      if (voitCategorie(d, l.categorie_id)) return ok({ v: VERSION_CIBLE, g: 'ticket', ticket: c.ticket });
+      return INTERDIT;
+    }
+    case 'salon_match': {
+      const e = await base.premier('SELECT id FROM club_evenements WHERE id = ?', [c.evenement]);
+      if (!e) return SUPPRIME;
+      if (!voit(droits, 'club:evenements.gerer', null)) return INTERDIT;
+      if (c.match) {
+        const m = await base.premier("SELECT statut FROM club_salons_match WHERE evenement_id = ? AND site_match_id = ? AND statut <> 'supprime'", [c.evenement, c.match]);
+        if (!m) delete c.match;
+      }
+      return ok(c);
+    }
+    case 'alerte_discord': {
+      if (c.zone === 'vocaux') return voit(droits, 'club:vocaux.configurer', null) ? ok(c) : INTERDIT;
+      if (c.zone === 'evenement') {
+        const e = await base.premier('SELECT id FROM club_evenements WHERE id = ?', [c.evenement]);
+        if (!e) return SUPPRIME;
+        return voit(droits, 'club:evenements.gerer', null) ? ok(c) : INTERDIT;
+      }
+      const t = await base.premier('SELECT id FROM teams WHERE id = ? AND supprimee_le IS NULL', [c.team]);
+      if (!t) return SUPPRIME;
+      return voit(droits, 'team:discord.manage', c.team) ? ok(c) : INTERDIT;
     }
     default:
       return { etat: 'invalide' };

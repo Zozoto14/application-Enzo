@@ -54,6 +54,7 @@ import {
 import { EquipesEvenement } from './EquipesEvenement';
 import { SiteEvenement } from './SiteEvenement';
 import { SalonsMatch } from './SalonsMatch';
+import { CibleSurlignee } from '../notifications/Cible';
 import { StaffEvenement } from './StaffEvenement';
 import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
@@ -539,6 +540,7 @@ export function PageEvenements({
               })}
             </Text>
           ) : null}
+          <CibleSurlignee theme={theme} cle={`evenement-discord:${fiche.evenement.id}`}>
           <Bloc theme={theme} testID="esport-ev-reglages">
             <Editeur
               theme={theme}
@@ -578,6 +580,7 @@ export function PageEvenements({
               />
             </View>
           </Bloc>
+          </CibleSurlignee>
 
           <StaffEvenement theme={theme} api={api} fiche={fiche} onFiche={setFiche} />
 

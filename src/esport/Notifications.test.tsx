@@ -80,10 +80,10 @@ function fauxClient(requete: jest.Mock): ClientEsport {
   } as unknown as ClientEsport;
 }
 
-function serveurFaux() {
+function serveurFaux({ types }: { types?: string[] } = {}) {
   let nonLues = 2;
-  let prefs = { masquees: [] as string[], silencieuses: [] as string[], teams: [] as string[], categories: [] };
-  return jest.fn(async (chemin: string, methode = 'GET', corps?: { ids?: string[]; tout?: boolean; masquees?: string[] }) => {
+  let prefs: Record<string, unknown> = { masquees: [] as string[], silencieuses: [] as string[], teams: [] as string[], categories: [], ...(types ? { types, typesMasques: [] as string[] } : {}) };
+  return jest.fn(async (chemin: string, methode = 'GET', corps?: { ids?: string[]; tout?: boolean; masquees?: string[]; typesMasques?: string[] }) => {
     if (chemin === '/notifications/compteur') return { nonLues };
     if (chemin.startsWith('/notifications/centre') && methode === 'GET') {
       return { liste: [N1, N2], noms: { coach123: 'Zed' }, suite: null, nonLues, categories: [], teams: [{ id: 'team-a', nom: 'Team Alpha' }, { id: 'team-b', nom: 'Team Bravo' }] };
@@ -94,7 +94,7 @@ function serveurFaux() {
     }
     if (chemin === '/notifications/preferences' && methode === 'GET') return prefs;
     if (chemin === '/notifications/preferences' && methode === 'PUT') {
-      prefs = { ...prefs, masquees: corps?.masquees ?? prefs.masquees };
+      prefs = { ...prefs, masquees: corps?.masquees ?? prefs.masquees, ...(corps?.typesMasques ? { typesMasques: corps.typesMasques } : {}) };
       return prefs;
     }
     if (chemin === '/devblog/nouveautes') return { entree: null };
@@ -206,3 +206,61 @@ describe('centre de notifications', () => {
     expect(screen.getByLabelText('Notifications : 7 non lues')).toBeTruthy();
   });
 });
+
+describe('avis et alertes (migration 0077)', () => {
+  const alerte = (type: string, charge: Record<string, unknown>, extra: Partial<NotificationCentre> = {}): NotificationCentre => ({ ...N2, id: `ev-9:${type}`, type, categorie: type === 'tk-avis' ? 'tickets' : 'discord', team: null, charge, lue: false, date: il(60_000), ...extra });
+
+  it('phrases : avis du ticket, cause lisible, compteur quand la même erreur se répète, FR et EN', () => {
+    expect(phraseCentre(alerte('tk-avis', { numero: 12, note: 4, nom: 'Recrutement' }), {})).toBe('Ticket n° 12 noté 4/5 par son auteur · Recrutement');
+    expect(phraseCentre(alerte('salon-match-alerte', { code: 'equipe-sans-role', nom: '[DLT] Delta', compteur: 1 }), {})).toBe('Salon de match : équipe sans rôle Discord ([DLT] Delta)');
+    expect(phraseCentre(alerte('salon-match-alerte', { code: 'categorie-pleine', compteur: 3 }), {})).toBe('Salon de match : catégorie pleine (50 salons) (×3)');
+    expect(phraseCentre(alerte('salon-match-alerte', { code: 'creation-hierarchie' }), {})).toBe('Salon de match : création refusée : Discord refuse (permissions du bot ou position de son rôle)');
+    expect(phraseCentre(alerte('vocal-alerte', { code: 'hierarchie', quoi: 'passe-partout', compteur: 2 }), {})).toBe('Salons vocaux (accès passe-partout) : Discord refuse (permissions du bot ou position de son rôle) (×2)');
+    expect(phraseCentre(alerte('role-evenement-alerte', { code: 'discord-502', quoi: 'creation', statut: 502 }), {})).toBe('Rôles de l’événement (création) : erreur Discord (HTTP 502)');
+    expect(phraseCentre(alerte('role-temp-alerte', { code: 'gerer_roles_manquant', quoi: 'expiration' }), {})).toBe('Rôles temporaires (retrait à l’échéance) : le bot n’a pas la permission « Gérer les rôles »');
+    definirLangue('en');
+    expect(phraseCentre(alerte('tk-avis', { numero: 12, note: 5 }), {})).toBe('Ticket #12 rated 5/5 by its author');
+    expect(phraseCentre(alerte('vocal-alerte', { code: 'hierarchie', quoi: 'creation', compteur: 4 }), {})).toBe('Voice channels (creation): Discord refuses (bot permissions or the position of its role) (×4)');
+  });
+
+  it('préférences : seulement les types que le rôle permet, un interrupteur par type enregistré sur le compte', async () => {
+    const requete = serveurFaux({ types: ['tk-avis', 'vocal-alerte'] });
+    await monter(fauxClient(requete));
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('esport-cloche'));
+    });
+    await screen.findByTestId('esport-notif-ev-1');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-notifs-prefs'));
+    });
+    expect(await screen.findByTestId('esport-notifs-type-tk-avis')).toBeTruthy();
+    expect(screen.getByTestId('esport-notifs-type-vocal-alerte')).toBeTruthy();
+    expect(screen.queryByTestId('esport-notifs-type-role-temp-alerte')).toBeNull();
+    expect(screen.getByText('Avis sur un ticket')).toBeTruthy();
+    expect(screen.getByText('Salons vocaux : erreurs')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-notifs-type-vocal-alerte'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/notifications/preferences', 'PUT', expect.objectContaining({ typesMasques: ['vocal-alerte'] })));
+    // Remis : la liste redevient vide.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-notifs-type-vocal-alerte'));
+    });
+    await waitFor(() => expect(requete).toHaveBeenCalledWith('/notifications/preferences', 'PUT', expect.objectContaining({ typesMasques: [] })));
+  });
+
+  it('préférences d’un compte sans avis ni alerte (ou serveur plus ancien) : aucune section en plus', async () => {
+    const requete = serveurFaux();
+    await monter(fauxClient(requete));
+    await act(async () => {
+      fireEvent.press(await screen.findByTestId('esport-cloche'));
+    });
+    await screen.findByTestId('esport-notif-ev-1');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-notifs-prefs'));
+    });
+    await screen.findByTestId('esport-notifs-preferences');
+    expect(screen.queryByText('Avis et alertes')).toBeNull();
+  });
+});
+

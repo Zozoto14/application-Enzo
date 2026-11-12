@@ -18,6 +18,7 @@ import { Squelette, attenue, texte } from '../design';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
 import { entier } from './outils';
 import { SelecteurRole } from './SelecteurRole';
+import { CibleSurlignee } from '../notifications/Cible';
 
 const AUCUN = '-';
 
@@ -56,6 +57,7 @@ export function ReglagesRolesTemp({ theme, client, teamId }: { theme: ThemeHub; 
       return trRt('enregistre');
     });
   return (
+    <CibleSurlignee theme={theme} cle={`roles-temp:${teamId}`}>
     <Panneau theme={theme} testID="esport-rt-reglages">
       <Intertitre theme={theme}>{trRt('titre')}</Intertitre>
       <Text style={attenue(theme)}>{trRt('aide')}</Text>
@@ -98,5 +100,6 @@ export function ReglagesRolesTemp({ theme, client, teamId }: { theme: ThemeHub; 
         <BoutonHub theme={theme} titre={trRt('lire_serveur')} onPress={() => void lireServeur()} desactive={enCours === 'discord' || !etat.bot} testID="esport-rt-lire" />
       </View>
     </Panneau>
+    </CibleSurlignee>
   );
 }

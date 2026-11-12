@@ -34,6 +34,7 @@ import { lireGeneral, instructionReglage } from '../tickets/reglages.mjs';
 import { DROITS_BOT, rest } from '../tickets/discord.mjs';
 import { bilingue } from '../tickets/textes.mjs';
 import { idsSup } from './staff-sup.mjs';
+import { codeRefusDiscord, signalerAlerte } from '../notifications/signaler.mjs';
 import { ECRITS, positionsSousHub } from '../vocaux/hubs.mjs';
 
 export const REGLAGES_DEFAUT = Object.freeze({
@@ -341,6 +342,18 @@ const empreinteResultat = m => (m.resultat ? JSON.stringify(m.resultat) : null);
 export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, botId = null, maintenant = () => Date.now(), journal = console }) {
   const t0 = () => maintenant();
 
+  /**
+   * Alerte pour le staff de l'événement (notification `salon-match-alerte` : evenements.gerer et Fondateur, au plus une par
+   * 6 h avec compteur, docs/esport/notifications.md « Alertes et avis »). `match` : le match concerné (la ligne est mise en
+   * avant dans la fiche de l'événement), pris dans la clé quand le code vise un match.
+   */
+  const alerter = (evt, code, { match = null, parMatch = true, nom = null, statut = null } = {}) =>
+    signalerAlerte(base, 'salon_match', {
+      cle: `salon-match:${evt.id}:${parMatch && match ? match : '*'}:${code}`,
+      charge: { code, evenement: evt.id, ...(match ? { match } : {}), ...(nom ? { nom } : {}), ...(statut !== null ? { statut } : {}) },
+      maintenant: t0(),
+    });
+
   async function ctxDiscord() {
     if (!jetonBot) return { erreur: 'bot-absent' };
     const general = await lireGeneral(base);
@@ -577,6 +590,8 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       }
       if (!r.ok || !r.corps?.id) {
         await maj(ligne.id, { erreur: `creation-${r.statut}${r.code ? `-${r.code}` : ''}` });
+        // Création refusée par Discord (permission, hiérarchie, catégorie pleine côté Discord…) : le staff est prévenu.
+        await alerter(evt, `creation-${codeRefusDiscord(r)}`, { match: ligne.site_match_id, statut: r.statut ?? 0 });
         return false;
       }
       salon = r.corps;
@@ -612,8 +627,14 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     const dejaStaff = Array.isArray(avant) ? [] : (avant?.staff ?? []);
     const roles = [evt.staff_role_id, ...(evt.roles_supprimes_le ? [] : idsSup(evt.staff_roles_sup))].filter(x => x && ID.test(String(x))).map(String);
     const textes = [];
-    if (sans.length && JSON.stringify(sans) !== JSON.stringify(dejaEquipes)) textes.push(tx(mode, 'sans_role', { liste: sans.join(', ') }, 900));
-    if (introuvables.length && JSON.stringify(introuvables) !== JSON.stringify(dejaStaff)) textes.push(tx(mode, 'staff_introuvable', { liste: introuvables.join(', ') }, 900));
+    if (sans.length && JSON.stringify(sans) !== JSON.stringify(dejaEquipes)) {
+      textes.push(tx(mode, 'sans_role', { liste: sans.join(', ') }, 900));
+      await alerter(evt, 'equipe-sans-role', { match: ligne.site_match_id, nom: sans.join(', ') });
+    }
+    if (introuvables.length && JSON.stringify(introuvables) !== JSON.stringify(dejaStaff)) {
+      textes.push(tx(mode, 'staff_introuvable', { liste: introuvables.join(', ') }, 900));
+      await alerter(evt, 'staff-introuvable', { match: ligne.site_match_id, nom: introuvables.join(', ') });
+    }
     if (textes.length) await poster(ligne, { content: `${roles.map(r => `<@&${r}>`).join(' ')} ${textes.join('\n')}`.trim().slice(0, 2000), allowed_mentions: { parse: [], roles } }, compteur);
     await maj(ligne.id, { avertis: cle });
     ligne.avertis = cle;
@@ -732,6 +753,8 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       if (deja) await base.executer('DELETE FROM tickets_reglages WHERE cle = ?', [cle]);
       return;
     }
+    // Alerte (notification) dès que le repère manque, avec ou sans salon ouvert où l'écrire ; au plus une par 6 h.
+    await alerter(evt, 'ancre-supprimee', { parMatch: false });
     if (deja?.ancreId === reglages.ancreId || compteur.limite) return;
     const ligne = await base.premier("SELECT * FROM club_salons_match WHERE evenement_id = ? AND statut = 'ouvert' AND salon_id IS NOT NULL ORDER BY cree_le DESC", [evt.id]);
     if (!ligne) return; // aucun salon où l'écrire : au prochain passage
@@ -857,6 +880,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       const salons = await lireSalons();
       if (parentId && salons.filter(s => String(s.parent_id ?? '') === parentId).length >= LIMITES_SALONS.salonsParCategorie && !salons.some(s => String(s.topic ?? '').includes(`${MARQUEUR}${m.cle}`))) {
         bilan.erreur = 'categorie-pleine';
+        await alerter(evt, 'categorie-pleine', { match: m.cle, parMatch: false });
         bilan.attente++;
         continue;
       }

@@ -70,6 +70,7 @@ import { phraseJournalCompetition, phraseNotificationCompetition } from './compe
 import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
 import { phraseNotificationSponsors } from './sponsors/libelles';
 import { phraseNotificationTickets } from './tickets/libelles';
+import { phraseAlerte, phraseJournalAlerte } from './notifications/alertes';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.quelquun');
@@ -85,6 +86,9 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
   const qui = nom(noms, e.acteur);
   const m = e.meta;
   const texte = (v: unknown) => (typeof v === 'string' ? v : '?');
+  // Alertes techniques (migration 0077) : le journal montre la cause, comme la notification.
+  const alerte = phraseJournalAlerte(e.action, m);
+  if (alerte) return alerte;
   switch (e.action) {
     case 'team.created':
       return tr('jr.team_created', { qui });
@@ -326,7 +330,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
         echeance: typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : '',
       });
     default:
-      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationSponsors(n.type, c, id => nom(noms, id)) ?? phraseNotificationTickets(n.type, c) ?? `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationSponsors(n.type, c, id => nom(noms, id)) ?? phraseNotificationTickets(n.type, c) ?? phraseAlerte(n.type, c) ?? `${team} : ${n.type}`;
   }
 }
 

@@ -386,6 +386,8 @@ export interface FiltresAvis {
   du?: string;
   au?: string;
   responsable?: string;
+  /** Avis d'un seul ticket (lien d'une notification d'avis). */
+  ticket?: string;
   tri?: TriAvis;
 }
 

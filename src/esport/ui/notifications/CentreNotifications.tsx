@@ -18,6 +18,8 @@ import type { ClientEsport } from '../../client';
 import { trNf, trnNf } from '../../i18n/notifications';
 import { trRp } from '../../i18n/roles';
 import { Icone } from '../../../ui/icones';
+import { ICONES_ALERTES } from '../../notifications/alertes';
+import { trAl, type CleAl } from '../../i18n/alertes';
 import { CATEGORIES_NOTIFICATIONS, apiNotifications, signalerNotifications, surNotifications, type CategorieNotification, type LienNotification, type NotificationCentre, type PageNotifications as Page, type PreferencesNotifications } from '../../notifications/api';
 import type { CibleNotification } from '../../notifications/cibles';
 import { ICONES, bornesPeriode, dateRelative, grouperParJour, libelleCategorie, pastille, phraseCentre, titreJour, type Periode } from '../../notifications/logique';
@@ -211,6 +213,31 @@ function Preferences({ theme, prefs, teams, onChanger, enCours }: { theme: Theme
           );
         })}
       </View>
+      {(prefs.types ?? []).length ? (
+        <Groupe theme={theme} titre={trAl('titre')}>
+          <Text style={{ ...attenue(theme, 12), width: '100%' }}>{trAl('aide')}</Text>
+          {(prefs.types ?? []).map(t => {
+            const recevoir = !(prefs.typesMasques ?? []).includes(t);
+            const libelle = trAl(`type.${t}` as CleAl);
+            return (
+              <View key={t} style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s, minHeight: 44, width: '100%' }}>
+                <View style={{ width: 22, alignItems: 'center' }}>
+                  <Icone nom={ICONES_ALERTES[t]} taille={16} couleur={theme.attenue} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={texte(theme, 14)} numberOfLines={1}>
+                    {libelle}
+                  </Text>
+                  <Text style={attenue(theme, 12)}>{trAl(`type_aide.${t}` as CleAl)}</Text>
+                </View>
+                <View style={{ width: 76, alignItems: 'center' }}>
+                  <Case theme={theme} coche={recevoir} libelle={trAl('recevoir', { type: libelle })} onChanger={() => onChanger({ typesMasques: basculer(prefs.typesMasques ?? [], t) })} testID={`esport-notifs-type-${t}`} />
+                </View>
+              </View>
+            );
+          })}
+        </Groupe>
+      ) : null}
       {teams.length > 1 ? (
         <Groupe theme={theme} titre={trNf('teams_suivies')}>
           {teams.map(t => (
@@ -317,7 +344,7 @@ export function PageNotifications({
   };
   const changerPrefs = (p: Partial<PreferencesNotifications>) =>
     void agir('prefs', async () => {
-      const r = await api.changerPreferences({ masquees: p.masquees, silencieuses: p.silencieuses, teams: p.teams });
+      const r = await api.changerPreferences({ masquees: p.masquees, silencieuses: p.silencieuses, teams: p.teams, typesMasques: p.typesMasques });
       setPrefs(r);
       await charger();
       return trNf('enregistre');

@@ -9,7 +9,7 @@
 export const VERSION_CIBLE = 1;
 
 /** Genres de cibles (version 1) : la même liste que le serveur (vérifié par esport/test/notifications-cibles.test.mjs). */
-export const GENRES_CIBLES = ['ticket', 'carte_cm', 'clip_cm', 'lien_cm', 'drive', 'reunion_cm', 'evenement', 'tache', 'objectif', 'reunion', 'strat', 'playbook', 'review', 'ressource', 'adversaire', 'tournoi', 'resultat', 'membre', 'demande_compte', 'sponsor', 'jeu', 'devblog'] as const;
+export const GENRES_CIBLES = ['ticket', 'carte_cm', 'clip_cm', 'lien_cm', 'drive', 'reunion_cm', 'evenement', 'tache', 'objectif', 'reunion', 'strat', 'playbook', 'review', 'ressource', 'adversaire', 'tournoi', 'resultat', 'membre', 'demande_compte', 'sponsor', 'jeu', 'devblog', 'avis_ticket', 'salon_match', 'alerte_discord'] as const;
 export type GenreCible = (typeof GENRES_CIBLES)[number];
 
 /** Identifiants permis par genre (mêmes listes que le serveur). */
@@ -36,6 +36,9 @@ export const CHAMPS_CIBLES: Record<GenreCible, readonly string[]> = {
   sponsor: ['prospect', 'partenaire'],
   jeu: ['jeu'],
   devblog: ['entree', 'brouillon'],
+  avis_ticket: ['ticket'],
+  salon_match: ['evenement', 'match'],
+  alerte_discord: ['zone', 'evenement', 'team'],
 };
 
 /** Cible d'une notification : genre et identifiants (chaînes). */
@@ -70,7 +73,7 @@ export type EcranCible =
   | { v: 'cm'; onglet: string }
   | { v: 'tickets' }
   | { v: 'membres'; sous: 'trombi' | 'tous' }
-  | { v: 'administration'; sous: 'jeux' | 'devblog' }
+  | { v: 'administration'; sous: 'jeux' | 'devblog' | 'bot' | 'evenements' }
   | { v: 'devblog' };
 
 export interface DestinationCible {
@@ -136,6 +139,16 @@ export function destinationCible(c: CibleNotification, { espaceCm = true }: { es
       return { vue: { v: 'cm', onglet: 'sponsors' } };
     case 'jeu':
       return { vue: { v: 'administration', sous: 'jeux' }, surligne: cleElement(c) };
+    // Avis et alertes (migration 0077) : Tickets › Avis ; Administration › Événements › fiche (Salons de match, rôles) ;
+    // Administration › Bot Esport HQ › Salons vocaux ; page Discord de la team › Rôles temporaires.
+    case 'avis_ticket':
+      return { vue: { v: 'tickets' }, surligne: s('ticket') ? `tk-avis:${s('ticket')}` : undefined };
+    case 'salon_match':
+      return { vue: { v: 'administration', sous: 'evenements' }, surligne: s('match') ? `salon-match:${s('match')}` : s('evenement') ? `salons-match:${s('evenement')}` : undefined };
+    case 'alerte_discord':
+      if (s('zone') === 'vocaux') return { vue: { v: 'administration', sous: 'bot' }, surligne: 'bot-fn:vocaux' };
+      if (s('zone') === 'evenement') return { vue: { v: 'administration', sous: 'evenements' }, surligne: s('evenement') ? `evenement-discord:${s('evenement')}` : undefined };
+      return s('team') ? { vue: { v: 'team', id: s('team')!, section: 'module:discord' }, surligne: `roles-temp:${s('team')}` } : null;
     case 'devblog':
       return s('brouillon') ? { vue: { v: 'administration', sous: 'devblog' } } : { vue: { v: 'devblog' }, surligne: s('entree') ? `devblog:${s('entree')}` : undefined };
     default:

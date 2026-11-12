@@ -26,6 +26,7 @@ import { Tableau } from './ui/cm/Tableau';
 import { Drive } from './ui/cm/drive/Drive';
 import { FournisseurCible, type CibleActive } from './ui/notifications/Cible';
 import { ListeTickets } from './ui/tickets/TicketsStaff';
+import { PageTickets } from './ui/tickets/PageTickets';
 
 const theme = themeHub('nuit');
 
@@ -52,6 +53,19 @@ describe('cibles : écrans et adresses', () => {
     // Sans team : rien à ouvrir.
     expect(destinationCible({ v: 1, g: 'evenement', evenement: 'e1' })).toBeNull();
     expect(destinationCible({ v: 1, g: 'devblog', brouillon: 'd1' })?.vue).toEqual({ v: 'administration', sous: 'devblog' });
+  });
+
+  it('avis et alertes (migration 0077) : Tickets › Avis, fiche de l’événement et ligne du match, Bot Esport HQ › Salons vocaux, Rôles temporaires de la team', () => {
+    expect(destinationCible({ v: 1, g: 'avis_ticket', ticket: 't1' })).toEqual({ vue: { v: 'tickets' }, surligne: 'tk-avis:t1' });
+    expect(destinationCible({ v: 1, g: 'salon_match', evenement: 'e1', match: 'm:9' })).toEqual({ vue: { v: 'administration', sous: 'evenements' }, surligne: 'salon-match:m:9' });
+    expect(destinationCible({ v: 1, g: 'salon_match', evenement: 'e1' })).toEqual({ vue: { v: 'administration', sous: 'evenements' }, surligne: 'salons-match:e1' });
+    expect(destinationCible({ v: 1, g: 'alerte_discord', zone: 'vocaux' })).toEqual({ vue: { v: 'administration', sous: 'bot' }, surligne: 'bot-fn:vocaux' });
+    expect(destinationCible({ v: 1, g: 'alerte_discord', zone: 'evenement', evenement: 'e1' })).toEqual({ vue: { v: 'administration', sous: 'evenements' }, surligne: 'evenement-discord:e1' });
+    expect(destinationCible({ v: 1, g: 'alerte_discord', zone: 'role_temp', team: 't1' })).toEqual({ vue: { v: 'team', id: 't1', section: 'module:discord' }, surligne: 'roles-temp:t1' });
+    expect(destinationCible({ v: 1, g: 'alerte_discord', zone: 'role_temp' })).toBeNull();
+    const c: CibleNotification = { v: 1, g: 'salon_match', evenement: 'e1', match: 'm:9' };
+    expect(fragmentCible(c)).toBe('#/app/esport/c/salon_match?evenement=e1&match=m%3A9');
+    expect(lireFragment(fragmentCible(c))).toEqual({ cible: c });
   });
 
   it('adresses partageables : élément et écran, lus et relus à l’identique', () => {
@@ -197,6 +211,38 @@ describe('écrans ouverts par un lien direct', () => {
     const surligne = await screen.findByTestId('esport-cible-surlignee');
     expect(within(surligne).getByTestId('esport-tk-msg-m2')).toBeTruthy();
     expect(within(surligne).queryByTestId('esport-tk-msg-m1')).toBeNull();
+  });
+
+  it('avis d’un ticket : l’onglet Avis s’ouvre, filtré sur ce ticket et mis en avant ; « Tous les avis » retire le filtre', async () => {
+    const CAT = { id: 'cat1', nom: { fr: 'Recrutement', en: 'Recruitment' }, couleur: '#22aa66', icone: 'membres', actif: true };
+    const TK = '00000000-0000-0000-0000-000000000009';
+    const avis = (id: string, numero: number, note: number) => ({ id, ticketId: id, numero, salon: null, anonyme: false, categorie: CAT, note, commentaire: 'Merci', auteur: 'Léa', responsable: null, le: '2026-11-04T10:05:00.000Z' });
+    const appels: string[] = [];
+    const requete = async (chemin: string): Promise<unknown> => {
+      appels.push(chemin);
+      if (chemin === '/tickets/etat') return { actif: true, bot: true, connexion: { etat: 'direct' } };
+      if (chemin.startsWith('/tickets/avis')) {
+        const seul = chemin.includes(`ticket=${TK}`);
+        const liste = seul ? [avis(TK, 9, 4)] : [avis(TK, 9, 4), avis('autre', 10, 2)];
+        return { total: liste.length, moyenne: 3, repartition: [0, 1, 0, 1, 0], avis: liste, categories: [CAT], responsables: [], voirTickets: false };
+      }
+      return { tickets: [], categories: [CAT], droits: { repondre: true, gerer: true, configurer: false } };
+    };
+    await render(
+      <FournisseurCible active={active({ v: 1, g: 'avis_ticket', ticket: TK }, `tk-avis:${TK}`)}>
+        <PageTickets theme={theme} client={{ requete } as unknown as ClientEsport} large moi={{ voir: true, repondre: true, gerer: true, configurer: false, actif: true }} />
+      </FournisseurCible>,
+    );
+    expect(await screen.findByTestId('esport-tk-avis')).toBeTruthy();
+    await waitFor(() => expect(appels.some(c => c.startsWith('/tickets/avis') && c.includes(`ticket=${TK}`))).toBe(true));
+    const surligne = await screen.findByTestId('esport-cible-surlignee');
+    expect(within(surligne).getByTestId(`esport-tk-avis-${TK}`)).toBeTruthy();
+    expect(screen.queryByTestId('esport-tk-avis-autre')).toBeNull();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-tk-avis-f-ticket-tous'));
+    });
+    expect(await screen.findByTestId('esport-tk-avis-autre')).toBeTruthy();
+    expect(screen.queryByTestId('esport-tk-avis-f-ticket')).toBeNull();
   });
 
   it('Drive : le dossier du fichier s’ouvre et le fichier s’affiche (aperçu et détails)', async () => {

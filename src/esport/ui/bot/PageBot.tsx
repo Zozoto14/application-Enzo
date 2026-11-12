@@ -26,6 +26,7 @@ import { Choix, Intertitre, Panneau, Retours, styles, useAgir } from '../commun'
 import { Badge, ESP, EnTetePage, Onglets, Squelette, attenue, texte } from '../design';
 import { TestMpDiscord } from '../TestMpDiscord';
 import { Diagnostic, PastilleConnexion } from '../tickets/ConfigTickets';
+import { CibleSurlignee } from '../notifications/Cible';
 import { fonctionnalitesBot, type ContexteBot } from './sections';
 
 export type SectionBot = 'connexion' | 'serveur' | 'messages' | 'annonces' | 'commandes' | 'fonctionnalites';
@@ -424,7 +425,8 @@ function SectionFonctionnalites({ ctx }: { ctx: ContexteBot }) {
         const e = f.etat?.(ctx);
         const Reglages = f.Reglages;
         return (
-          <Panneau key={f.id} theme={theme} testID={`esport-bot-fn-${f.id}`} style={f.bientot ? { opacity: 0.7 } : undefined}>
+          <CibleSurlignee key={f.id} theme={theme} cle={`bot-fn:${f.id}`}>
+          <Panneau theme={theme} testID={`esport-bot-fn-${f.id}`} style={f.bientot ? { opacity: 0.7 } : undefined}>
             <View style={styles.ligne}>
               <Glyphe valeur={f.icone} taille={16} couleur={theme.texte} />
               <Text style={{ ...texte(theme, 15), fontWeight: '700', flexShrink: 1 }}>{f.titre()}</Text>
@@ -439,6 +441,7 @@ function SectionFonctionnalites({ ctx }: { ctx: ContexteBot }) {
               </View>
             ) : null}
           </Panneau>
+          </CibleSurlignee>
         );
       })}
     </View>

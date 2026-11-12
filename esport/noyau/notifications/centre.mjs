@@ -22,6 +22,7 @@ import { echec, iso, jsonOu } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
 import { CATEGORIES, categoriePerso, chargePublique, lienDeCategorie, regleDe, regleEffective } from './regles.mjs';
 import { aCm, droitsLecteur, teamsDuLecteur, voit } from './droits.mjs';
+import { TYPES_COUPABLES, filtreAlertes, typesVisibles } from './alertes.mjs';
 import { horsTableauxInterdits } from '../cm/acces.mjs';
 import { cibleEvenement, ciblePersonnelle, normaliserCible, verifierCible } from './cibles.mjs';
 
@@ -77,13 +78,15 @@ export async function lirePreferences(base, compte) {
     masquees: listeDe(l?.masquees, CATEGORIES),
     silencieuses: listeDe(l?.silencieuses, CATEGORIES),
     teams: listeDe(l?.teams),
+    typesMasques: listeDe(l?.types_masques, TYPES_COUPABLES),
     luJusqua,
   };
 }
 
 /** L'élément compte-t-il pour ce compte (préférences « suivies », teams, et « me notifier » si `annonce`) ? */
-function selonPreferences(prefs, categorie, teamId, { annonce = false } = {}) {
+function selonPreferences(prefs, categorie, teamId, { annonce = false, type } = {}) {
   if (prefs.masquees.includes(categorie)) return false;
+  if (type && prefs.typesMasques.includes(type)) return false;
   if (annonce && prefs.silencieuses.includes(categorie)) return false;
   if (teamId && prefs.teams.length && !prefs.teams.includes(teamId)) return false;
   return true;
@@ -145,7 +148,7 @@ async function annoncerEvenement(base, ev, regle) {
   for (const p of perso) {
     const categorie = categoriePerso(p.type);
     deja.add(p.compte_id);
-    if (selonPreferences(await lirePreferences(base, p.compte_id), categorie, p.team_id, { annonce: true })) annoncer({ compte: p.compte_id, id: p.id, source: 'perso', categorie, teamId: p.team_id ?? null });
+    if (selonPreferences(await lirePreferences(base, p.compte_id), categorie, p.team_id, { annonce: true, type: p.type })) annoncer({ compte: p.compte_id, id: p.id, source: 'perso', categorie, teamId: p.team_id ?? null });
   }
   if (regle.acces === 'aucun') return;
   // Tableau CM de l'élément (migration 0046) : jamais annoncé à qui ne voit pas ce tableau restreint.
@@ -171,6 +174,8 @@ export async function purgerNotifications(base, { maintenant = Date.now(), jours
   const fil = await base.executer('DELETE FROM notifs_centre WHERE cree_le < ?', [limite]);
   const lectures = await base.executer('DELETE FROM notifs_lectures WHERE lue_le < ?', [limite]);
   const perso = await base.executer('DELETE FROM notifications WHERE cree_le < ?', [limite]);
+  // Dédoublonnage des alertes : la fenêtre (6 h) est longtemps passée.
+  await base.executer('DELETE FROM notifs_alertes WHERE premiere_le < ?', [limite]);
   return { fil: Number(fil?.changements ?? 0), lectures: Number(lectures?.changements ?? 0), personnelles: Number(perso?.changements ?? 0) };
 }
 
@@ -226,6 +231,12 @@ export function filtrePerso(droits) {
   );
   params.push(...PERSO_HORS_TEAM, ...teams, ...teamsCm);
   if (!droits.club.has('sponsors.voir')) conditions.push("COALESCE(p.categorie, '') <> 'sponsors'");
+  // Alertes techniques (migration 0077) : seulement celles dont le lecteur a encore le droit (permission, team).
+  const alertes = filtreAlertes(droits);
+  if (alertes.sql) {
+    conditions.push(alertes.sql);
+    params.push(...alertes.params);
+  }
   // Tickets (migration 0054) : seulement les catégories de tickets que le lecteur voit aujourd'hui.
   if (Array.isArray(droits.tickets)) {
     conditions.push(droits.tickets.length ? `(COALESCE(p.categorie, '') <> 'tickets' OR p.ticket_categorie_id IN (${droits.tickets.map(() => '?').join(', ')}))` : "COALESCE(p.categorie, '') <> 'tickets'");
@@ -324,6 +335,11 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     if (!categories.length) return { sql: '1 = 0', params: [] };
     w.push(`x.categorie IN (${categories.map(() => '?').join(', ')})`);
     p.push(...categories);
+    // Types coupés un par un (migration 0077).
+    if (prefs.typesMasques.length) {
+      w.push(`x.type NOT IN (${prefs.typesMasques.map(() => '?').join(', ')})`);
+      p.push(...prefs.typesMasques);
+    }
     if (f.team) {
       w.push('x.team_id = ?');
       p.push(f.team);
@@ -455,11 +471,12 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
 
   /** `GET /notifications/preferences`. */
   async function preferences(acteur) {
-    const p = await lirePreferences(base, acteur.compte);
-    return { masquees: p.masquees, silencieuses: p.silencieuses, teams: p.teams, categories: CATEGORIES };
+    const [p, droits] = await Promise.all([lirePreferences(base, acteur.compte), droitsLecteur(base, acteur)]);
+    // `types` : les avis et alertes que le rôle du compte lui permet de recevoir (un par un : `typesMasques`).
+    return { masquees: p.masquees, silencieuses: p.silencieuses, teams: p.teams, typesMasques: p.typesMasques, types: typesVisibles(droits), categories: CATEGORIES };
   }
 
-  /** `PUT /notifications/preferences` `{ masquees?, silencieuses?, teams? }` : listes complètes (remplacent). */
+  /** `PUT /notifications/preferences` `{ masquees?, silencieuses?, teams?, typesMasques? }` : listes complètes (remplacent). */
   async function changerPreferences(acteur, corps) {
     const actuelles = await lirePreferences(base, acteur.compte);
     const lire = (v, permis, quoi) => {
@@ -470,11 +487,12 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     const masquees = lire(corps?.masquees, CATEGORIES, 'masquees') ?? actuelles.masquees;
     const silencieuses = lire(corps?.silencieuses, CATEGORIES, 'silencieuses') ?? actuelles.silencieuses;
     const teams = lire(corps?.teams, null, 'teams') ?? actuelles.teams;
+    const typesMasques = lire(corps?.typesMasques, TYPES_COUPABLES, 'typesMasques') ?? actuelles.typesMasques;
     const t = iso(maintenant());
     await base.executer(
-      `INSERT INTO notifs_preferences (compte_id, masquees, silencieuses, teams, lu_jusqua, maj_le) VALUES (?, ?, ?, ?, NULL, ?)
-       ON CONFLICT (compte_id) DO UPDATE SET masquees = excluded.masquees, silencieuses = excluded.silencieuses, teams = excluded.teams, maj_le = excluded.maj_le`,
-      [acteur.compte, JSON.stringify(masquees), JSON.stringify(silencieuses), JSON.stringify(teams), t],
+      `INSERT INTO notifs_preferences (compte_id, masquees, silencieuses, teams, types_masques, lu_jusqua, maj_le) VALUES (?, ?, ?, ?, ?, NULL, ?)
+       ON CONFLICT (compte_id) DO UPDATE SET masquees = excluded.masquees, silencieuses = excluded.silencieuses, teams = excluded.teams, types_masques = excluded.types_masques, maj_le = excluded.maj_le`,
+      [acteur.compte, JSON.stringify(masquees), JSON.stringify(silencieuses), JSON.stringify(teams), JSON.stringify(typesMasques), t],
     );
     return preferences(acteur);
   }
@@ -494,10 +512,10 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
 
 /** Données du centre d'un compte (RGPD : export) : préférences et lectures. Le fil n'est pas « à lui ». */
 export async function exportCentre(base, compte) {
-  const p = await base.premier('SELECT masquees, silencieuses, teams, lu_jusqua, maj_le FROM notifs_preferences WHERE compte_id = ?', [compte]);
+  const p = await base.premier('SELECT masquees, silencieuses, teams, types_masques, lu_jusqua, maj_le FROM notifs_preferences WHERE compte_id = ?', [compte]);
   const lectures = await base.tous('SELECT notif_id, lue_le FROM notifs_lectures WHERE compte_id = ? ORDER BY lue_le', [compte]);
   return {
-    preferences: p ? { masquees: jsonOu(p.masquees, []), silencieuses: jsonOu(p.silencieuses, []), teams: jsonOu(p.teams, []), luJusqua: p.lu_jusqua ?? null, majLe: p.maj_le } : null,
+    preferences: p ? { masquees: jsonOu(p.masquees, []), silencieuses: jsonOu(p.silencieuses, []), teams: jsonOu(p.teams, []), typesMasques: jsonOu(p.types_masques, []), luJusqua: p.lu_jusqua ?? null, majLe: p.maj_le } : null,
     lectures: lectures.map(l => ({ notification: l.notif_id, lueLe: l.lue_le })),
   };
 }
@@ -506,4 +524,5 @@ export async function exportCentre(base, compte) {
 export const effacementCentre = compte => [
   { sql: 'DELETE FROM notifs_preferences WHERE compte_id = ?', params: [compte] },
   { sql: 'DELETE FROM notifs_lectures WHERE compte_id = ?', params: [compte] },
+  { sql: 'DELETE FROM notifs_alertes WHERE compte_id = ?', params: [compte] },
 ];

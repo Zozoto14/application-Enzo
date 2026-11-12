@@ -575,7 +575,7 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
 
   /**
    * Avis des tickets (note 1 à 5, commentaire facultatif) et avis gardés anonymes des tickets supprimés, des seules
-   * catégories que l'acteur gère (`gereAvis`). Filtres : catégorie, note, période (date de l'avis), responsable ;
+   * catégories que l'acteur gère (`gereAvis`). Filtres : catégorie, note, période (date de l'avis), responsable, ticket ;
    * tri : date ou note. Moyenne, nombre et répartition portent sur les mêmes filtres SAUF la note (la répartition
    * montre toujours les cinq notes). Rend au plus 500 avis.
    */
@@ -596,6 +596,11 @@ export function servicesVueTickets({ base, maintenant = () => Date.now(), stocka
       if (categorie) {
         where.push('categorie_id = ?');
         params.push(categorie);
+      }
+      // Un seul ticket (lien d'une notification d'avis) : les avis gardés anonymes n'ont pas cet identifiant.
+      if (f.ticket) {
+        where.push('id = ?');
+        params.push(String(f.ticket));
       }
       if (debut) {
         where.push('COALESCE(note_le, ferme_le) >= ?');

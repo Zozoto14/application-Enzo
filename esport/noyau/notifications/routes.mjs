@@ -6,8 +6,8 @@
  *   GET  /notifications/compteur     { nonLues }
  *   POST /notifications/centre/lues  { ids: [...] } ou { tout: true } → { nonLues }
  *   POST /notifications/cible        { cible } → { etat: 'ok' | 'supprime' | 'interdit', cible } (lien direct, cibles.mjs)
- *   GET  /notifications/preferences  { masquees, silencieuses, teams, categories }
- *   PUT  /notifications/preferences  { masquees?, silencieuses?, teams? }
+ *   GET  /notifications/preferences  { masquees, silencieuses, teams, typesMasques, types, categories }
+ *   PUT  /notifications/preferences  { masquees?, silencieuses?, teams?, typesMasques? }
  */
 
 export async function routesNotifications({ nc, acteur, chemin, methode, url, lireCorps, limite }) {

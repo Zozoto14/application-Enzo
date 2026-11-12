@@ -18,6 +18,22 @@ import { P, idDiscord, permissionsMembre, rest } from '../tickets/discord.mjs';
 import { lireGeneral } from '../tickets/reglages.mjs';
 import { guildDeEquipe, LIMITES_ROLES_TEMP, lireReglagesEquipe } from './reglages.mjs';
 import { dureeTexte, horodatage, tr } from './textes.mjs';
+import { signalerAlerte } from '../notifications/signaler.mjs';
+
+/**
+ * Refus qui demandent une action de la team (hiérarchie, permission, rôle géré, Discord injoignable) : alerte, même quand la
+ * personne qui agit voit déjà l'erreur. Un retrait à l'ÉCHÉANCE (personne ne regarde) alerte pour tout refus.
+ */
+const CAUSES_ALERTE = new Set(['hierarchie', 'gerer_roles_manquant', 'role_gere', 'discord_injoignable', 'role_introuvable']);
+
+/**
+ * Alerte `role-temp-alerte` (discord.manage de la team et Fondateur, une par 6 h avec compteur) : le rôle temporaire ne
+ * peut être donné ou retiré (`quoi` : octroi, retrait, expiration). Au mieux.
+ */
+const alerterRoleTemp = (ctx, teamId, quoi, refus, statut) =>
+  (quoi === 'expiration' || CAUSES_ALERTE.has(refus?.cle)) && statut !== 429
+    ? signalerAlerte(ctx.base, 'role_temp', { cle: `role-temp:${teamId}:${refus.cle}`, teamId, charge: { code: refus.cle, quoi, statut: statut ?? 0 }, maintenant: ctx.maintenant })
+    : undefined;
 
 const H = 3_600_000;
 const MIN = 60_000;
@@ -199,7 +215,11 @@ export async function donnerRoleTemp(ctx, entree) {
     if (n >= reglages.maxSimultanes) throw new RefusRoleTemp('max_atteint', { max: reglages.maxSimultanes, team: sur(equipe, 80) });
   }
   const r = await rest(ctx.fetch, ctx.jetonBot, 'PUT', CHEMIN(guildId, membreId, reglages.roleId), undefined, { raison: `Rôle temporaire (${equipe}) par ${entree.par?.nom || 'Esport HQ'}` });
-  if (!r.ok) throw await refusDiscord(ctx, r, { guildId, roleId: reglages.roleId, membreId });
+  if (!r.ok) {
+    const refus = await refusDiscord(ctx, r, { guildId, roleId: reglages.roleId, membreId });
+    await alerterRoleTemp(ctx, entree.teamId, 'octroi', refus, r.statut);
+    throw refus;
+  }
 
   const fin = Math.min(Math.max(existant ? Date.parse(existant.expireLe) : 0, t + dureeMs), t + LIMITES_ROLES_TEMP.dureeMaxH * H);
   let ligne;
@@ -262,7 +282,11 @@ export async function retirerRoleTemp(ctx, o, { par, langue }) {
   let deja = false;
   if (!r.ok) {
     if (r.statut === 404 && (r.code === 10007 || r.code === 10011)) deja = true;
-    else throw await refusDiscord(ctx, r, { guildId: o.guildId, roleId: o.roleId, membreId: o.membreId });
+    else {
+      const refus = await refusDiscord(ctx, r, { guildId: o.guildId, roleId: o.roleId, membreId: o.membreId });
+      await alerterRoleTemp(ctx, o.teamId, 'retrait', refus, r.statut);
+      throw refus;
+    }
   }
   await base.lot([
     { sql: "UPDATE roles_temp_octrois SET statut = 'retire', retire_le = ?, retire_par = ?, prochain_essai_le = NULL, maj_le = ? WHERE id = ? AND statut = 'actif'", params: [iso(t), par?.compte ?? null, iso(t), o.id] },
@@ -314,6 +338,7 @@ export async function expirerRolesTemp(base, { fetch: fetchDiscord = (...a) => g
     // Échec : nouvel essai plus tard (ou abandon).
     const refus = await refusDiscord(ctx, r, { guildId: o.guildId, roleId: o.roleId, membreId: o.membreId }).catch(() => new RefusRoleTemp('discord_refus', { statut: r.statut }));
     const motif = tr('fr', refus.cle, refus.vars).replace(/\*\*/g, '').slice(0, 300);
+    await alerterRoleTemp(ctx, o.teamId, 'expiration', refus, r.statut);
     const essais = o.essais + 1;
     const attente = r.statut === 429 ? Math.max(1, Number(r.retryApresS) || 5) * 1000 : Math.min(RETRAIT_MAX_MS, 5 * MIN * 2 ** Math.min(o.essais, 10));
     if (essais >= ESSAIS_MAX) {

@@ -24,6 +24,7 @@ import { tr } from '../../i18n';
 import { ESP, LARGEUR_CONTENU, Onglets } from '../design';
 import { Jeux, PageBot, PageDevblog, PageEvenements, RolesPermissions, Statistiques } from '../differe';
 import type { NavigationBot } from '../bot/PageBot';
+import { useCible } from '../notifications/Cible';
 
 export type SousOngletAdmin = 'statistiques' | 'jeux' | 'roles' | 'bot' | 'evenements' | 'devblog';
 
@@ -72,6 +73,19 @@ export function PageAdministration({
   const [choix, setChoix] = useState<SousOngletAdmin | undefined>(ongletInitial);
   // Fiche d'événement à ouvrir (Bot Esport HQ › Salons vocaux › « Ouvrir l'événement » d'un hub d'événement).
   const [evenementOuvert, setEvenementOuvert] = useState<string | undefined>();
+  // Section du Bot Esport HQ à ouvrir (lien d'une alerte des salons vocaux).
+  const [sectionBot, setSectionBot] = useState<'fonctionnalites' | undefined>();
+  // Liens directs des alertes (migration 0077) : la fiche de l'événement (Salons de match, rôles), ou la carte « Salons
+  // vocaux » du Bot Esport HQ.
+  useCible('administration', c => {
+    if ((c.g === 'salon_match' || (c.g === 'alerte_discord' && c.zone === 'evenement')) && typeof c.evenement === 'string') {
+      setEvenementOuvert(c.evenement);
+      setChoix('evenements');
+    } else if (c.g === 'alerte_discord' && c.zone === 'vocaux') {
+      setSectionBot('fonctionnalites');
+      setChoix('bot');
+    }
+  });
   const onglet: SousOngletAdmin | undefined = choix && permis.includes(choix) ? choix : permis[0];
   return (
     <View style={{ flex: 1 }} testID="esport-administration">
@@ -102,9 +116,11 @@ export function PageAdministration({
           <RolesPermissions theme={theme} client={client} large={large} />
         ) : onglet === 'bot' ? (
           <PageBot
+            key={sectionBot ?? 'bot'}
             theme={theme}
             client={client}
             large={large}
+            sectionInitiale={sectionBot}
             navigation={{
               ...navigationBot,
               ouvrirEvenements: droits.evenements

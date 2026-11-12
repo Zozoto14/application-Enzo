@@ -65,7 +65,8 @@ Préférences **en base, par compte** (`notifs_preferences`) :
 
 - `masquees` : catégories non suivies (absentes de la liste et du compteur ; un filtre explicite les montre) ;
 - `silencieuses` : « me notifier » décoché (dans la liste, hors compteur et hors annonce en direct) ;
-- `teams` : teams suivies (vide = toutes ; les éléments sans team restent).
+- `teams` : teams suivies (vide = toutes ; les éléments sans team restent) ;
+- `types_masques` (migration 0077) : **avis et alertes coupés un par un** (voir « Alertes et avis »).
 
 ## API
 
@@ -74,7 +75,7 @@ Préférences **en base, par compte** (`notifs_preferences`) :
 | `GET /notifications/centre` | page de la liste (`liste`, `noms`, `suite`, `nonLues`, `teams` filtrables) |
 | `GET /notifications/compteur` | `{ nonLues }` (droits et préférences) |
 | `POST /notifications/centre/lues` | `{ ids: [...] }` ou `{ tout: true }` → `{ nonLues }` |
-| `GET` / `PUT /notifications/preferences` | `{ masquees, silencieuses, teams }` |
+| `GET` / `PUT /notifications/preferences` | `{ masquees, silencieuses, teams, typesMasques }` ; la lecture rend aussi `types` : les avis et alertes que le rôle du compte permet de recevoir |
 
 Les anciennes routes `GET /notifications` et `POST /notifications/lues` (notifications personnelles seules) restent.
 
@@ -118,10 +119,53 @@ portée ; `entite_type` / `entite_id` du fichier.
 ## Tickets Discord
 
 Catégorie **Tickets** (migration 0054, [tickets.md](tickets.md)) : seulement des notifications **personnelles**
-(`tk-nouveau`, `tk-assigne`, `tk-message`, `tk-note`, `tk-ferme`), envoyées à ceux qui voient la catégorie du ticket.
+(`tk-nouveau`, `tk-assigne`, `tk-message`, `tk-note`, `tk-ferme`, `tk-avis`), envoyées à ceux qui voient la catégorie du ticket.
 Leur catégorie de ticket est gardée (`notifications.ticket_categorie_id`) et **relue à chaque lecture** : un compte qui
 ne voit plus cette catégorie ne voit plus ces notifications. Les événements `ticket.*` / `tickets.*` n'entrent jamais
 dans le fil commun (règle « aucun »), ni dans le récapitulatif e-mail.
+
+## Alertes et avis
+
+Migration `0077_notifications_alertes.sql`. Code : `esport/noyau/notifications/alertes.mjs` (types, destinataires,
+dédoublonnage, accès à la lecture), `signaler.mjs` (`signalerAlerte`), côté app `src/esport/notifications/alertes.ts` et
+`src/esport/i18n/alertes.ts` (FR / EN). Tests : `esport/test/notifications-alertes.test.mjs`, et dans les tests de
+chaque module (`salons-match`, `vocaux`, `vocaux-passepartout`, `evenements-club`, `roles-temp`),
+`src/esport/Notifications.test.tsx`, `NotificationsLiens.test.tsx`, `Evenements.test.tsx`.
+
+Cinq types de notifications **personnelles**, chacun avec ses destinataires, son accès (relu à **chaque lecture** : une
+permission retirée ou une team quittée masque l'alerte aussitôt) et son interrupteur dans les préférences :
+
+| Type | Catégorie | Quand | Qui | Où mène le clic |
+| --- | --- | --- | --- | --- |
+| `tk-avis` | Tickets | un auteur note un ticket fermé (1 à 5) | ceux qui traitent la catégorie du ticket et le Fondateur (la personne qui a pris le ticket garde `tk-note`) ; catégorie relue à la lecture | Tickets › Avis, filtré sur ce ticket (`avis_ticket`) ; sans accès aux avis (`tickets.gerer`, ou `configurer` pour sa catégorie) mais avec l'accès au ticket : le ticket |
+| `salon-match-alerte` | Discord | équipe du match sans rôle Discord, staff assigné introuvable sur le serveur, salon repère supprimé, création refusée par Discord (permission, hiérarchie…), catégorie pleine (50 salons) | `evenements.gerer` et le Fondateur | Administration › Événements › la fiche › Salons de match, ligne du match mise en avant (`salon_match`) |
+| `vocal-alerte` | Discord | salon vocal temporaire : création, suppression ou placement refusé, hub introuvable ; accès passe-partout (rôle Goat) refusé (hiérarchie, permission) | `vocaux.configurer` et le Fondateur | Administration › Bot Esport HQ › Fonctionnalités › carte « Salons vocaux » (`alerte_discord`, zone `vocaux`) |
+| `role-evenement-alerte` | Discord | rôle Discord d'équipe d'un événement : création, attribution, renommage, suppression ou placement refusé (hiérarchie 50013…) | `evenements.gerer` et le Fondateur | la fiche de l'événement, bloc des réglages (Discord) (`alerte_discord`, zone `evenement`) |
+| `role-temp-alerte` | Discord | rôles temporaires (`/role-temp`) : retrait à l'échéance impossible (tout refus), hiérarchie / permission au moment de donner ou retirer | `discord.manage` de la team et le Fondateur | page Discord de la team › Rôles temporaires (`alerte_discord`, zone `role_temp`) |
+
+**Mécanique** : le module qui détecte l'erreur appelle `signalerAlerte(base, genre, { cle, charge, teamId?, maintenant })`
+(`salon_match`, `vocal`, `role_evenement`, `role_temp`) ; cela écrit un événement du bus (`alerte.*`, jamais dans le fil :
+règle « aucun », mais dans le journal), et l'abonné `abonneAlertes` écrit les notifications des destinataires (calculés à ce
+moment ; l'accès est relu ensuite). L'avis (`tk-avis`) vient de l'événement `ticket.note`. La charge ne contient que des
+codes et des identifiants (`code`, `quoi`, `statut`, `evenement`, `match`, un nom d'équipe ou de personne court), jamais un
+message ni un jeton.
+
+**Dédoublonnage** : la même alerte (clé = genre, cible et code, par exemple `vocal:creation:hierarchie`) n'est notifiée
+qu'**une fois par fenêtre de 6 h et par destinataire** ; les occurrences suivantes augmentent le `compteur` de la
+notification existante (affiché « ×3 »), sans nouvelle notification ni nouvelle « non lue ». Au-delà de 6 h, une nouvelle
+notification repart de 1 (table `notifs_alertes`, purgée avec le reste). En amont, `signalerAlerte` n'écrit au plus qu'un
+événement par clé et par quart d'heure et par processus (les passages d'une minute répètent la même erreur). Un nouvel
+essai de la distribution d'un événement déjà compté ne change rien. Pas de message « résolu » automatique : quand l'erreur
+disparaît, les occurrences cessent, c'est tout.
+
+**Préférences** : chaque type se coupe **un par un** (Notifications › Préférences › « Avis et alertes », `types_masques`), en
+plus des catégories suivies / silencieuses ; un type coupé n'apparaît plus ni dans la liste ni dans la pastille ni en
+direct. Seuls les types que le rôle du compte permet de recevoir sont proposés (`types` de `GET /notifications/preferences`).
+Icônes monochromes (étoile, bulle, micro, bouclier, sablier : `ICONES_ALERTES`), jamais d'emoji (`npm run emojis:verifier`).
+
+**Ajouter un type d'alerte** : une entrée dans `ALERTES` (`alertes.mjs`) et ses destinataires (`destinataires`), l'événement
+dans `TYPES_ALERTES`, son rangement dans `CATEGORIES_PERSO` (`regles.mjs`) et `CIBLES_PERSONNELLES` (`cibles.mjs`), sa
+phrase et ses textes FR / EN (`src/esport/i18n/alertes.ts`), sa liste dans `TYPES_ALERTES` / `ICONES_ALERTES` côté app.
 
 ## Liens directs
 
@@ -171,9 +215,12 @@ ticket et de nouveau message (ticket et message), MP de réunion CM (la réunion
 | `sponsor` | `sponsors.prospect_*`, `.partenaire_*`, `.contrat_enregistre`, `.obligation_*`, `.responsable`, `.rappel_*`, `sp-*` | Espace CM › Sponsors |
 | `jeu` | `game.created`, `.updated`, `.updates_proposed`, `jeu-maj-proposee` | Administration › Jeux |
 | `devblog` | `devblog.publie`, `devblog-auto` | Devblog (publié) ; Administration › Devblog (brouillon de l'éditeur) |
+| `avis_ticket` | `tk-avis` | Tickets › Avis, l'avis de ce ticket seul (« Tous les avis » retire le filtre), ligne mise en avant ; sans accès aux avis : le ticket |
+| `salon_match` | `salon-match-alerte` | Administration › Événements › la fiche, section Salons de match, ligne du match mise en avant (ou la section) |
+| `alerte_discord` | `vocal-alerte`, `role-evenement-alerte`, `role-temp-alerte` | selon la zone : Bot Esport HQ › Salons vocaux (`vocaux`), fiche de l'événement (`evenement`), Discord de la team › Rôles temporaires (`role_temp`) |
 | (section) | réglages et éléments supprimés : `team.*`, `role.*`, `invitation.*`, `discord.*` (Bot, salons, échecs d'envoi), `cm.tableau_*`, `cm.reseau_*`, `roles.*`, `tickets.*`, `bienvenue`, `role-change`, `modules`, `note-partagee`, `cm-releve`… | la section de la règle (`lien`), déjà le bon endroit |
 
-Les types jamais affichés (règle « aucun » : réactions, jetons iCal, commandes du bot…) sont rangés sous `aucune`.
+Les types jamais affichés (règle « aucun » : réactions, jetons iCal, commandes du bot, événements `alerte.*`…) sont rangés sous `aucune`.
 
 **Ajouter un type** : le ranger sous son genre dans `CIBLES_EVENEMENTS` ou `CIBLES_PERSONNELLES` (`cibles.mjs`) ; les
 tests échouent tant qu'un type du bus ou une notification personnelle écrite par un module n'est pas rangé. Un nouveau

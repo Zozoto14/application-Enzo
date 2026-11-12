@@ -42,8 +42,8 @@ export const TYPES_TICKETS = [
   'ticket.mention',
 ];
 
-/** Notifications personnelles des tickets (catégorie « tickets » du centre). */
-export const NOTIFICATIONS_TICKETS = ['tk-nouveau', 'tk-assigne', 'tk-message', 'tk-note', 'tk-ferme'];
+/** Notifications personnelles des tickets (catégorie « tickets » du centre) ; `tk-avis` est écrite par notifications/alertes.mjs (avis d'un auteur : ceux qui traitent la catégorie). */
+export const NOTIFICATIONS_TICKETS = ['tk-nouveau', 'tk-assigne', 'tk-message', 'tk-note', 'tk-ferme', 'tk-avis'];
 
 async function notifier(base, ev, compte, type, charge, categorieId) {
   await base.executer(

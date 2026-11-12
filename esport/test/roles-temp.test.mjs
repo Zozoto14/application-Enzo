@@ -18,6 +18,7 @@ import { ESSAIS_MAX, expirerRolesTemp, lireDuree, octroiActif } from '../noyau/r
 import { equipesDuMembre } from '../noyau/roles-temp/equipes.mjs';
 import { TABLES } from '../noyau/transfert.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
 
 const JETON = 'jeton-bot-de-test-jamais-reel';
 const H = 3_600_000;
@@ -444,4 +445,38 @@ test('processus qui tient la connexion en direct : il retire lui-même les rôle
     await sup.arreter();
     await gw.arreter();
   }
+});
+
+test('échéance refusée (hiérarchie) : alerte pour discord.manage de la team et le Fondateur, une notification avec compteur, lien vers « Rôles temporaires »', async () => {
+  const k = await monter();
+  await k.cmd(COACH_TF, 'donner', { membre: TO1, duree: '1h' });
+  k.b.horloge.t += 2 * H;
+  const lancer = () => expirerRolesTemp(k.b.base, { fetch: k.discord.fetch, jetonBot: JETON, maintenant: k.maintenant });
+  const refuser = () => k.discord.programme.push({ si: (m, c) => m === 'DELETE' && c.includes('/roles/'), statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  const recues = async compte => {
+    await distribuer(k.b.base, { maintenant: k.maintenant() });
+    const r = await k.b.appel('/notifications/centre?limite=100', { jeton: await k.b.session(compte) });
+    return r.corps.liste.filter(n => n.type === 'role-temp-alerte');
+  };
+  refuser();
+  await lancer();
+  const premiere = await recues('manager01');
+  assert.equal(premiere.length, 1);
+  assert.deepEqual(premiere[0].cible, { v: 1, g: 'alerte_discord', zone: 'role_temp', team: k.tf.teamId });
+  assert.deepEqual([premiere[0].charge.code, premiere[0].charge.quoi, premiere[0].charge.compteur], ['hierarchie', 'expiration', 1]);
+  assert.equal((await recues('principal')).length, 1, 'le Fondateur aussi');
+  assert.equal((await recues('coachtf01')).length, 0, 'un coach n’a pas discord.manage');
+  assert.equal((await recues('joueur001')).length, 0);
+  assert.equal((await recues('coachmul1')).length, 0, 'une autre team');
+  // Nouveaux essais (5 puis 10 minutes plus tard) : même erreur, même cible → une seule notification, compteur.
+  k.b.horloge.t += 5 * 60_000 + 1000;
+  refuser();
+  await lancer();
+  k.b.horloge.t += 10 * 60_000 + 1000;
+  refuser();
+  await lancer();
+  const apres = await recues('manager01');
+  assert.equal(apres.length, 1);
+  assert.equal(apres[0].id, premiere[0].id);
+  assert.ok(apres[0].charge.compteur >= 2, `compteur ${apres[0].charge.compteur}`);
 });

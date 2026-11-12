@@ -15,6 +15,7 @@ import { trEv, type CleEv } from '../../i18n/evenements';
 import type { FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte, type Ton } from '../design';
+import { CibleSurlignee } from '../notifications/Cible';
 import { SelecteurRepliable, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 
 type Api = ReturnType<typeof apiEvenements>;
@@ -56,6 +57,7 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
     });
   const e = v.etat;
   return (
+    <CibleSurlignee theme={theme} cle={`salons-match:${id}`}>
     <Carte theme={theme} dense testID="esport-ev-salons-match">
       <TitreCarte theme={theme} titre={trEv('sm.titre')} />
       <Text style={attenue(theme, 13)}>{trEv('sm.aide')}</Text>
@@ -122,7 +124,8 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
       <Text style={{ ...texte(theme), fontWeight: '700', marginTop: ESP.xs }}>{trEv('sm.liste')}</Text>
       {!v.salons.length ? <Text style={attenue(theme)} testID="esport-ev-sm-vide">{trEv('sm.vide')}</Text> : null}
       {v.salons.map(s => (
-        <View key={s.id} style={{ gap: ESP.xxs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-ev-sm-salon-${s.id}`}>
+        <CibleSurlignee key={s.id} theme={theme} cle={`salon-match:${s.cle}`}>
+        <View style={{ gap: ESP.xxs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-ev-sm-salon-${s.id}`}>
           <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={{ ...texte(theme), fontWeight: '600', flex: 1, minWidth: 0 }}>{s.titre || s.cle}</Text>
             <Badge theme={theme} ton={TON[s.statut]} texte={trEv(`sm.statut.${s.statut}` as CleEv)} testID={`esport-ev-sm-salon-${s.id}-statut`} />
@@ -142,12 +145,14 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
           </View>
           {historique?.salon.id === s.id ? <Historique theme={theme} messages={historique.messages} onFermer={() => setHistorique(undefined)} /> : null}
         </View>
+        </CibleSurlignee>
       ))}
 
       {/* Matchs du site sans salon */}
       {v.matchs.length ? <Text style={{ ...texte(theme), fontWeight: '700', marginTop: ESP.xs }}>{trEv('sm.matchs_site')}</Text> : null}
       {v.matchs.map(m => (
-        <View key={m.cle} style={{ gap: ESP.xxs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-ev-sm-match-${m.cle}`}>
+        <CibleSurlignee key={m.cle} theme={theme} cle={`salon-match:${m.cle}`}>
+        <View style={{ gap: ESP.xxs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-ev-sm-match-${m.cle}`}>
           <Text style={{ ...texte(theme), fontWeight: '600' }}>{m.titre}</Text>
           <Text style={attenue(theme)}>{[m.equipes.length ? nomsEquipes(m.equipes) : trEv('sm.equipes_inconnues'), m.prevuLe ? trEv('sm.prevu', { le: date(m.prevuLe) }) : '', m.staff?.length ? trEv('sm.staff', { liste: nomsStaff(m.staff) }) : ''].filter(Boolean).join(' · ')}</Text>
           <View style={{ alignSelf: 'flex-start' }}>
@@ -157,8 +162,10 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
                   })} testID={`esport-ev-sm-match-${m.cle}-creer`} />
           </View>
         </View>
+        </CibleSurlignee>
       ))}
     </Carte>
+    </CibleSurlignee>
   );
 }
 

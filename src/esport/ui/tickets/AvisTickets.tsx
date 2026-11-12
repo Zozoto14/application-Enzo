@@ -12,9 +12,11 @@ import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport } from '../../client';
 import { formaterDate, langueCourante } from '../../i18n';
 import { trTk, type CleTk } from '../../i18n/tickets';
+import { CibleSurlignee } from '../notifications/Cible';
 import { apiTickets, type AvisTicket, type FiltresAvis, type ListeAvis, type TriAvis } from '../../tickets/api';
 import { useTempsReel } from '../../tempsReel/hooks';
 import { Icone } from '../../../ui/icones';
+import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { Choix, Intertitre, Panneau, Retours, styles, useAgir } from '../commun';
 import { Badge, ChiffreCle, ESP, EtatVide, Grille, Squelette, attenue, texte } from '../design';
 
@@ -48,9 +50,9 @@ const PERIODES = [
 type Periode = (typeof PERIODES)[number]['id'];
 const TRIS: TriAvis[] = ['recent', 'ancien', 'note_haut', 'note_bas'];
 
-export function AvisTicketsPage({ theme, client, onOuvrir }: { theme: ThemeHub; client: ClientEsport; /** Ouvrir le ticket d'un avis (tickets.voir). */ onOuvrir?(id: string, numero: number): void }) {
+export function AvisTicketsPage({ theme, client, onOuvrir, ticket }: { theme: ThemeHub; client: ClientEsport; /** Ouvrir le ticket d'un avis (tickets.voir). */ onOuvrir?(id: string, numero: number): void; /** Avis d'un seul ticket (lien d'une notification d'avis) : « Tous les avis » le retire. */ ticket?: string }) {
   const api = useMemo(() => apiTickets(client), [client]);
-  const [f, setF] = useState<{ categorie?: string; note?: string; responsable?: string; tri: TriAvis }>({ tri: 'recent' });
+  const [f, setF] = useState<{ categorie?: string; note?: string; responsable?: string; ticket?: string; tri: TriAvis }>({ tri: 'recent', ticket });
   const [periode, setPeriode] = useState<Periode>('tout');
   const [d, setD] = useState<ListeAvis | undefined>();
   const [version, setVersion] = useState(0);
@@ -104,10 +106,16 @@ export function AvisTicketsPage({ theme, client, onOuvrir }: { theme: ThemeHub; 
       {d.responsables.length ? <Choix theme={theme} libelle={trTk('avis.responsable')} valeur={f.responsable ?? ''} options={[{ id: '', nom: trTk('f.tous') }, ...d.responsables.map(r => ({ id: r.cle, nom: r.nom }))]} onChoisir={responsable => setF({ ...f, responsable: responsable || undefined })} testID="esport-tk-avis-f-responsable" /> : null}
       <Choix theme={theme} libelle={trTk('avis.tri')} valeur={f.tri} options={TRIS.map(t => ({ id: t, nom: trTk(`avis.tri_${t}` as CleTk) }))} onChoisir={tri => setF({ ...f, tri: tri as TriAvis })} testID="esport-tk-avis-tri" />
 
+      {f.ticket ? (
+        <View style={[styles.ligne, { justifyContent: 'space-between' }]} testID="esport-tk-avis-f-ticket">
+          <Text style={{ ...attenue(theme), flex: 1, minWidth: 0 }}>{trTk('avis.un_ticket')}</Text>
+          <BoutonHub theme={theme} titre={trTk('avis.tous_les_avis')} onPress={() => setF({ ...f, ticket: undefined })} testID="esport-tk-avis-f-ticket-tous" />
+        </View>
+      ) : null}
       {!d.avis.length ? <EtatVide theme={theme} glyphe="etoile" titre={trTk('avis.vide')} /> : null}
       <View style={{ gap: ESP.xs }}>
         {d.avis.map(a => (
-          <LigneAvis key={a.id} theme={theme} a={a} onPress={a.ticketId && a.numero !== null && d.voirTickets && onOuvrir ? () => onOuvrir(a.ticketId as string, a.numero as number) : undefined} />
+          <CibleSurlignee key={a.id} theme={theme} cle={`tk-avis:${a.ticketId ?? a.id}`}><LigneAvis theme={theme} a={a} onPress={a.ticketId && a.numero !== null && d.voirTickets && onOuvrir ? () => onOuvrir(a.ticketId as string, a.numero as number) : undefined} /></CibleSurlignee>
         ))}
       </View>
     </View>

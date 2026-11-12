@@ -23,6 +23,7 @@ import { rest } from '../tickets/discord.mjs';
 import { NOM_ROLE_GOAT, hubMasque } from './reglages.mjs';
 import { DROITS_PASSE_PARTOUT, appliquerSurcharges, salonsDuServeur } from './salons.mjs';
 import { rolesEquipe } from './tournoi.mjs';
+import { codeRefusDiscord, signalerAlerte } from '../notifications/signaler.mjs';
 
 export const CLE_SUIVI = 'vocaux_passepartout';
 /** Requêtes Discord au plus par passage. */
@@ -50,6 +51,14 @@ async function ecrireSuivi(base, suivi, t) {
 
 /** Bilan affiché dans la carte (`tickets_etat`, clé `vocaux`, champ `passePartout`) : lecture puis fusion. */
 export async function noterBilanPasse(base, bilan, t) {
+  // Salons refusés par Discord (hiérarchie, permission manquante du bot) : alerte `vocal-alerte`, une par cause et par 6 h.
+  const causes = new Map();
+  for (const e of bilan?.echecs ?? []) {
+    if (e.statut === 429) continue;
+    const cause = codeRefusDiscord(e);
+    causes.set(cause, (causes.get(cause) ?? 0) + 1);
+  }
+  for (const [cause, nombre] of causes) await signalerAlerte(base, 'vocal', { cle: `vocal:passe-partout:${cause}`, charge: { code: cause, quoi: 'passe-partout', nombre }, maintenant: t });
   const l = await base.premier("SELECT valeur FROM tickets_etat WHERE cle = 'vocaux'", []);
   const actuel = jsonOu(l?.valeur, {});
   await base.executer(

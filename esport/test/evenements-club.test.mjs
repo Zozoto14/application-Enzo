@@ -22,6 +22,7 @@ import {
   tachesEvenementsDiscord,
 } from '../noyau/evenements-club/discord.mjs';
 import { effacementParDiscord } from '../noyau/tickets/rgpd.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
 import { TABLES, reprendreTablesTournoi } from '../noyau/transfert.mjs';
 
 const J1 = '810000000000000101';
@@ -1428,4 +1429,35 @@ test('hub de l’événement : le staff (rôle staff, rôles staff supplémentai
   assert.ok(k.rest.appels.some(a => a.methode === 'DELETE' && a.chemin === `/channels/${salon}`));
   assert.equal((await k.base.tous('SELECT * FROM vocaux_salons WHERE tournoi_id = ?', [TOURNOI])).length, 0);
   k.moteur.arreter();
+});
+
+test('alertes : création du rôle d’une équipe refusée (hiérarchie) et suppression refusée → evenements.gerer et Fondateur, lien vers l’événement, une fois par 6 h', async () => {
+  const k = await monter();
+  const gestion = await k.compteAvec('gest1234', 'Gestion', ['evenements.gerer']);
+  const autre = await k.compteAvec('autr1234', 'Autre', ['vocaux.configurer']);
+  const recues = async compte => {
+    await distribuer(k.b.base, { maintenant: k.b.horloge.t });
+    const r = await k.b.appel('/notifications/centre?limite=100', { jeton: await k.b.session(compte) });
+    return r.corps.liste.filter(n => n.type === 'role-evenement-alerte');
+  };
+  await k.api(k.chemin, undefined, { methode: 'PATCH', corps: { discord: { rolesAuto: true } } });
+  k.discord.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${k.GUILD}/roles`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  const e = await k.api(`${k.chemin}/equipes`, undefined, { methode: 'POST', corps: { nom: 'Alpha', tag: 'ALP', membres: [] } });
+  assert.equal(e.statut, 200, JSON.stringify(e.corps));
+  const liste = await recues('gest1234');
+  assert.equal(liste.length, 1);
+  assert.deepEqual([liste[0].charge.code, liste[0].charge.quoi], ['hierarchie', 'creation']);
+  assert.deepEqual(liste[0].cible, { v: 1, g: 'alerte_discord', zone: 'evenement', evenement: k.id });
+  assert.equal((await recues('principal')).length, 1);
+  assert.equal((await recues('autr1234')).length, 0);
+  // Le lien s'ouvre (evenements.gerer) ; l'événement supprimé : « n'existe plus ».
+  const verif = async cible => (await k.b.appel('/notifications/cible', { methode: 'POST', jeton: await k.b.session('gest1234'), corps: { cible } })).corps;
+  assert.equal((await verif(liste[0].cible)).etat, 'ok');
+  // Nouvelle tentative (resynchroniser) 20 minutes plus tard, même refus : compteur, pas de nouvelle notification.
+  k.b.horloge.t += 20 * 60_000;
+  k.discord.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${k.GUILD}/roles`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  await k.api(`${k.chemin}/roles`, undefined, { methode: 'POST', corps: {} });
+  const apres = await recues('gest1234');
+  assert.equal(apres.length, 1);
+  assert.equal(apres[0].charge.compteur, 2);
 });

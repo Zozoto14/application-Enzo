@@ -26,6 +26,20 @@ import { idsSup, lireSup, raisonInterdite } from './staff-sup.mjs';
 import { lireVocaux } from '../vocaux/reglages.mjs';
 import { resynchroniserHubsEvenement } from '../vocaux/hubs.mjs';
 import { fermerSalonsEvenement } from './salons-match.mjs';
+import { codeRefusDiscord, signalerAlerte } from '../notifications/signaler.mjs';
+
+/**
+ * Alerte `role-evenement-alerte` (evenements.gerer et Fondateur, une par 6 h avec compteur) : création, suppression ou
+ * placement d'un rôle Discord de l'événement refusé. `quoi` : creation | suppression | placement.
+ */
+const alerterRoles = (ctx, evenementId, quoi, r, nom = null) =>
+  r?.statut === 429
+    ? undefined
+    : signalerAlerte(ctx.base, 'role_evenement', {
+        cle: `role-evenement:${evenementId}:${quoi}:${codeRefusDiscord(r)}`,
+        charge: { code: codeRefusDiscord(r), quoi, evenement: evenementId, statut: r?.statut ?? 0, ...(nom ? { nom } : {}) },
+        maintenant: ctx.maintenant,
+      });
 
 /**
  * Hubs cachés de l'événement (vocaux/hubs.mjs) : leurs surcharges suivent les rôles des équipes, le rôle staff et les
@@ -424,9 +438,17 @@ export async function synchroniser(
       evt,
       crees ? null : serveur.erreur ? null : serveur,
     );
+  await alerterRefus(ctx, evt.id, bilan.refus);
+  // Rôles refusés au placement sous le rôle choisi (hiérarchie du bot) : alerte aussi.
+  if (bilan.position && bilan.position.ok === false && bilan.position.raison) await alerterRoles(ctx, evt.id, 'placement', bilan.position.raison === 'hierarchie' ? { statut: 403, code: 50013 } : { statut: Number(String(bilan.position.raison).replace(/\D/g, '')) || 0 });
   await resynchroniserHubs(ctx, evt.id);
   return bilan;
 }
+
+/** Alertes des refus d'un bilan (`refus` : création, attribution, renommage ; un rôle disparu se répare seul). */
+const alerterRefus = async (ctx, evenementId, refus) => {
+  for (const x of refus) if (['creation', 'attribution', 'renommage'].includes(x.quoi)) await alerterRoles(ctx, evenementId, x.quoi, { statut: x.statut, code: x.code ?? undefined }, x.equipe);
+};
 
 /** Salons vocaux d'une équipe (hub de l'événement) supprimés. */
 async function supprimerSalons(ctx, filtre, raison) {
@@ -475,6 +497,7 @@ export async function supprimerRoleEquipe(ctx, e) {
       { raison: 'Esport HQ : équipe retirée de l’événement' },
     );
     role = r.ok || r.statut === 404;
+    if (!role) await alerterRoles(ctx, e.evenement_id, 'suppression', r);
     // Rôle supprimé : oublié tout de suite (les hubs cachés de l'événement ne l'admettent plus).
     if (role) await ctx.base.executer('UPDATE club_evenement_equipes SET role_id = NULL, role_nom = NULL WHERE id = ?', [e.id]);
   }
@@ -519,13 +542,15 @@ export async function nettoyerEvenement(ctx, evenementId) {
         [e.id],
       );
       roles++;
-    } else
+    } else {
       echecs.push({
         quoi: 'role',
         id: e.role_id,
         statut: r.statut,
         code: r.code ?? null,
       });
+      await alerterRoles(ctx, evenementId, 'suppression', r);
+    }
     if (r.statut === 429) break;
   }
   // Rôle staff de l'événement : retiré des catégories de tickets, puis supprimé.
@@ -537,7 +562,10 @@ export async function nettoyerEvenement(ctx, evenementId) {
       await base.executer('UPDATE club_evenements SET staff_role_id = NULL, staff_role_nom = NULL WHERE id = ?', [evenementId]);
       await base.executer('UPDATE club_evenement_staff SET role_statut = NULL WHERE evenement_id = ?', [evenementId]);
       roles++;
-    } else echecs.push({ quoi: 'role', id: evt.staff_role_id, statut: r.statut, code: r.code ?? null });
+    } else {
+      echecs.push({ quoi: 'role', id: evt.staff_role_id, statut: r.statut, code: r.code ?? null });
+      await alerterRoles(ctx, evenementId, 'suppression', r);
+    }
   }
   // Rôles staff supplémentaires : accès ajoutés par l'événement défaits, puis ceux marqués « supprimer à la fin »
   // supprimés de Discord (revérifiés).
@@ -545,6 +573,7 @@ export async function nettoyerEvenement(ctx, evenementId) {
   const sup = await supprimerRolesSup(ctx, evenementId);
   roles += sup.supprimes.length;
   echecs.push(...sup.echecs);
+  for (const x of sup.echecs) await alerterRoles(ctx, evenementId, 'suppression', x);
   if (!echecs.length)
     await base.executer(
       'UPDATE club_evenements SET roles_supprimes_le = ?, maj_le = ? WHERE id = ?',
@@ -774,6 +803,7 @@ export async function synchroniserStaff(ctx, evtLigne, { retirer = [], supRetire
     const r = await rest(ctx.fetch, ctx.jetonBot, 'POST', `/guilds/${ctx.guildId}/roles`, { name: nom, permissions: '0', mentionable: false, hoist: false }, { raison: 'Esport HQ : staff de l’événement' });
     if (!r.ok || !r.corps?.id) {
       b.refus.push({ equipe: nom, quoi: 'creation', statut: r.statut, code: r.code ?? null });
+      await alerterRefus(ctx, evt.id, b.refus);
       return b;
     }
     roleId = String(r.corps.id);
@@ -805,6 +835,7 @@ export async function synchroniserStaff(ctx, evtLigne, { retirer = [], supRetire
   // salons créés ensuite l'ont dès leur création (vocaux/tournoi.mjs, `rolesEquipe`).
   b.vocaux = await accesVocaux(ctx, evt.id, roleId);
   if (b.cree && evt.role_ancre_id) b.position = await placerRoles(ctx, evt);
+  await alerterRefus(ctx, evt.id, b.refus);
   await resynchroniserHubs(ctx, evt.id);
   return b;
 }

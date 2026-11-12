@@ -6,12 +6,13 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
 import type { ClientEsport } from './client';
 import { definirLangue } from './i18n';
 import { PageEvenements } from './ui/evenements/PageEvenements';
-import { sousOngletsAdmin } from './ui/administration/PageAdministration';
+import { PageAdministration, sousOngletsAdmin } from './ui/administration/PageAdministration';
+import { FournisseurCible } from './ui/notifications/Cible';
 import type {
   ChoixEvenements,
   Evenement,
@@ -838,4 +839,16 @@ test('salons de match : « Placer sous le salon » (salons écrits par catégori
   // Retiré : le sélecteur de catégorie revient.
   await choisirDans('esport-ev-sm-ancre', '-');
   expect(screen.getByTestId('esport-ev-sm-categorie-modifier')).toBeTruthy();
+});
+
+test('lien direct d’une alerte de salon de match : Administration › Événements, la fiche s’ouvre et la ligne du match est mise en avant', async () => {
+  const { client } = fauxClient(ficheDe());
+  const match = 'm:44444444-4444-4444-8444-000000000001';
+  await render(
+    <FournisseurCible active={{ cible: { v: 1, g: 'salon_match', evenement: 'ev1', match }, n: 1, surligne: `salon-match:${match}` }}>
+      <PageAdministration theme={theme} client={client} large droits={{ evenements: true }} fondateur={false} ongletInitial="evenements" />
+    </FournisseurCible>,
+  );
+  const surligne = await screen.findByTestId('esport-cible-surlignee');
+  expect(within(surligne).getByTestId('esport-ev-sm-salon-sm1')).toBeTruthy();
 });

@@ -38,6 +38,7 @@ import { hubMasque, lireVocaux, nomSalon } from './reglages.mjs';
 import { gererHubTournoi, rolesEquipe } from './tournoi.mjs';
 import { lireOrigines, placerSousHub } from './hubs.mjs';
 import { noterBilanPasse, synchroniserPasse } from './passepartout.mjs';
+import { codeRefusDiscord, signalerAlerte } from '../notifications/signaler.mjs';
 import {
   annoncerProprietaire,
   chargePanneau,
@@ -182,7 +183,14 @@ export function creerMoteurVocaux({
     return p;
   }
 
-  const noterErreur = (motif, r, t) => noter({ derniereErreur: { motif, statut: r?.statut ?? 0, code: r?.code ?? null, le: iso(t) } }, t);
+  const noterErreur = async (motif, r, t) => {
+    // Alerte (notification `vocal-alerte` : vocaux.configurer et Fondateur, une par 6 h avec compteur) : sauf limite de débit.
+    if (r?.statut !== 429) {
+      const cause = codeRefusDiscord(r);
+      await signalerAlerte(base, 'vocal', { cle: `vocal:${motif}:${cause}`, charge: { code: cause, quoi: motif, statut: r?.statut ?? 0 }, maintenant: t });
+    }
+    return noter({ derniereErreur: { motif, statut: r?.statut ?? 0, code: r?.code ?? null, le: iso(t) } }, t);
+  };
 
   /** Ligne d'un salon, après son écriture si elle est en cours. */
   async function salonConnu(salonId) {

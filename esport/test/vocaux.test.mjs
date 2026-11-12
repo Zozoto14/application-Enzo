@@ -296,6 +296,16 @@ test('Discord refuse la création : erreur notée pour l’app, journal, rien en
   const etat = JSON.parse((await k.base.premier("SELECT valeur FROM tickets_etat WHERE cle = 'vocaux'", [])).valeur);
   assert.deepEqual([etat.derniereErreur.motif, etat.derniereErreur.statut, etat.derniereErreur.code], ['creation', 403, 50013]);
   assert.ok(k.rest.appels.some(a => a.chemin === `/channels/${JOURNAUX}/messages` && /50013/.test(a.corps.content)));
+  // Alerte pour ceux qui configurent les salons vocaux (notification `vocal-alerte`, notifications/alertes.mjs) : hiérarchie.
+  const alertes = async () => k.base.tous("SELECT entite_id, charge FROM evenements WHERE type = 'alerte.vocal' ORDER BY cree_le", []);
+  const [a1, ...reste] = await alertes();
+  assert.equal(reste.length, 0);
+  assert.equal(a1.entite_id, 'vocal:creation:hierarchie');
+  assert.deepEqual([JSON.parse(a1.charge).code, JSON.parse(a1.charge).quoi, JSON.parse(a1.charge).statut], ['hierarchie', 'creation', 403]);
+  // Même refus dans la foulée : pas un événement de plus (compté par le dédoublonnage de l'abonné, 6 h).
+  k.rest.programme.push({ si: (m, c) => m === 'POST' && c === `/guilds/${GUILD}/channels`, statut: 403, corps: { code: 50013, message: 'Missing Permissions' } });
+  await k.moteur.evenement('VOICE_STATE_UPDATE', vs(U1, HUB, 'Léa'));
+  assert.equal((await alertes()).length, 1);
   k.moteur.arreter();
 });
 

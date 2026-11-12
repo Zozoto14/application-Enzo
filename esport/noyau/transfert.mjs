@@ -219,6 +219,8 @@ export const TABLES = [
   ['notifs_centre', 'cree_le, id'],
   ['notifs_lectures', 'compte_id, notif_id'],
   ['notifs_preferences', 'compte_id'],
+  // Alertes et avis (migration 0077) : dédoublonnage des alertes par destinataire.
+  ['notifs_alertes', 'compte_id, cle'],
   // Réunions de l'équipe CM (migration 0039) : réunions, participants, notes et tâches (confidentielles : restent
   // dans la base), disponibilités, statuts, rendez-vous, rappels, MP en file, abonnements iCal (empreinte du jeton).
   ['cm_reunions', 'id'],

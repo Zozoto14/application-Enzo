@@ -11,6 +11,7 @@ import type { ClientEsport } from '../../client';
 import { trTk } from '../../i18n/tickets';
 import { apiTickets, type Connexion, type MoiTickets } from '../../tickets/api';
 import { PageEsport } from '../CadreEsport';
+import { useCible } from '../notifications/Cible';
 import { EnTetePage, Onglets, Squelette } from '../design';
 import { ConfigTickets, PastilleConnexion, type SectionConfigTickets } from './ConfigTickets';
 import { AvisTicketsPage } from './AvisTickets';
@@ -21,6 +22,13 @@ export type OngletTk = 'tickets' | 'stats' | 'avis' | 'config';
 export function PageTickets({ theme, client, large, moi, onExporter, sectionConfig }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiTickets; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>; /** Ouvre Configuration à cette section (lien depuis Administration › Bot Esport HQ). */ sectionConfig?: SectionConfigTickets }) {
   const api = useMemo(() => apiTickets(client), [client]);
   const [onglet, setOnglet] = useState<OngletTk>(sectionConfig && moi.configurer ? 'config' : moi.voir ? 'tickets' : 'config');
+  // Avis d'un ticket (lien d'une notification d'avis, migration 0077) : l'onglet Avis, filtré sur ce ticket.
+  const [avisTicket, setAvisTicket] = useState<string | undefined>();
+  useCible('tickets-avis', c => {
+    if (c.g !== 'avis_ticket' || typeof c.ticket !== 'string' || !(moi.gerer || moi.configurer)) return;
+    setAvisTicket(c.ticket);
+    setOnglet('avis');
+  });
   // Ticket à ouvrir depuis l'onglet Avis (toucher un avis ouvre son ticket).
   const [aOuvrir, setAOuvrir] = useState<{ id: string; numero: number } | undefined>();
   const [etat, setEtat] = useState<{ actif: boolean; connexion: Connexion } | undefined>();
@@ -45,7 +53,7 @@ export function PageTickets({ theme, client, large, moi, onExporter, sectionConf
       {onglet === 'config' && moi.configurer ? <ConfigTickets theme={theme} client={client} large={large} sectionInitiale={sectionConfig} /> : null}
       {onglet === 'tickets' && moi.voir ? <ListeTickets theme={theme} client={client} large={large} onExporter={onExporter} ouvrir={aOuvrir} /> : null}
       {onglet === 'stats' && moi.gerer ? <StatsTicketsPage theme={theme} client={client} /> : null}
-      {onglet === 'avis' && (moi.gerer || moi.configurer) ? <AvisTicketsPage theme={theme} client={client} onOuvrir={moi.voir ? (id, numero) => (setAOuvrir({ id, numero }), setOnglet('tickets')) : undefined} /> : null}
+      {onglet === 'avis' && (moi.gerer || moi.configurer) ? <AvisTicketsPage theme={theme} client={client} ticket={avisTicket} onOuvrir={moi.voir ? (id, numero) => (setAOuvrir({ id, numero }), setOnglet('tickets')) : undefined} /> : null}
     </PageEsport>
   );
 }
