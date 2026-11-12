@@ -9,6 +9,9 @@
  * une flèche dessinée, une étape ajoutée ; enregistrer ; recharger la page et rouvrir la strat ;
  * exporter un PNG ; l'ajouter au playbook ; filtrer le playbook ; valider l'entrée. Puis : lien de
  * lecture seule (page publique) révoqué, et repli générique quand valorant-api.com est en panne.
+ * Gestes : mur de Viper posé en CLIQUANT-GLISSANT, puis ses poignées tirées à la souris (extrémité, saisie à
+ * 15 px du centre : zone de prise large ; première extrémité) et au DOIGT sur iPad (regard d'un pion) ;
+ * longueur bornée à la longueur réelle (60 m) ; portraits sur les pions et barre d'agents.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-esport-strats.mjs
@@ -94,6 +97,8 @@ const IMAGES = {
   '/agents/omen/displayicon.png': png(64, [60, 40, 120]),
   '/agents/jett/displayicon.png': png(64, [120, 180, 220]),
   '/agents/omen/abilities/ability2/displayicon.png': png(32, [90, 60, 160]),
+  '/agents/viper/displayicon.png': png(64, [40, 160, 80]),
+  '/agents/viper/abilities/ability2/displayicon.png': png(32, [40, 200, 90]),
 };
 const CARTES = {
   status: 200,
@@ -119,6 +124,18 @@ const AGENTS = {
       ],
     },
     { displayName: 'Jett', isPlayableCharacter: true, displayIcon: `${CDN}/agents/jett/displayicon.png`, role: { displayName: 'Duelliste' }, abilities: [] },
+    {
+      displayName: 'Viper',
+      isPlayableCharacter: true,
+      displayIcon: `${CDN}/agents/viper/displayicon.png`,
+      role: { displayName: 'Contrôleur' },
+      abilities: [
+        { slot: 'Grenade', displayName: 'Morsure de serpent', displayIcon: null },
+        { slot: 'Ability1', displayName: 'Nuage toxique', displayIcon: null },
+        { slot: 'Ability2', displayName: 'Écran toxique', displayIcon: `${CDN}/agents/viper/abilities/ability2/displayicon.png` },
+        { slot: 'Ultimate', displayName: 'Fosse à vipères', displayIcon: null },
+      ],
+    },
   ],
 };
 const appelsValorant = [];
@@ -216,6 +233,33 @@ async function allerModule(page, cle) {
   await ongletTeam(page, `module-${cle}`);
 }
 
+/** Choix dans un sélecteur repliable (ouvert au besoin par « Modifier »). */
+async function choisir(page, testID, id) {
+  const option = page.getByTestId(`${testID}-${id}`);
+  if (!(await option.isVisible().catch(() => false))) await page.getByTestId(`${testID}-modifier`).click();
+  await option.click();
+}
+
+/** Glisser au doigt (événements tactiles du navigateur, comme sur iPad) de `de` à `a` (coordonnées de la page). */
+async function glisserDoigt(page, de, a, etapes = 10) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: de.x, y: de.y }] });
+  for (let i = 1; i <= etapes; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: de.x + ((a.x - de.x) * i) / etapes, y: de.y + ((a.y - de.y) * i) / etapes }] });
+    await pause(16);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
+/** Glisser à la souris de `de` à `a` (coordonnées de la page). */
+async function glisserSouris(page, de, a, etapes = 12) {
+  await page.mouse.move(de.x, de.y);
+  await page.mouse.down();
+  await page.mouse.move(a.x, a.y, { steps: etapes });
+  await page.mouse.up();
+}
+
 /** Point du canevas en coordonnées du document (carré de 1000) → coordonnées de la page. */
 async function point(page, x, y) {
   const boite = await page.getByTestId('esport-canevas').boundingBox();
@@ -246,7 +290,7 @@ try {
   await pc.getByTestId('esport-strats').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-strats-nouvelle').click();
   await pc.getByTestId('esport-strats-titre').fill('Exécution A (split)');
-  await pc.getByTestId('esport-strats-carte-ascent').click();
+  await choisir(pc, 'esport-strats-carte', 'ascent');
   await pc.getByTestId('esport-strats-side-attaque').click();
   await pc.getByTestId('esport-strats-type-execute').click();
   await pc.getByTestId('esport-strats-tags').fill('A, split');
@@ -264,7 +308,7 @@ try {
   await pc.mouse.click(p.x, p.y);
   await pc.getByTestId('esport-outil-capacite').click();
   await pc.getByTestId('esport-capacite-Ability2').click();
-  await pc.getByTestId('esport-zone-cercle').click();
+  await choisir(pc, 'esport-zone', 'cercle');
   p = await point(pc, 420, 330);
   await pc.mouse.click(p.x, p.y);
   await pc.getByTestId('esport-outil-fleche').click();
@@ -276,6 +320,43 @@ try {
     await pc.mouse.move(q.x, q.y, { steps: 4 });
   }
   await pc.mouse.up();
+  log('PC : mur de Viper posé en cliquant-glissant, poignées tirées à la souris');
+  await pc.getByTestId('esport-agent-viper').click();
+  verifier((await pc.getByTestId('esport-agent-viper-portrait-image').count()) === 1, 'barre d’agents : portrait de Viper');
+  await pc.getByTestId('esport-capacite-Ability2').click();
+  verifier(await pc.getByTestId('esport-barre-capacites').isVisible(), 'barre des capacités de l’agent choisi (C, Q, E, X)');
+  await choisir(pc, 'esport-zone', 'auto');
+  await glisserSouris(pc, await point(pc, 500, 500), await point(pc, 900, 500));
+  const murDuServeur = async () => {
+    const l0 = (await api(`/teams/${faucons.id}/strats`, sessFond)).corps.strats;
+    return (await api(`/teams/${faucons.id}/strats/${l0[0].id}`, sessFond)).corps.donnees.etapes[0].objets.find(o => o.type === 'capacite' && o.agent === 'viper');
+  };
+  // Extrémité saisie à 15 px de son centre (zone de prise de 48 px) : le mur tourne autour de son origine.
+  const fin = await point(pc, 900, 500);
+  await glisserSouris(pc, { x: fin.x + 11, y: fin.y + 10 }, await point(pc, 750, 750));
+  // Puis tirée bien au-delà de la longueur réelle, en diagonale : bornée à 60 m (480 unités à l'échelle par défaut).
+  const fin2 = await point(pc, 750, 750);
+  await glisserSouris(pc, fin2, await point(pc, 980, 980));
+  await capture(pc, '01b-pc-poignees-mur');
+  await pc.getByTestId('esport-editeur-enregistrer').click();
+  await pc.getByText(/Strat enregistrée \(version 2\)/).waitFor({ timeout: 20_000 });
+  let murViper = await murDuServeur();
+  log('mur de Viper (poignée de fin)', JSON.stringify(murViper?.zone), murViper?.x, murViper?.y);
+  verifier(murViper?.zone?.forme === 'mur' && Math.abs(murViper.x - 500) < 1 && Math.abs(murViper.y - 500) < 1, 'serveur : mur de Viper posé par cliquer-glisser, origine à l’appui');
+  verifier(murViper?.zone.longueur === 60, `poignée de fin saisie hors centre puis tirée au-delà : longueur bornée à 60 m (${murViper?.zone.longueur} m)`);
+  verifier(murViper && Math.abs(murViper.zone.angle - 45) < 4, `poignée de fin : rotation autour de l’origine (${murViper?.zone.angle}°)`);
+  const fin0 = murViper ? { x: murViper.x + murViper.zone.longueur * 8 * Math.cos((murViper.zone.angle * Math.PI) / 180), y: murViper.y + murViper.zone.longueur * 8 * Math.sin((murViper.zone.angle * Math.PI) / 180) } : { x: 0, y: 0 };
+  verifier(murViper?.icone === `${CDN}/agents/viper/abilities/ability2/displayicon.png`, 'icône de la capacité (CDN Riot) dans le document');
+  // Première extrémité tirée : le point de pose suit, l'autre extrémité reste.
+  await glisserSouris(pc, await point(pc, 500, 500), await point(pc, 440, 520));
+  await pc.getByTestId('esport-editeur-enregistrer').click();
+  await pc.getByText(/Strat enregistrée \(version 3\)/).waitFor({ timeout: 20_000 });
+  murViper = await murDuServeur();
+  log('mur de Viper (poignée de début)', JSON.stringify(murViper?.zone), murViper?.x, murViper?.y);
+  verifier(murViper && murViper.x < 490 && murViper.y > 510 && murViper.zone.longueur === 60, `poignée de début : le point de pose a suivi la souris, longueur bornée à 60 m (${murViper?.x}, ${murViper?.y})`);
+  const finX = murViper ? murViper.x + murViper.zone.longueur * 8 * Math.cos((murViper.zone.angle * Math.PI) / 180) : 0;
+  const finY = murViper ? murViper.y + murViper.zone.longueur * 8 * Math.sin((murViper.zone.angle * Math.PI) / 180) : 0;
+  verifier(Math.abs(finX - fin0.x) < 3 && Math.abs(finY - fin0.y) < 3, `poignée de début : l’autre extrémité est restée en place (${Math.round(finX)}, ${Math.round(finY)})`);
   await pc.getByTestId('esport-etape-titre').fill('Mise en place');
   await pc.getByTestId('esport-etape-note').fill('Smoke heaven, Omen joue le lurk.');
   // Annuler / rétablir au clavier sur la flèche.
@@ -288,7 +369,7 @@ try {
   await pc.getByTestId('esport-etape-precedente').click();
   await capture(pc, '02-pc-editeur-etape-1');
   await pc.getByTestId('esport-editeur-enregistrer').click();
-  await pc.getByText(/Strat enregistrée \(version 2\)/).waitFor({ timeout: 20_000 });
+  await pc.getByText(/Strat enregistrée \(version 4\)/).waitFor({ timeout: 20_000 });
 
   const liste = (await api(`/teams/${faucons.id}/strats`, sessFond)).corps.strats;
   const id = liste[0]?.id;
@@ -307,7 +388,8 @@ try {
   // ================================================================ Recharger, rouvrir, exporter
   log('PC : recharger la page, rouvrir la strat, exporter un PNG');
   await pc.reload();
-  await pc.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(pc, MDP, secrets.get(pc)));
+  // Le site rouvre l'app où l'on était (Esport), derrière le déverrouillage.
+  await pc.locator('[data-testid="hub"]:visible, [data-testid="app-esport"]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => deverrouiller(pc, MDP, secrets.get(pc), 'app-esport'));
   await fermerPopups(pc);
   await allerModule(pc, 'strat_editor');
   await pc.getByTestId(`esport-strat-${id}`).waitFor({ timeout: 20_000 });
@@ -317,7 +399,7 @@ try {
   verifier((await pc.getByTestId('esport-etape-position').innerText()).includes('Étape 1 / 2'), 'rechargée : deux étapes');
   verifier((await pc.getByTestId('esport-etape-note').inputValue()) === 'Smoke heaven, Omen joue le lurk.', 'rechargée : note de l’étape');
   await pause(800);
-  const [telechargement] = await Promise.all([pc.waitForEvent('download', { timeout: 20_000 }), pc.getByTestId('esport-editeur-png').click()]);
+  const [telechargement] = await Promise.all([pc.waitForEvent('download', { timeout: 20_000 }), pc.getByTestId('esport-editeur-exporter').click().then(() => pc.getByTestId('esport-editeur-png').click())]);
   const cheminPng = join(TELECHARGEMENTS, telechargement.suggestedFilename());
   await telechargement.saveAs(cheminPng);
   const octets = readFileSync(cheminPng);
@@ -393,6 +475,17 @@ try {
   await ipad.getByText(/Strat enregistrée/).waitFor({ timeout: 20_000 });
   const surIpad = (await api(`/teams/${faucons.id}/strats/${id}`, sessFond)).corps.donnees.etapes[0].objets;
   verifier(surIpad.some(o => o.type === 'agent' && o.agent === 'kay-o' && o.icone === null), 'iPad : agent posé au doigt (jeton générique, sans image)');
+  // Le pion posé est sélectionné : sa poignée de regard (au-dessus, 48 unités) se tire au doigt.
+  const regard = await point(ipad, 700, 252);
+  await glisserDoigt(ipad, { x: regard.x + 8, y: regard.y + 6 }, await point(ipad, 820, 300));
+  await capture(ipad, '06b-ipad-poignee-regard');
+  await ipad.getByTestId('esport-editeur-enregistrer').tap();
+  let kayo;
+  for (let i = 0; i < 40 && !(kayo && typeof kayo.angle === 'number'); i++) {
+    await pause(250);
+    kayo = (await api(`/teams/${faucons.id}/strats/${id}`, sessFond)).corps.donnees.etapes[0].objets.find(o => o.type === 'agent' && o.agent === 'kay-o');
+  }
+  verifier(kayo && Math.abs(kayo.angle) <= 20, `iPad : poignée de regard saisie au doigt hors centre et tirée de -90° vers 0° (${kayo?.angle}°)`);
   const defile = await ipad.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   verifier(!defile, 'iPad : pas de défilement horizontal de la page');
   await capture(ipad, '06-ipad-repli-hors-ligne');

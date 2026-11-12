@@ -24,8 +24,12 @@
  *   cartes[].zones     [{ cle, nom, points: [x, y, …], couleur }]            callouts (polygones nommés)
  *   cartes[].reperes   [{ cle, nom, type, x, y, niveau }]                    sites, spawns, cashouts, coffres…
  *   cartes[].niveaux   [{ cle, nom }]                                        étages (The Finals)
+ *   personnages[].fichier   portrait IMPORTÉ (`jeu_images`, valorant-api.com : « Importer agents et capacités »)
+ *   personnages[].source    { fournisseur, url, le, empreinte }                    origine du portrait
+ *   personnages[].officielles [{ touche, slot, nom, description, fichier, url }]   capacités officielles (icônes)
+ *   classes[].fichier       icône du rôle importée
  *   personnages[].capacites [{ cle, nom, touche, categorie, forme, rayon, longueur, largeur, ouverture,
- *                      portee, duree, charges, cout, courbable, notes, aVerifier }]   dimensions en mètres
+ *                      portee, duree, charges, cout, courbable, double, notes, aVerifier }]   dimensions en mètres
  * Ces champs sont propres au club (images déposées, calibrages, données vérifiées par le Fondateur) :
  * l'assistant IA ne les propose jamais (`CHAMPS_LOCAUX`, retirés de ses réponses).
  *
@@ -54,9 +58,9 @@ export const CATEGORIES_CAPACITE = ['basique', 'signature', 'ultime', 'passif', 
 export const TYPES_REPERES = ['site', 'spawn-attaque', 'spawn-defense', 'cashout', 'coffre', 'spawn', 'plant', 'callout', 'autre'];
 /** Origine d'un calibrage : à la main (deux points), importé (données du jeu), approximatif (à vérifier). */
 export const METHODES_ECHELLE = ['manuel', 'import', 'approx'];
-export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 120, niveaux: 12 };
+export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 120, niveaux: 12, officielles: 8 };
 /** Champs propres au club, jamais proposés par l'IA. */
-export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux', 'source'], personnages: ['capacites'] };
+export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux', 'source'], personnages: ['capacites', 'fichier', 'source', 'officielles'], classes: ['fichier'] };
 export const MAX_ELEMENTS = { formats: 20, modes: 40, cartes: 80, classes: 20, personnages: 200, rolesJoueurs: 30, champs: 40, sources: 20 };
 /** Taille max d'un profil sérialisé (octets UTF-8). */
 export const TAILLE_MAX_PROFIL = 1024 * 1024;
@@ -160,13 +164,25 @@ const ELEMENTS = {
   },
   classes(v, c) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
-    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom };
+    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, ...fichierFacultatif(v.fichier, `${c}.fichier`) };
   },
   personnages(v, c, ctx) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
     const classe = typeof v.classe === 'string' && v.classe ? (MOTIF_CLE.test(v.classe) ? v.classe : cleDe(v.classe)) : null;
     const capacites = listeDetails(v.capacites, `${c}.capacites`, MAX_DETAILS.capacites, lireCapacite);
-    return { cle: cleElement(v.cle, nom, `${c}.cle`), nom, classe: classe || null, image: imageCtx(v.image, `${c}.image`, ctx), actif: booleen(v.actif), ...(capacites.length ? { capacites } : {}) };
+    const source = lireSource(v.source, `${c}.source`);
+    const officielles = lireOfficielles(v.officielles, `${c}.officielles`);
+    return {
+      cle: cleElement(v.cle, nom, `${c}.cle`),
+      nom,
+      classe: classe || null,
+      image: imageCtx(v.image, `${c}.image`, ctx),
+      actif: booleen(v.actif),
+      ...(capacites.length ? { capacites } : {}),
+      ...fichierFacultatif(v.fichier, `${c}.fichier`),
+      ...(source ? { source } : {}),
+      ...(officielles.length ? { officielles } : {}),
+    };
   },
   rolesJoueurs(v, c) {
     const nom = texte(v.nom, `${c}.nom`, { max: 40 });
@@ -215,6 +231,35 @@ function listeDetails(v, chemin, max, lire) {
 
 const coordonnee = (v, chemin) => decimal(v, chemin, -10, 1010);
 
+/** Identifiant facultatif d'une image déposée ou importée (`jeu_images`) : `{ fichier }` ou `{}`. */
+function fichierFacultatif(v, chemin) {
+  if (v === undefined || v === null || v === '') return {};
+  if (typeof v !== 'string' || !MOTIF_UUID.test(v)) throw new Invalide(chemin, 'fichier');
+  return { fichier: v };
+}
+
+/**
+ * Capacités OFFICIELLES d'un personnage (import valorant-api.com) : touche, emplacement, nom et description
+ * officiels, icône importée (`fichier`) et son adresse d'origine (`url`, CDN). Une par touche.
+ */
+function lireOfficielles(v, chemin) {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new Invalide(chemin, 'liste');
+  if (v.length > MAX_DETAILS.officielles) throw new Invalide(chemin, 'trop-elements');
+  const vues = new Set();
+  return v.map((x, i) => {
+    const c = `${chemin}.${i}`;
+    if (!estObjet(x)) throw new Invalide(c, 'objet');
+    const touche = texte(x.touche, `${c}.touche`, { max: 6 });
+    if (vues.has(touche)) throw new Invalide(`${c}.touche`, 'doublon');
+    vues.add(touche);
+    const slot = texteNettoye(x.slot, 20);
+    const description = texteLong(x.description, 300);
+    const url = imageSure(x.url, `${c}.url`);
+    return { touche, ...(slot ? { slot } : {}), nom: texte(x.nom, `${c}.nom`, { max: 40 }), ...(description ? { description } : {}), ...fichierFacultatif(x.fichier, `${c}.fichier`), ...(url ? { url } : {}) };
+  });
+}
+
 /** Capacité d'un personnage : forme et dimensions en mètres, durée (s), charges, coût ; « à vérifier ». */
 function lireCapacite(v, c) {
   const nom = texte(v.nom, `${c}.nom`, { max: 40 });
@@ -235,6 +280,7 @@ function lireCapacite(v, c) {
   const cout = entier(v.cout, `${c}.cout`, 0, 100_000, { facultatif: true });
   if (cout !== null) sortie.cout = cout;
   if (booleen(v.courbable, false)) sortie.courbable = true;
+  if (booleen(v.double, false)) sortie.double = true;
   const notes = texteLong(v.notes, 300);
   if (notes) sortie.notes = notes;
   sortie.aVerifier = booleen(v.aVerifier, false);

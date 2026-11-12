@@ -38,7 +38,7 @@ import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
 import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, reporterChampsLocaux, validerDonnees, validerEntete } from './schema.mjs';
 import { servicesImagesJeux, verifierOctetsImage, TYPES_IMAGE_JEU } from './images.mjs';
-import { CARTES_THEFINALS, HOTES_VALORANT, TAILLE_MAX_IMAGE_IMPORT, TAILLE_MAX_JSON_IMPORT, URL_MAPS_VALORANT, echelleApproxTheFinals, echelleDepuisUnitesParMetre, fusionnerReperes, mapValorant, telechargerBorne } from './import.mjs';
+import { CARTES_THEFINALS, HOTES_VALORANT, TAILLE_MAX_IMAGE_IMPORT, TAILLE_MAX_JSON_IMPORT, URL_AGENTS_VALORANT, URL_MAPS_VALORANT, agentValorant, echelleApproxTheFinals, echelleDepuisUnitesParMetre, fusionnerReperes, mapValorant, telechargerBorne } from './import.mjs';
 import { modeleDuJeu } from '../strats/modeles.mjs';
 import { servicesCartesProposees } from './cartesProposees.mjs';
 
@@ -314,6 +314,93 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
       }
     } else throw echec(400, 'import-modele', 'Import automatique : Valorant et The Finals seulement (déposez les images à la main).');
     const r = await ecrireVersion(acteur, j, { donnees: validerDonnees(d).donnees, versionAttendue: corps?.version, motif: 'import' });
+    return { rapport, inchange: Boolean(r.inchange), jeu: await detail(acteur, cle) };
+  }
+
+  /**
+   * `POST /jeux/:cle/importer-agents` (Valorant) : agents de valorant-api.com, téléchargés par le serveur et rangés
+   * dans son stockage (comme les minimaps) : portrait de chaque agent (`personnages[].fichier`), icônes de ses
+   * capacités avec leurs nom et description officiels (`personnages[].officielles`), icônes des rôles
+   * (`classes[].fichier`). Un agent absent du profil est ajouté (actif) avec son rôle. Les caractéristiques des
+   * capacités (formes, dimensions « à vérifier ») ne sont jamais touchées : l'éditeur les rapproche par la touche.
+   * Idempotent (empreintes) ; un portrait déposé à la main (sans source) n'est remplacé qu'avec `remplacer`.
+   * Une nouvelle VERSION du profil est écrite (historique : restaurable). Rend `{ rapport, inchange, jeu }`.
+   */
+  async function importerAgents(acteur, cle, corps = {}) {
+    await exigerGestion(acteur);
+    const j = await ligneJeu(cle);
+    if (modeleDuJeu(j.modele_strat, j.cle) !== 'valorant') throw echec(400, 'import-modele', 'Import des agents : profil Valorant seulement.');
+    const { octets } = await telechargerBorne(fetchImport, URL_AGENTS_VALORANT, { hotes: HOTES_VALORANT, max: TAILLE_MAX_JSON_IMPORT, types: ['application/json'] });
+    let json;
+    try {
+      json = JSON.parse(new TextDecoder().decode(octets));
+    } catch {
+      throw echec(502, 'import-json', 'Réponse de valorant-api.com illisible.');
+    }
+    const agents = (Array.isArray(json?.data) ? json.data : []).map(agentValorant).filter(Boolean);
+    if (agents.length === 0) throw echec(502, 'import-vide', 'valorant-api.com ne donne aucun agent exploitable.');
+    const d = structuredClone(donneesDe(j));
+    const t = new Date(maintenant()).toISOString();
+    const remplacer = corps?.remplacer === true;
+    const rapport = [];
+    const image = (url, ancien, nom) => importerImage(acteur, j, url, ancien, { hotes: HOTES_VALORANT, nom });
+    // Rôles : classe ajoutée si absente, icône importée une fois.
+    const rolesFaits = new Set();
+    for (const a of agents) {
+      if (!a.role || rolesFaits.has(a.role.cle)) continue;
+      rolesFaits.add(a.role.cle);
+      let classe = d.classes.find(c => c.cle === a.role.cle);
+      if (!classe && d.classes.length < 20) d.classes.push((classe = { cle: a.role.cle, nom: a.role.nom }));
+      if (classe && a.role.icone) {
+        try {
+          classe.fichier = (await image(a.role.icone, classe.fichier, `role-${a.role.cle}.png`)).fichier;
+        } catch (e) {
+          if (!e?.code) throw e;
+        }
+      }
+    }
+    for (const a of agents) {
+      let p = d.personnages.find(x => x.cle === a.cle);
+      const ligne = { agent: a.nom, portrait: 'gardee', capacites: 0 };
+      if (!p) {
+        if (d.personnages.length >= 200) continue;
+        p = { cle: a.cle, nom: a.nom, classe: a.role && d.classes.some(c => c.cle === a.role.cle) ? a.role.cle : null, image: null, actif: true };
+        d.personnages.push(p);
+        ligne.ajoute = true;
+      } else if (!p.classe && a.role && d.classes.some(c => c.cle === a.role.cle)) p.classe = a.role.cle;
+      try {
+        if (a.portrait && (!p.fichier || remplacer || p.source)) {
+          const r = await image(a.portrait, p.fichier, `${a.cle}.png`);
+          p.fichier = r.fichier;
+          p.source = { fournisseur: 'valorant-api.com', url: a.portrait, le: t, empreinte: r.empreinte, aVerifier: false };
+          ligne.portrait = r.statut;
+        } else if (!a.portrait) ligne.portrait = 'absente';
+        const anciennes = new Map((p.officielles ?? []).map(o => [o.touche, o]));
+        const officielles = [];
+        for (const c of a.capacites) {
+          const avant = anciennes.get(c.touche);
+          const o = { touche: c.touche, slot: c.slot, nom: c.nom, ...(c.description ? { description: c.description } : {}) };
+          if (c.icone) {
+            try {
+              const r = await image(c.icone, avant?.fichier, `${a.cle}-${c.touche.toLowerCase()}.png`);
+              Object.assign(o, { fichier: r.fichier, url: c.icone });
+              if (r.statut === 'importee') ligne.capacites++;
+            } catch (e) {
+              if (!e?.code) throw e;
+              if (avant?.fichier) Object.assign(o, { fichier: avant.fichier, ...(avant.url ? { url: avant.url } : {}) });
+              ligne.erreur = e.code;
+            }
+          }
+          officielles.push(o);
+        }
+        if (officielles.length) p.officielles = officielles;
+      } catch (e) {
+        if (!e?.code) throw e;
+        ligne.erreur = e.code;
+      }
+      rapport.push(ligne);
+    }
+    const r = await ecrireVersion(acteur, j, { donnees: validerDonnees(d).donnees, versionAttendue: corps?.version, motif: 'import-agents' });
     return { rapport, inchange: Boolean(r.inchange), jeu: await detail(acteur, cle) };
   }
 
@@ -1406,6 +1493,7 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     pourTeam,
     deposerImage,
     importerCartes,
+    importerAgents,
     cartesProposees: proposees.liste,
     preparerCartes: proposees.preparer,
     validerCartes: proposees.valider,

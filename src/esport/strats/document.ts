@@ -48,7 +48,12 @@ export interface JoueurStrat {
 /** Zone d'une capacité : dimensions en MÈTRES ; `trajet` : origine du lancer (unités du repère, relative). */
 export type Zone =
   | { forme: 'cercle'; rayon: number }
-  | { forme: 'mur'; angle: number; longueur: number; largeur: number; courbure: number }
+  /**
+   * Mur : droit (angle, longueur), courbé (courbure : décalage du milieu, -1 à 1) ou TRACÉ point par point
+   * (`trace` : points relatifs au point de pose, en mètres ; High Tide, Blaze) ; `double` : deux lignes
+   * parallèles écartées de `largeur` (Fast Lane).
+   */
+  | { forme: 'mur'; angle: number; longueur: number; largeur: number; courbure: number; trace?: number[]; double?: boolean }
   | { forme: 'cone'; angle: number; ouverture: number; portee: number }
   | { forme: 'trajet'; dx: number; dy: number; rayon: number }
   | { forme: 'ligne'; angle: number; longueur: number }
@@ -229,6 +234,8 @@ export type Action =
   | { type: 'deplacer'; etape: number; id: string; dx: number; dy: number }
   | { type: 'supprimer'; etape: number; id: string }
   | { type: 'vider'; etape: number }
+  /** Vider TOUTES les étapes (objets des calques verrouillés gardés). */
+  | { type: 'viderTout' }
   | { type: 'ajouterEtape'; apres: number; phase?: string | null }
   | { type: 'dupliquerEtape'; etape: number }
   | { type: 'supprimerEtape'; etape: number }
@@ -306,6 +313,10 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
       const e = d.etapes[a.etape];
       if (!e || e.objets.length === 0) return d;
       return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.filter(o => d.calques[calqueDe(o)].verrou) }));
+    }
+    case 'viderTout': {
+      if (d.etapes.every(e => e.objets.every(o => d.calques[calqueDe(o)].verrou))) return d;
+      return { ...d, etapes: d.etapes.map(e => ({ ...e, objets: e.objets.filter(o => d.calques[calqueDe(o)].verrou) })) };
     }
     case 'ajouterEtape': {
       if (d.etapes.length >= ETAPES_MAX) return d;

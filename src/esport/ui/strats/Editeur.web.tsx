@@ -19,15 +19,16 @@
  */
 
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Modal, ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport } from '../../client';
 import type { Strat } from '../../strats/api';
-import { creerCacheImages, initiales, trouverAgent, type AgentAsset } from '../../strats/assets';
+import { creerCacheImages, trouverAgent, type AgentAsset } from '../../strats/assets';
 import {
   CALQUES,
   COULEURS_LIBRES,
+  ETAPES_MAX,
   FORMES_ZONE,
   TAILLE_MAX_DOCUMENT,
   VUE_INITIALE,
@@ -63,24 +64,26 @@ import { trSt, type CleSt } from '../../i18n/strats2';
 import { Glyphe } from '../../../ui/icones';
 import { useTempsReel } from '../../tempsReel/hooks';
 import { Chronologie, FicheCapacite, Inspecteur, ListeUtilitaires, PanneauJoueurs, couleurPhase, libellePhase } from './Panneaux';
+import { BarreAgents, BarreCapacites, BarreEtapes, COULEUR_ENNEMI, GrilleOutils, Pastille, type Camp } from './Barres';
 import { documentImpression } from './impression';
 
 export type { PropsEditeur };
 
 const Canevas = React.lazy(() => import('./CanevasStrat.web'));
 
+/** Outils : icônes MONOCHROMES de l'interface (src/ui/icones) ; les images du jeu sont réservées aux agents et capacités. */
 const OUTILS: ReadonlyArray<readonly [Outil, string, CleSt, string]> = [
   ['selection', 'selection', 'outil.selection', 'V'],
   ['main', 'main', 'outil.main', 'H'],
-  ['agent', '◉', 'outil.agent', 'A'],
-  ['capacite', '✦', 'outil.capacite', 'C'],
-  ['fleche', '➜', 'outil.fleche', 'F'],
-  ['ligne', '╱', 'outil.ligne', 'L'],
-  ['forme', '▭', 'outil.forme', 'R'],
-  ['texte', 'T', 'outil.texte', 'T'],
-  ['marqueur', '◆', 'outil.marqueur', 'M'],
-  ['vision', '◠', 'outil.vision', 'O'],
-  ['gomme', '⌫', 'outil.gomme', 'E'],
+  ['agent', 'personne', 'outil.agent', 'A'],
+  ['capacite', 'etincelles', 'outil.capacite', 'C'],
+  ['fleche', 'fleche-diagonale', 'outil.fleche', 'F'],
+  ['ligne', 'trait', 'outil.ligne', 'L'],
+  ['forme', 'carre', 'outil.forme', 'R'],
+  ['texte', 'texte', 'outil.texte', 'T'],
+  ['marqueur', 'losange', 'outil.marqueur', 'M'],
+  ['vision', 'oeil', 'outil.vision', 'O'],
+  ['gomme', 'gomme', 'outil.gomme', 'E'],
 ];
 const TOUCHES_OUTILS: Record<string, Outil> = { v: 'selection', h: 'main', a: 'agent', c: 'capacite', f: 'fleche', l: 'ligne', r: 'forme', t: 'texte', m: 'marqueur', o: 'vision', e: 'gomme' };
 
@@ -89,40 +92,6 @@ const cacheImages = creerCacheImages({
   caches: (globalThis as { caches?: Parameters<typeof creerCacheImages>[0]['caches'] }).caches,
   creerUrl: b => URL.createObjectURL(b),
 });
-
-function IconeAsset({ theme, url, nom, couleur, taille = 30 }: { theme: ThemeHub; url: string | null; nom: string; couleur?: string; taille?: number }) {
-  const [echec, setEchec] = useState(false);
-  if (url && !echec) return <Image source={{ uri: url }} onError={() => setEchec(true)} style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur ?? theme.surface }} accessibilityLabel={nom} />;
-  return (
-    <View style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur ?? teinteTransparente(theme.attenue, 0.4), alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: '#ffffff', fontSize: taille * 0.38, fontWeight: '800' }}>{initiales(nom)}</Text>
-    </View>
-  );
-}
-
-function Pastille({ theme, actif, onPress, libelle, testID, children, couleur }: { theme: ThemeHub; actif: boolean; onPress(): void; libelle: string; testID: string; children: React.ReactNode; couleur?: string }) {
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={libelle}
-      accessibilityState={{ selected: actif }}
-      onPress={onPress}
-      style={{
-        minWidth: 40,
-        minHeight: 40,
-        paddingHorizontal: 8,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: Math.min(theme.rayonMoyen, 10),
-        borderWidth: actif ? 2 : 1,
-        borderColor: actif ? (couleur ?? theme.accent) : theme.ligne,
-        backgroundColor: actif ? teinteTransparente(couleur ?? theme.accent, 0.22) : theme.surface,
-      }}>
-      {children}
-    </Pressable>
-  );
-}
 
 /** Nom de fichier ASCII (certains navigateurs ignorent un nom accentué). */
 const nomFichier = (titre: string) => titre.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'strat';
@@ -176,6 +145,8 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const [comparer, setComparer] = useState(false);
   const [aide, setAide] = useState(false);
   const [callout, setCallout] = useState<string | undefined>();
+  const [camp, setCamp] = useState<Camp>('allie');
+  const [roleFiltre, setRoleFiltre] = useState<string | null>(null);
   const [distant, setDistant] = useState<{ revision: number; pseudo: string | null } | undefined>();
   const exportRef = useRef<ExportCanevas | undefined>(undefined);
   const revisionRef = useRef(0);
@@ -219,7 +190,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const agents = agentsActifs(assets);
   const agent: AgentAsset | undefined = (agentCle ? trouverAgent(assets, agentCle) : undefined) ?? (joueur !== null && doc?.joueurs[joueur]?.agent ? trouverAgent(assets, doc.joueurs[joueur].agent as string) : undefined) ?? agents[0];
   const capacite = agent?.capacites.find(c => c.cle === capaciteCle) ?? agent?.capacites[0];
-  const couleur = couleurLibre ?? (joueur !== null ? (doc?.joueurs[joueur]?.couleur ?? '#ffffff') : '#ffffff');
+  const couleur = camp === 'ennemi' ? COULEUR_ENNEMI : (couleurLibre ?? (joueur !== null ? (doc?.joueurs[joueur]?.couleur ?? '#ffffff') : '#ffffff'));
   const iEtape = doc ? Math.min(etape, doc.etapes.length - 1) : 0;
   const etapeCourante = doc?.etapes[iEtape];
   const carteAsset = assets?.cartes.find(c => c.cle === doc?.carte.cle);
@@ -459,9 +430,10 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     etape: iEtape,
     outil: peutModifier && temps === undefined ? outil : 'main',
     couleur,
-    joueur: couleurLibre ? null : joueur,
+    joueur: couleurLibre || camp === 'ennemi' ? null : joueur,
     agent,
     capacite,
+    agents: assets?.agents,
     formeZone,
     formeDessin,
     texte,
@@ -483,38 +455,43 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     onPret: surPret,
   };
 
+  const choisirAgent = (a: AgentAsset) => {
+    setAgentCle(a.cle);
+    setCapaciteCle(undefined);
+    if (camp === 'allie' && joueur !== null && !couleurLibre) faire({ type: 'joueur', index: joueur, champs: { agent: a.cle } });
+    setOutil('agent');
+  };
+
+  /** Outils en grille (panneau de gauche), puis annuler / rétablir, aimant, retourner, zoom, aide. */
   const barreOutils = (
-    <View style={[styles.ligne, { gap: 6 }]} accessibilityRole="toolbar" accessibilityLabel={trSt('outil.outils')} testID="esport-editeur-outils">
-      {OUTILS.map(([id, icone, cle, raccourci]) => (
-        <Pastille key={id} theme={theme} actif={outil === id} onPress={() => setOutil(id)} libelle={`${trSt(cle)} (${raccourci})`} testID={`esport-outil-${id}`}>
-          <Glyphe valeur={icone} style={{ color: theme.texte, fontSize: 17 }} />
+    <View style={{ gap: 6 }}>
+      <GrilleOutils theme={theme} outils={OUTILS.map(([id, icone, cle, raccourci]) => ({ id, icone, libelle: trSt(cle), raccourci }))} actif={outil} onOutil={id => setOutil(id as Outil)} colonnes={large ? 4 : 11} />
+      <View style={[styles.ligne, { gap: 4 }]} testID="esport-editeur-actions">
+        <Pastille theme={theme} actif={false} desactive={!h.passe.length} onPress={() => setH(annuler(h))} libelle={trSt('gauche.annuler')} testID="esport-editeur-annuler">
+          <Glyphe valeur="annuler" style={{ color: theme.texte, fontSize: 16 }} />
         </Pastille>
-      ))}
-      <View style={{ width: 8 }} />
-      <Pastille theme={theme} actif={false} onPress={() => setH(annuler(h))} libelle={tr('strats.editeur.annuler_ctrl_z')} testID="esport-editeur-annuler">
-        <Text style={{ color: h.passe.length ? theme.texte : theme.attenue, fontSize: 17 }}>↶</Text>
-      </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setH(retablir(h))} libelle={tr('strats.editeur.retablir_ctrl_maj_z')} testID="esport-editeur-retablir">
-        <Text style={{ color: h.futur.length ? theme.texte : theme.attenue, fontSize: 17 }}>↷</Text>
-      </Pastille>
-      <Pastille theme={theme} actif={Boolean(aimant)} onPress={() => setAimant(a => (a ? 0 : 10))} libelle={trSt('outil.aimant')} testID="esport-editeur-aimant">
-        <Glyphe valeur="grille" style={{ color: theme.texte, fontSize: 16 }} />
-      </Pastille>
-      <Pastille theme={theme} actif={rotation === 180} onPress={() => setRotation(r => (r ? 0 : 180))} libelle={trSt('outil.retourner')} testID="esport-editeur-retourner">
-        <Glyphe valeur="synchro" style={{ color: theme.texte, fontSize: 16 }} />
-      </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.zoomer')} testID="esport-editeur-zoom-plus">
-        <Text style={{ color: theme.texte, fontSize: 17 }}>＋</Text>
-      </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1 / 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.dezoomer')} testID="esport-editeur-zoom-moins">
-        <Text style={{ color: theme.texte, fontSize: 17 }}>－</Text>
-      </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(VUE_INITIALE)} libelle={tr('strats.editeur.vue_entiere_0')} testID="esport-editeur-zoom-zero">
-        <Text style={{ color: theme.texte, fontSize: 12 }}>{Math.round(vue.echelle * 100)} %</Text>
-      </Pastille>
-      <Pastille theme={theme} actif={aide} onPress={() => setAide(a => !a)} libelle={trSt('aide.raccourcis')} testID="esport-editeur-aide">
-        <Glyphe valeur="question" style={{ color: theme.texte, fontSize: 16 }} />
-      </Pastille>
+        <Pastille theme={theme} actif={false} desactive={!h.futur.length} onPress={() => setH(retablir(h))} libelle={trSt('gauche.retablir')} testID="esport-editeur-retablir">
+          <Glyphe valeur="retablir" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+        <Pastille theme={theme} actif={Boolean(aimant)} onPress={() => setAimant(a => (a ? 0 : 10))} libelle={trSt('outil.aimant')} testID="esport-editeur-aimant">
+          <Glyphe valeur="grille" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+        <Pastille theme={theme} actif={rotation === 180} onPress={() => setRotation(r => (r ? 0 : 180))} libelle={trSt('outil.retourner')} testID="esport-editeur-retourner">
+          <Glyphe valeur="synchro" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+        <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.zoomer')} testID="esport-editeur-zoom-plus">
+          <Glyphe valeur="plus" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+        <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1 / 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.dezoomer')} testID="esport-editeur-zoom-moins">
+          <Glyphe valeur="moins" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+        <Pastille theme={theme} actif={false} onPress={() => setVue(VUE_INITIALE)} libelle={tr('strats.editeur.vue_entiere_0')} testID="esport-editeur-zoom-zero">
+          <Text style={{ color: theme.texte, fontSize: 11 }}>{Math.round(vue.echelle * 100)} %</Text>
+        </Pastille>
+        <Pastille theme={theme} actif={aide} onPress={() => setAide(a => !a)} libelle={trSt('aide.raccourcis')} testID="esport-editeur-aide">
+          <Glyphe valeur="question" style={{ color: theme.texte, fontSize: 16 }} />
+        </Pastille>
+      </View>
     </View>
   );
 
@@ -530,58 +507,25 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
 
   const palette = (
     <View style={{ gap: 10 }}>
-      {outil === 'agent' || outil === 'capacite' ? (
+      {outil === 'capacite' && agent ? (
         <Panneau theme={theme} testID="esport-editeur-agents">
-          <Intertitre theme={theme}>{outil === 'agent' ? trSt('palette.agent', { quoi: libelleAgent }) : trSt('palette.capacite')}</Intertitre>
-          {agents.length === 0 ? <Text style={attenue}>{trSt('palette.aucun_personnage')}</Text> : null}
-          <View style={[styles.ligne, { gap: 4 }]}>
-            {agents.map(a => (
-              <Pastille
-                key={a.cle}
-                theme={theme}
-                actif={agent?.cle === a.cle}
-                onPress={() => {
-                  setAgentCle(a.cle);
-                  setCapaciteCle(undefined);
-                  if (joueur !== null) faire({ type: 'joueur', index: joueur, champs: { agent: a.cle } });
-                }}
-                libelle={a.nom}
-                testID={`esport-agent-${a.cle}`}>
-                <IconeAsset theme={theme} url={a.icone} nom={a.nom} />
-              </Pastille>
-            ))}
-          </View>
-          {outil === 'capacite' && agent ? (
-            <>
-              <View style={[styles.ligne, { gap: 6 }]}>
-                {agent.capacites.map(c => (
-                  <Pastille key={c.cle} theme={theme} actif={capacite?.cle === c.cle} onPress={() => setCapaciteCle(c.cle)} libelle={`${c.nom}${c.touche ? ` (${c.touche})` : ''}`} testID={`esport-capacite-${c.cle}`}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 150 }}>
-                      <IconeAsset theme={theme} url={c.icone} nom={c.nom} taille={24} couleur="#334155" />
-                      <Text style={{ color: theme.texte, fontSize: 11 }} numberOfLines={1}>
-                        {c.touche || c.nom}
-                      </Text>
-                    </View>
-                  </Pastille>
-                ))}
-              </View>
-              <FicheCapacite theme={theme} capacite={capacite} />
-              <Choix<FormeZone | 'aucune' | 'auto'>
-                theme={theme}
-                libelle={tr('strats.editeur.zone')}
-                valeur={formeZone}
-                options={[
-                  { id: 'auto', nom: trSt('forme.auto') },
-                  ...FORMES_ZONE.map(f => ({ id: f, nom: trSt(`forme.${f}` as CleSt) })),
-                  { id: 'aucune', nom: tr('strats.editeur.icone_seule') },
-                ]}
-                onChoisir={setFormeZone}
-                repliable
-                testID="esport-zone"
-              />
-              <Text style={attenue}>{trSt('palette.aide_capacite')}</Text>
-            </>
-          ) : null}
+          <Intertitre theme={theme}>{trSt('palette.capacite')}</Intertitre>
+          <FicheCapacite theme={theme} capacite={capacite} />
+          {capacite?.description ? <Text style={attenue}>{capacite.description}</Text> : null}
+          <Choix<FormeZone | 'aucune' | 'auto'>
+            theme={theme}
+            libelle={tr('strats.editeur.zone')}
+            valeur={formeZone}
+            options={[
+              { id: 'auto', nom: trSt('forme.auto') },
+              ...FORMES_ZONE.map(f => ({ id: f, nom: trSt(`forme.${f}` as CleSt) })),
+              { id: 'aucune', nom: tr('strats.editeur.icone_seule') },
+            ]}
+            onChoisir={setFormeZone}
+            repliable
+            testID="esport-zone"
+          />
+          <Text style={attenue}>{trSt('palette.aide_capacite')}</Text>
         </Panneau>
       ) : null}
       {outil === 'marqueur' ? (
@@ -671,37 +615,32 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   );
 
   const reglagesStrat = (
-    <View style={[styles.ligne, { gap: 8 }]} testID="esport-editeur-reglages">
+    <View style={{ gap: 8 }} testID="esport-editeur-reglages">
       {def.modes.length && peutModifier ? (
-        <Segments<ModeJeuStrat>
-          theme={theme}
-          libelle={trSt('mode.titre')}
-          valeur={doc.mode ?? def.modes[0]}
-          options={def.modes.map(m => [m, trSt(`mode.${m}` as CleSt)] as const)}
-          onChoisir={mode => faire({ type: 'mode', mode })}
-          testID="esport-editeur-mode"
-        />
+        <Choix<ModeJeuStrat> theme={theme} libelle={trSt('mode.titre')} valeur={doc.mode ?? def.modes[0]} options={def.modes.map(m => ({ id: m, nom: trSt(`mode.${m}` as CleSt) }))} onChoisir={mode => faire({ type: 'mode', mode })} repliable testID="esport-editeur-mode" />
       ) : null}
       {def.sides && peutModifier ? (
         <Segments theme={theme} libelle={tr('scouting.scouting.side')} valeur={doc.side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]] as const} onChoisir={side => faire({ type: 'side', side })} testID="esport-editeur-side" />
       ) : null}
       {def.economie.length && peutModifier ? (
-        <Segments<Economie | 'aucune'>
+        <Choix<Economie | 'aucune'>
           theme={theme}
           libelle={trSt('economie.titre')}
           valeur={doc.economie ?? 'aucune'}
-          options={[['aucune', trSt('economie.aucune')], ...def.economie.map(x => [x, trSt(`economie.${x}` as CleSt)] as const)]}
+          options={[{ id: 'aucune', nom: trSt('economie.aucune') }, ...def.economie.map(x => ({ id: x, nom: trSt(`economie.${x}` as CleSt) }))]}
           onChoisir={v => faire({ type: 'economie', economie: v === 'aucune' ? null : v })}
+          repliable
           testID="esport-editeur-economie"
         />
       ) : null}
       {niveaux.length ? (
-        <Segments<string>
+        <Choix<string>
           theme={theme}
           libelle={trSt('niveau.etage')}
           valeur={niveau === null ? 'tous' : String(niveau)}
-          options={[['tous', trSt('niveau.tous')], ...niveaux.map(n => [String(n.valeur), n.nom] as const)]}
+          options={[{ id: 'tous', nom: trSt('niveau.tous') }, ...niveaux.map(n => ({ id: String(n.valeur), nom: n.nom }))]}
           onChoisir={v => setNiveau(v === 'tous' ? null : Number(v))}
+          repliable
           testID="esport-editeur-niveau"
         />
       ) : null}
@@ -721,6 +660,77 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       ) : null}
     </View>
   );
+
+  const carteGauche = (
+    <Panneau theme={theme} testID="esport-editeur-carte-panneau">
+      <View style={[styles.ligne, { gap: 8, flexWrap: 'nowrap' }]}>
+        {carteAsset?.vignette || carteAsset?.minimap ? (
+          <Image source={{ uri: (carteAsset.vignette ?? carteAsset.minimap) as string }} style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#111827' }} accessibilityLabel={doc.carte.nom} />
+        ) : (
+          <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: teinteTransparente(theme.attenue, 0.3), alignItems: 'center', justifyContent: 'center' }}>
+            <Glyphe valeur="lieu" style={{ color: theme.texte, fontSize: 18 }} />
+          </View>
+        )}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={attenue}>{trSt('gauche.carte')}</Text>
+          <Text style={{ color: theme.texte, fontSize: 16, fontWeight: '800', ...police(theme.policeTitre) }} numberOfLines={1} testID="esport-editeur-carte-nom">
+            {doc.carte.nom}
+          </Text>
+        </View>
+      </View>
+      {reglagesStrat}
+    </Panneau>
+  );
+
+  const etapesGauche = (
+    <Panneau theme={theme} testID="esport-editeur-etapes-panneau">
+      <BarreEtapes
+        theme={theme}
+        n={doc.etapes.length}
+        etape={iEtape}
+        onEtape={changerEtape}
+        onAjouter={() => (faire({ type: 'ajouterEtape', apres: iEtape }), changerEtape(iEtape + 1))}
+        peutAjouter={doc.etapes.length < ETAPES_MAX}
+        duree={etapeCourante?.duree ?? 5}
+        temps={temps}
+        enLecture={enLecture}
+        onLire={lire}
+        onPause={() => setEnLecture(false)}
+        onTemps={t => (setEnLecture(false), setSelection(undefined), setTemps(t))}
+        onSupprimerTout={() => (faire({ type: 'viderTout' }), setSelection(undefined))}
+        onSupprimerEtape={() => (faire({ type: 'vider', etape: iEtape }), setSelection(undefined))}
+        modifiable={peutModifier}
+      />
+    </Panneau>
+  );
+
+  const panneauGauche = (
+    <View style={{ width: large ? 244 : '100%', gap: 10 }} testID="esport-editeur-gauche">
+      {carteGauche}
+      {etapesGauche}
+      {peutModifier ? <Panneau theme={theme}>{barreOutils}</Panneau> : null}
+    </View>
+  );
+
+  const agentsAvecCapacites = doc.modele !== 'generique';
+  const barresBas =
+    peutModifier && agents.length ? (
+      <View style={{ gap: 6 }} testID="esport-editeur-barres">
+        {agent && agentsAvecCapacites && agent.capacites.length ? (
+          <BarreCapacites
+            theme={theme}
+            agent={agent}
+            capaciteCle={capacite?.cle}
+            armee={outil === 'capacite'}
+            onCapacite={c => {
+              setCapaciteCle(c.cle);
+              setOutil('capacite');
+            }}
+          />
+        ) : null}
+        <BarreAgents theme={theme} agents={agents} agentCle={agent?.cle} onAgent={choisirAgent} role={roleFiltre} onRole={setRoleFiltre} camp={camp} onCamp={setCamp} libelle={libelleAgent} />
+      </View>
+    ) : null;
 
   const canevas = (t: number, extra?: Partial<PropsCanevas>) => (
     <Suspense fallback={<Text style={attenue}>{tr('strats.editeur.chargement_de_l_editeur')}</Text>}>
@@ -823,18 +833,19 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
           <Text style={{ color: theme.texte, fontSize: 13, lineHeight: 20, ...police(theme.policeTexte) }}>{trSt('aide.liste')}</Text>
         </Panneau>
       ) : null}
-      {reglagesStrat}
-      {peutModifier ? barreOutils : null}
       {comparer ? <Comparaison theme={theme} api={api} teamId={teamId} strat={strat} doc={doc} etape={iEtape} assets={assets} taille={large ? Math.min(560, (largeur || 900) / 2 - 12) : Math.min(taille, 420)} /> : null}
       <View style={{ flexDirection: large ? 'row' : 'column', gap: 12, alignItems: 'flex-start' }}>
+        {panneauGauche}
         <View style={{ flex: 1, width: '100%', gap: 8, minWidth: 0 }} onLayout={ev => setLargeur(ev.nativeEvent.layout.width)}>
           {canevas(taille)}
+          {barresBas}
           <Text style={attenue} testID="esport-editeur-callout">{callout ? trSt('editeur.callout', { nom: callout }) : ' '}</Text>
+          {peutModifier ? <Text style={attenue} testID="esport-editeur-aide-gestes">{trSt('poignees.aide')}</Text> : null}
           {!carteAsset?.minimap && !doc.carte.image ? <Text style={attenue}>{trSt('editeur.sans_image')}</Text> : null}
           {carteAsset && !carteAsset.echelle ? <Text style={attenue} testID="esport-editeur-non-calibree">{trSt('editeur.non_calibree')}</Text> : null}
           {chronologie}
         </View>
-        {peutModifier || doc.joueurs.length ? <View style={{ width: large ? 340 : '100%', gap: 10 }}>{palette}</View> : null}
+        {peutModifier || doc.joueurs.length ? <View style={{ width: large ? 320 : '100%', gap: 10 }}>{palette}</View> : null}
       </View>
       <MentionRiot theme={theme} jeu={assets?.jeu} />
       {presentation ? (

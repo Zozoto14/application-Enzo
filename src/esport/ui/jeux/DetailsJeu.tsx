@@ -11,7 +11,7 @@ import React, { Suspense, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { type ThemeHub } from '../../../hub/themes';
-import { CATEGORIES_CAPACITE, FORMES_CAPACITE, TYPES_REPERES, type CapaciteJeu, type CarteJeu, type DonneesJeu, type ImageJeu, type LigneImport, type PersonnageJeu, type TypeRepere } from '../../jeux/api';
+import { CATEGORIES_CAPACITE, FORMES_CAPACITE, TYPES_REPERES, type CapaciteJeu, type CarteJeu, type DonneesJeu, type ImageJeu, type LigneImport, type LigneImportAgent, type PersonnageJeu, type TypeRepere } from '../../jeux/api';
 import { cleDe } from '../../jeux/profil';
 import { ajouterNiveau, ajouterRepere, ajouterZone, avecEchelle, avecImage, echelleDepuis, retirer, renommer } from '../../jeux/cartes';
 import { trSt } from '../../i18n/strats2';
@@ -300,6 +300,12 @@ export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites,
           <View style={[styles.ligne, { gap: 8 }]}>
             <Case theme={theme} coche={Boolean(c.courbable)} libelle={trJc('capacites.courbable')} onChanger={v => maj(i, { courbable: v || undefined })} testID={`${testID}-${i}-courbable`} />
             <Text style={texte(theme, 13)}>{trJc('capacites.courbable')}</Text>
+            {c.forme === 'mur' ? (
+              <>
+                <Case theme={theme} coche={Boolean(c.double)} libelle={trJc('capacites.double')} onChanger={v => maj(i, { double: v || undefined })} testID={`${testID}-${i}-double`} />
+                <Text style={texte(theme, 13)}>{trJc('capacites.double')}</Text>
+              </>
+            ) : null}
             <Case theme={theme} coche={c.aVerifier} libelle={trJc('capacites.a_verifier')} onChanger={v => maj(i, { aVerifier: v })} testID={`${testID}-${i}-a-verifier`} />
             <Text style={texte(theme, 13)}>{trJc('capacites.a_verifier')}</Text>
           </View>
@@ -371,6 +377,62 @@ export function ImportCartes({
           {rapport.map(l => (
             <Text key={l.carte} style={{ ...texte(theme, 12), color: l.erreur ? theme.critique : theme.texte }}>
               {`${l.carte} : ${trJc(`import.image.${l.image}` as CleJc)} · ${trJc(`import.echelle.${l.echelle}` as CleJc)}${l.reperes ? ` · ${trJc('import.reperes', { n: l.reperes })}` : ''}${l.erreur ? ` · ${trJc('import.erreur', { code: l.erreur })}` : ''}`}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ Import serveur des agents et de leurs capacités (Valorant)
+
+export function ImportAgents({
+  theme,
+  profil,
+  importer,
+  onFini,
+}: {
+  theme: ThemeHub;
+  profil: { version: number };
+  importer(corps: { version?: number; remplacer?: boolean }): Promise<{ rapport: LigneImportAgent[]; inchange: boolean }>;
+  onFini(): void;
+}) {
+  const [enCours, setEnCours] = useState(false);
+  const [rapport, setRapport] = useState<LigneImportAgent[] | undefined>();
+  const [erreur, setErreur] = useState<string | undefined>();
+  const [remplacer, setRemplacer] = useState(false);
+  const lancer = async () => {
+    setEnCours(true);
+    setErreur(undefined);
+    setRapport(undefined);
+    try {
+      const r = await importer({ version: profil.version, ...(remplacer ? { remplacer: true } : {}) });
+      setRapport(r.rapport);
+      onFini();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnCours(false);
+    }
+  };
+  return (
+    <View style={{ gap: 8 }} testID="esport-jeu-import-agents">
+      <Text style={attenue(theme, 12)}>{trJc('agents.aide')}</Text>
+      <View style={[styles.ligne, { gap: 8 }]}>
+        <Case theme={theme} coche={remplacer} libelle={trJc('agents.remplacer')} onChanger={setRemplacer} testID="esport-jeu-import-agents-remplacer" />
+        <Text style={texte(theme, 13)}>{trJc('agents.remplacer')}</Text>
+      </View>
+      <BoutonHub theme={theme} titre={enCours ? trJc('agents.en_cours') : trJc('agents.lancer')} variante="plein" desactive={enCours} onPress={() => void lancer()} testID="esport-jeu-import-agents-lancer" />
+      {erreur ? <Text style={{ ...texte(theme, 13), color: theme.critique }} testID="esport-jeu-import-agents-erreur">{erreur}</Text> : null}
+      {rapport ? (
+        <View style={{ gap: 2 }} testID="esport-jeu-import-agents-rapport">
+          <Text style={{ ...texte(theme, 13), fontWeight: '700' }}>
+            {trJc('agents.resume', { agents: rapport.length, portraits: rapport.filter(l => l.portrait === 'importee').length, icones: rapport.reduce((n, l) => n + l.capacites, 0) })}
+          </Text>
+          {rapport.map(l => (
+            <Text key={l.agent} style={{ ...texte(theme, 12), color: l.erreur ? theme.critique : theme.texte }}>
+              {[l.agent, trJc(`agents.portrait.${l.portrait}` as CleJc), l.capacites ? trJc('agents.icones', { n: l.capacites }) : '', l.ajoute ? trJc('agents.ajoute') : '', l.erreur ? trJc('import.erreur', { code: l.erreur }) : ''].filter(Boolean).join(' · ')}
             </Text>
           ))}
         </View>

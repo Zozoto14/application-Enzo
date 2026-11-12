@@ -29,7 +29,7 @@ import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, SqueletteCartes, TitreCarte, attenue, texte } from '../design';
 import { EditeurProfil, libelleChemin, libelleRaison } from './EditeurProfil';
 import { trJc } from '../../i18n/jeuxCartes';
-import { ImportCartes } from './DetailsJeu';
+import { ImportAgents, ImportCartes } from './DetailsJeu';
 import { CartesProposees, type ApiCartesProposees } from './CartesProposees';
 import { ReglagesEcriture } from '../ecriture/ReglagesEcriture';
 
@@ -311,6 +311,12 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
         <TitreCarte theme={theme} titre={trJc('import.titre')} />
         <ImportCartes theme={theme} profil={profil} importer={corps => api.importer(cle, corps)} onFini={() => void charger().then(() => oublierProfilsTeams())} />
       </Carte>
+      {profil.modeleStrat === 'valorant' ? (
+        <Carte theme={theme} testID="esport-jeu-agents">
+          <TitreCarte theme={theme} titre={trJc('agents.titre')} />
+          <ImportAgents theme={theme} profil={profil} importer={corps => api.importerAgents(cle, corps)} onFini={() => void charger().then(() => oublierProfilsTeams())} />
+        </Carte>
+      ) : null}
       <Carte theme={theme} testID="esport-jeu-maj">
         <TitreCarte theme={theme} titre={trJeux('jeux.maj_titre')} sous={trJeux('jeux.maj_aide')} />
         <Segments<'oui' | 'non'>

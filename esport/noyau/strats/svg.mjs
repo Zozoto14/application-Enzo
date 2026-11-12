@@ -51,6 +51,21 @@ function secteur(x, y, angleDeg, ouverture, r, couleur, opacite = 0.3) {
   return `<path d="M ${x} ${y} L ${p(a)} A ${f1(r)} ${f1(r)} 0 ${ouverture > 180 ? 1 : 0} 1 ${p(b)} Z" fill="${couleur}" fill-opacity="${opacite}" stroke="${couleur}" stroke-width="2"/>`;
 }
 
+/** Polyligne décalée perpendiculairement de `d` (mur double ; miroir de src/esport/strats/geometrie.ts). */
+function decaler(points, d) {
+  const n = points.length / 2;
+  const sortie = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1);
+    const b = Math.min(n - 1, i + 1);
+    const dx = points[b * 2] - points[a * 2];
+    const dy = points[b * 2 + 1] - points[a * 2 + 1];
+    const l = Math.hypot(dx, dy) || 1;
+    sortie.push(points[i * 2] - (dy / l) * d, points[i * 2 + 1] + (dx / l) * d);
+  }
+  return sortie;
+}
+
 /** Forme d'une zone de capacité (mètres → unités avec l'échelle `k` de la map). */
 export function zoneSvg(o, z, k) {
   const c = o.couleur;
@@ -65,6 +80,16 @@ export function zoneSvg(o, z, k) {
       const x2 = o.x + l * Math.cos(rad(z.angle));
       const y2 = o.y + l * Math.sin(rad(z.angle));
       const ep = z.forme === 'mur' ? Math.max(2, z.largeur * k) : 3;
+      if (z.forme === 'mur' && (z.double || (Array.isArray(z.trace) && z.trace.length >= 2))) {
+        // Mur tracé point par point (High Tide) et / ou double (Fast Lane) : polyligne(s).
+        const pts = [o.x, o.y];
+        if (Array.isArray(z.trace) && z.trace.length >= 2) for (let i = 0; i + 1 < z.trace.length; i += 2) pts.push(o.x + z.trace[i] * k, o.y + z.trace[i + 1] * k);
+        else pts.push(x2, y2);
+        const ligne = (q, e) => `<polyline points="${q.map(f1).join(' ')}" fill="none" stroke="${c}" stroke-width="${f1(e)}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.8"/>`;
+        if (!z.double) return ligne(pts, ep);
+        const d = Math.max(4, z.largeur * k) / 2;
+        return ligne(decaler(pts, d), Math.max(2, 0.4 * k)) + ligne(decaler(pts, -d), Math.max(2, 0.4 * k));
+      }
       if (z.forme === 'mur' && z.courbure) {
         const mx = (o.x + x2) / 2 - (l / 2) * z.courbure * Math.sin(rad(z.angle));
         const my = (o.y + y2) / 2 + (l / 2) * z.courbure * Math.cos(rad(z.angle));

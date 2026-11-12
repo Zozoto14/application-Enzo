@@ -28,6 +28,8 @@ export const TAILLE_MAX_DOCUMENT = 384 * 1024;
 export const ETAPES_MAX = 30;
 export const OBJETS_MAX = 250;
 export const POINTS_MAX = 64;
+/** Points d'un mur tracé (High Tide), point de pose non compris. */
+export const TRACE_MUR_MAX = 16;
 export const JOUEURS_MAX = 10;
 export const SIDES = ['attaque', 'defense'];
 export const TYPES_STRAT = ['default', 'execute', 'eco', 'pistol', 'retake', 'other'];
@@ -122,8 +124,16 @@ function zone(v) {
   switch (v.forme) {
     case 'cercle':
       return { forme: 'cercle', rayon: nombre(v.rayon, 'rayon', 0.2, 100) };
-    case 'mur':
-      return { forme: 'mur', angle: angle(v.angle), longueur: nombre(v.longueur, 'longueur', 0.5, 200), largeur: nombre(v.largeur ?? 1, 'largeur', 0.1, 30), courbure: nombre(v.courbure ?? 0, 'courbure', -1, 1) };
+    case 'mur': {
+      const mur = { forme: 'mur', angle: angle(v.angle), longueur: nombre(v.longueur, 'longueur', 0.5, 200), largeur: nombre(v.largeur ?? 1, 'largeur', 0.1, 30), courbure: nombre(v.courbure ?? 0, 'courbure', -1, 1) };
+      // Mur tracé point par point (mètres relatifs au point de pose, 16 points au plus) ; mur double.
+      if (v.trace !== undefined && v.trace !== null) {
+        if (!Array.isArray(v.trace) || v.trace.length < 2 || v.trace.length > TRACE_MUR_MAX * 2 || v.trace.length % 2 !== 0) throw invalide('tracé du mur (1 à 16 points)');
+        mur.trace = v.trace.map((n, i) => nombre(n, `tracé ${i}`, -200, 200));
+      }
+      if (v.double === true) mur.double = true;
+      return mur;
+    }
     case 'cone':
       return { forme: 'cone', angle: angle(v.angle), ouverture: nombre(v.ouverture ?? 60, 'ouverture', 5, 360), portee: nombre(v.portee, 'portée', 0.5, 200) };
     case 'trajet':

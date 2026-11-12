@@ -40,12 +40,21 @@ export interface CapaciteAsset {
   touche: string;
   /** Caractéristiques (profil de jeu, sinon données pré-remplies « à vérifier ») : forme et dimensions en mètres. */
   donnees?: CapaciteJeu;
+  /** Adresse CDN Riot de l'icône (seule acceptée dans le document d'une strat ; `icone` peut être un lien signé). */
+  iconeDoc?: string | null;
+  /** Description officielle (import valorant-api.com). */
+  description?: string;
 }
 export interface AgentAsset {
   cle: string;
   nom: string;
   role: string | null;
+  /** Clé stable du rôle (duelliste, initiateur, controleur, sentinelle ; classe du profil) : filtre de la barre d'agents. */
+  roleCle?: string | null;
+  /** Portrait affiché : lien signé de l'image importée dans le profil, sinon CDN Riot ; null : initiales. */
   icone: string | null;
+  /** Adresse CDN Riot du portrait (document d'une strat). */
+  iconeDoc?: string | null;
   capacites: CapaciteAsset[];
   /** Profil de jeu : personnage encore jouable (absent : oui). */
   actif?: boolean;
@@ -92,6 +101,10 @@ const TOUCHES: Record<string, string> = { Ability1: 'Q', Ability2: 'E', Grenade:
 export const SLOTS: Record<string, string> = { Q: 'Ability1', E: 'Ability2', C: 'Grenade', X: 'Ultimate' };
 const ORDRE_SLOTS = ['Grenade', 'Ability1', 'Ability2', 'Ultimate'];
 
+/** Rôles de Valorant (anglais ou français) → clé stable des classes du profil. */
+const ROLES: Record<string, string> = { duelist: 'duelliste', duelliste: 'duelliste', initiator: 'initiateur', initiateur: 'initiateur', controller: 'controleur', controleur: 'controleur', sentinel: 'sentinelle', sentinelle: 'sentinelle' };
+export const cleRole = (nom: string | null | undefined): string | null => (nom ? (ROLES[cleDe(nom)] ?? cleDe(nom)) : null);
+
 /** Clé stable d'un nom (« KAY/O » → « kay-o », « Abyss » → « abyss »). */
 export function cleDe(nom: string): string {
   return (
@@ -129,6 +142,7 @@ export function assetsRepli(maintenant = Date.now()): Assets {
       cle: cleDe(nom),
       nom,
       role,
+      roleCle: cleRole(role),
       icone: null,
       capacites: ORDRE_SLOTS.map(cle => ({ cle, nom: tr('strats.assets.capacite', { v: TOUCHES[cle] }), icone: null, touche: TOUCHES[cle] })),
     })),
@@ -174,6 +188,7 @@ export function depuisApi(cartesJson: unknown, agentsJson: unknown, maintenant =
       cle: cleDe(a.displayName as string),
       nom: a.displayName as string,
       role: a.role?.displayName ?? null,
+      roleCle: cleRole(a.role?.displayName),
       icone: https(a.displayIcon),
       capacites: (a.abilities ?? [])
         .filter(c => typeof c.slot === 'string' && c.slot in TOUCHES)

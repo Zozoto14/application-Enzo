@@ -12,9 +12,9 @@
  */
 
 import type { ClientEsport } from '../client';
-import { SLOTS, type AgentAsset, type Assets, type CapaciteAsset, type CarteAsset } from '../strats/assets';
+import { SLOTS, cleRole, type AgentAsset, type Assets, type CapaciteAsset, type CarteAsset } from '../strats/assets';
 import { modeleDuJeu } from '../strats/modeles';
-import { apiJeux, type CapaciteJeu, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
+import { apiJeux, type CapaciteJeu, type CapaciteOfficielle, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
 import { capacitesPrereplies } from './modeles';
 
 /** « 5v5 », « 3v3v3v3 » ; au-delà de 4 équipes « 20 × 3 ». */
@@ -77,14 +77,42 @@ export function assetsDepuisProfil(profil: ProfilJeu, riot?: Assets, maintenant 
       niveaux: c.niveaux ?? [],
     };
   });
+  const lien = (f: string | undefined): string | null => (f ? (profil.images?.[f]?.url ?? null) : null);
   const agents: AgentAsset[] = d.personnages.map(p => {
     const r = valorant ? riot?.agents.find(x => x.cle === p.cle) : undefined;
     // Caractéristiques des capacités : celles du profil, sinon les données pré-remplies du modèle (« à vérifier »).
     const donnees = p.capacites?.length ? p.capacites : capacitesPrereplies(modele, p);
+    // Capacités officielles IMPORTÉES (icônes dans le stockage du serveur) : prioritaires sur les icônes lues en direct.
+    const officielles = capacitesOfficielles(p.officielles ?? [], r?.capacites ?? [], lien);
     // Valorant : le rôle traduit par valorant-api.com d'abord (langue de l'app), sinon la classe du profil.
-    return { cle: p.cle, nom: p.nom, role: r?.role ?? (p.classe ? classes.get(p.classe) : null) ?? null, icone: r?.icone ?? null, capacites: fusionnerCapacites(r?.capacites ?? [], donnees), actif: p.actif };
+    return {
+      cle: p.cle,
+      nom: p.nom,
+      role: r?.role ?? (p.classe ? classes.get(p.classe) : null) ?? null,
+      roleCle: p.classe ?? r?.roleCle ?? cleRole(r?.role) ?? null,
+      icone: lien(p.fichier) ?? r?.icone ?? null,
+      iconeDoc: p.source?.url ?? r?.iconeDoc ?? r?.icone ?? null,
+      capacites: fusionnerCapacites(officielles, donnees),
+      actif: p.actif,
+    };
   });
   return { jeu: valorant ? 'valorant' : profil.cle, modele, source: riot && valorant ? riot.source : 'profil', cartes, agents, majLe: maintenant };
+}
+
+/**
+ * Capacités officielles d'un agent : celles importées dans le profil (icône = lien signé, adresse CDN pour le
+ * document), complétées par celles lues en direct sur valorant-api.com (nom traduit dans la langue de l'app).
+ */
+export function capacitesOfficielles(importees: CapaciteOfficielle[], riot: CapaciteAsset[], lien: (f: string | undefined) => string | null): CapaciteAsset[] {
+  if (importees.length === 0) return riot;
+  const ordre = ['C', 'Q', 'E', 'X'];
+  return importees
+    .map(o => {
+      const r = riot.find(c => c.touche.toUpperCase() === o.touche.toUpperCase());
+      const icone = lien(o.fichier) ?? r?.icone ?? o.url ?? null;
+      return { cle: o.slot ?? r?.cle ?? SLOTS[o.touche.toUpperCase()] ?? cleDe(o.nom), nom: r?.icone ? r.nom : o.nom, icone, iconeDoc: o.url ?? r?.iconeDoc ?? r?.icone ?? null, touche: o.touche, ...(o.description ? { description: o.description } : {}) };
+    })
+    .sort((a, b) => ordre.indexOf(a.touche.toUpperCase()) - ordre.indexOf(b.touche.toUpperCase()));
 }
 
 /**

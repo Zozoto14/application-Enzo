@@ -56,6 +56,21 @@ redirection suivie, 15 s, 10 Mo par image, type annoncé et contenu vérifiés. 
 pas re-déposée, les callouts importés sont remplacés, un calibrage fait à la main et une image déposée à la main sont
 gardés (case « Remplacer aussi les images déposées à la main » pour forcer).
 
+**Importer agents et capacités** (fiche du jeu Valorant, carte « Agents et capacités », `POST /jeux/:cle/importer-agents`) :
+le SERVEUR lit `https://valorant-api.com/v1/agents?isPlayableCharacter=true` (réponse anglaise : noms officiels, ceux
+des caractéristiques pré-remplies) et télécharge dans son stockage, avec le même téléchargeur borné que les maps :
+- le **portrait** de chaque agent (`displayIconSmall`, sinon `displayIcon`) → `personnages[].fichier` et sa `source` ;
+- ses **capacités officielles** (emplacements Grenade, Ability1, Ability2, Ultimate → touches C, Q, E, X ; la passive
+  est ignorée) : nom, description, icône importée et adresse CDN d'origine → `personnages[].officielles` ;
+- l'**icône de chaque rôle** → `classes[].fichier` (classe ajoutée si elle manque).
+Un agent absent du profil est ajouté (actif, avec son rôle). Les **caractéristiques** des capacités (formes, dimensions
+« à vérifier ») ne sont **jamais** touchées : l'éditeur rapproche capacités officielles et caractéristiques par la
+touche. Idempotent (empreintes) ; un portrait déposé à la main n'est remplacé qu'avec la case « Remplacer aussi… ».
+Une nouvelle **version** du profil est écrite (motif `import-agents`) : l'historique permet de revenir en arrière.
+Ces champs sont propres au club (jamais envoyés à l'IA ni proposés par elle). Vérifié sur l'API réelle (2026-11) :
+30 agents jouables, rôles Controller / Duelist / Initiator / Sentinel, icônes de capacités en PNG sur
+`media.valorant-api.com`.
+
 **Maps proposées** (fiche du jeu, carte « Maps proposées », Valorant et The Finals) : le serveur PRÉPARE les maps,
 le gestionnaire les VALIDE ; **rien n'est appliqué au profil avant la validation**.
 - **The Finals** : wiki communautaire THE FINALS Wiki (wiki.gg, MediaWiki), API `https://www.thefinals.wiki/w/api.php` :
@@ -237,6 +252,7 @@ sont comptées à part, sans plafond (rien n'est payé), mais bornées en durée
 | `POST /jeux` · `GET` / `PATCH` / `DELETE /jeux/:cle` | jeux.gerer (`GET` d'un profil actif : tous) | Créer, lire, modifier (`version` attendue), supprimer |
 | `POST /jeux/:cle/archiver` · `PUT /jeux/:cle/maj` | jeux.gerer | Archiver ; vérification automatique et fréquence |
 | `POST /jeux/:cle/importer` | jeux.gerer | Import serveur des images et de l'échelle `{ version, urls?, remplacer? }` ; rend `{ rapport, jeu }` |
+| `POST /jeux/:cle/importer-agents` | jeux.gerer | Valorant : portraits des agents, icônes et noms officiels des capacités, icônes des rôles `{ version, remplacer? }` ; rend `{ rapport, inchange, jeu }` |
 | `GET /jeux/:cle/cartes-proposees` · `POST …/preparer` | jeux.gerer | Maps proposées (et ce qu'elles changeraient) ; préparation par le serveur, rend `{ rapport, cartes, images }` |
 | `POST /jeux/:cle/cartes-proposees/valider` · `…/rejeter` | jeux.gerer | `{ cartes: [clés] }` ou `{ toutes: true }` (valider : nouvelle version du profil) |
 | `POST /jeux/:cle/cartes-proposees/:carte/image` · `PUT …/:carte/echelle` | jeux.gerer | Remplacer l'image `{ url }` ou `{ type, donnees, nom }` ; calibrage `{ points, distance }` |
@@ -260,7 +276,8 @@ Code : `esport/noyau/jeux/import.mjs` (téléchargeur borné, valorant-api.com),
 `cartesProposees.mjs` (propositions) ; écran `src/esport/ui/jeux/CartesProposees.tsx`.
 
 Tests : `esport/test/profils-jeu.test.mjs`, `esport/test/strats-modeles.test.mjs` (modèle, détails des maps et des
-capacités, images, import réel abrégé de valorant-api.com), `esport/test/cartes-proposees.test.mjs` (réponses JSON réelles
+capacités, images, import réel abrégé de valorant-api.com), `esport/test/import-agents.test.mjs` (réponse réelle abrégée
+de `/v1/agents`, `esport/test/donnees/valorant-api-agents.json`, JSON seulement ; images simulées), `esport/test/cartes-proposees.test.mjs` (réponses JSON réelles
 du wiki enregistrées et abrégées, `esport/test/donnees/wiki-thefinals.json` ; images simulées), `src/esport/CartesProposees.test.tsx`,
 `esport/test/ia-assistant.test.mjs` (faux serveur d'IA et faux web :
 aucun appel réseau réel), `src/esport/ProfilsJeu.test.tsx`.

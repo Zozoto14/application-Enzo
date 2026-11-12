@@ -45,7 +45,7 @@ describe('échelle et formes des capacités', () => {
     const ligne = tirerPoignee(0, 0, { forme: 'ligne', angle: 0, longueur: 5 }, 'fin', 300, 0, 10);
     expect(ligne).toEqual({ forme: 'ligne', angle: 0, longueur: 30 });
     const mur = { forme: 'mur' as const, angle: 0, longueur: 20, largeur: 1, courbure: 0 };
-    expect(poignees(0, 0, mur, 10).map(h => h.cle)).toEqual(['fin', 'courbe']);
+    expect(poignees(0, 0, mur, 10).map(h => h.cle)).toEqual(['debut', 'fin', 'courbe']);
     expect(tirerPoignee(0, 0, mur, 'courbe', 100, 50, 10, { courbable: true })).toEqual({ ...mur, courbure: 0.5 });
     expect(tirerPoignee(0, 0, mur, 'courbe', 100, 50, 10, { courbable: false })).toBe(mur);
     expect(tirerPoignee(0, 0, { forme: 'cercle', rayon: 4 }, 'bord', 60, 0, 10)).toEqual({ forme: 'cercle', rayon: 6 });

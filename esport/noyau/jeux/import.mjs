@@ -19,7 +19,7 @@
  * n'est pas re-déposée ; un calibrage fait à la main n'est jamais écrasé.
  */
 
-import { echec } from '../outils.mjs';
+import { echec, texteLong, texteNettoye } from '../outils.mjs';
 import { adresseAutorisee } from '../ressources/apercu.mjs';
 import { cleDe } from './schema.mjs';
 
@@ -173,3 +173,36 @@ export function mapValorant(m) {
 
 /** Échelle approximative par défaut d'une map de The Finals (à vérifier). */
 export const echelleApproxTheFinals = () => echelleDepuisUnitesParMetre(Math.round((1000 / LARGEUR_APPROX_THEFINALS_M) * 1000) / 1000, 'approx');
+
+// ------------------------------------------------------------------ Agents et capacités (Valorant)
+
+/**
+ * Agents de valorant-api.com (« Importer agents et capacités ») : portrait (`displayIconSmall`, sinon
+ * `displayIcon`), rôle et son icône, capacités Grenade / Ability1 / Ability2 / Ultimate (touches C, Q, E, X :
+ * nom, description, icône ; la passive est ignorée). Réponse anglaise par défaut : les noms officiels sont ceux
+ * des caractéristiques pré-remplies de l'éditeur (src/esport/jeux/modeles/valorant.ts), rapprochées par la touche.
+ */
+export const URL_AGENTS_VALORANT = 'https://valorant-api.com/v1/agents?isPlayableCharacter=true';
+/** Emplacement Riot → touche par défaut du jeu. */
+export const TOUCHES_VALORANT = { Grenade: 'C', Ability1: 'Q', Ability2: 'E', Ultimate: 'X' };
+/** Rôle de valorant-api.com (anglais) → classe du profil Valorant (et son nom). */
+export const ROLES_VALORANT = { duelist: ['duelliste', 'Duelliste'], initiator: ['initiateur', 'Initiateur'], controller: ['controleur', 'Contrôleur'], sentinel: ['sentinelle', 'Sentinelle'] };
+
+const media = v => (typeof v === 'string' && /^https:\/\/media\.valorant-api\.com\/[A-Za-z0-9/_.-]{1,200}$/.test(v) ? v : null);
+
+/** Un agent de valorant-api.com → ce que l'import en garde ; null s'il n'est pas jouable ou illisible. */
+export function agentValorant(a) {
+  if (!a || typeof a.displayName !== 'string' || !a.displayName.trim() || a.isPlayableCharacter === false) return null;
+  const nom = texteNettoye(a.displayName, 40);
+  const cle = cleDe(nom);
+  if (!cle) return null;
+  const roleNom = typeof a.role?.displayName === 'string' ? texteNettoye(a.role.displayName, 40) : '';
+  const connu = ROLES_VALORANT[cleDe(roleNom)];
+  const role = roleNom ? { cle: connu?.[0] ?? cleDe(roleNom), nom: connu?.[1] ?? roleNom, icone: media(a.role.displayIcon) } : null;
+  const ordre = Object.keys(TOUCHES_VALORANT);
+  const capacites = (Array.isArray(a.abilities) ? a.abilities : [])
+    .filter(c => c && typeof c.slot === 'string' && c.slot in TOUCHES_VALORANT && typeof c.displayName === 'string' && c.displayName.trim())
+    .sort((x, y) => ordre.indexOf(x.slot) - ordre.indexOf(y.slot))
+    .map(c => ({ touche: TOUCHES_VALORANT[c.slot], slot: c.slot, nom: texteNettoye(c.displayName, 40), description: texteLong(c.description, 300), icone: media(c.displayIcon) }));
+  return { cle, nom, portrait: media(a.displayIconSmall) ?? media(a.displayIcon), role, capacites };
+}

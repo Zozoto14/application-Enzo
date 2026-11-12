@@ -24,6 +24,7 @@
  *   POST   /jeux/ia/travaux/:id/valider           le Fondateur valide le brouillon corrigé
  *   DELETE /jeux/ia/travaux/:id                   abandonner
  *   POST   /jeux/:cle/importer                    images des maps et échelle téléchargées par le serveur (jeux.gerer) { version, urls?, remplacer? }
+ *   POST   /jeux/:cle/importer-agents             portraits des agents, icônes des capacités et des rôles (Valorant, jeux.gerer) { version, remplacer? }
  *   GET    /jeux/:cle/cartes-proposees            maps proposées (à valider, validées, rejetées) et ce qu'elles changeraient (jeux.gerer)
  *   POST   /jeux/:cle/cartes-proposees/preparer   le serveur prépare les propositions (wiki The Finals, valorant-api.com)
  *   POST   /jeux/:cle/cartes-proposees/valider    { cartes: [clés] } ou { toutes: true } : appliquées au profil (nouvelle version)
@@ -120,6 +121,11 @@ async function routesJeuxBrutes({ jeux, acteur, chemin, methode: m, url, lireCor
     const corps = await lireCorps();
     await limite('ia', acteur.compte);
     return jeux.importerCartes(acteur, cle, corps);
+  }
+  if (p[1] === 'importer-agents' && p.length === 2 && m === 'POST') {
+    const corps = await lireCorps();
+    await limite('ia', acteur.compte);
+    return jeux.importerAgents(acteur, cle, corps);
   }
   if (p[1] === 'cartes-proposees') {
     if (p.length === 2 && m === 'GET') return jeux.cartesProposees(acteur, cle);

@@ -108,6 +108,8 @@ export interface CapaciteJeu {
   charges?: number;
   cout?: number;
   courbable?: boolean;
+  /** Mur double : deux lignes parallèles écartées de la largeur (Fast Lane de Neon). */
+  double?: boolean;
   notes?: string;
   /** Données pré-remplies, à vérifier par le Fondateur. */
   aVerifier: boolean;
@@ -115,6 +117,19 @@ export interface CapaciteJeu {
 export interface ClasseJeu {
   cle: string;
   nom: string;
+  /** Icône du rôle importée (lien signé dans `ProfilJeu.images`). */
+  fichier?: string;
+}
+/** Capacité OFFICIELLE d'un personnage (import valorant-api.com) : nom, description, icône importée. */
+export interface CapaciteOfficielle {
+  touche: string;
+  slot?: string;
+  nom: string;
+  description?: string;
+  /** Icône importée (lien signé dans `ProfilJeu.images`). */
+  fichier?: string;
+  /** Adresse d'origine de l'icône (CDN Riot : seule acceptée dans le document d'une strat). */
+  url?: string;
 }
 export interface PersonnageJeu {
   cle: string;
@@ -123,6 +138,10 @@ export interface PersonnageJeu {
   image: string | null;
   actif: boolean;
   capacites?: CapaciteJeu[];
+  /** Portrait importé (lien signé dans `ProfilJeu.images`) et son origine. */
+  fichier?: string;
+  source?: SourceCarte;
+  officielles?: CapaciteOfficielle[];
 }
 export interface RoleJoueurJeu {
   cle: string;
@@ -173,6 +192,15 @@ export interface LigneImport {
   image: 'importee' | 'inchangee' | 'gardee' | 'sans-adresse';
   echelle: 'importee' | 'approximative' | 'gardee';
   reperes: number;
+  erreur?: string;
+}
+/** Compte rendu de l'import des agents, par agent. */
+export interface LigneImportAgent {
+  agent: string;
+  portrait: 'importee' | 'inchangee' | 'gardee' | 'absente';
+  /** Icônes de capacités nouvellement importées. */
+  capacites: number;
+  ajoute?: boolean;
   erreur?: string;
 }
 /** Source d'une image importée. */
@@ -490,6 +518,8 @@ export function apiJeux(client: ClientEsport) {
     /** Import serveur des images de maps et de l'échelle (Valorant : valorant-api.com ; The Finals : `urls`). */
     importer: (cle: string, corps: { version?: number; urls?: Record<string, string>; remplacer?: boolean }) =>
       client.requete<{ rapport: LigneImport[]; inchange: boolean; jeu: ProfilJeu }>(`${j(cle)}/importer`, 'POST', corps),
+    importerAgents: (cle: string, corps: { version?: number; remplacer?: boolean }) =>
+      client.requete<{ rapport: LigneImportAgent[]; inchange: boolean; jeu: ProfilJeu }>(`${j(cle)}/importer-agents`, 'POST', corps),
     cartesProposees: (cle: string) => client.requete<ListeCartesProposees>(`${j(cle)}/cartes-proposees`),
     preparerCartes: (cle: string) => client.requete<ListeCartesProposees & { rapport: LignePreparation[] }>(`${j(cle)}/cartes-proposees/preparer`, 'POST', {}),
     validerCartes: (cle: string, corps: { cartes?: string[]; toutes?: boolean }) =>

@@ -11,7 +11,7 @@
 import type { CapaciteJeu, CategorieCapacite, FormeCapacite } from '../api';
 import { cleDe } from '../profil';
 
-type Dim = Partial<Pick<CapaciteJeu, 'rayon' | 'longueur' | 'largeur' | 'ouverture' | 'portee' | 'duree' | 'charges' | 'cout' | 'courbable'>>;
+type Dim = Partial<Pick<CapaciteJeu, 'rayon' | 'longueur' | 'largeur' | 'ouverture' | 'portee' | 'duree' | 'charges' | 'cout' | 'courbable' | 'double'>>;
 type Ligne = [touche: 'C' | 'Q' | 'E' | 'X', nom: string, forme: FormeCapacite, dim: Dim];
 
 const C = (nom: string, forme: FormeCapacite, dim: Dim): Ligne => ['C', nom, forme, dim];
@@ -35,7 +35,7 @@ const AGENTS: Record<string, Ligne[]> = {
   jett: [C('Cloudburst', 'cercle', { rayon: 3.35, duree: 2.5, charges: 3, cout: 200 }), Q('Updraft', 'point', { charges: 2, cout: 150 }), E('Tailwind', 'point', { portee: 7.5 }), X('Blade Storm', 'point', { cout: 8 })],
   'kay-o': [C('FRAG/ment', 'cercle', { rayon: 4.5, duree: 2.4, cout: 200 }), Q('FLASH/drive', 'cone', { ouverture: 120, portee: 15, duree: 2.25, charges: 2, cout: 250 }), E('ZERO/point', 'cercle', { rayon: 15, duree: 8 }), X('NULL/cmd', 'cercle', { rayon: 42.5, duree: 12, cout: 8 })],
   killjoy: [C('Nanoswarm', 'cercle', { rayon: 4.5, duree: 4, charges: 2, cout: 200 }), Q('ALARMBOT', 'cercle', { rayon: 5.5, cout: 200 }), E('Turret', 'cone', { ouverture: 180, portee: 40 }), X('Lockdown', 'cercle', { rayon: 32.5, duree: 13, cout: 9 })],
-  neon: [C('Fast Lane', 'mur', { longueur: 30, largeur: 4.5, duree: 6, cout: 300 }), Q('Relay Bolt', 'cercle', { rayon: 5.5, duree: 3.5, charges: 2, cout: 200 }), E('High Gear', 'point', {}), X('Overdrive', 'point', { duree: 20, cout: 7 })],
+  neon: [C('Fast Lane', 'mur', { longueur: 30, largeur: 4.5, duree: 6, double: true, cout: 300 }), Q('Relay Bolt', 'cercle', { rayon: 5.5, duree: 3.5, charges: 2, cout: 200 }), E('High Gear', 'point', {}), X('Overdrive', 'point', { duree: 20, cout: 7 })],
   omen: [C('Shrouded Step', 'point', { portee: 12, charges: 2, cout: 100 }), Q('Paranoia', 'rect', { longueur: 30, largeur: 4.5, duree: 2.5, cout: 300 }), E('Dark Cover', 'cercle', { rayon: 4.1, duree: 15, charges: 2, cout: 150 }), X('From the Shadows', 'point', { cout: 7 })],
   phoenix: [C('Blaze', 'mur', { longueur: 18, largeur: 1, duree: 8, courbable: true, cout: 200 }), Q('Curveball', 'cone', { ouverture: 120, portee: 15, duree: 1.1, charges: 2, cout: 250 }), E('Hot Hands', 'cercle', { rayon: 4.5, duree: 4 }), X('Run It Back', 'point', { duree: 10, cout: 6 })],
   raze: [C('Boom Bot', 'trajet', { rayon: 2, duree: 10, cout: 300 }), Q('Blast Pack', 'cercle', { rayon: 4, charges: 2, cout: 200 }), E('Paint Shells', 'cercle', { rayon: 7 }), X('Showstopper', 'cercle', { rayon: 7, cout: 8 })],

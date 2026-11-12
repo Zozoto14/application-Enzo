@@ -120,6 +120,16 @@ export const REPLIS: Record<NomIcone, string> = {
   'chevron-droite': '›',
   'chevron-bas': '⌄',
   'chevron-haut': '⌃',
+  'fleche-diagonale': '↗︎',
+  trait: '╱',
+  carre: '▭',
+  texte: 'T',
+  gomme: '⌫',
+  losange: '◇',
+  annuler: '↶',
+  retablir: '↷',
+  plus: '+',
+  moins: '−',
   selection: '↖︎',
 };
 

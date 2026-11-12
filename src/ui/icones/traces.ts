@@ -123,6 +123,16 @@ export const TRACES = {
   'chevron-droite': [['path', { d: 'm9 18 6-6-6-6' }]],
   'chevron-bas': [['path', { d: 'm6 9 6 6 6-6' }]],
   'chevron-haut': [['path', { d: 'm18 15-6-6-6 6' }]],
+  'fleche-diagonale': [['path', { d: 'M7 7h10v10' }], ['path', { d: 'M7 17 17 7' }]],
+  trait: [['path', { d: 'M22 2 2 22' }]],
+  carre: [['rect', { width: '18', height: '18', x: '3', y: '3', rx: '2' }]],
+  texte: [['polyline', { points: '4 7 4 4 20 4 20 7' }], ['line', { x1: '9', x2: '15', y1: '20', y2: '20' }], ['line', { x1: '12', x2: '12', y1: '4', y2: '20' }]],
+  gomme: [['path', { d: 'm7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21' }], ['path', { d: 'M22 21H7' }], ['path', { d: 'm5 11 9 9' }]],
+  losange: [['path', { d: 'M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z' }]],
+  annuler: [['path', { d: 'M9 14 4 9l5-5' }], ['path', { d: 'M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11' }]],
+  retablir: [['path', { d: 'm15 14 5-5-5-5' }], ['path', { d: 'M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13' }]],
+  plus: [['path', { d: 'M5 12h14' }], ['path', { d: 'M12 5v14' }]],
+  moins: [['path', { d: 'M5 12h14' }]],
   selection: [['path', { d: 'M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z' }]],
 } as const satisfies Record<string, readonly ElementTrace[]>;
 

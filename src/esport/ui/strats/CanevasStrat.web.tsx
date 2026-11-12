@@ -19,14 +19,26 @@
  * Tactile (iPad dans le navigateur) : un doigt dessine ou déplace, deux
  * doigts zooment et déplacent la vue (pincement) ; `touch-action: none`
  * empêche le navigateur de faire défiler la page sous le canevas.
+ *
+ * Gestes (src/esport/strats/pose.ts) : poser une capacité, un cône de vision
+ * ou un pion en CLIQUANT-GLISSANT (appui = origine, glisser = direction et
+ * longueur, bornée à la longueur réelle de la capacité ; un mur courbable suit
+ * le chemin parcouru) ; la sélection montre de GRANDES poignées (26 px à
+ * l'écran quel que soit le zoom, zone de prise de 48 px) : extrémités d'un mur,
+ * milieu d'un mur courbable, points d'un mur tracé, direction et portée d'un
+ * cône, regard d'un pion. Maj aimante l'angle à 15°. Souris, doigt et stylet.
+ * Pions : portrait de l'agent (rond, anneau à la couleur du joueur, nom du
+ * joueur dessous), initiales tant que les images ne sont pas importées ;
+ * capacités : icône de la capacité au point de pose.
  */
 
 import Konva from 'konva';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, RegularPolygon, Stage, Text as KText, Wedge } from 'react-konva';
 import { initiales, type AgentAsset, type CacheImages, type CapaciteAsset, type CarteAsset } from '../../strats/assets';
-import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
-import { aimanter, cadreImage, centre, dansPolygone, dimensionFixe, etatLecture, poignees, primitiveZone, tirerPoignee, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
+import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type ChampsObjet, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
+import { aimanter, cadreImage, centre, dansPolygone, decalerTrace, etatLecture, longueurMax, primitiveZone, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
+import { avecChamps, debuterVisee, estGlisse, poigneesObjet, poseCapacite, posePion, poseVision, suivreVisee, tirerPoigneeDe, type PoigneeObjet, type Visee } from '../../strats/pose';
 import { COULEURS_EQUIPES, echelleEffective, type GenreMarqueur } from '../../strats/modeles';
 import { tr } from '../../i18n';
 
@@ -52,6 +64,8 @@ export interface PropsCanevas {
   joueur: number | null;
   agent?: AgentAsset;
   capacite?: CapaciteAsset;
+  /** Agents du jeu (portraits et icônes à jour, caractéristiques des capacités posées). */
+  agents?: AgentAsset[];
   /** Forme de la zone posée : « auto » = celle des caractéristiques de la capacité. */
   formeZone: FormeZone | 'aucune' | 'auto';
   formeDessin: 'rect' | 'ellipse';
@@ -104,14 +118,21 @@ function useImage(url: string | null | undefined, images: CacheImages): HTMLImag
   return img;
 }
 
-/** Jeton rond : couleur du joueur, initiales (repli), icône par-dessus si elle est chargée. */
-function Jeton({ rayon, couleur, nom, icone, images, surbrillance }: { rayon: number; couleur: string; nom: string; icone: string | null; images: CacheImages; surbrillance: boolean }) {
+/**
+ * Jeton rond : portrait (ou icône) DÉCOUPÉ en cercle sur un fond sombre, anneau à la couleur du joueur ;
+ * initiales sur la couleur du joueur tant que l'image n'est pas chargée (repli).
+ */
+function Jeton({ rayon, couleur, nom, icone, images, surbrillance, anneau = 3 }: { rayon: number; couleur: string; nom: string; icone: string | null; images: CacheImages; surbrillance: boolean; anneau?: number }) {
   const img = useImage(icone, images);
   return (
     <>
-      <Circle radius={rayon} fill={couleur} stroke={surbrillance ? '#ffffff' : '#0b0f17'} strokeWidth={surbrillance ? 4 : 2} shadowColor="#000000" shadowBlur={surbrillance ? 14 : 4} shadowOpacity={0.6} />
+      {surbrillance ? <Circle radius={rayon + anneau + 6} stroke="#fde047" strokeWidth={3} dash={[6, 4]} listening={false} /> : null}
+      <Circle radius={rayon + anneau} fill={couleur} stroke={surbrillance ? '#ffffff' : '#0b0f17'} strokeWidth={surbrillance ? 2.5 : 1.5} shadowColor="#000000" shadowBlur={surbrillance ? 14 : 5} shadowOpacity={0.6} />
       {img ? (
-        <KImage image={img} x={-rayon * 0.82} y={-rayon * 0.82} width={rayon * 1.64} height={rayon * 1.64} listening={false} />
+        <Group clipFunc={ctx => ctx.arc(0, 0, rayon, 0, Math.PI * 2, false)} listening={false}>
+          <Circle radius={rayon} fill="#111827" />
+          <KImage image={img} x={-rayon} y={-rayon} width={rayon * 2} height={rayon * 2} />
+        </Group>
       ) : (
         <KText text={initiales(nom)} fontSize={rayon * 0.9} fontStyle="bold" fill="#ffffff" width={rayon * 2} x={-rayon} y={-rayon * 0.45} align="center" listening={false} />
       )}
@@ -154,6 +175,18 @@ function FormeZone({ p, couleur, ox, oy }: { p: Primitive; couleur: string; ox: 
         <Wedge x={p.x - ox} y={p.y - oy} radius={p.r} angle={p.ouverture} rotation={p.angle - p.ouverture / 2} fill={couleur} opacity={0.3} stroke={couleur} strokeWidth={2} />
       );
     case 'trait':
+      if (p.double !== undefined) {
+        const gap = p.double;
+        const pts = p.points.map((n, i) => n - (i % 2 === 0 ? ox : oy));
+        const ligne = (q: number[]) => <Line points={q} stroke={couleur} strokeWidth={p.epaisseur} lineCap="round" lineJoin="round" tension={p.courbe ? 0.5 : 0} opacity={0.9} hitStrokeWidth={Math.max(20, gap)} />;
+        return (
+          <>
+            <Line points={pts} stroke={couleur} strokeWidth={gap} opacity={0.12} lineCap="round" tension={p.courbe ? 0.5 : 0} />
+            {ligne(decalerTrace(pts, gap / 2))}
+            {ligne(decalerTrace(pts, -gap / 2))}
+          </>
+        );
+      }
       return (
         <Line
           points={p.points.map((n, i) => n - (i % 2 === 0 ? ox : oy))}
@@ -225,11 +258,14 @@ interface PropsObjet {
   lecture?: EtatLecture;
   /** Position imposée (pion qui suit son trajet pendant la lecture). */
   position?: { x: number; y: number };
-  zoneApercu?: Zone;
+  /** Icône à jour (portrait importé, icône de la capacité) ; repli : celle du document. */
+  icone?: string | null;
+  /** Nom court du joueur, sous son pion. */
+  etiquette?: string;
   onFin(o: ObjetStrat, node: Konva.Node): void;
 }
 
-function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe, lecture, position, zoneApercu, onFin }: PropsObjet) {
+function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe, lecture, position, icone, etiquette, onFin }: PropsObjet) {
   const commun = {
     id: o.id,
     name: 'objet',
@@ -247,21 +283,22 @@ function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe
       const p = position ?? { x: o.x, y: o.y };
       return (
         <Group {...commun} x={p.x} y={p.y}>
-          {typeof o.angle === 'number' ? <Wedge radius={34} angle={40} rotation={o.angle - 20} fill={o.couleur} opacity={0.55} listening={false} /> : null}
+          {typeof o.angle === 'number' ? <Wedge radius={44} angle={46} rotation={o.angle - 23} fill={o.couleur} opacity={0.5} listening={false} /> : null}
           <Group rotation={-rotation}>
-            <Jeton rayon={22} couleur={o.couleur} nom={o.nom} icone={o.icone} images={images} surbrillance={surbrillance} />
+            <Jeton rayon={20} couleur={o.couleur} nom={o.nom} icone={icone ?? o.icone} images={images} surbrillance={surbrillance} />
+            {etiquette ? <Etiquette x={0} y={34} texte={etiquette} taille={12} largeur={110} /> : null}
             {niveau ? <Etiquette x={20} y={-20} texte={niveau} taille={14} /> : null}
           </Group>
         </Group>
       );
     }
     case 'capacite': {
-      const z = zoneApercu ?? o.zone;
+      const z = o.zone;
       return (
         <Group {...commun} x={o.x} y={o.y}>
           {z ? <FormeZone p={primitiveZone(o.x, o.y, z, echelle)} couleur={o.couleur} ox={o.x} oy={o.y} /> : null}
           <Group rotation={-rotation}>
-            <Jeton rayon={14} couleur={o.couleur} nom={o.nom} icone={o.icone} images={images} surbrillance={surbrillance} />
+            <Jeton rayon={12} anneau={2.5} couleur={o.couleur} nom={o.nom} icone={icone ?? o.icone} images={images} surbrillance={surbrillance} />
             {typeof o.ordre === 'number' ? (
               <>
                 <Circle x={14} y={-14} radius={9} fill="#0b0f17" stroke="#ffffff" strokeWidth={1.5} listening={false} />
@@ -348,7 +385,14 @@ const Tourne = React.forwardRef<Konva.Group, { rotation: number; children: React
 });
 
 type Brouillon = { type: 'trace'; points: number[] } | { type: 'forme'; x: number; y: number; l: number; h: number };
-type Poignee = { cle: 'fin' | 'courbe' | 'bord'; x: number; y: number };
+
+/** Taille des poignées À L'ÉCRAN (px) : rayon dessiné, et demi-largeur de la zone de prise (doigt, stylet). */
+export const RAYON_POIGNEE_PX = 13;
+export const PRISE_POIGNEE_PX = 24;
+/** En deçà (px à l'écran), un appui n'est pas un glisser : pose simple. */
+const SEUIL_GLISSER_PX = 8;
+/** Outils de pose : un appui sur un objet existant le SÉLECTIONNE (et le déplace) au lieu de poser. */
+const OUTILS_POSE: ReadonlyArray<Outil> = ['agent', 'capacite', 'marqueur', 'vision', 'texte'];
 
 export default function CanevasStrat(p: PropsCanevas) {
   const { doc, etape, taille, outil, vue, onVue, onAction, images, carte } = p;
@@ -357,7 +401,9 @@ export default function CanevasStrat(p: PropsCanevas) {
   const repere = useRef<Konva.Group>(null);
   const [brouillon, setBrouillon] = useState<Brouillon | undefined>();
   const [fantome, setFantome] = useState<{ x: number; y: number } | undefined>();
-  const [apercu, setApercu] = useState<{ id: string; zone?: Zone; vision?: { angle: number; portee: number } } | undefined>();
+  const [apercu, setApercu] = useState<{ id: string; champs: ChampsObjet } | undefined>();
+  const [visee, setVisee] = useState<Visee | undefined>();
+  const [maj, setMaj] = useState(false);
   const pincement = useRef<{ distance: number; centre: { x: number; y: number } } | undefined>(undefined);
   const fondImg = useImage(carte?.minimap ?? p.fond, images);
   const e = doc.etapes[etape];
@@ -366,6 +412,13 @@ export default function CanevasStrat(p: PropsCanevas) {
   const lecture = useMemo(() => (p.temps !== undefined && e ? etatLecture(e, p.temps) : undefined), [p.temps, e]);
   const cadre = cadreImage(fondImg && carte?.largeurImage ? carte.largeurImage : fondImg?.naturalWidth, fondImg && carte?.hauteurImage ? carte.hauteurImage : fondImg?.naturalHeight);
   const editable = p.temps === undefined;
+  /** Unités du document par pixel d'écran (poignées et seuils de taille constante quel que soit le zoom). */
+  const parPixel = 1 / Math.max(0.01, base * vue.echelle);
+  const agentDe = (cle: string) => p.agents?.find(a => a.cle === cle) ?? (p.agent?.cle === cle ? p.agent : undefined);
+  const capaciteDe = (agent: string, cle: string) => agentDe(agent)?.capacites.find(c => c.cle === cle);
+  /** Icône d'un document : seule une adresse du CDN Riot y est acceptée (un lien signé expire). */
+  const iconeDocument = (url: string | null | undefined) => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
+  const iconeDoc = (a: { icone: string | null; iconeDoc?: string | null } | undefined) => iconeDocument(a?.iconeDoc) ?? iconeDocument(a?.icone);
 
   // Export : la vue est remise à plat (1000 × 1000) le temps du rendu, puis rétablie.
   const exporter = useCallback((options: { pixelRatio: number; mimeType?: string; quality?: number }) => {
@@ -405,14 +458,23 @@ export default function CanevasStrat(p: PropsCanevas) {
   const pionJoueur = (j: number | null) => (j === null ? undefined : e?.objets.find(o => o.type === 'agent' && o.joueur === j) as { x: number; y: number } | undefined);
 
   /** Zone d'une capacité posée en `pt` : à sa taille réelle, orientée depuis le pion du joueur (un trajet part du pion). */
+  function zoneDeBase(): Zone | null {
+    return p.formeZone === 'auto' ? zoneDepuisCapacite(p.capacite?.donnees) : zoneParDefaut(p.formeZone);
+  }
   function zonePourPose(pt: { x: number; y: number }): Zone | null {
-    let zone = p.formeZone === 'auto' ? zoneDepuisCapacite(p.capacite?.donnees) : zoneParDefaut(p.formeZone);
+    let zone = zoneDeBase();
     const pion = pionJoueur(p.joueur);
     if (zone && pion && Math.hypot(pt.x - pion.x, pt.y - pion.y) > 4) {
       const angle = Math.round(((Math.atan2(pt.y - pion.y, pt.x - pion.x) * 180) / Math.PI) * 10) / 10;
       if (zone.forme === 'trajet') zone = { ...zone, dx: Math.round((pion.x - pt.x) * 10) / 10, dy: Math.round((pion.y - pt.y) * 10) / 10 };
       else if (zone.forme === 'cone' || zone.forme === 'ligne' || zone.forme === 'rect') zone = { ...zone, angle };
       else if (zone.forme === 'mur') zone = { ...zone, angle: angle + 90 };
+    }
+    // Bornée à la longueur réelle de la capacité.
+    const max = longueurMax(p.capacite?.donnees);
+    if (zone && max !== undefined) {
+      if (zone.forme === 'cone' && zone.portee > max) zone = { ...zone, portee: max };
+      if ((zone.forme === 'mur' || zone.forme === 'ligne' || zone.forme === 'rect') && zone.longueur > max) zone = { ...zone, longueur: max };
     }
     return zone;
   }
@@ -423,9 +485,14 @@ export default function CanevasStrat(p: PropsCanevas) {
     const pt = position();
     if (!pt || !e) return;
     const touche = objetSous(ev.target);
+    setMaj(Boolean(ev.evt?.shiftKey));
+    // Outil de pose sur un objet existant : on le sélectionne (ses poignées apparaissent, on peut le déplacer).
+    if (touche && OUTILS_POSE.includes(outil)) {
+      p.onSelection(touche);
+      return;
+    }
     const ajouter = (objet: ObjetStrat) => onAction({ type: 'ajouter', etape, objet: avecNiveau(objet) });
     const ids = () => doc.etapes.flatMap(x => x.objets.map(o => o.id));
-    const couleur = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
     switch (outil) {
       case 'selection':
         p.onSelection(touche);
@@ -434,27 +501,17 @@ export default function CanevasStrat(p: PropsCanevas) {
         if (touche) onAction({ type: 'supprimer', etape, id: touche });
         return;
       case 'agent':
-        if (p.agent) ajouter({ id: idUnique(ids()), type: 'agent', x: pt.x, y: pt.y, agent: p.agent.cle, nom: p.agent.nom, icone: p.agent.icone, joueur: p.joueur, couleur });
-        return;
-      case 'capacite': {
-        if (!p.agent || !p.capacite) return;
-        const zone = zonePourPose(pt);
-        const id = idUnique(ids());
-        ajouter({ id, type: 'capacite', x: pt.x, y: pt.y, agent: p.agent.cle, capacite: p.capacite.cle, nom: p.capacite.nom, icone: p.capacite.icone, joueur: p.joueur, couleur, zone, ordre: p.ordreSuivant ?? null });
-        p.onSelection(id);
+      case 'capacite':
+      case 'vision':
+        // Cliquer-glisser : l'appui fixe l'origine, le relâché la direction (voir auPointeurHaut).
+        if (outil === 'capacite' && (!p.agent || !p.capacite)) return;
+        if (outil === 'agent' && !p.agent) return;
+        setVisee(debuterVisee(pt));
         setFantome(undefined);
         return;
-      }
       case 'marqueur':
         if (p.marqueur) ajouter({ id: idUnique(ids()), type: 'marqueur', x: pt.x, y: pt.y, genre: p.marqueur.genre, etiquette: p.marqueur.etiquette.trim().slice(0, 40), couleur: p.couleur, equipe: p.marqueur.equipe });
         return;
-      case 'vision': {
-        const pion = pionJoueur(p.joueur);
-        const id = idUnique(ids());
-        ajouter({ id, type: 'vision', x: pt.x, y: pt.y, angle: pion ? Math.round((Math.atan2(pt.y - pion.y, pt.x - pion.x) * 180) / Math.PI) : -90, ouverture: p.vision?.ouverture ?? 90, portee: p.vision?.portee ?? 30, joueur: p.joueur, couleur });
-        p.onSelection(id);
-        return;
-      }
       case 'texte':
         if (p.texte.trim()) ajouter({ id: idUnique(ids()), type: 'texte', x: pt.x, y: pt.y, texte: p.texte.trim().slice(0, 200), couleur: p.couleur, taille: 26 });
         return;
@@ -470,8 +527,40 @@ export default function CanevasStrat(p: PropsCanevas) {
     }
   }
 
+  /** Fin d'un cliquer-glisser de pose (ou simple appui : pose orientée depuis le pion du joueur, comme avant). */
+  function finVisee(v: Visee, aimant: boolean) {
+    setVisee(undefined);
+    if (!e) return;
+    const ids = doc.etapes.flatMap(x => x.objets.map(o => o.id));
+    const couleur = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
+    const glisse = estGlisse(v, SEUIL_GLISSER_PX * parPixel);
+    const id = idUnique(ids);
+    if (outil === 'agent' && p.agent) {
+      const pose = glisse ? posePion(v, aimant) : { x: v.origine.x, y: v.origine.y };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'agent', ...pose, agent: p.agent.cle, nom: p.agent.nom, icone: iconeDoc(p.agent), joueur: p.joueur, couleur }) });
+      p.onSelection(id);
+    } else if (outil === 'capacite' && p.agent && p.capacite) {
+      const pose = glisse ? poseCapacite(v, zoneDeBase(), echelle, p.capacite.donnees, aimant) : { x: v.origine.x, y: v.origine.y, zone: zonePourPose(v.origine) };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'capacite', x: pose.x, y: pose.y, agent: p.agent.cle, capacite: p.capacite.cle, nom: p.capacite.nom, icone: iconeDoc(p.capacite), joueur: p.joueur, couleur, zone: pose.zone, ordre: p.ordreSuivant ?? null }) });
+      p.onSelection(id);
+    } else if (outil === 'vision') {
+      const pion = pionJoueur(p.joueur);
+      const pose = glisse
+        ? poseVision(v, echelle, aimant)
+        : { x: v.origine.x, y: v.origine.y, angle: pion ? Math.round((Math.atan2(v.origine.y - pion.y, v.origine.x - pion.x) * 180) / Math.PI) : -90, portee: p.vision?.portee ?? 30 };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'vision', ...pose, ouverture: p.vision?.ouverture ?? 90, joueur: p.joueur, couleur }) });
+      p.onSelection(id);
+    }
+  }
+
   const calloutSous = useRef<string | undefined>(undefined);
-  function auPointeurBouge() {
+  function auPointeurBouge(ev?: Konva.KonvaEventObject<PointerEvent>) {
+    if (visee && !pincement.current) {
+      const pt = position();
+      if (pt) setVisee(suivreVisee(visee, pt, 4 * parPixel));
+      if (ev?.evt) setMaj(Boolean(ev.evt.shiftKey));
+      return;
+    }
     // Aperçu de la capacité sous le pointeur, à sa taille réelle, avant de la poser.
     if (outil === 'capacite' && editable && p.capacite && !pincement.current) {
       const pt = position();
@@ -500,7 +589,12 @@ export default function CanevasStrat(p: PropsCanevas) {
     else setBrouillon({ type: 'trace', points: [...pts.slice(0, n - 2), pt.x, pt.y] });
   }
 
-  function auPointeurHaut() {
+  function auPointeurHaut(ev?: Konva.KonvaEventObject<PointerEvent>) {
+    if (visee) {
+      const pt = pincement.current ? undefined : position();
+      finVisee(pt ? suivreVisee(visee, pt, 4 * parPixel) : visee, ev?.evt ? Boolean(ev.evt.shiftKey) : maj);
+      return;
+    }
     if (!brouillon) return;
     setBrouillon(undefined);
     const ids = doc.etapes.flatMap(x => x.objets.map(o => o.id));
@@ -574,50 +668,41 @@ export default function CanevasStrat(p: PropsCanevas) {
   }
 
   // ---------------------------------------------------------------- Poignées de la sélection
+  //
+  // Visibles avec TOUT outil d'édition (pas seulement la sélection) : on pose un mur avec l'outil Capacité, on
+  // l'oriente aussitôt. Taille constante à l'écran (RAYON_POIGNEE_PX), zone de prise large (PRISE_POIGNEE_PX) ;
+  // calque au-dessus de tout, seul à écouter le pointeur sur la poignée.
 
-  const choisi = editable && outil === 'selection' ? e?.objets.find(o => o.id === p.selection) : undefined;
-  const capaciteChoisie = choisi?.type === 'capacite' ? choisi : undefined;
-  const donneesChoisie = capaciteChoisie ? p.agent?.capacites.find(c => c.cle === capaciteChoisie.capacite)?.donnees : undefined;
-  let mesPoignees: Poignee[] = [];
-  if (choisi && !verrou(choisi)) {
-    if (choisi.type === 'capacite' && choisi.zone) mesPoignees = poignees(choisi.x, choisi.y, apercu?.id === choisi.id && apercu.zone ? apercu.zone : choisi.zone, echelle);
-    if (choisi.type === 'vision') {
-      const v = apercu?.id === choisi.id && apercu.vision ? apercu.vision : choisi;
-      const r = v.portee * echelleEffective(echelle);
-      mesPoignees = [{ cle: 'fin', x: choisi.x + r * Math.cos((v.angle * Math.PI) / 180), y: choisi.y + r * Math.sin((v.angle * Math.PI) / 180) }];
-    }
-    if (choisi.type === 'agent') {
-      const a = choisi.angle ?? -90;
-      mesPoignees = [{ cle: 'fin', x: choisi.x + 45 * Math.cos((a * Math.PI) / 180), y: choisi.y + 45 * Math.sin((a * Math.PI) / 180) }];
-    }
+  const choisiBrut = editable && outil !== 'main' ? e?.objets.find(o => o.id === p.selection) : undefined;
+  const choisi = choisiBrut && apercu?.id === choisiBrut.id ? avecChamps(choisiBrut, apercu.champs) : choisiBrut;
+  const donneesDe = (o: ObjetStrat | undefined) => (o?.type === 'capacite' ? capaciteDe(o.agent, o.capacite)?.donnees : undefined);
+  const mesPoignees: PoigneeObjet[] = choisi && !verrou(choisi) ? poigneesObjet(choisi, echelle) : [];
+  const maxChoisi = longueurMax(donneesDe(choisiBrut));
+
+  function poigneeBouge(cle: PoigneeObjet['cle'], ev: Konva.KonvaEventObject<DragEvent>) {
+    if (!choisiBrut) return;
+    const node = ev.target;
+    const aimant = Boolean((ev.evt as MouseEvent | undefined)?.shiftKey);
+    const champs = tirerPoigneeDe(choisiBrut, cle, { x: node.x(), y: node.y() }, echelle, donneesDe(choisiBrut), aimant);
+    if (!champs) return;
+    setApercu({ id: choisiBrut.id, champs });
+    // La poignée colle à la forme réelle (longueur bornée, angle aimanté) : on la replace sous le doigt.
+    const h = poigneesObjet(avecChamps(choisiBrut, champs), echelle).find(x => x.cle === cle);
+    if (h) node.position({ x: h.x, y: h.y });
   }
-  const zoneTiree = (poignee: Poignee['cle'], node: Konva.Node): Zone | undefined => {
-    if (!capaciteChoisie?.zone) return undefined;
-    return tirerPoignee(capaciteChoisie.x, capaciteChoisie.y, capaciteChoisie.zone, poignee, node.x(), node.y(), echelle, { fixe: dimensionFixe(donneesChoisie) && poignee !== 'bord', courbable: Boolean(donneesChoisie?.courbable) || !donneesChoisie });
-  };
-  function poigneeBouge(poignee: Poignee['cle'], node: Konva.Node) {
-    if (!choisi) return;
-    if (choisi.type === 'capacite') setApercu({ id: choisi.id, zone: zoneTiree(poignee, node) });
-    if (choisi.type === 'vision') {
-      const k = echelleEffective(echelle);
-      setApercu({ id: choisi.id, vision: { angle: Math.round((Math.atan2(node.y() - choisi.y, node.x() - choisi.x) * 180) / Math.PI), portee: Math.max(1, Math.min(200, Math.round((Math.hypot(node.x() - choisi.x, node.y() - choisi.y) / k) * 10) / 10)) } });
-    }
-  }
-  function poigneeFin(poignee: Poignee['cle'], node: Konva.Node) {
-    if (!choisi) return;
-    if (choisi.type === 'capacite') {
-      const zone = zoneTiree(poignee, node);
-      if (zone) onAction({ type: 'modifier', etape, id: choisi.id, champs: { zone } });
-    } else if (choisi.type === 'vision' && apercu?.vision) onAction({ type: 'modifier', etape, id: choisi.id, champs: apercu.vision });
-    else if (choisi.type === 'agent') onAction({ type: 'modifier', etape, id: choisi.id, champs: { angle: Math.round((Math.atan2(node.y() - choisi.y, node.x() - choisi.x) * 180) / Math.PI) } });
+  function poigneeFin(cle: PoigneeObjet['cle'], ev: Konva.KonvaEventObject<DragEvent>) {
+    ev.cancelBubble = true;
+    if (!choisiBrut) return;
+    const champs = apercu?.id === choisiBrut.id ? apercu.champs : tirerPoigneeDe(choisiBrut, cle, { x: ev.target.x(), y: ev.target.y() }, echelle, donneesDe(choisiBrut));
     setApercu(undefined);
+    if (champs) onAction({ type: 'modifier', etape, id: choisiBrut.id, champs });
   }
 
   // ---------------------------------------------------------------- Rendu
 
   const visible = doc.calques;
   const objetsDe = (c: 'utilitaires' | 'vision' | 'marqueurs' | 'dessins' | 'texte') => (e?.objets ?? []).filter(o => calqueDe(o) === c && (!lecture || lecture.visibles.has(o.id)));
-  const deplacable = (o: ObjetStrat) => editable && outil === 'selection' && !verrou(o);
+  const deplacable = (o: ObjetStrat) => editable && (outil === 'selection' || OUTILS_POSE.includes(outil)) && !verrou(o);
   const estompe = (o: ObjetStrat) => niveau !== null && typeof o.niveau === 'number' && o.niveau !== niveau;
   // Pendant la lecture, le premier pion de chaque joueur suit son trajet.
   const pionsSuivis = new Map<string, { x: number; y: number }>();
@@ -627,10 +712,16 @@ export default function CanevasStrat(p: PropsCanevas) {
       if (pion) pionsSuivis.set(pion.id, pos);
     }
   }
-  const rendreObjet = (o: ObjetStrat) => (
+  const nomJoueur = (j: number | null | undefined) => (typeof j === 'number' && doc.joueurs[j] ? doc.joueurs[j].nom.slice(0, 14) : undefined);
+  const iconeAJour = (o: ObjetStrat) => (o.type === 'agent' ? agentDe(o.agent)?.icone : o.type === 'capacite' ? capaciteDe(o.agent, o.capacite)?.icone : undefined);
+  const rendreObjet = (brut: ObjetStrat) => {
+    const o = apercu?.id === brut.id ? avecChamps(brut, apercu.champs) : brut;
+    return (
     <Objet
       key={o.id}
       o={o}
+      icone={iconeAJour(o)}
+      etiquette={o.type === 'agent' ? nomJoueur(o.joueur) : undefined}
       images={images}
       surbrillance={p.selection === o.id}
       deplacable={deplacable(o)}
@@ -639,11 +730,10 @@ export default function CanevasStrat(p: PropsCanevas) {
       estompe={estompe(o)}
       lecture={lecture}
       position={pionsSuivis.get(o.id)}
-      zoneApercu={apercu?.id === o.id ? apercu.zone : undefined}
       onFin={finDeplacement}
     />
-  );
-  const visionApercu = (o: ObjetStrat) => (apercu?.id === o.id && apercu.vision && o.type === 'vision' ? { ...o, ...apercu.vision } : o);
+    );
+  };
 
   return (
     <div
@@ -721,7 +811,7 @@ export default function CanevasStrat(p: PropsCanevas) {
         {(['vision', 'utilitaires', 'marqueurs', 'dessins', 'texte'] as const).map(c => (
           <Layer key={c} visible={visible[c].visible} listening={!visible[c].verrou && editable}>
             <Tourne rotation={rotation}>
-              {objetsDe(c).map(o => rendreObjet(c === 'vision' ? visionApercu(o) : o))}
+              {objetsDe(c).map(rendreObjet)}
               {c === 'dessins' && brouillon?.type === 'trace' ? (
                 outil === 'fleche' ? (
                   <Arrow points={brouillon.points} stroke={p.couleur} fill={p.couleur} strokeWidth={p.epaisseur} tension={0.35} pointerLength={16} pointerWidth={16} dash={p.tirets ? [14, 10] : undefined} listening={false} />
@@ -739,12 +829,44 @@ export default function CanevasStrat(p: PropsCanevas) {
             </Tourne>
           </Layer>
         ))}
-        {fantome && outil === 'capacite' && p.capacite ? (
+        {(fantome && outil === 'capacite' && p.capacite) || visee ? (
           <Layer listening={false}>
             <Tourne rotation={rotation}>
               {(() => {
-                const z = zonePourPose(fantome);
                 const c = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
+                if (visee) {
+                  const glisse = estGlisse(visee, SEUIL_GLISSER_PX * parPixel);
+                  const o = visee.origine;
+                  const tige = glisse ? <Arrow points={[o.x, o.y, visee.pointeur.x, visee.pointeur.y]} stroke="#ffffff" fill="#ffffff" strokeWidth={2 * parPixel} dash={[8 * parPixel, 6 * parPixel]} pointerLength={10 * parPixel} pointerWidth={10 * parPixel} opacity={0.8} /> : null;
+                  if (outil === 'capacite' && p.capacite) {
+                    const pose = glisse ? poseCapacite(visee, zoneDeBase(), echelle, p.capacite.donnees, maj) : { x: o.x, y: o.y, zone: zonePourPose(o) };
+                    return (
+                      <Group opacity={0.7}>
+                        {pose.zone ? <FormeZone p={primitiveZone(pose.x, pose.y, pose.zone, echelle)} couleur={c} ox={0} oy={0} /> : null}
+                        {tige}
+                        <Circle x={pose.x} y={pose.y} radius={6 * parPixel} fill={c} stroke="#ffffff" strokeWidth={1.5 * parPixel} />
+                        {pose.zone ? <Etiquette x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={cote(pose.zone)} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} /> : null}
+                      </Group>
+                    );
+                  }
+                  if (outil === 'vision' && glisse) {
+                    const v = poseVision(visee, echelle, maj);
+                    return (
+                      <Group opacity={0.7}>
+                        <Wedge x={v.x} y={v.y} radius={v.portee * echelleEffective(echelle)} angle={p.vision?.ouverture ?? 90} rotation={v.angle - (p.vision?.ouverture ?? 90) / 2} fill={c} opacity={0.25} stroke={c} strokeWidth={2} dash={[8, 6]} />
+                        <Etiquette x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={`${v.portee} m · ${Math.round(((v.angle % 360) + 360) % 360)}°`} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} />
+                      </Group>
+                    );
+                  }
+                  return (
+                    <Group opacity={0.8}>
+                      {tige}
+                      <Circle x={o.x} y={o.y} radius={20} fill={c} opacity={0.5} stroke="#ffffff" strokeWidth={1.5} />
+                    </Group>
+                  );
+                }
+                if (!fantome) return null;
+                const z = zonePourPose(fantome);
                 return (
                   <Group opacity={0.55}>
                     {z ? <FormeZone p={primitiveZone(fantome.x, fantome.y, z, echelle)} couleur={c} ox={0} oy={0} /> : null}
@@ -756,33 +878,62 @@ export default function CanevasStrat(p: PropsCanevas) {
             </Tourne>
           </Layer>
         ) : null}
-        {capaciteChoisie && (apercu?.id === capaciteChoisie.id ? apercu.zone : capaciteChoisie.zone) ? (
+        {choisi?.type === 'capacite' && choisi.zone ? (
           <Layer listening={false}>
             <Tourne rotation={rotation}>
-              <Etiquette x={capaciteChoisie.x} y={capaciteChoisie.y + 32} texte={cote((apercu?.id === capaciteChoisie.id ? apercu.zone : capaciteChoisie.zone) as Zone)} taille={16} couleur="#fde68a" rotation={-rotation} />
+              <Etiquette
+                x={(mesPoignees.find(h => h.cle === 'fin') ?? mesPoignees[mesPoignees.length - 1] ?? choisi).x}
+                y={(mesPoignees.find(h => h.cle === 'fin') ?? mesPoignees[mesPoignees.length - 1] ?? choisi).y + 30 * parPixel} texte={`${cote(choisi.zone)}${maxChoisi !== undefined ? ` (max ${maxChoisi} m)` : ''}`} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} largeur={320 * parPixel} />
             </Tourne>
           </Layer>
         ) : null}
-        {mesPoignees.length ? (
-          <Layer>
+        {choisi && mesPoignees.length ? (
+          <Layer testID="esport-canevas-poignees">
             <Tourne rotation={rotation}>
+              {(() => {
+                // Repères du geste : tige de l'origine à la poignée de direction, cercle de la longueur réelle.
+                const fin = mesPoignees.find(h => h.cle === 'fin' || h.cle === 'regard');
+                const origine = 'x' in choisi ? { x: choisi.x, y: choisi.y } : { x: 0, y: 0 };
+                const k = echelleEffective(echelle);
+                const anneauMax = fin && maxChoisi !== undefined && choisi.type === 'capacite' && choisi.zone && choisi.zone.forme !== 'trajet' && choisi.zone.forme !== 'cercle';
+                return (
+                  <>
+                    {anneauMax ? <Circle x={origine.x} y={origine.y} radius={(maxChoisi as number) * k} stroke="#fde68a" strokeWidth={1.5 * parPixel} dash={[6 * parPixel, 6 * parPixel]} opacity={0.6} listening={false} /> : null}
+                    {fin ? <Line points={[origine.x, origine.y, fin.x, fin.y]} stroke="#ffffff" strokeWidth={2.5 * parPixel} dash={[7 * parPixel, 5 * parPixel]} opacity={0.9} listening={false} /> : null}
+                  </>
+                );
+              })()}
               {mesPoignees.map(h => (
-                <Circle
-                  key={h.cle}
-                  name="poignee"
-                  x={h.x}
-                  y={h.y}
-                  radius={10}
-                  fill={h.cle === 'courbe' ? '#f59e0b' : '#ffffff'}
-                  stroke="#0b0f17"
-                  strokeWidth={2.5}
-                  draggable
-                  onDragMove={ev => poigneeBouge(h.cle, ev.target)}
-                  onDragEnd={ev => {
-                    ev.cancelBubble = true;
-                    poigneeFin(h.cle, ev.target);
-                  }}
-                />
+                <Group key={h.cle}>
+                  <Circle
+                    name="poignee"
+                    testID={`poignee-${h.cle}`}
+                    x={h.x}
+                    y={h.y}
+                    radius={RAYON_POIGNEE_PX * parPixel}
+                    fill={h.cle === 'courbe' ? '#f59e0b' : h.cle === 'debut' ? '#38bdf8' : h.cle.startsWith('p') ? '#86efac' : '#ffffff'}
+                    stroke="#0b0f17"
+                    strokeWidth={2.5 * parPixel}
+                    hitStrokeWidth={2 * (PRISE_POIGNEE_PX - RAYON_POIGNEE_PX) * parPixel}
+                    shadowColor="#000000"
+                    shadowBlur={6 * parPixel}
+                    shadowOpacity={0.5}
+                    draggable
+                    onMouseEnter={() => {
+                      const c = scene.current?.container();
+                      if (c) c.style.cursor = 'grab';
+                    }}
+                    onMouseLeave={() => {
+                      const c = scene.current?.container();
+                      if (c) c.style.cursor = '';
+                    }}
+                    onDragStart={ev => {
+                      ev.cancelBubble = true;
+                    }}
+                    onDragMove={ev => poigneeBouge(h.cle, ev)}
+                    onDragEnd={ev => poigneeFin(h.cle, ev)}
+                  />
+                </Group>
               ))}
             </Tourne>
           </Layer>

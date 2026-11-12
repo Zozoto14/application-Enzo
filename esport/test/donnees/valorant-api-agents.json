@@ -1,0 +1,213 @@
+{
+ "status": 200,
+ "data": [
+  {
+   "uuid": "707eab51-4836-f488-046a-cda6bf494859",
+   "displayName": "Viper",
+   "displayIcon": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/displayicon.png",
+   "displayIconSmall": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/displayicon.png",
+   "isPlayableCharacter": true,
+   "role": {
+    "uuid": "4ee40330-ecdd-4f2f-98a8-eb1243428373",
+    "displayName": "Controller",
+    "displayIcon": "https://media.valorant-api.com/agents/roles/4ee40330-ecdd-4f2f-98a8-eb1243428373/displayicon.png"
+   },
+   "abilities": [
+    {
+     "slot": "Ability1",
+     "displayName": "Poison Cloud",
+     "description": "EQUIP <whitebold>Poison Cloud</>. FIRE to throw. ALT FIRE to lob. REACTIVATE to consume fuel to create a <whitebold>toxic</> smoke that <debuffred>decays</> enemies.\r\n\r\nCan be picked up during BUY PHASE.",
+     "displayIcon": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/abilities/ability1/displayicon.png"
+    },
+    {
+     "slot": "Ability2",
+     "displayName": "Toxic Screen",
+     "description": "EQUIP <whitebold>Toxic Screen</>. FIRE to send forward and place a line of emitters. REACTIVATE to consume fuel to create a <whitebold>toxic</> vision-blocking wall that <debuffred>decays</> enemies.",
+     "displayIcon": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/abilities/ability2/displayicon.png"
+    },
+    {
+     "slot": "Grenade",
+     "displayName": "Snake Bite",
+     "description": "EQUIP <whitebold>Snake Bite</>. FIRE to launch. On landing, create a zone that grants <debuffred>vulnerable</> and deals low <debuffred>damage</> to all players.",
+     "displayIcon": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/abilities/grenade/displayicon.png"
+    },
+    {
+     "slot": "Ultimate",
+     "displayName": "Viper's Pit",
+     "description": "EQUIP <whitebold>Viper’s Pit</>. FIRE to form a large <whitebold>toxic</> vision-blocking cloud that <debuffred>decays</> enemies inside.\r\n\r\nHOLD ACTIVATE to cancel the cloud.",
+     "displayIcon": "https://media.valorant-api.com/agents/707eab51-4836-f488-046a-cda6bf494859/abilities/ultimate/displayicon.png"
+    },
+    {
+     "slot": "Passive",
+     "displayName": "Toxin",
+     "description": "Viper’s <whitebold>Toxin</> continuously inflicts <debuffred>decay</> when enemies come in contact. Passively recharge fuel over time.",
+     "displayIcon": null
+    }
+   ]
+  },
+  {
+   "uuid": "95b78ed7-4637-86d9-7e41-71ba8c293152",
+   "displayName": "Harbor",
+   "displayIcon": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/displayicon.png",
+   "displayIconSmall": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/displayicon.png",
+   "isPlayableCharacter": true,
+   "role": {
+    "uuid": "4ee40330-ecdd-4f2f-98a8-eb1243428373",
+    "displayName": "Controller",
+    "displayIcon": "https://media.valorant-api.com/agents/roles/4ee40330-ecdd-4f2f-98a8-eb1243428373/displayicon.png"
+   },
+   "abilities": [
+    {
+     "slot": "Ability1",
+     "displayName": "High Tide",
+     "description": "EQUIP <whitebold>High Tide</>. FIRE to send forward a vision-blocking wall that <debuffred>slows</> all players who come in contact. HOLD FIRE to steer towards your crosshair. ALT FIRE to stop early.",
+     "displayIcon": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/abilities/ability1/displayicon.png"
+    },
+    {
+     "slot": "Grenade",
+     "displayName": "Storm Surge",
+     "description": "EQUIP <whitebold>Storm Surge</>. FIRE to throw. Explodes on landing, <debuffred>nearsighting</> and <debuffred>slowing</> all players.",
+     "displayIcon": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/abilities/grenade/displayicon.png"
+    },
+    {
+     "slot": "Ability2",
+     "displayName": "Cove",
+     "description": "ENTER The Deep. REACTIVATE to cast a smoke. HOLD FIRE/ALT FIRE to adjust distance. RELOAD to toggle view. After casting, REACTIVATE to transform the smoke into a destructible shield.",
+     "displayIcon": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/abilities/ability2/displayicon.png"
+    },
+    {
+     "slot": "Ultimate",
+     "displayName": "Reckoning",
+     "description": "EQUIP <whitebold>Reckoning</>. FIRE to push forward a vision-blocking wall that <debuffred>nearsights</> and <debuffred>slows</> all players who come in contact. REACTIVATE to stop the wall early.",
+     "displayIcon": "https://media.valorant-api.com/agents/95b78ed7-4637-86d9-7e41-71ba8c293152/abilities/ultimate/displayicon.png"
+    }
+   ]
+  },
+  {
+   "uuid": "bb2a4828-46eb-8cd1-e765-15848195d751",
+   "displayName": "Neon",
+   "displayIcon": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/displayicon.png",
+   "displayIconSmall": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/displayicon.png",
+   "isPlayableCharacter": true,
+   "role": {
+    "uuid": "dbe8757e-9e92-4ed4-b39f-9dfc589691d4",
+    "displayName": "Duelist",
+    "displayIcon": "https://media.valorant-api.com/agents/roles/dbe8757e-9e92-4ed4-b39f-9dfc589691d4/displayicon.png"
+   },
+   "abilities": [
+    {
+     "slot": "Ability2",
+     "displayName": "High Gear",
+     "description": "INSTANTLY consume fuel to gain <teal>haste</>. REACTIVATE to cancel. ALT FIRE to slide forward or in your movement direction.\r\n\r\nSlide resets every two kills.",
+     "displayIcon": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/abilities/ability2/displayicon.png"
+    },
+    {
+     "slot": "Ability1",
+     "displayName": "Relay Bolt",
+     "description": "INSTANTLY throw a bolt that bounces once. Explodes on each surface, <debuffred>concussing</> all players.",
+     "displayIcon": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/abilities/ability1/displayicon.png"
+    },
+    {
+     "slot": "Grenade",
+     "displayName": "Fast Lane",
+     "description": "INSTANTLY launch two vision-blocking walls that extend until they hit a surface.",
+     "displayIcon": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/abilities/grenade/displayicon.png"
+    },
+    {
+     "slot": "Ultimate",
+     "displayName": "Overdrive",
+     "description": "INSTANTLY refresh <whitebold>High Gear</>. Access an accurate lightning beam that can be used while activating <whitebold>High Gear</>.\r\n\r\nFIRE to shoot. On kills, fully recharge fuel.",
+     "displayIcon": "https://media.valorant-api.com/agents/bb2a4828-46eb-8cd1-e765-15848195d751/abilities/ultimate/displayicon.png"
+    },
+    {
+     "slot": "Passive",
+     "displayName": "Battery",
+     "description": "Passively recharge fuel over time.",
+     "displayIcon": null
+    }
+   ]
+  },
+  {
+   "uuid": "601dbbe7-43ce-be57-2a40-4abd24953621",
+   "displayName": "KAY/O",
+   "displayIcon": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/displayicon.png",
+   "displayIconSmall": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/displayicon.png",
+   "isPlayableCharacter": true,
+   "role": {
+    "uuid": "1b47567f-8f7b-444b-aae3-b0c634622d10",
+    "displayName": "Initiator",
+    "displayIcon": "https://media.valorant-api.com/agents/roles/1b47567f-8f7b-444b-aae3-b0c634622d10/displayicon.png"
+   },
+   "abilities": [
+    {
+     "slot": "Grenade",
+     "displayName": "FRAG/ment",
+     "description": "EQUIP <whitebold>FRAG/ment</>. FIRE to throw. ALT FIRE to lob. Explodes on landing, repeatedly dealing pulses of <debuffred>damage</> to all players.",
+     "displayIcon": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/abilities/grenade/displayicon.png"
+    },
+    {
+     "slot": "Ability1",
+     "displayName": "FLASH/drive",
+     "description": "EQUIP a <whitebold>FLASH/drive</>. FIRE to throw. ALT FIRE to lob. After a delay, explode, <debuffred>flashing</> all players looking at it.",
+     "displayIcon": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/abilities/ability1/displayicon.png"
+    },
+    {
+     "slot": "Ability2",
+     "displayName": "ZERO/point",
+     "description": "EQUIP a destructible <whitebold>ZERO/point</>. FIRE to throw. Pulses on any surface, <debuffred>suppressing</> enemies within range.",
+     "displayIcon": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/abilities/ability2/displayicon.png"
+    },
+    {
+     "slot": "Ultimate",
+     "displayName": "NULL/cmd",
+     "description": "INSTANTLY gain <teal>overloaded</> and repeatedly send out a pulse that <debuffred>suppresses</> enemies within range.\r\n\r\n<teal>Overloaded</> grants <teal>combat stim</>. Upon taking <debuffred>lethal damage</>, KAY/O is downed and can be re-stabilized.",
+     "displayIcon": "https://media.valorant-api.com/agents/601dbbe7-43ce-be57-2a40-4abd24953621/abilities/ultimate/displayicon.png"
+    }
+   ]
+  },
+  {
+   "uuid": "ddd5a15c-4fbe-42fa-3789-11a55ca5ee04",
+   "displayName": "Hush",
+   "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/displayicon.png",
+   "displayIconSmall": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/displayicon.png",
+   "isPlayableCharacter": true,
+   "role": {
+    "uuid": "dbe8757e-9e92-4ed4-b39f-9dfc589691d4",
+    "displayName": "Duelist",
+    "displayIcon": "https://media.valorant-api.com/agents/roles/dbe8757e-9e92-4ed4-b39f-9dfc589691d4/displayicon.png"
+   },
+   "abilities": [
+    {
+     "slot": "Ability1",
+     "displayName": "Flashbulb",
+     "description": "EQUIP <whitebold>Flashbulb</>. FIRE to throw. ALT FIRE to prepare it instead. REACTIVATE to direct it towards your crosshair. Explodes on any surface or after a delay, <debuffred>flashing</> all players looking at it.",
+     "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/abilities/ability1/displayicon.png"
+    },
+    {
+     "slot": "Ability2",
+     "displayName": "Displacement",
+     "description": "EQUIP <whitebold>Displacement</>. FIRE to throw. ALT FIRE to prepare it instead. REACTIVATE to direct it towards your crosshair. Explodes on any surface or after a delay, <debuffred>pulling</> all players towards the center and <debuffred>concussing</> them if they collide with any surface or another player.\r\n\r\nResets every two kills.",
+     "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/abilities/ability2/displayicon.png"
+    },
+    {
+     "slot": "Grenade",
+     "displayName": "Flow",
+     "description": "INSTANTLY create an anchor. If Hush is in the air, briefly levitate in place. After a delay, propel towards it.",
+     "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/abilities/grenade/displayicon.png"
+    },
+    {
+     "slot": "Ultimate",
+     "displayName": "Suspension",
+     "description": "INSTANTLY prepare <whitebold>Suspension</>. FIRE to send it forward, steering with your crosshair. REACTIVATE or press FIRE again to detonate, <debuffred>levitating</> all players.",
+     "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/abilities/ultimate/displayicon.png"
+    },
+    {
+     "slot": "Passive",
+     "displayName": "Telekinesis",
+     "description": "Hush can pick up weapons, the Spike, and INTERACT with switches from an increased range.",
+     "displayIcon": "https://media.valorant-api.com/agents/ddd5a15c-4fbe-42fa-3789-11a55ca5ee04/abilities/passive/displayicon.png"
+    }
+   ]
+  }
+ ]
+}

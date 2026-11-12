@@ -5,6 +5,8 @@
  *  - dépôt : `POST /jeux/:cle/images` { type, donnees (base64), nom } — JPEG, PNG ou WebP vérifiés aux
  *    octets, 12 Mo au plus, 8192 px de côté au plus ; permission `jeux.gerer` ;
  *  - octets : interface de stockage du serveur (disque en production), comme les fichiers du Drive ;
+ *  - portraits des agents, icônes de leurs capacités et de leurs rôles : importés par le serveur
+ *    (« Importer agents et capacités », valorant-api.com), même stockage, mêmes liens signés ;
  *  - lecture : lien signé (6 h) `GET /jeux/images/<id>?c&exp&sig`, délivré avec le profil à qui peut le
  *    lire (gestionnaire, ou membre d'une team du jeu) ;
  *  - une image n'est jamais effacée tant que son profil existe (une ancienne version peut la citer) ; la
@@ -51,8 +53,15 @@ export function verifierImageJeu({ type, donnees }) {
   return verifierOctetsImage(octets, type);
 }
 
-/** Identifiants des images citées par des données de profil (maps). */
-export const imagesCitees = donnees => [...new Set((donnees?.cartes ?? []).map(c => c.fichier).filter(Boolean))];
+/** Identifiants des images citées par des données de profil (maps, portraits et icônes importés, rôles). */
+export const imagesCitees = donnees =>
+  [
+    ...new Set([
+      ...(donnees?.cartes ?? []).map(c => c.fichier),
+      ...(donnees?.classes ?? []).map(c => c.fichier),
+      ...(donnees?.personnages ?? []).flatMap(p => [p.fichier, ...(p.officielles ?? []).map(o => o.fichier)]),
+    ]),
+  ].filter(Boolean);
 
 export function servicesImagesJeux({ base, stockage, cleSession, maintenant = () => Date.now() }) {
   /** Dépose une image (le gestionnaire est déjà vérifié) ; rend sa description et un lien signé. */
