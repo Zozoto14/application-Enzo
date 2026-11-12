@@ -4,11 +4,14 @@ Demande du Fondateur : « Dans l'équipe CM, rajoute une partie comme un TEAMS p
 disponibilités de chacun. »
 
 Où : **Esport › Teams › CM du club › onglet « Réunions »** (PC et téléphone ; pas de nouvelle section dans la barre du
-bas). L'onglet a trois parties : **Agenda**, **Disponibilités**, **Rendez-vous**, et le **statut du moment** de chacun.
+bas). L'onglet a deux parties : **Agenda** et **Rendez-vous**, le **statut du moment** de chacun et le raccourci
+**Mes disponibilités**. Les disponibilités ont une seule entrée, **Équipe › Disponibilités** (migration 0081, voir
+plus bas) ; l'ancien sous-onglet Réunions › Disponibilités (et ses anciens liens : `reunions:dispos`,
+`reunions-dispos`, `disponibilites`) y mène.
 
 Migration : `esport/migrations/0039_cm_reunions.sql`. Code : `esport/noyau/cm/reunions/` (serveur),
 `src/esport/cm/reunions.ts` (client), `src/esport/ui/cm/reunions/` (écrans), `src/esport/i18n/reunions.ts` (FR / EN).
-Tests : `esport/test/cm-reunions.test.mjs` (SQLite et PostgreSQL), `src/esport/Reunions.test.tsx` (Jest).
+Tests : `esport/test/cm-reunions.test.mjs` et `esport/test/planning-review-dispos.test.mjs` (SQLite et PostgreSQL), `src/esport/Reunions.test.tsx` et `src/esport/CmDisposUnifiees.test.tsx` (Jest).
 
 ## Qui fait quoi
 
@@ -48,9 +51,27 @@ Deux permissions du club, dans la section CM de **Administration › Rôles et p
 
 ## Disponibilités et statut
 
+Demande du Fondateur : « Deux Disponibilités — synchronise-les au même endroit dans Équipe CM. » Depuis la migration
+0081, **une seule source** : les disponibilités de la **team CM du club** (modèle des teams : semaine type
+`dispo_regles`, semaines personnalisées `dispo_semaines`, exceptions datées `dispo_exceptions`). La grille de
+l'équipe, « Trouver un créneau » et le statut automatique les lisent (semaines personnalisées comprises : une semaine
+personnalisée vide = indisponible), et les routes `/cm/reunions/dispos/moi…` les écrivent (même semaine type, mêmes
+exceptions, événement `availability.updated` de la team CM du club pour le temps réel).
+
+- **Une seule entrée** « **Disponibilités** » dans le groupe **Équipe** de l'espace CM, juste après Équipe CM :
+  l'onglet Disponibilités de la team CM du club (semaine type, semaine par semaine, exceptions, heatmap) pour ses
+  membres ; pour un membre de l'équipe CM hors de cette team (correspondant d'une team) ou si le module est coupé,
+  l'écran des disponibilités des Réunions (mêmes données). Jamais les deux.
 - **Mes créneaux** : chaque semaine, par jour, de HH:MM à HH:MM, disponible ou indisponible, dans **mon fuseau**
   (heures murales converties date par date, `planning/dispos.mjs`).
-- **Absences et congés** (journées entières, dans mon fuseau) et « disponible en plus ».
+- **Absences et congés** (journées entières, dans mon fuseau) et « disponible en plus » : exceptions de la team CM du
+  club, une absence ou un congé étant une exception « indisponible » avec son `motif` (`absence`, `conge`).
+- **Reprise** (migration 0081, sans perte) : un compte qui n'avait qu'une semaine type (Réunions ou team) la garde ; s'il
+  avait les deux, la plus récemment enregistrée devient la semaine type et l'autre est gardée dans
+  `dispo_regles_reprises` (export RGPD « misesDeCote », export de la base, effacée avec le compte) ; les absences,
+  congés et « disponible en plus » deviennent des exceptions de la team CM du club (mêmes identifiants) ; les tables
+  `cm_dispo_regles` et `cm_dispo_exceptions` disparaissent. L'import d'un export antérieur fait la même reprise
+  (`reprendreDisposCm`, `esport/noyau/transfert.mjs`).
 - **Statut du moment** (pastille comme Teams) : Disponible, Occupé, Absent, Ne pas déranger, avec un message et une
   durée (1 h, 4 h, aujourd'hui, jusqu'à ce que je le change). Sans statut choisi, il est **automatique** : absent
   pendant une absence, occupé pendant une réunion, disponible sinon. Le panneau **Équipe CM** montre le statut, le
@@ -128,7 +149,8 @@ Routes (session) : voir l'en-tête de `esport/noyau/cm/reunions/routes.mjs` — 
 ## Données, export, RGPD
 
 - Tables : `cm_reunions`, `cm_reunion_participants`, `cm_reunion_exceptions`, `cm_reunion_notes`, `cm_reunion_taches`,
-  `cm_dispo_regles`, `cm_dispo_exceptions`, `cm_reunion_profils`, `cm_rdv_offres`, `cm_rdv_creneaux`,
+  `cm_reunion_profils` (disponibilités : `dispo_regles`, `dispo_semaines`, `dispo_exceptions` de la team CM du club et
+  `dispo_regles_reprises`, migration 0081), `cm_rdv_offres`, `cm_rdv_creneaux`,
   `cm_reunion_rappels`, `cm_reunion_mp`, `cm_reunion_ical` — toutes dans l'**export / import** de la base.
 - **Export RGPD** (Mes données) : réunions organisées ou invitées (sa réponse), créneaux, absences, statut, offres de
   rendez-vous.

@@ -12,7 +12,7 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
 **Navigation de l'espace CM du club** (comme une team) : la barre latérale ne liste que des **groupes** — **Accueil CM**
 (vue d'ensemble : posts à valider, prochaines publications, nouveautés du Drive, prochaines réunions ; pour qui a
 `cm.voir`), **Contenus** (sous-onglets Tableaux | À valider | Calendrier), **DATA** (Clips | Visuels | Drive | Ressources),
-**Diffusion** (Réseaux), **Partenaires** (Sponsors), **Équipe** (Réunions | Équipe CM), **Gestion** (Import Trello |
+**Diffusion** (Réseaux), **Partenaires** (Sponsors), **Équipe** (Équipe CM | Disponibilités | Réunions | …), **Gestion** (Import Trello |
 Réglages | Journal) — et chaque groupe a ses **sous-onglets en haut de la page** (aucune rangée s'il n'a qu'une
 sous-section). Les compteurs (posts à valider, nouveautés du Drive) sont sur le sous-onglet et, additionnés, sur
 le groupe. Un groupe sans sous-section permise est masqué. Fil d'Ariane « Teams › CM du club › Groupe › Sous-section ».
@@ -23,8 +23,10 @@ et toutes les teams.
 Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md). Comptes des réseaux, annonce
 Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md). **Drive**
 (dossiers et fichiers du club et des teams, versions, corbeille, dépôt des joueurs) : [drive.md](drive.md). **Réunions**
-de l'équipe CM (agenda, disponibilités, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
-`cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md).
+de l'équipe CM (agenda, rendez-vous, notes confidentielles ; permissions `cm.reunions.voir` et
+`cm.reunions.gerer`) : [cm-reunions.md](cm-reunions.md). **Disponibilités** : une seule entrée, dans le groupe Équipe
+juste après Équipe CM, une seule source (celles de la team CM du club, que les Réunions lisent et écrivent, migration
+0081) : [cm-reunions.md](cm-reunions.md#disponibilités-et-statut).
 
 Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables ; `0042_cm_tableaux_fond.sql`, fond des tableaux et choix d'affichage par compte ; `0044_cm_liens.sql`, liens utiles de DATA › Ressources et leurs liaisons ; `0045_cm_commentaires_non_lus.sql`, commentaires non lus et cartes suivies ; `0046_cm_tableaux_acces.sql`, tableaux restreints ; `0047_cm_urgence.sql`, drapeau d'urgence des cartes ; `0048_cm_liens_acces.sql`, qui voit une ressource de DATA › Ressources). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
@@ -85,8 +87,8 @@ Contrôles d'une route CM : session → team existante → module `cm` activé (
 L'espace « **CM du club** » EST une team : une seule entité, une seule carte dans la page **Teams** — la carte
 « **CM du club** » (pastille rose « CM », « Communication · N membres », puces des sections : Contenus, À valider,
 Drive, Sponsors ; **Ouvrir l'espace CM**). Il n'y a pas de page de team à part : ses pages de team s'ouvrent **dans
-l'espace CM** (barre latérale) — **Équipe** : **Équipe CM** (membres et rôles de la team), Réunions,
-Disponibilités, Résumés, **Rôles CM** (affectations) (Planning, Présence et Objectifs sont coupés pour le CM du club depuis la migration 0071 ; le Fondateur peut les rallumer dans les Paramètres de la team) ; **DATA** : Ressources de l'équipe ;
+l'espace CM** (barre latérale) — **Équipe** : **Équipe CM** (membres et rôles de la team), **Disponibilités** (une
+seule entrée, partagée avec les Réunions, migration 0081), Réunions, Résumés, **Rôles CM** (affectations) (Planning, Présence et Objectifs sont coupés pour le CM du club depuis la migration 0071 ; le Fondateur peut les rallumer dans les Paramètres de la team) ; **DATA** : Ressources de l'équipe ;
 **Gestion** : **Paramètres de la team** (nom, description, modules), **Discord** (webhook, messages), Journal de la team,
 puis Import Trello, Réglages, Journal du CM. Chaque entrée suit les modules activés et les permissions de team du
 compte. Tout lien vers sa page de team (Dashboard, Membres, notification, ancien lien, « Changer de team ») ouvre

@@ -23,6 +23,7 @@ import { rappelsReunions } from '../noyau/cm/reunions/rappels.mjs';
 import { traiterMpReunions } from '../noyau/cm/reunions/mp.mjs';
 import { tacheConfidentielle } from '../noyau/ia/confidentialite.mjs';
 import { TOUTES_PERMISSIONS } from '../noyau/permissions.mjs';
+import { TEAM_CM_ID } from '../noyau/cm/teamCm.mjs';
 
 const H = 3_600_000;
 const JOUR = 24 * H;
@@ -74,7 +75,9 @@ test('statut du moment : choisi (jusqu’à sa fin), sinon absent (congé en cou
 
 test('catalogue : cm.reunions.voir / cm.reunions.gerer (permissions du club, jamais d’un rôle de team) ; export ; IA confidentielle', () => {
   for (const p of ['cm.reunions.voir', 'cm.reunions.gerer']) assert.ok(!TOUTES_PERMISSIONS.includes(p), p);
-  for (const t of ['cm_reunions', 'cm_reunion_participants', 'cm_reunion_notes', 'cm_reunion_taches', 'cm_dispo_regles', 'cm_dispo_exceptions', 'cm_rdv_offres', 'cm_rdv_creneaux', 'cm_reunion_ical']) assert.ok(TABLES.some(([n]) => n === t), `export : ${t}`);
+  // Disponibilités unifiées (migration 0081) : plus de tables propres aux Réunions.
+  for (const t of ['cm_dispo_regles', 'cm_dispo_exceptions']) assert.ok(!TABLES.some(([n]) => n === t), `plus exportée : ${t}`);
+  for (const t of ['cm_reunions', 'cm_reunion_participants', 'cm_reunion_notes', 'cm_reunion_taches', 'dispo_regles', 'dispo_exceptions', 'dispo_regles_reprises', 'cm_rdv_offres', 'cm_rdv_creneaux', 'cm_reunion_ical']) assert.ok(TABLES.some(([n]) => n === t), `export : ${t}`);
   assert.equal(tacheConfidentielle('cm-reunions'), 'resumes');
   assert.equal(tacheConfidentielle('notes-reunion'), 'resumes');
 });
@@ -338,7 +341,9 @@ test('RGPD : export des réunions et disponibilités ; suppression du compte ; e
   const neuve = await baseMigree();
   const bilan = await importerBase(neuve, JSON.parse(JSON.stringify(donnees)));
   assert.equal(bilan.cm_reunions, donnees.tables.cm_reunions.length);
-  assert.equal(bilan.cm_dispo_regles, 1);
+  // Disponibilités de l'équipe CM = celles de la team CM du club (migration 0081).
+  assert.equal(bilan.dispo_regles, 1);
+  assert.equal((await neuve.premier('SELECT team_id FROM dispo_regles', [])).team_id, TEAM_CM_ID);
   // Rôles CM système : la migration pose les permissions des réunions.
   const perms = (await neuve.tous("SELECT permission FROM cm_role_permissions WHERE role_id = 'cm-role-correspondant' AND permission LIKE 'cm.reunions%'", [])).map(l => l.permission);
   assert.deepEqual(perms, ['cm.reunions.voir']);

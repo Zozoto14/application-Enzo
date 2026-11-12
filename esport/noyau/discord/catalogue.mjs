@@ -21,7 +21,7 @@ const variables = extra => ({ ...extra, ...COMMUNES });
 
 import { texte as texteLangue } from '../langues.mjs';
 
-const TYPES = ['scrim', 'match', 'training', 'meeting', 'tournament', 'other'];
+const TYPES = ['scrim', 'match', 'training', 'meeting', 'tournament', 'review', 'other'];
 /** Nom d'un type d'événement dans une langue (variable {type} des modèles). */
 export const libelleTypeEvenement = (type, langue = 'fr') => texteLangue(langue, `type.${TYPES.includes(type) ? type : 'other'}`);
 

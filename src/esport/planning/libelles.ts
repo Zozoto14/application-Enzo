@@ -24,6 +24,10 @@ export const TYPES_EVENEMENT: ReadonlyArray<{ cle: TypeEvenement; nom: string; c
   { cle: 'meeting', get nom() {
       return tr('planning.libelles.reunion');
     }, couleur: '#0891b2' },
+  // Séance de review (vidéo, VOD, débrief), migration 0080 : sarcelle, distincte du cyan des réunions.
+  { cle: 'review', get nom() {
+      return tr('planning.libelles.review');
+    }, couleur: '#0d9488' },
   { cle: 'other', get nom() {
       return tr('planning.libelles.autre');
     }, couleur: '#64748b' },

@@ -32,6 +32,7 @@ export const TYPES_CHOIX = [
   choix('Tournoi', 'Tournament', 'tournament'),
   choix('Entraînement', 'Practice', 'training'),
   choix('Réunion', 'Meeting', 'meeting'),
+  choix('Review', 'Review', 'review'),
   choix('Autre', 'Other', 'other'),
 ];
 

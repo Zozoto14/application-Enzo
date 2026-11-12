@@ -43,13 +43,15 @@ import { trVi } from '../../i18n/visuels';
 import { Drive } from './drive/Drive';
 import { Ressources } from './liens/Ressources';
 import { Reunions } from './reunions/Reunions';
+import { DisposCm } from './reunions/Dispos';
+import { fuseauAppareil } from '../../planning/libelles';
 import { trRe } from '../../i18n/reunions';
 import { useNouveautesDrive } from '../../cm/nouveautesDrive';
 import { apiReunions, plusJours, type Reunion } from '../../cm/reunions';
 import { useCible } from '../notifications/Cible';
 import { entreesTeamCm, groupeSectionTeam, type EntreeTeamCm, type OngletTeamCm, type SectionsTeam } from './SectionsTeamCm';
 
-type OngletBase = 'accueil' | 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'ressources' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+type OngletBase = 'accueil' | 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'dispos' | 'drive' | 'ressources' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 /** Section de l'espace, ou section du CM du club (la team) : « team:membres », « team:module:planning »… */
 export type OngletCm = OngletBase | OngletTeamCm;
 export type GroupeCmId = 'accueil' | 'contenus' | 'data' | 'diffusion' | 'partenaires' | 'equipe' | 'gestion';
@@ -78,11 +80,29 @@ export const GROUPE_DE_ONGLET: Record<OngletBase, GroupeCmId> = {
   reseaux: 'diffusion',
   sponsors: 'partenaires',
   reunions: 'equipe',
+  dispos: 'equipe',
   equipe: 'equipe',
   import: 'gestion',
   reglages: 'gestion',
   journal: 'gestion',
 };
+
+/**
+ * Disponibilités de l'équipe CM, une seule entrée (migration 0081) : l'onglet Disponibilités de la team CM du club
+ * pour ses membres ; sinon (correspondant d'une team, module coupé) « dispos », l'écran des disponibilités des
+ * Réunions, qui écrit les mêmes données (team CM du club).
+ */
+export const ONGLET_DISPOS_TEAM: OngletTeamCm = 'team:module:availability';
+
+/**
+ * Anciens liens : l'ancien sous-onglet Réunions › Disponibilités (et ses variantes d'adresse) mène à l'entrée unique
+ * « Disponibilités » du groupe Équipe.
+ */
+export function normaliserOngletCm(o: string | undefined): OngletCm | undefined {
+  if (o === undefined) return undefined;
+  if (o === 'reunions:dispos' || o === 'reunions-dispos' || o === 'reunions/dispos' || o === 'disponibilites') return 'dispos';
+  return o as OngletCm;
+}
 
 /** Groupe d'une section (sections de la team : voir SectionsTeamCm.tsx). */
 export function groupeDeOnglet(id: OngletCm): GroupeCmId {
@@ -110,11 +130,15 @@ export interface GroupeCm {
  * Chaque groupe porte ses sous-sections (mêmes conditions qu'avant pour chacune) ; un groupe sans sous-section visible
  * n'apparaît pas. L'accueil (vue d'ensemble) est proposé à qui voit les contenus ; sans lui, l'espace s'ouvre sur le Drive, les Sponsors ou les réunions.
  */
-export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, nouveautesDrive, commentairesNonLus, ressourcesNouvelles, ressources = voirCm, team = [] }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number; /** Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */ ressourcesNouvelles?: number; /** DATA › Ressources : l'équipe CM, ou un compte avec qui une ressource est partagée (celles-là seulement). */ ressources?: boolean; /** Sections du CM du club, la team (membres, planning, dispos, paramètres…) : SectionsTeamCm.tsx. */ team?: EntreeTeamCm[] }): GroupeCm[] {
+export function groupesCm({ voirCm, drive, sponsors, reunions, disposCm = false, gerer, aValider, nouveautesDrive, commentairesNonLus, ressourcesNouvelles, ressources = voirCm, team = [] }: { voirCm: boolean; drive: boolean; sponsors: boolean; reunions: boolean; /** Équipe CM (cm.reunions.voir) : a des disponibilités, même hors team CM du club. */ disposCm?: boolean; gerer: boolean; aValider?: number; nouveautesDrive?: number; commentairesNonLus?: number; /** Ressources partagées avec le compte, pas encore ouvertes (migration 0048). */ ressourcesNouvelles?: number; /** DATA › Ressources : l'équipe CM, ou un compte avec qui une ressource est partagée (celles-là seulement). */ ressources?: boolean; /** Sections du CM du club, la team (membres, planning, dispos, paramètres…) : SectionsTeamCm.tsx. */ team?: EntreeTeamCm[] }): GroupeCm[] {
   const e = (id: OngletCm, libelle: string, compteur?: number): EntreeCm => ({ id, libelle, compteur: compteur || undefined });
   const deTeam = (g: GroupeCmId) => team.filter(t => t.groupe === g).map(t => e(t.id, t.libelle));
   const membresTeam = deTeam('equipe').filter(t => t.id === 'team:membres');
-  const agendaTeam = deTeam('equipe').filter(t => t.id !== 'team:membres');
+  const agendaTeam = deTeam('equipe').filter(t => t.id !== 'team:membres' && t.id !== ONGLET_DISPOS_TEAM);
+  // UNE seule entrée « Disponibilités », juste après Équipe CM (migration 0081) : celle de la team CM du club si le
+  // compte y a accès, sinon celle des Réunions (mêmes données).
+  const disposTeam = deTeam('equipe').find(t => t.id === ONGLET_DISPOS_TEAM);
+  const dispos = disposTeam ? [e(disposTeam.id, trCm('espace.dispos'))] : disposCm ? [e('dispos', trCm('espace.dispos'))] : [];
   const brut: Array<{ id: GroupeCmId; libelle: string; entrees: EntreeCm[] }> = [
     { id: 'accueil', libelle: trCm('espace.g.accueil'), entrees: voirCm ? [e('accueil', trCm('espace.g.accueil'))] : [] },
     { id: 'contenus', libelle: trCm('espace.g.contenus'), entrees: voirCm ? [e('tableaux', trCm('espace.tableaux'), commentairesNonLus), e('valider', trCm('espace.valider'), aValider), e('calendrier', trCm('espace.calendrier'))] : [] },
@@ -122,7 +146,7 @@ export function groupesCm({ voirCm, drive, sponsors, reunions, gerer, aValider, 
     { id: 'diffusion', libelle: trCm('espace.g.diffusion'), entrees: voirCm ? [e('reseaux', trCm('espace.reseaux'))] : [] },
     { id: 'partenaires', libelle: trCm('espace.g.partenaires'), entrees: sponsors ? [e('sponsors', trCm('espace.sponsors'))] : [] },
     // Équipe CM = les membres de la team ; les rôles CM (affectations) deviennent « Rôles CM » quand la team est là.
-    { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...membresTeam, ...(reunions ? [e('reunions', trRe('onglet'))] : []), ...agendaTeam, ...(gerer ? [e('equipe', membresTeam.length ? tr('teamCm.roles_cm') : trCm('espace.equipe'))] : [])] },
+    { id: 'equipe', libelle: trCm('espace.g.equipe'), entrees: [...membresTeam, ...dispos, ...(reunions ? [e('reunions', trRe('onglet'))] : []), ...agendaTeam, ...(gerer ? [e('equipe', membresTeam.length ? tr('teamCm.roles_cm') : trCm('espace.equipe'))] : [])] },
     { id: 'gestion', libelle: trCm('espace.g.gestion'), entrees: [...deTeam('gestion'), ...(gerer ? [e('import', trCm('espace.import')), e('reglages', trCm('espace.reglages')), e('journal', trCm('espace.journal'))] : [])] },
   ];
   return brut
@@ -226,11 +250,16 @@ export function EspaceCm({
   // DATA › Ressources : l'équipe CM, ou un compte hors équipe avec qui une ressource est partagée (celles-là seulement).
   const ressources = voirCm || Boolean(moi.ressources);
   const accueil = voirCm;
+  // Disponibilités de l'équipe CM (migration 0081) : toute l'équipe CM (cm.reunions.voir).
+  const disposCm = Boolean(moi.reunions?.voir);
+  const apiRe = useMemo(() => apiReunions(client), [client]);
+  const fuseauDispos = useMemo(() => fuseauAppareil(), []);
   const [onglet, setOnglet] = useState<OngletCm>(() => {
-    const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, ressources, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, dispos: disposCm, ressources, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    const initial = normaliserOngletCm(ongletInitial);
     // Section du CM du club (lien vers sa page de team) : vérifiée une fois la team lue.
     if (carteInitiale && voirCm) return 'tableaux';
-    if (ongletInitial && (ongletInitial.startsWith('team:') || (permis[ongletInitial as OngletBase] ?? voirCm))) return ongletInitial;
+    if (initial && (initial.startsWith('team:') || (permis[initial as OngletBase] ?? voirCm))) return initial;
     return accueil ? 'accueil' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : ressources ? 'ressources' : 'tableaux';
   });
   // Dernière sous-section ouverte de chaque groupe (on y revient en rouvrant le groupe), comme dans une team.
@@ -268,8 +297,16 @@ export function EspaceCm({
     void lireTeam().catch(() => undefined);
   }, [lireTeam]);
   const entreesTeam = useMemo(() => (detailTeam && sectionsTeam ? entreesTeamCm(sectionsTeam.entrees(detailTeam)) : []), [detailTeam, sectionsTeam]);
-  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total, ressourcesNouvelles: etat?.ressources, ressources, team: entreesTeam });
+  const groupes = groupesCm({ voirCm, drive, sponsors, reunions, disposCm, gerer: moi.gerer, aValider: etat?.aValider, nouveautesDrive, commentairesNonLus: etat?.nonLus?.total, ressourcesNouvelles: etat?.ressources, ressources, team: entreesTeam });
   const toutes = groupes.flatMap(g => g.entrees);
+  // Entrée unique des disponibilités : « dispos » devient l'onglet de la team CM du club dès qu'il est là (et
+  // inversement si le compte n'y a pas accès), pour les anciens liens comme pour les liens partagés.
+  const disposDeTeam = entreesTeam.some(t => t.id === ONGLET_DISPOS_TEAM);
+  useEffect(() => {
+    if (onglet === 'dispos' && disposDeTeam) setOnglet(ONGLET_DISPOS_TEAM);
+    else if (onglet === ONGLET_DISPOS_TEAM && detailTeam && !disposDeTeam && disposCm) setOnglet('dispos');
+  }, [onglet, disposDeTeam, detailTeam, disposCm]);
+  const ongletDispos: OngletCm | undefined = disposDeTeam ? ONGLET_DISPOS_TEAM : disposCm ? 'dispos' : undefined;
   const courante = toutes.find(e => e.id === onglet);
   const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));
   const choisir = (id: OngletCm) => {
@@ -418,7 +455,8 @@ export function EspaceCm({
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
       {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}
-      {onglet === 'reunions' && reunions ? <Reunions theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
+      {onglet === 'reunions' && reunions ? <Reunions theme={theme} client={client} large={large} onExporter={onExporter} onDispos={ongletDispos ? () => choisir(ongletDispos) : undefined} /> : null}
+      {onglet === 'dispos' && disposCm && !disposDeTeam ? <DisposCm theme={theme} api={apiRe} large={large} fuseau={fuseauDispos} onFuseau={() => undefined} /> : null}
       {onglet === 'drive' && drive ? (
         <Drive
           theme={theme}

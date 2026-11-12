@@ -9,6 +9,8 @@
  *   executer(sql, params) → { changements }
  *   lot([{ sql, params }]) → [{ changements }], atomique (tout ou rien)
  *   script(sql)           → plusieurs instructions (migrations seulement)
+ *   scriptReconstruction(sql) → migration qui reconstruit une table (clés étrangères coupées, une transaction,
+ *                           PRAGMA foreign_key_check ; voir noyau/migrations.mjs)
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -47,6 +49,7 @@ export async function baseSqlite(chemin = ':memory:') {
   }
   const preparer = sql => db.prepare(sql);
   const base = {
+    dialecte: 'sqlite',
     async tous(sql, params = []) {
       return preparer(sql).all(...params.map(normaliser)).map(ligne);
     },
@@ -71,6 +74,30 @@ export async function baseSqlite(chemin = ':memory:') {
     },
     async script(sql) {
       db.exec(sql);
+    },
+    /**
+     * Reconstruction d'une table (procédure officielle en 12 étapes de SQLite) : `PRAGMA foreign_keys = OFF` posé
+     * AVANT la transaction (il est sans effet dans une transaction), pour qu'aucun ON DELETE CASCADE ne joue au
+     * DROP TABLE de l'ancienne table ; tout dans UNE transaction ; `PRAGMA foreign_key_check` avant de valider
+     * (une ligne fille orpheline annule tout) ; les clés étrangères sont remises comme avant, même en cas d'erreur.
+     */
+    async scriptReconstruction(sql) {
+      const avant = Number(db.prepare('PRAGMA foreign_keys').get()?.foreign_keys ?? 0) === 1;
+      db.exec('PRAGMA foreign_keys = OFF');
+      try {
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.exec(sql);
+          const fautes = db.prepare('PRAGMA foreign_key_check').all();
+          if (fautes.length) throw new Error(`Reconstruction annulée : ${fautes.length} ligne(s) violent une clé étrangère (${[...new Set(fautes.map(f => f.table))].join(', ')}).`);
+          db.exec('COMMIT');
+        } catch (e) {
+          if (db.isTransaction) db.exec('ROLLBACK');
+          throw e;
+        }
+      } finally {
+        db.exec(`PRAGMA foreign_keys = ${avant ? 'ON' : 'OFF'}`);
+      }
     },
     fermer() {
       db.close();

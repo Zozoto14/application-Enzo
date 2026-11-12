@@ -19,7 +19,7 @@ import { resumeAnnonce } from '../competition/resume.mjs';
 import { espaceCm, porteesDe, voitEspaceCm } from './commun.mjs';
 
 export const COULEURS_TEAMS = Object.freeze(['#579dff', '#f87462', '#4bce97', '#e2b203', '#9f8fef', '#e774bb', '#6cc3e0', '#faa53d', '#94c748', '#8590a2']);
-const TYPES_AFFICHES = ['match', 'scrim', 'tournament', 'other'];
+const TYPES_AFFICHES = ['match', 'scrim', 'tournament', 'review', 'other'];
 const JOUR_MS = 86_400_000;
 const PLAGE_MAX_JOURS = 100;
 const MAX_TEAMS = 60;

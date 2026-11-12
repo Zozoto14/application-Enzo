@@ -30,6 +30,8 @@ export const TABLES = [
   ['ical_jetons', 'id'],
   // Semaines personnalisées des disponibilités (migration 0062).
   ['dispo_semaines', 'team_id, compte_id, semaine'],
+  // Semaine type mise de côté à l'unification des disponibilités de l'équipe CM (migration 0081).
+  ['dispo_regles_reprises', 'id'],
   ['evenements', 'id'],
   ['journal', 'id'],
   ['notifications', 'id'],
@@ -222,14 +224,13 @@ export const TABLES = [
   // Alertes et avis (migration 0077) : dédoublonnage des alertes par destinataire.
   ['notifs_alertes', 'compte_id, cle'],
   // Réunions de l'équipe CM (migration 0039) : réunions, participants, notes et tâches (confidentielles : restent
-  // dans la base), disponibilités, statuts, rendez-vous, rappels, MP en file, abonnements iCal (empreinte du jeton).
+  // dans la base), statuts, rendez-vous, rappels, MP en file, abonnements iCal (empreinte du jeton). Leurs
+  // disponibilités sont celles de la team CM du club (`dispo_*`, migration 0081).
   ['cm_reunions', 'id'],
   ['cm_reunion_participants', 'reunion_id, compte_id'],
   ['cm_reunion_exceptions', 'reunion_id, occurrence'],
   ['cm_reunion_notes', 'reunion_id'],
   ['cm_reunion_taches', 'id'],
-  ['cm_dispo_regles', 'id'],
-  ['cm_dispo_exceptions', 'id'],
   ['cm_reunion_profils', 'compte_id'],
   ['cm_rdv_offres', 'id'],
   ['cm_rdv_creneaux', 'id'],
@@ -324,7 +325,7 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
   if (!donnees || donnees.format !== FORMAT_EXPORT || donnees.version !== VERSION_EXPORT || typeof donnees.tables !== 'object') {
     throw echec(400, 'format', 'Ce fichier n’est pas un export Esport (version 1).');
   }
-  donnees = { ...donnees, tables: reprendreAffectationsCm(reprendreTablesTournoi(donnees.tables)) };
+  donnees = { ...donnees, tables: reprendreDisposCm(reprendreAffectationsCm(reprendreTablesTournoi(donnees.tables))) };
   for (const nom of Object.keys(donnees.tables)) {
     if (!NOMS_TABLES.includes(nom)) throw echec(400, 'table-inconnue', `Table inconnue dans l’export : ${String(nom).slice(0, 40)}`);
   }
@@ -389,4 +390,47 @@ export function reprendreAffectationsCm(tables) {
   if (!('cm_affectations' in tables)) return tables;
   const { cm_affectations: anciennes, ...reste } = tables;
   return { ...reste, cm_affectations_directes: [...(Array.isArray(reste.cm_affectations_directes) ? reste.cm_affectations_directes : []), ...(Array.isArray(anciennes) ? anciennes : [])] };
+}
+
+/** Date de reprise des semaines types mises de côté (comme la migration 0081). */
+const REPRISE_DISPOS = '2026-11-12T00:00:00.000Z';
+
+/**
+ * Export antérieur à la migration 0081 : les disponibilités des Réunions CM (`cm_dispo_regles`, `cm_dispo_exceptions`)
+ * deviennent celles de la team CM du club (`dispo_regles`, `dispo_exceptions` avec `motif`), exactement comme la
+ * migration : un compte qui avait deux semaines types garde la plus récente, l'autre va dans `dispo_regles_reprises`.
+ */
+export function reprendreDisposCm(tables) {
+  if (!('cm_dispo_regles' in tables) && !('cm_dispo_exceptions' in tables)) return tables;
+  const { cm_dispo_regles: rcm = [], cm_dispo_exceptions: xcm = [], ...reste } = tables;
+  const liste = v => (Array.isArray(v) ? v : []);
+  let regles = liste(reste.dispo_regles);
+  const reprises = [...liste(reste.dispo_regles_reprises)];
+  const max = l => l.reduce((m, r) => (String(r.cree_le) > m ? String(r.cree_le) : m), '');
+  const cm = liste(rcm);
+  const ids = new Set(regles.map(r => r.id));
+  for (const compte of new Set(cm.map(r => r.compte_id))) {
+    const deCm = cm.filter(r => r.compte_id === compte);
+    const deTeam = regles.filter(r => r.team_id === TEAM_CM_ID && r.compte_id === compte);
+    const garder = (r, origine) => reprises.push({ id: r.id, compte_id: r.compte_id, jour: r.jour, debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau, cree_le: r.cree_le, origine, repris_le: REPRISE_DISPOS });
+    if (deTeam.length && max(deCm) > max(deTeam)) {
+      for (const r of deTeam) garder(r, 'planning');
+      regles = regles.filter(r => !deTeam.includes(r));
+    }
+    if (regles.some(r => r.team_id === TEAM_CM_ID && r.compte_id === compte)) {
+      for (const r of deCm) garder(r, 'reunions_cm');
+      continue;
+    }
+    for (const r of deCm) {
+      if (ids.has(r.id)) garder(r, 'reunions_cm');
+      else regles.push({ id: r.id, team_id: TEAM_CM_ID, compte_id: r.compte_id, jour: r.jour, debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau, cree_le: r.cree_le });
+    }
+  }
+  const exceptions = liste(reste.dispo_exceptions);
+  const idsX = new Set(exceptions.map(x => x.id));
+  for (const x of liste(xcm)) {
+    if (idsX.has(x.id)) continue;
+    exceptions.push({ id: x.id, team_id: TEAM_CM_ID, compte_id: x.compte_id, debut: x.debut, fin: x.fin, type: x.type === 'disponible' ? 'disponible' : 'indisponible', note: x.note ?? '', cree_le: x.cree_le, motif: x.type === 'absence' || x.type === 'conge' ? x.type : null });
+  }
+  return { ...reste, dispo_regles: regles, dispo_exceptions: exceptions, dispo_regles_reprises: reprises };
 }

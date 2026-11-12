@@ -120,8 +120,9 @@ describe('CM du club : une seule carte, la team dans l’espace CM', () => {
     const equipe = groupes.find(g => g.id === 'equipe')!;
     expect(equipe.entrees.map(e => [e.id, e.libelle])).toEqual([
       ['team:membres', 'Équipe CM'],
-      ['reunions', expect.any(String)],
+      // Une seule entrée « Disponibilités », juste après Équipe CM (migration 0081).
       ['team:module:availability', 'Disponibilités'],
+      ['reunions', expect.any(String)],
       ['team:module:meeting_summaries', 'Résumés'],
       ['equipe', 'Rôles CM'],
     ]);

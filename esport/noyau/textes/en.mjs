@@ -9,6 +9,7 @@ export const EN = {
   'type.training': 'Practice',
   'type.meeting': 'Meeting',
   'type.tournament': 'Tournament',
+  'type.review': 'Review',
   'type.other': 'Event',
   'type.choix_autre': 'Other',
 

@@ -437,7 +437,7 @@ export function Calendrier({
   );
 }
 
-const TYPES_EVENEMENT = ['match', 'scrim', 'tournament', 'other', 'training', 'meeting'];
+const TYPES_EVENEMENT = ['match', 'scrim', 'tournament', 'review', 'other', 'training', 'meeting'];
 
 /** Détail d'un événement de team (lecture seule) et « Créer un post pour cet événement ». */
 function DetailEvenement({ theme, api, detail, creerPost, onFermer, onOuvrirTableau }: { theme: ThemeHub; api: ApiCm; detail: { e: EvenementTeam; team: CalendrierTeam }; creerPost: boolean; onFermer(): void; onOuvrirTableau(id: string): void }) {

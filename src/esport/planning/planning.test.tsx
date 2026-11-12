@@ -11,10 +11,11 @@ import { THEMES_HUB, themeHub } from '../../hub/themes';
 import { ModeAffichageForce } from '../../ui/mobile';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from '../client';
 import { phraseJournal, phraseNotification } from '../libelles';
+import { definirLangue } from '../i18n';
 import { PageTeam, type SectionTeam } from '../ui/PageTeam';
 import { CONVOCATION_DEFAUT, basculerGroupe, basculerMembre, basculerProprietaire, convoquesParmi, memeConvocation, resumeConvocation } from './convocations';
 import { MEMBRES_CONVOCABLES, fauxPlanning } from './faux';
-import { ajouterJours, dateLongue, grilleMois, jourSemaine, libelleSemaine, lundiDe, moisVoisin, nomMois, pourcentage, resumeRecurrence, typeEvenement } from './libelles';
+import { TYPES_EVENEMENT, ajouterJours, dateLongue, grilleMois, jourSemaine, libelleSemaine, lundiDe, moisVoisin, nomMois, pourcentage, resumeRecurrence, typeEvenement } from './libelles';
 
 const theme = themeHub('nuit');
 const COACH = ['members.view', 'planning.view', 'planning.create', 'planning.update', 'planning.delete', 'availability.view_all', 'availability.edit_own', 'attendance.view_all', 'attendance.mark', 'attendance.rsvp_own'];
@@ -222,6 +223,34 @@ describe('écran Planning', () => {
     await fireEvent.press(screen.getByTestId('esport-planning-filtres-ouvrir'));
     await fireEvent.press(screen.getByTestId('esport-filtre-type-match'));
     await waitFor(() => expect(appels.some(a => a.chemin.includes('types=match'))).toBe(true));
+  });
+});
+
+describe('type Review (migration 0080)', () => {
+  it('libellé FR / EN, couleur sarcelle distincte, avant « Autre »', () => {
+    expect(typeEvenement('review')).toMatchObject({ cle: 'review', nom: 'Review', couleur: '#0d9488' });
+    expect(TYPES_EVENEMENT.map(t => t.cle).slice(-2)).toEqual(['review', 'other']);
+    expect(new Set(TYPES_EVENEMENT.map(t => t.couleur)).size).toBe(TYPES_EVENEMENT.length);
+    definirLangue('en');
+    expect(typeEvenement('review').nom).toBe('Review');
+    definirLangue('fr');
+  });
+
+  it('Nouvel événement › Type propose Review (corps envoyé) ; filtre par type', async () => {
+    const { appels } = await monter(COACH, 'module:planning');
+    await fireEvent.press(await screen.findByTestId('esport-planning-nouveau'));
+    expect(screen.getByTestId('esport-formulaire-type-review')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-formulaire-type-review'));
+    await fireEvent.changeText(screen.getByTestId('esport-formulaire-titre'), 'Review VOD Nova');
+    await fireEvent.changeText(screen.getByTestId('esport-formulaire-date'), '2026-10-21');
+    await fireEvent.changeText(screen.getByTestId('esport-formulaire-debut'), '20:00');
+    await fireEvent.changeText(screen.getByTestId('esport-formulaire-fin'), '21:30');
+    await fireEvent.press(screen.getByTestId('esport-formulaire-enregistrer'));
+    await screen.findByTestId('esport-planning');
+    expect(appels.find(a => a.methode === 'POST')?.corps).toMatchObject({ type: 'review', titre: 'Review VOD Nova' });
+    await fireEvent.press(screen.getByTestId('esport-planning-filtres-ouvrir'));
+    await fireEvent.press(screen.getByTestId('esport-filtre-type-review'));
+    await waitFor(() => expect(appels.some(a => a.chemin.includes('types=review'))).toBe(true));
   });
 });
 

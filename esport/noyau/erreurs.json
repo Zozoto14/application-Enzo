@@ -132,6 +132,7 @@
   "Créneau : heures HH:MM, début différent de la fin.": "Slot: times HH:MM, start different from end.",
   "Type : disponible ou indisponible.": "Type: available or unavailable.",
   "Deux cents exceptions à venir au plus.": "Two hundred upcoming exceptions at most.",
+  "Motif : absence ou conge (exception indisponible).": "Reason: absence or leave (unavailable exception only).",
   "Exception introuvable.": "Exception not found.",
   "Pas : 30 ou 60 minutes.": "Step: 30 or 60 minutes.",
   "Semaine invalide (AAAA-MM-JJ).": "Invalid week (YYYY-MM-DD).",

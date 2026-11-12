@@ -1,8 +1,10 @@
 /**
  * Réunions de l'équipe CM : règles PURES (sans base). Voir docs/esport/cm-reunions.md.
  *
- *  - disponibilités d'un membre : ses créneaux hebdomadaires (heures murales dans leur fuseau) et ses exceptions
- *    datées (absence, congé : indisponible ; disponible en plus), converties par planning/dispos.mjs ;
+ *  - disponibilités d'un membre : celles de la team CM du club (source unique, migration 0081) : sa semaine type
+ *    (heures murales dans leur fuseau), ses semaines personnalisées (qui remplacent la semaine type pour leurs sept
+ *    jours) et ses exceptions datées (absence, congé : indisponible ; disponible en plus), converties par
+ *    planning/dispos.mjs ;
  *  - « Trouver un créneau » (`proposerCreneaux`) : les meilleurs créneaux où tous (ou le plus) de participants sont
  *    libres, en tenant compte de leurs disponibilités, de leurs exceptions, de leurs réunions existantes et de leur
  *    fuseau (heures de journée raisonnables DANS LE FUSEAU DE CHACUN) ;
@@ -28,10 +30,13 @@ export const JOURNEE_DEFAUT = Object.freeze({ debut: 9 * 60, fin: 22 * 60 });
 export const exceptionsDispo = exceptions =>
   exceptions.map(x => ({ debut: x.debut, fin: x.fin, type: x.type === 'disponible' ? 'disponible' : 'indisponible' }));
 
-/** Intervalles [s, e[ (ms) où le membre est disponible sur [du, au[, ou `null` s'il n'a saisi aucun créneau. */
-export function disponibilitesDe({ regles = [], exceptions = [] }, du, au) {
-  if (!regles.length && !exceptions.some(x => x.type === 'disponible')) return null;
-  return libresDe({ regles, exceptions: exceptionsDispo(exceptions) }, du, au);
+/**
+ * Intervalles [s, e[ (ms) où le membre est disponible sur [du, au[, ou `null` s'il n'a saisi aucun créneau (ni semaine
+ * type, ni semaine personnalisée, ni « disponible en plus »). Une semaine personnalisée vide = indisponible.
+ */
+export function disponibilitesDe({ regles = [], semaines = [], exceptions = [] }, du, au) {
+  if (!regles.length && !semaines.length && !exceptions.some(x => x.type === 'disponible')) return null;
+  return libresDe({ regles, semaines, exceptions: exceptionsDispo(exceptions) }, du, au);
 }
 
 /** Absences (exceptions absence / congé) en intervalles. */

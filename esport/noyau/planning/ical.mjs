@@ -45,7 +45,7 @@ export function dateIcs(ms) {
   return new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
-export const LIBELLES_TYPES = { scrim: 'Scrim', match: 'Match', training: 'Entraînement', meeting: 'Réunion', tournament: 'Tournoi', other: 'Autre' };
+export const LIBELLES_TYPES = { scrim: 'Scrim', match: 'Match', training: 'Entraînement', meeting: 'Réunion', tournament: 'Tournoi', review: 'Review', other: 'Autre' };
 
 /**
  * Calendrier : `{ nom, fuseau, maintenant (ms), domaine, occurrences }`, une

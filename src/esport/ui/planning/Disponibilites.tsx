@@ -154,7 +154,9 @@ function MesExceptions({
       {mes.exceptions.map(x => (
         <View key={x.id} style={[styles.ligne, { justifyContent: 'space-between' }]}>
           <Text style={{ flex: 1, color: theme.texte, ...police(theme.policeTexte) }}>
-            {x.type === 'indisponible' ? '✕' : '✓'} {dateCourteJour(x.jour)} {x.heureDebut}–{x.heureFin}
+            {x.type === 'indisponible' ? '✕' : '✓'} {x.motif ? `${tr(`planning.disponibilites.motif_${x.motif}`)} · ` : ''}
+            {dateCourteJour(x.jour)} {x.heureDebut}–{x.jourFin && x.jourFin !== x.jour ? `${dateCourteJour(x.jourFin)} ` : ''}
+            {x.heureFin}
             {x.note ? ` · ${x.note}` : ''}
           </Text>
           <BoutonConfirme theme={theme} titre={tr('resumes.retirer')} confirmation={tr('planning.disponibilites.oui_retirer')} onConfirme={() => void agir('retrait', () => onSupprimer(x.id))} testID={`esport-exception-retirer-${x.id}`} />

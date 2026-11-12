@@ -10,7 +10,7 @@
 
 import type { ClientEsport } from '../client';
 
-export type TypeEvenement = 'scrim' | 'match' | 'training' | 'meeting' | 'tournament' | 'other';
+export type TypeEvenement = 'scrim' | 'match' | 'training' | 'meeting' | 'tournament' | 'review' | 'other';
 export type Rsvp = 'oui' | 'non' | 'peut_etre' | 'sans_reponse';
 export type Reel = 'present' | 'absent' | 'excuse' | 'retard' | 'inconnu';
 
@@ -289,6 +289,8 @@ export interface ExceptionDispo {
   debut: string;
   fin: string;
   type: 'disponible' | 'indisponible';
+  /** Absence ou congé (exception indisponible saisie dans les Réunions de l'équipe CM, migration 0081). */
+  motif?: 'absence' | 'conge' | null;
   note: string;
   jour: string;
   heureDebut: string;

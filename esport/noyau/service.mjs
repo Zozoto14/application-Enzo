@@ -898,7 +898,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       journal: (await q('SELECT team_id, action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le')).map(a => ({ team: team(a.team_id), action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
       disponibilites: {
         regles: (await q('SELECT team_id, jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? ORDER BY team_id, jour, debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
-        exceptions: (await q('SELECT team_id, debut, fin, type, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
+        // `motif` (migration 0081) : absence ou congé saisi dans les Réunions de l'équipe CM.
+        exceptions: (await q('SELECT team_id, debut, fin, type, motif, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(r => ({ ...r, motif: r.motif ?? null, team_id: undefined, team: team(r.team_id) })),
         // Semaines personnalisées (migration 0062).
         semaines: (await q('SELECT team_id, semaine, regles, fuseau FROM dispo_semaines WHERE compte_id = ? ORDER BY team_id, semaine')).map(r => ({ semaine: r.semaine, fuseau: r.fuseau, regles: JSON.parse(r.regles || '[]'), team: team(r.team_id) })),
       },

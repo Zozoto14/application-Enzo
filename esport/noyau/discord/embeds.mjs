@@ -22,13 +22,13 @@ import { nettoyerTexteDiscord } from './messages.mjs';
 export const LIMITES_EMBED = Object.freeze({ titre: 256, description: 4096, champs: 25, nomChamp: 256, valeurChamp: 1024, pied: 2048, auteur: 256, total: 6000, embeds: 10 });
 
 /** Couleurs de l'app (src/esport/planning/libelles.ts) et accent du thème « nuit ». */
-export const COULEURS_TYPES = Object.freeze({ training: '#2563eb', scrim: '#7c3aed', match: '#dc2626', tournament: '#d97706', meeting: '#0891b2', other: '#64748b' });
+export const COULEURS_TYPES = Object.freeze({ training: '#2563eb', scrim: '#7c3aed', match: '#dc2626', tournament: '#d97706', meeting: '#0891b2', review: '#0d9488', other: '#64748b' });
 export const ACCENT = '#5b8cff';
 export const COULEUR_OK = '#16a34a';
 export const COULEUR_ALERTE = '#d97706';
 export const COULEUR_ERREUR = '#dc2626';
-export const EMOJIS_TYPES = Object.freeze({ scrim: '⚔️', match: '🏆', training: '🎯', tournament: '🏟️', meeting: '📋', other: '📅' });
-export const NOMS_TYPES = Object.freeze({ scrim: 'Scrim', match: 'Match', training: 'Entraînement', tournament: 'Tournoi', meeting: 'Réunion', other: 'Événement' });
+export const EMOJIS_TYPES = Object.freeze({ scrim: '⚔️', match: '🏆', training: '🎯', tournament: '🏟️', meeting: '📋', review: '🔎', other: '📅' });
+export const NOMS_TYPES = Object.freeze({ scrim: 'Scrim', match: 'Match', training: 'Entraînement', tournament: 'Tournoi', meeting: 'Réunion', review: 'Review', other: 'Événement' });
 /** Nom d'un type d'événement dans une langue (`NOMS_TYPES` : français). */
 export const nomType = (type, langue = 'fr') => T(langue, `type.${type in NOMS_TYPES ? type : 'other'}`);
 

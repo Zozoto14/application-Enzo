@@ -24,6 +24,7 @@ import { dateIcs, echapper, plier } from '../../planning/ical.mjs';
 import { estOccurrence, lireRecurrence, occurrences } from '../../planning/recurrence.mjs';
 import { dateLocale, fuseauValide, instantMural, jourSemaine, lireDate, lireHeure, lundiDe, partiesLocales, texteDate, texteHeure } from '../../planning/temps.mjs';
 import { MOTIF_COMPTE, exigerUuid, permissionsClub } from '../commun.mjs';
+import { TEAM_CM_ID } from '../teamCm.mjs';
 import { DUREES_RAPPEL, JOUR_MS, LIEUX, MINUTE, REPONSES, STATUTS, TYPES_EXCEPTION, decouperPlage, exceptionsDispo, proposerCreneaux, statutEffectif } from './regles.mjs';
 
 export const FUSEAU_DEFAUT = 'Europe/Paris';
@@ -68,6 +69,9 @@ const local = (fuseau, ms) => {
   const l = partiesLocales(fuseau, ms);
   return { date: texteDate(l), heure: texteHeure(l.heure * 60 + l.minute) };
 };
+
+/** Exception de la team CM du club (`dispo_exceptions`) → exception des Réunions (absence, conge, disponible). */
+export const exceptionCm = x => ({ id: x.id, debut: x.debut, fin: x.fin, type: x.type === 'disponible' ? 'disponible' : (x.motif ?? 'absence'), note: x.note ?? '' });
 
 function lireFuseau(v, defaut = FUSEAU_DEFAUT) {
   if (v === undefined || v === null || v === '') return defaut;
@@ -209,17 +213,34 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
     return m;
   }
 
-  /** Disponibilités saisies : Map compte → { regles, exceptions } (exceptions qui touchent [du, au[). */
+  /**
+   * Disponibilités saisies : Map compte → { regles, semaines, exceptions } (exceptions qui touchent [du, au[).
+   * SOURCE UNIQUE (migration 0081) : les disponibilités de la team CM du club (`dispo_regles` : semaine type,
+   * `dispo_semaines` : semaines personnalisées, `dispo_exceptions` : exceptions datées), celles de son onglet
+   * « Disponibilités » (groupe Équipe de l'espace CM). Une exception indisponible devient une « absence » (ou un
+   * « conge » selon son `motif`), une exception disponible un « disponible en plus ».
+   */
   async function disposDe(comptes, du, au) {
-    const m = new Map(comptes.map(c => [c, { regles: [], exceptions: [] }]));
+    const m = new Map(comptes.map(c => [c, { regles: [], semaines: [], exceptions: [] }]));
+    // Semaines autour de la période (le fuseau d'un membre peut décaler sa semaine d'un jour).
+    const semMin = texteDate(lundiDe(dateLocale('UTC', du - 14 * JOUR_MS)));
+    const semMax = texteDate(lundiDe(dateLocale('UTC', au + 14 * JOUR_MS)));
     for (let i = 0; i < comptes.length; i += 80) {
       const paquet = comptes.slice(i, i + 80);
       if (!paquet.length) continue;
-      for (const r of await base.tous(`SELECT * FROM cm_dispo_regles WHERE compte_id IN (${paquet.map(() => '?').join(', ')}) ORDER BY jour, debut`, paquet)) m.get(r.compte_id).regles.push({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau });
-      for (const x of await base.tous(`SELECT * FROM cm_dispo_exceptions WHERE compte_id IN (${paquet.map(() => '?').join(', ')}) AND fin > ? AND debut < ? ORDER BY debut`, [...paquet, iso(du), iso(au)])) m.get(x.compte_id).exceptions.push({ id: x.id, debut: x.debut, fin: x.fin, type: x.type, note: x.note });
+      for (const r of await base.tous(`SELECT * FROM dispo_regles WHERE team_id = ? AND compte_id IN (${paquet.map(() => '?').join(', ')}) ORDER BY jour, debut`, [TEAM_CM_ID, ...paquet])) m.get(r.compte_id).regles.push({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau });
+      for (const s of await base.tous(`SELECT * FROM dispo_semaines WHERE team_id = ? AND compte_id IN (${paquet.map(() => '?').join(', ')}) AND semaine >= ? AND semaine <= ? ORDER BY semaine`, [TEAM_CM_ID, ...paquet, semMin, semMax])) {
+        m.get(s.compte_id).semaines.push({ semaine: s.semaine, regles: jsonOu(s.regles, []).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: s.fuseau })) });
+      }
+      for (const x of await base.tous(`SELECT * FROM dispo_exceptions WHERE team_id = ? AND compte_id IN (${paquet.map(() => '?').join(', ')}) AND fin > ? AND debut < ? ORDER BY debut`, [TEAM_CM_ID, ...paquet, iso(du), iso(au)])) m.get(x.compte_id).exceptions.push(exceptionCm(x));
     }
     return m;
   }
+
+  /** Fuseau d'un membre : celui de son profil, sinon celui de sa semaine type, sinon Paris. */
+  const fuseauDe = (profil, dispos) => profil?.fuseau ?? dispos?.regles[0]?.fuseau ?? FUSEAU_DEFAUT;
+  /** A-t-il saisi des créneaux (semaine type ou semaine personnalisée) ? */
+  const aDesCreneaux = d => Boolean(d && (d.regles.length || d.semaines.length));
 
   /** Vérifie et normalise une liste de comptes invités (profil Esport requis). */
   async function lireParticipants(liste, organisateur) {
@@ -289,7 +310,8 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
       invite,
       aRepondre: Number(enAttente?.n ?? 0),
       compte: acteur.compte,
-      profil: { fuseau: profil?.fuseau ?? null, statut: profil?.statut ?? null, message: profil?.message ?? '', jusqua: profil?.statut_jusqua ?? null },
+      // Fuseau : celui du profil, sinon celui de sa semaine type (team CM du club, migration 0081).
+      profil: { fuseau: profil?.fuseau ?? (await base.premier('SELECT fuseau FROM dispo_regles WHERE team_id = ? AND compte_id = ? ORDER BY jour, debut LIMIT 1', [TEAM_CM_ID, acteur.compte]))?.fuseau ?? null, statut: profil?.statut ?? null, message: profil?.message ?? '', jusqua: profil?.statut_jusqua ?? null },
       equipe: c.voir ? await equipeAvecStatuts(t) : [],
     };
   }
@@ -304,7 +326,7 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
       .map(compte => {
         const enReunion = (occ.get(compte) ?? []).some(i => i.s <= t && i.e > t);
         const s = statutEffectif({ profil: profils.get(compte), exceptions: dispos.get(compte)?.exceptions ?? [], enReunion }, t);
-        return { compte, pseudo: noms[compte] ?? null, fuseau: profils.get(compte)?.fuseau ?? null, enReunion, ...s };
+        return { compte, pseudo: noms[compte] ?? null, fuseau: profils.get(compte)?.fuseau ?? dispos.get(compte)?.regles[0]?.fuseau ?? null, enReunion, ...s };
       })
       .sort((a, b) => String(a.pseudo ?? '').localeCompare(String(b.pseudo ?? ''), 'fr'));
   }
@@ -607,10 +629,13 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
     await ctx(acteur, { exigerVoir: true });
     const t = maintenant();
     const profil = (await profilsDe([acteur.compte])).get(acteur.compte);
-    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : (profil?.fuseau ?? FUSEAU_DEFAUT);
     const d = (await disposDe([acteur.compte], t - JOUR_MS, t + 400 * JOUR_MS)).get(acteur.compte);
+    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : fuseauDe(profil, d);
     return {
       fuseau,
+      // Source unique (migration 0081) : la team CM du club ; `semaines` : semaines personnalisées à venir.
+      teamId: TEAM_CM_ID,
+      semaines: d.semaines.filter(s => s.semaine >= texteDate(lundiDe(dateLocale(fuseau, t)))).map(s => s.semaine),
       regles: d.regles,
       exceptions: d.exceptions.map(x => ({ ...x, local: { debut: local(fuseau, Date.parse(x.debut)), fin: local(fuseau, Date.parse(x.fin)) } })),
     };
@@ -628,12 +653,14 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
       if (lireHeure(r?.debut) === undefined || lireHeure(r?.fin) === undefined) throw echec(400, 'heure', 'Heures invalides (HH:MM).');
       const type = r?.type ?? 'disponible';
       if (!['disponible', 'indisponible'].includes(type)) throw echec(400, 'type', 'Type : disponible ou indisponible.');
-      return { jour, debut: r.debut, fin: r.fin, type };
+      return { jour, debut: texteHeure(lireHeure(r.debut)), fin: texteHeure(lireHeure(r.fin)), type };
     });
     const t = maintenant();
+    // Semaine type de la team CM du club (source unique, migration 0081) : la même que son onglet « Disponibilités ».
     await base.lot([
-      { sql: 'DELETE FROM cm_dispo_regles WHERE compte_id = ?', params: [acteur.compte] },
-      ...propres.map(r => ({ sql: 'INSERT INTO cm_dispo_regles (id, compte_id, jour, debut, fin, type, fuseau, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), acteur.compte, r.jour, r.debut, r.fin, r.type, fuseau, iso(t)] })),
+      { sql: 'DELETE FROM dispo_regles WHERE team_id = ? AND compte_id = ?', params: [TEAM_CM_ID, acteur.compte] },
+      ...propres.map(r => ({ sql: 'INSERT INTO dispo_regles (id, team_id, compte_id, jour, debut, fin, type, fuseau, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), TEAM_CM_ID, acteur.compte, r.jour, r.debut, r.fin, r.type, fuseau, iso(t)] })),
+      evenement('availability.updated', { teamId: TEAM_CM_ID, acteur: acteur.compte, entiteType: 'dispos', entiteId: acteur.compte, charge: { regles: propres.length, origine: 'reunions' }, maintenant: t }),
       { sql: 'INSERT INTO cm_reunion_profils (compte_id, fuseau, maj_le) VALUES (?, ?, ?) ON CONFLICT (compte_id) DO UPDATE SET fuseau = excluded.fuseau, maj_le = excluded.maj_le', params: [acteur.compte, fuseau, iso(t)] },
     ]);
     return mesDispos(acteur, { fuseau });
@@ -660,16 +687,24 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
       const h = lireHoraire(corps, FUSEAU_DEFAUT);
       [debut, fin] = [h.debut, h.fin];
     }
-    const n = await base.premier('SELECT COUNT(*) AS n FROM cm_dispo_exceptions WHERE compte_id = ? AND fin > ?', [acteur.compte, iso(maintenant())]);
-    if (Number(n?.n ?? 0) >= 100) throw echec(409, 'trop-d-exceptions', '100 exceptions à venir au plus.');
-    await base.executer('INSERT INTO cm_dispo_exceptions (id, compte_id, debut, fin, type, note, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)', [nouvelId(), acteur.compte, iso(debut), iso(fin), type, texteNettoye(corps?.note ?? '', 200), iso(maintenant())]);
+    // Même plafond que l'onglet « Disponibilités » de la team (mêmes exceptions, migration 0081).
+    const n = await base.premier('SELECT COUNT(*) AS n FROM dispo_exceptions WHERE team_id = ? AND compte_id = ? AND fin > ?', [TEAM_CM_ID, acteur.compte, iso(maintenant())]);
+    if (Number(n?.n ?? 0) >= 200) throw echec(409, 'trop-d-exceptions', 'Deux cents exceptions à venir au plus.');
+    const t = maintenant();
+    await base.lot([
+      {
+        sql: 'INSERT INTO dispo_exceptions (id, team_id, compte_id, debut, fin, type, note, cree_le, motif) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [nouvelId(), TEAM_CM_ID, acteur.compte, iso(debut), iso(fin), type === 'disponible' ? 'disponible' : 'indisponible', texteNettoye(corps?.note ?? '', 200), iso(t), type === 'disponible' ? null : type],
+      },
+      evenement('availability.updated', { teamId: TEAM_CM_ID, acteur: acteur.compte, entiteType: 'dispos', entiteId: acteur.compte, charge: { exception: type, origine: 'reunions' }, maintenant: t }),
+    ]);
     return mesDispos(acteur, { fuseau: corps?.fuseau });
   }
 
   async function supprimerException(acteur, id) {
     await ctx(acteur, { exigerVoir: true });
     exigerUuid(id, 'exception');
-    const r = await base.executer('DELETE FROM cm_dispo_exceptions WHERE id = ? AND compte_id = ?', [id, acteur.compte]);
+    const r = await base.executer('DELETE FROM dispo_exceptions WHERE id = ? AND team_id = ? AND compte_id = ?', [id, TEAM_CM_ID, acteur.compte]);
     if (r.changements !== 1) throw echec(404, 'exception-introuvable', 'Exception introuvable.');
     return mesDispos(acteur);
   }
@@ -714,10 +749,11 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
     const joueurs = comptes.map(compte => ({
       compte,
       regles: d.get(compte).regles,
+      semaines: d.get(compte).semaines,
       exceptions: [...exceptionsDispo(d.get(compte).exceptions), ...(occ.get(compte) ?? []).map(i => ({ debut: iso(i.s), fin: iso(i.e), type: 'indisponible' }))],
     }));
     const carte = heatmap({ lundi, fuseau, pas, joueurs, seuil: Math.max(1, comptes.length) });
-    return { ...carte, fuseau, pas, total: comptes.length, noms: await pseudosDe(base, comptes), sansCreneaux: comptes.filter(c => !d.get(c).regles.length) };
+    return { ...carte, fuseau, pas, total: comptes.length, noms: await pseudosDe(base, comptes), sansCreneaux: comptes.filter(c => !aDesCreneaux(d.get(c))) };
   }
 
   /**
@@ -743,11 +779,11 @@ export function servicesReunionsCm({ base, maintenant = () => Date.now(), tablea
     const d = await disposDe(comptes, du - JOUR_MS, au + JOUR_MS);
     const occ = await occupationsDe(comptes, du, au, { sauf });
     const profils = await profilsDe(comptes);
-    const participants = comptes.map(compte => ({ compte, fuseau: profils.get(compte)?.fuseau ?? FUSEAU_DEFAUT, regles: d.get(compte).regles, exceptions: d.get(compte).exceptions, occupes: occ.get(compte) ?? [] }));
+    const participants = comptes.map(compte => ({ compte, fuseau: fuseauDe(profils.get(compte), d.get(compte)), regles: d.get(compte).regles, semaines: d.get(compte).semaines, exceptions: d.get(compte).exceptions, occupes: occ.get(compte) ?? [] }));
     const propositions = proposerCreneaux({ participants, du, au, duree, pas: 30, fuseau, heureMin, heureMax, max: Number(corps?.max) > 0 ? Math.min(Number(corps.max), 20) : 8, maintenant: t });
     return {
       propositions: propositions.map(p => ({ ...p, local: { ...local(fuseau, Date.parse(p.debut)), heureFin: local(fuseau, Date.parse(p.fin)).heure } })),
-      participants: participants.map(p => ({ compte: p.compte, fuseau: p.fuseau, sansCreneaux: !p.regles.length })),
+      participants: participants.map(p => ({ compte: p.compte, fuseau: p.fuseau, sansCreneaux: !aDesCreneaux(p) })),
       noms: await pseudosDe(base, comptes),
       fuseau,
     };

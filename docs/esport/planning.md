@@ -26,7 +26,8 @@ La migration 0002 ajoute aux rôles système **déjà créés** : `availability.
 
 - Vues **mois**, **semaine**, **liste** ; filtres par type, par membre convoqué et **« Où je suis convoqué »**
   (`membre=moi`) ; navigation par période.
-- Types et couleurs : Entraînement (bleu), Scrim (violet), Match (rouge), Tournoi (ambre), Réunion (cyan), Autre (gris).
+- Types et couleurs : Entraînement (bleu), Scrim (violet), Match (rouge), Tournoi (ambre), Réunion (cyan),
+  **Review** (sarcelle `#0d9488`, séance de review vidéo / VOD / débrief, migration 0080), Autre (gris).
   Un match de tournoi daté (module Tournois) crée et tient à jour son événement « Tournoi », convoquant le roster
   du tournoi ([tournois-resultats.md](tournois-resultats.md)).
 - Champs : type, titre, date, début, fin (une fin avant le début tombe le lendemain), lieu ou lien,
@@ -79,6 +80,32 @@ pour les anciennes lectures ; l'API accepte encore `concernes: [...]` (liste nom
 Code : `esport/noyau/planning/convocations.mjs` (règles pures, serveur) et `src/esport/planning/convocations.ts`
 (sélecteur de l'app) ; tests `esport/test/convocations.test.mjs`, e2e `scripts/e2e-esport-convocations.mjs`.
 
+### Type « Review » (migration 0080)
+
+Demande du Fondateur : « Tu n'as pas ajouté le type Review dans les teams compétitives. » Le type `review` est proposé
+à **toutes les teams** dans **Nouvel événement › Type** (entre Réunion et Autre), en français et en anglais
+(« Review »), avec sa couleur sarcelle : filtres du planning et de la présence, vues mois / semaine / jour, calendrier
+des teams de l'espace CM (comme les matchs, scrims et tournois), annonces et rappels Discord (libellé « Review »,
+couleur de l'embed, réglage des pings par type, choix « Review » de la commande `/planning` du bot), feuille d'appel,
+statistiques par type, export CSV et iCal.
+
+La valeur est protégée par la contrainte CHECK de `planning_evenements.type`. La migration est faite **sans risque
+pour les données** :
+- **PostgreSQL** : la contrainte (retrouvée dans `pg_constraint`, en principe `planning_evenements_type_check`) est
+  retirée puis remise avec `'review'`, `NOT VALID` puis `VALIDATE CONSTRAINT`, le tout dans la transaction de la
+  migration ; aucune ligne n'est réécrite.
+- **SQLite** : la table est reconstruite (procédure officielle en 12 étapes). Le migrateur (`noyau/migrations.mjs`)
+  lit les sections `-- @dialecte sqlite|postgres|commun` et le marqueur `-- @reconstruction` : l'adaptateur SQLite
+  (`scriptReconstruction`) coupe les clés étrangères **hors transaction** (le réglage est sans effet dans une
+  transaction), exécute tout dans **une** transaction, vérifie les clés étrangères avant de valider (tout est annulé
+  sinon), puis les remet comme avant. Sans cela, le `DROP TABLE` de l'ancienne table ferait jouer les
+  `ON DELETE CASCADE` des présences et des exceptions de séries. Le migrateur n'enveloppe pas une migration SQLite
+  dans une transaction (`db.exec`) ; en PostgreSQL, une migration à plusieurs instructions est déjà une seule
+  transaction implicite.
+- Test : `esport/test/planning-review-dispos.test.mjs` (base remplie : événements simples, séries, supprimés,
+  exceptions, présences, rappels et annonces Discord ; toutes les tables comparées ligne à ligne avant / après ; CHECK,
+  clés étrangères et cascade vérifiés ; reconstruction annulée si une ligne devenait orpheline).
+
 ## Récurrence et iCal
 
 - **Récurrence hebdomadaire** : jours de la semaine, toutes les 1 à 4 semaines, fin par date ou par nombre.
@@ -114,6 +141,9 @@ Code : `esport/noyau/planning/convocations.mjs` (règles pures, serveur) et `src
   libre » fusionne les créneaux consécutifs. **Proposer un événement** ouvre le formulaire du planning
   prérempli (Coach, Manager, Propriétaire).
 - Effectif minimum : 5 par défaut, réglable (1 à 30) dans Paramètres › Planning (Propriétaire, Manager).
+- **Motif** d'une exception indisponible (migration 0081) : facultatif, « absence » ou « conge » (`motif`), affiché
+  « Absence · » / « Congé · » ; c'est ainsi que sont rangés les absences et congés des Réunions de l'équipe CM, dont
+  les disponibilités SONT celles de la team CM du club (docs/esport/cm-reunions.md, « Disponibilités et statut »).
 
 ### Semaine par semaine (migration 0062)
 

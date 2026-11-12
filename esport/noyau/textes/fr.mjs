@@ -10,6 +10,7 @@ export const FR = {
   'type.training': 'Entraînement',
   'type.meeting': 'Réunion',
   'type.tournament': 'Tournoi',
+  'type.review': 'Review',
   'type.other': 'Événement',
   'type.choix_autre': 'Autre',
 

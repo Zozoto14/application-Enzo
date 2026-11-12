@@ -109,6 +109,9 @@ export interface ExceptionDispo {
 }
 export interface MesDispos {
   fuseau: string;
+  /** Source unique (migration 0081) : la team CM du club ; semaines personnalisées à venir. */
+  teamId?: string;
+  semaines?: string[];
   regles: RegleDispo[];
   exceptions: ExceptionDispo[];
 }

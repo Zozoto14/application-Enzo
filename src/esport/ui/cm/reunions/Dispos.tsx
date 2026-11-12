@@ -1,6 +1,11 @@
 /**
  * Disponibilités de l'équipe CM : mes créneaux hebdomadaires (heures murales dans mon fuseau), mes absences et congés,
  * et la grille superposée de l'équipe (nombre de membres libres par créneau, réunions déjà prévues déduites).
+ *
+ * Source unique (migration 0081) : ce sont les disponibilités de la team CM du club. Cet écran est l'entrée
+ * « Disponibilités » du groupe Équipe pour un membre de l'équipe CM qui n'est PAS membre de la team CM du club
+ * (correspondant d'une team) ; un membre de la team CM du club y trouve l'onglet Disponibilités de la team
+ * (semaine type, semaine par semaine, exceptions, heatmap), qui écrit les mêmes données.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -22,7 +27,9 @@ export function DisposCm({ theme, api, large, fuseau, onFuseau }: { theme: Theme
     void agir('', async () => setMes(await api.mesDispos(fuseau)));
   }, [agir, api, fuseau]);
   return (
-    <View style={large ? { flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' } : { gap: ESP.m }} testID="esport-cm-reunions-dispos">
+    <View style={{ gap: ESP.m }} testID="esport-cm-reunions-dispos">
+    <Text style={attenue(theme, 13)} testID="esport-cm-dispos-source">{trRe('dispos.source')}</Text>
+    <View style={large ? { flexDirection: 'row', gap: ESP.m, alignItems: 'flex-start' } : { gap: ESP.m }}>
       <Retours theme={theme} erreur={erreur} prefixe="esport-cm-reunions-dispos" />
       {mes ? (
         <View style={{ flex: 1, gap: ESP.m, minWidth: 0 }}>
@@ -33,6 +40,7 @@ export function DisposCm({ theme, api, large, fuseau, onFuseau }: { theme: Theme
       <View style={{ flex: large ? 1.4 : undefined, minWidth: 0 }}>
         <Grille theme={theme} api={api} fuseau={fuseau} />
       </View>
+    </View>
     </View>
   );
 }

@@ -19,17 +19,21 @@ import { copierTexte } from '../commun';
 import { ChoixBoutons, PastilleStatut, jourCourt, jourLong, nomReponse, nomStatut } from './commun';
 import { DetailReunion } from './DetailReunion';
 import { FormReunion } from './FormReunion';
-import { DisposCm } from './Dispos';
 import { RendezVous } from './RendezVous';
 import { useTempsReel } from '../../../tempsReel/hooks';
 import { useCible } from '../../notifications/Cible';
 
-type Section = 'agenda' | 'dispos' | 'rdv';
+/**
+ * Sous-onglets : Agenda | Rendez-vous. Les disponibilités ne sont plus ici (migration 0081) : une seule entrée
+ * « Disponibilités » dans le groupe Équipe de l'espace CM, la même source que la team CM du club ; « Trouver un
+ * créneau », la grille et le statut automatique les lisent.
+ */
+type Section = 'agenda' | 'rdv';
 const DEBUT_GRILLE = 8 * 60;
 const FIN_GRILLE = 23 * 60;
 const PX_MIN = 0.66;
 
-export function Reunions({ theme, client, large, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
+export function Reunions({ theme, client, large, onExporter, onDispos }: { theme: ThemeHub; client: ClientEsport; large: boolean; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>; /** « Mes disponibilités » : l'entrée Disponibilités du groupe Équipe. */ onDispos?(): void }) {
   const api = useMemo(() => apiReunions(client), [client]);
   const [moi, setMoi] = useState<MoiReunions | undefined>();
   const [section, setSection] = useState<Section>('agenda');
@@ -45,12 +49,16 @@ export function Reunions({ theme, client, large, onExporter }: { theme: ThemeHub
       <Retours theme={theme} erreur={erreur} prefixe="esport-cm-reunions" />
       {moi ? (
         <View style={[styles.ligne, { justifyContent: 'space-between', gap: ESP.s }]}>
-          {equipe ? <Segments theme={theme} libelle={trRe('vue.choix')} valeur={section} options={[['agenda', trRe('vue.agenda')], ['dispos', trRe('vue.dispos')], ['rdv', trRe('vue.rdv')]]} onChoisir={v => setSection(v as Section)} testID="esport-cm-reunions-section" /> : <Text style={attenue(theme, 13)}>{trRe('agenda.invite_seul')}</Text>}
-          {equipe ? <MonStatut theme={theme} api={api} moi={moi} onChange={setMoi} /> : null}
+          {equipe ? <Segments theme={theme} libelle={trRe('vue.choix')} valeur={section} options={[['agenda', trRe('vue.agenda')], ['rdv', trRe('vue.rdv')]]} onChoisir={v => setSection(v as Section)} testID="esport-cm-reunions-section" /> : <Text style={attenue(theme, 13)}>{trRe('agenda.invite_seul')}</Text>}
+          {equipe ? (
+            <View style={[styles.ligne, { gap: ESP.xs }]}>
+              {onDispos ? <BoutonHub theme={theme} titre={trRe('vue.mes_dispos')} libelle={trRe('vue.mes_dispos_aide')} onPress={onDispos} testID="esport-cm-reunions-mes-dispos" /> : null}
+              <MonStatut theme={theme} api={api} moi={moi} onChange={setMoi} />
+            </View>
+          ) : null}
         </View>
       ) : null}
       {moi && section === 'agenda' ? <Agenda theme={theme} api={api} client={client} large={large} moi={moi} fuseau={fuseau} onExporter={onExporter} onRelireMoi={() => void agir('', chargerMoi)} /> : null}
-      {moi && section === 'dispos' && equipe ? <DisposCm theme={theme} api={api} large={large} fuseau={fuseau} onFuseau={() => void agir('', chargerMoi)} /> : null}
       {moi && section === 'rdv' && equipe ? <RendezVous theme={theme} api={api} large={large} moi={moi} fuseau={fuseau} /> : null}
     </View>
   );

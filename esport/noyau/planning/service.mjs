@@ -20,7 +20,10 @@ import { RSVP, REELS, MARQUES_REELLES, compter, csv, lireMinutes, seriesAbsences
 import { DEPLACEMENT_MAX_MS, estOccurrence, lireRecurrence, occurrences, occurrencesBrutes, veilleLocale } from './recurrence.mjs';
 import { ajouterJours, dateLocale, ecartJours, fuseauValide, instantMural, jourSemaine, lireDate, lireHeure, lundiDe, partiesLocales, texteDate, texteHeure } from './temps.mjs';
 
-export const TYPES_EVENEMENT = ['scrim', 'match', 'training', 'meeting', 'tournament', 'other'];
+/** Motifs d'une exception indisponible (migration 0081) : absence, congé. */
+export const MOTIFS_EXCEPTION = ['absence', 'conge'];
+// 'review' : séance de review (vidéo, VOD, débrief), migration 0080.
+export const TYPES_EVENEMENT = ['scrim', 'match', 'training', 'meeting', 'tournament', 'review', 'other'];
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 const MOTIF_JETON_ICAL = /^ical_[A-Za-z0-9_-]{43}$/;
@@ -1214,7 +1217,8 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
   const exceptionPublique = (x, fuseau) => {
     const d = local(fuseau, Date.parse(x.debut));
     const f = local(fuseau, Date.parse(x.fin));
-    return { id: x.id, debut: x.debut, fin: x.fin, type: x.type, note: x.note, jour: d.jour, heureDebut: d.heure, jourFin: f.jour, heureFin: f.heure };
+    // `motif` (migration 0081) : « absence » ou « conge » pour une exception indisponible (Réunions de l'équipe CM).
+    return { id: x.id, debut: x.debut, fin: x.fin, type: x.type, motif: x.motif ?? null, note: x.note, jour: d.jour, heureDebut: d.heure, jourFin: f.jour, heureFin: f.heure };
   };
 
   /** Créneaux saisis (modèle ou semaine) : `[{ jour, debut, fin, type }]` validés, 60 au plus. */
@@ -1292,14 +1296,16 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const c = lireCreneau(corps, ctx.team.fuseau);
     const type = corps?.type ?? 'indisponible';
     if (!TYPES_DISPO.includes(type)) throw echec(400, 'type', 'Type : disponible ou indisponible.');
+    const motif = corps?.motif ?? null;
+    if (motif !== null && (type !== 'indisponible' || !MOTIFS_EXCEPTION.includes(motif))) throw echec(400, 'motif', 'Motif : absence ou conge (exception indisponible).');
     const n = await base.premier('SELECT COUNT(*) AS n FROM dispo_exceptions WHERE team_id = ? AND compte_id = ? AND fin > ?', [teamId, acteur.compte, iso(maintenant())]);
     if (Number(n?.n ?? 0) >= 200) throw echec(409, 'trop-d-exceptions', 'Deux cents exceptions à venir au plus.');
     const t = maintenant();
     const id = nouvelId();
     await base.lot([
       {
-        sql: 'INSERT INTO dispo_exceptions (id, team_id, compte_id, debut, fin, type, note, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [id, teamId, acteur.compte, iso(c.debut), iso(c.fin), type, texteNettoye(corps?.note, 120), iso(t)],
+        sql: 'INSERT INTO dispo_exceptions (id, team_id, compte_id, debut, fin, type, note, cree_le, motif) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [id, teamId, acteur.compte, iso(c.debut), iso(c.fin), type, texteNettoye(corps?.note, 120), iso(t), motif],
       },
       evenement('availability.updated', { teamId, acteur: acteur.compte, entiteType: 'dispos', entiteId: acteur.compte, charge: { exception: type }, maintenant: t }),
     ]);

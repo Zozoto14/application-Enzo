@@ -12,6 +12,7 @@
  */
 
 import { jsonOu } from '../outils.mjs';
+import { TEAM_CM_ID } from './teamCm.mjs';
 
 export async function exportCm(base, compte) {
   const q = (sql, params = [compte]) => base.tous(`${sql} LIMIT 5000`, params);
@@ -37,9 +38,12 @@ export async function exportCm(base, compte) {
     cmTableauxAcces: (await q("SELECT a.niveau, a.ajoute_le, t.nom, t.cle_defaut FROM cm_tableau_acces a JOIN cm_tableaux t ON t.id = a.tableau_id WHERE a.genre = 'compte' AND a.cible = ? ORDER BY a.ajoute_le")).map(a => ({ tableau: a.nom ?? a.cle_defaut, niveau: a.niveau, depuis: a.ajoute_le })),
     cmDriveFavoris: (await q('SELECT genre, cree_le FROM cm_drive_favoris WHERE compte_id = ? ORDER BY cree_le')).map(f => ({ genre: f.genre, date: f.cree_le })),
     cmReunions: (await q("SELECT r.titre, r.genre, r.debut, r.fin, r.fuseau, r.statut, r.organisateur_id, p.reponse, p.commentaire FROM cm_reunion_participants p JOIN cm_reunions r ON r.id = p.reunion_id WHERE p.compte_id = ? ORDER BY r.debut")).map(r => ({ titre: r.titre, genre: r.genre, debut: r.debut, fin: r.fin, fuseau: r.fuseau, statut: r.statut, organisateur: r.organisateur_id === compte, reponse: r.reponse, commentaire: r.commentaire })),
+    // Disponibilités de l'équipe CM = celles de la team CM du club (migration 0081) : semaine type, absences et
+    // congés (aussi dans `disponibilites` de l'export Esport), et la semaine type mise de côté à l'unification.
     cmDisponibilites: {
-      creneaux: (await q('SELECT jour, debut, fin, type, fuseau FROM cm_dispo_regles WHERE compte_id = ? ORDER BY jour, debut')).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau })),
-      exceptions: (await q('SELECT debut, fin, type, note FROM cm_dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(x => ({ debut: x.debut, fin: x.fin, type: x.type, note: x.note })),
+      creneaux: (await q(`SELECT jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? AND team_id = ? ORDER BY jour, debut`, [compte, TEAM_CM_ID])).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau })),
+      exceptions: (await q(`SELECT debut, fin, type, motif, note FROM dispo_exceptions WHERE compte_id = ? AND team_id = ? ORDER BY debut`, [compte, TEAM_CM_ID])).map(x => ({ debut: x.debut, fin: x.fin, type: x.motif ?? x.type, note: x.note })),
+      misesDeCote: (await q('SELECT jour, debut, fin, type, fuseau, origine, repris_le FROM dispo_regles_reprises WHERE compte_id = ? ORDER BY jour, debut')).map(r => ({ jour: Number(r.jour), debut: r.debut, fin: r.fin, type: r.type, fuseau: r.fuseau, origine: r.origine, le: r.repris_le })),
       statut: (await q('SELECT fuseau, statut, message, statut_jusqua FROM cm_reunion_profils WHERE compte_id = ?')).map(x => ({ fuseau: x.fuseau, statut: x.statut, message: x.message, jusqua: x.statut_jusqua }))[0] ?? null,
     },
     cmRendezVous: (await q('SELECT titre, description, duree_minutes, ouverte, cree_le FROM cm_rdv_offres WHERE proprietaire_id = ? ORDER BY cree_le')).map(o => ({ titre: o.titre, description: o.description, dureeMinutes: Number(o.duree_minutes), ouverte: Number(o.ouverte) === 1, creeLe: o.cree_le })),
@@ -118,8 +122,9 @@ export async function effacementCm(base, compte) {
     { sql: 'DELETE FROM cm_reunion_rappels WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_reunion_mp WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_reunion_ical WHERE compte_id = ?', params: [compte] },
-    { sql: 'DELETE FROM cm_dispo_regles WHERE compte_id = ?', params: [compte] },
-    { sql: 'DELETE FROM cm_dispo_exceptions WHERE compte_id = ?', params: [compte] },
+    // Disponibilités (team CM du club, migration 0081) : effacées avec celles des teams (comptes.mjs) ; ici la semaine
+    // type mise de côté à l'unification.
+    { sql: 'DELETE FROM dispo_regles_reprises WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_reunion_profils WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE cm_reunions SET organisateur_id = NULL WHERE organisateur_id = ?', params: [compte] },
     { sql: 'UPDATE cm_reunions SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
