@@ -23,6 +23,7 @@
  * convoqué partent en MP (`phaseMp`), avec repli dans le salon pour qui n'a pas pu être joint.
  */
 
+import { lienProfond } from '../notifications/cibles.mjs';
 import { iso, jsonOu, nouvelId } from '../outils.mjs';
 import { dechiffrerWebhook } from './chiffrement.mjs';
 import { CLES_COMPETITION, CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement, textesEvenement } from './catalogue.mjs';
@@ -529,12 +530,14 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
     const def = evenementDiscord(genre);
     modele = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, genre]), langue).modele;
   }
-  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement, langue), acteur: variables.acteur ?? '', lien: lienApp };
+  // Lien direct vers l'événement dans l'app (à sa date), le même que celui des notifications (cibles.mjs).
+  const lienEv = lienProfond(lienApp, { v: 1, g: 'evenement', evenement: c.ev.id, occurrence: c.occurrence.cle, team: ligne.team_id }) || lienApp;
+  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement, langue), acteur: variables.acteur ?? '', lien: lienEv };
   if (relance && bilan) vars.membre = cibles.map(m => m.pseudo).join(', ');
   const texte = rendreModele(modele, vars);
-  const embed = embedOccurrence(c, { genre, texte, lien: lienApp, maintenant: t, langue });
+  const embed = embedOccurrence(c, { genre, texte, lien: lienEv, maintenant: t, langue });
   const rsvpPossible = bot && c.presenceActive && !c.termine;
-  const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp, langue }) : boutonLien(lienApp, undefined, langue);
+  const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienEv, langue }) : boutonLien(lienEv, undefined, langue);
   // Un ping UNE SEULE FOIS par occurrence (registre `discord_mentions`) : un joueur déjà mentionné (annonce,
   // rappel précédent…) ne l'est plus ; le rôle configuré non plus. Un rôle mentionné couvre les convoqués : jamais
   // rôle + mention individuelle dans le même message. Mentions individuelles : bot seulement, convoqués liés,

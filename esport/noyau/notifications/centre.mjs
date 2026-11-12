@@ -23,6 +23,7 @@ import { pseudosDe } from '../requetes.mjs';
 import { CATEGORIES, categoriePerso, chargePublique, lienDeCategorie, regleDe, regleEffective } from './regles.mjs';
 import { aCm, droitsLecteur, teamsDuLecteur, voit } from './droits.mjs';
 import { horsTableauxInterdits } from '../cm/acces.mjs';
+import { cibleEvenement, ciblePersonnelle, normaliserCible, verifierCible } from './cibles.mjs';
 
 export const RETENTION_NOTIFICATIONS_JOURS = 90;
 const JOUR_MS = 86_400_000;
@@ -90,13 +91,19 @@ function selonPreferences(prefs, categorie, teamId, { annonce = false } = {}) {
 
 // ------------------------------------------------------------------ Abonné du bus
 
-/** Catégorie et événement d'origine des notifications personnelles d'un compte qui n'en ont pas encore. */
+/**
+ * Catégorie, événement d'origine et cible (lien direct, cibles.mjs) des notifications personnelles d'un compte qui
+ * n'en ont pas encore.
+ */
 export async function classerPersonnelles(base, compte) {
-  const lignes = await base.tous('SELECT id, type FROM notifications WHERE compte_id = ? AND categorie IS NULL LIMIT 1000', [compte]);
+  const lignes = await base.tous('SELECT id, compte_id, type, team_id, charge, categorie, evenement_id FROM notifications WHERE compte_id = ? AND (categorie IS NULL OR cible IS NULL) LIMIT 1000', [compte]);
+  const suffixe = `:${compte}`;
   for (const l of lignes) {
-    const suffixe = `:${compte}`;
-    const evenementId = l.id.endsWith(suffixe) ? l.id.slice(0, -suffixe.length) : null;
-    await base.executer('UPDATE notifications SET categorie = ?, evenement_id = ? WHERE id = ?', [categoriePerso(l.type), evenementId, l.id]);
+    const categorie = l.categorie ?? categoriePerso(l.type);
+    const evenementId = l.categorie ? (l.evenement_id ?? null) : l.id.endsWith(suffixe) ? l.id.slice(0, -suffixe.length) : null;
+    const ev = evenementId ? await base.premier('SELECT cible FROM notifs_centre WHERE id = ?', [evenementId]) : null;
+    const cible = ciblePersonnelle(l, ev);
+    await base.executer('UPDATE notifications SET categorie = ?, evenement_id = ?, cible = ? WHERE id = ?', [categorie, evenementId, cible ? JSON.stringify(cible) : '', l.id]);
   }
 }
 
@@ -104,12 +111,17 @@ export async function classerPersonnelles(base, compte) {
  * Abonné du bus (le DERNIER de la liste : les notifications personnelles de l'événement sont déjà écrites) :
  * une ligne du fil par événement (identifiant = celui de l'événement, `ON CONFLICT DO NOTHING` : idempotent).
  */
+const cibleDe = ev => {
+  const c = cibleEvenement(ev);
+  return c ? JSON.stringify(c) : '';
+};
+
 export async function abonneCentre(base, ev) {
   const regle = await regleEffective(base, ev);
   const r = await base.executer(
-    `INSERT INTO notifs_centre (id, type, categorie, acces, portee_cle, team_id, acteur_id, entite_type, entite_id, lien, charge, cree_le)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
-    [ev.id, ev.type, regle.categorie, regle.acces, `${regle.acces}@${ev.team_id ?? ''}`, ev.team_id ?? null, ev.acteur_id ?? null, ev.entite_type ?? null, ev.entite_id ?? null, regle.lien ? JSON.stringify(regle.lien) : null, chargePublique(jsonOu(ev.charge, {})), ev.cree_le],
+    `INSERT INTO notifs_centre (id, type, categorie, acces, portee_cle, team_id, acteur_id, entite_type, entite_id, lien, charge, cree_le, cible)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+    [ev.id, ev.type, regle.categorie, regle.acces, `${regle.acces}@${ev.team_id ?? ''}`, ev.team_id ?? null, ev.acteur_id ?? null, ev.entite_type ?? null, ev.entite_id ?? null, regle.lien ? JSON.stringify(regle.lien) : null, chargePublique(jsonOu(ev.charge, {})), ev.cree_le, cibleDe(ev)],
   );
   // Visibilité resserrée APRÈS coup : une strat devenue privée, une ressource ou un résultat passés « staff » (tous
   // les éléments du fil de cet élément prennent l'accès restreint), un type de réunion devenu « staff ».
@@ -283,7 +295,7 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     const perso = filtrePerso(droits);
     const sql = `
       SELECT c.id AS id, 'fil' AS source, c.type AS type, c.categorie AS categorie, c.team_id AS team_id, c.acteur_id AS acteur_id,
-             c.entite_type AS entite_type, c.entite_id AS entite_id, c.lien AS lien, c.charge AS charge, c.cree_le AS cree_le, c.type AS evenement,
+             c.entite_type AS entite_type, c.entite_id AS entite_id, c.lien AS lien, c.charge AS charge, c.cree_le AS cree_le, c.type AS evenement, c.cible AS cible,
              CASE WHEN l.notif_id IS NOT NULL OR c.cree_le <= ? OR c.acteur_id = ? THEN 1 ELSE 0 END AS lue
         FROM notifs_centre c LEFT JOIN notifs_lectures l ON l.compte_id = ? AND l.notif_id = c.id
        WHERE ${fil.c} AND NOT EXISTS (SELECT 1 FROM notifications d WHERE d.id = c.id || CAST(? AS TEXT))
@@ -292,7 +304,7 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
              CASE WHEN ${fil.e} THEN e.acteur_id ELSE NULL END AS acteur_id,
              CASE WHEN ${fil.e} THEN e.entite_type ELSE NULL END AS entite_type,
              CASE WHEN ${fil.e} THEN e.entite_id ELSE NULL END AS entite_id,
-             e.lien AS lien, p.charge AS charge, p.cree_le AS cree_le, e.type AS evenement,
+             e.lien AS lien, p.charge AS charge, p.cree_le AS cree_le, e.type AS evenement, p.cible AS cible,
              CASE WHEN p.lue_le IS NULL THEN 0 ELSE 1 END AS lue
         FROM notifications p LEFT JOIN notifs_centre e ON e.id = p.evenement_id
        WHERE p.compte_id = ? AND ${perso.sql}`;
@@ -390,6 +402,8 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
         acteur: l.acteur_id ?? null,
         entite: l.entite_type ? { type: l.entite_type, id: l.entite_id ?? null } : null,
         lien: jsonOu(l.lien, null) ?? lienDeCategorie(l.categorie, l.team_id),
+        // Lien direct vers l'élément (cibles.mjs) ; absent : le lien de section.
+        cible: normaliserCible(l.cible),
         charge: charges[i],
         lue: Number(l.lue) === 1,
         date: l.cree_le,
@@ -465,7 +479,17 @@ export function servicesCentre({ base, maintenant = () => Date.now() }) {
     return preferences(acteur);
   }
 
-  return { liste, compteur, marquerLues, preferences, changerPreferences };
+  /**
+   * `POST /notifications/cible` `{ cible }` : l'élément d'un lien direct existe-t-il encore, et le lecteur y a-t-il
+   * encore accès ? → `{ etat: 'ok', cible }` (complétée pour l'ouvrir), `{ etat: 'supprime' }` ou `{ etat: 'interdit' }`.
+   */
+  async function verifier(acteur, corps) {
+    const r = await verifierCible(base, acteur, corps?.cible);
+    if (r.etat === 'invalide') throw echec(400, 'cible', 'Lien illisible.');
+    return r;
+  }
+
+  return { liste, compteur, marquerLues, preferences, changerPreferences, verifier };
 }
 
 /** Données du centre d'un compte (RGPD : export) : préférences et lectures. Le fil n'est pas « à lui ». */

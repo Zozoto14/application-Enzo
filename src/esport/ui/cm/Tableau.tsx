@@ -46,6 +46,7 @@ import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, no
 import { BandeUrgence, CompteurUrgence, Drapeau, LegendeUrgence, PastilleUrgence, SelecteurUrgence, libelleUrgence, useMouvementReduit } from './Drapeau';
 import { FicheCarte } from './FicheCarte';
 import { EtoileFavori } from './Favori';
+import { useCible } from '../notifications/Cible';
 import { GestionEtiquettes } from './GestionEtiquettes';
 import { AccesTableau } from './AccesTableau';
 
@@ -217,6 +218,10 @@ export function Tableau({
   useEffect(() => {
     if (carteInitiale) setOuverte(carteInitiale);
   }, [carteInitiale]);
+  // Lien direct d'une notification : la carte visée s'ouvre (fiche), si elle est de ce tableau.
+  useCible('cm-carte', c => {
+    if (c.g === 'carte_cm' && typeof c.carte === 'string' && (!c.tableau || c.tableau === id)) setOuverte(c.carte);
+  });
   const [ajout, setAjout] = useState<string | undefined>();
   const [titreAjout, setTitreAjout] = useState('');
   // Création en chaîne (comme Trello) : le champ reste ouvert ; les cartes créées apparaissent tout de suite (optimiste).

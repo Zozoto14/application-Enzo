@@ -9,6 +9,7 @@
  */
 
 import { requeteUrl, type ClientEsport } from '../client';
+import type { CibleNotification } from './cibles';
 
 export const CATEGORIES_NOTIFICATIONS = ['planning', 'competition', 'resultats', 'cm', 'drive', 'sponsors', 'tickets', 'membres', 'discord', 'reunions', 'objectifs', 'jeu', 'devblog', 'systeme'] as const;
 export type CategorieNotification = (typeof CATEGORIES_NOTIFICATIONS)[number];
@@ -35,6 +36,8 @@ export interface NotificationCentre {
   acteur: string | null;
   entite: { type: string; id: string | null } | null;
   lien: LienNotification | null;
+  /** Lien direct vers l'élément (cibles.ts) ; absent : le lien de section (`lien`). */
+  cible?: CibleNotification | null;
   charge: Record<string, unknown>;
   lue: boolean;
   date: string;
@@ -89,6 +92,8 @@ export function apiNotifications(client: ClientEsport) {
     marquerLues: (ids: string[]) => r<{ nonLues: number }>('/notifications/centre/lues', 'POST', { ids }),
     toutMarquerLu: () => r<{ nonLues: number }>('/notifications/centre/lues', 'POST', { tout: true }),
     preferences: () => r<PreferencesNotifications>('/notifications/preferences'),
+    /** Lien direct : l'élément existe-t-il encore, et le compte y a-t-il encore accès ? (cible complétée pour l'ouvrir) */
+    verifierCible: (cible: CibleNotification) => r<{ etat: 'ok'; cible: CibleNotification } | { etat: 'supprime' | 'interdit' }>('/notifications/cible', 'POST', { cible }),
     changerPreferences: (p: Partial<Pick<PreferencesNotifications, 'masquees' | 'silencieuses' | 'teams'>>) => r<PreferencesNotifications>('/notifications/preferences', 'PUT', p),
   };
 }

@@ -11,6 +11,7 @@
  * Ce fichier n'importe pas evenements.mjs (cm/bus.mjs, que evenements.mjs importe, se sert de `mettreMpEnFile`).
  */
 
+import { lienProfond } from '../../notifications/cibles.mjs';
 import { iso, jsonOu } from '../../outils.mjs';
 import { texte as T } from '../../langues.mjs';
 import { API_DISCORD, ATTENTES_ECHEC_S, ESSAIS_MAX, appelerDiscord, langueCompte } from '../../discord/file.mjs';
@@ -56,7 +57,7 @@ export async function chargeMpReunion(base, ligne, { lienApp = '' } = {}) {
     .filter(Boolean)
     .join('\n');
   return {
-    embeds: [{ title: T(langue, `cm.reunion.mp.titre_${ligne.genre}`).slice(0, 256), description: description.slice(0, 4000), color: ACCENT, ...(lienApp ? { url: lienApp } : {}) }],
+    embeds: [{ title: T(langue, `cm.reunion.mp.titre_${ligne.genre}`).slice(0, 256), description: description.slice(0, 4000), color: ACCENT, ...(lienApp ? { url: lienProfond(lienApp, { v: 1, g: 'reunion_cm', reunion: r.id, debut: ligne.occurrence ?? undefined }) || lienApp } : {}) }],
     allowed_mentions: { parse: [] },
   };
 }

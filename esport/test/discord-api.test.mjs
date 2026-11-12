@@ -352,9 +352,11 @@ test('{lien} : adresse de l’app donnée par le serveur ; vide sinon', async ()
   await b.appel(`/teams/${teamId}/discord/parametres/event_created`, { methode: 'PUT', jeton: sessions.max12345, corps: { modele: 'Voir {lien} pour {titre}' } });
   await b.appel(`/teams/${teamId}/planning`, { methode: 'POST', jeton: sessions.coach123, corps: { type: 'scrim', titre: 'Scrim', date: '2026-10-22', heureDebut: '20:30', heureFin: '22:00' } });
   const corps = discord.appels[0].corps;
-  assert.equal(corps.embeds[0].description, 'Voir https://app.exemple/esport pour Scrim');
-  assert.equal(corps.embeds[0].url, 'https://app.exemple/esport', 'titre de l’embed : lien vers l’app');
-  assert.equal(corps.components[0].components[0].url, 'https://app.exemple/esport', 'bouton « Ouvrir dans l’app »');
+  // Lien direct vers l'événement (à sa date) dans l'app : le même que celui des notifications.
+  const lienEv = /^https:\/\/app\.exemple\/esport#\/app\/esport\/c\/evenement\?evenement=[0-9a-f-]+&occurrence=[^&]+&team=[0-9a-f-]+$/;
+  assert.match(corps.embeds[0].description, /^Voir https:\/\/app\.exemple\/esport#\/app\/esport\/c\/evenement\?\S+ pour Scrim$/);
+  assert.match(corps.embeds[0].url, lienEv, 'titre de l’embed : lien vers l’app');
+  assert.match(corps.components[0].components[0].url, lienEv, 'bouton « Ouvrir dans l’app »');
 });
 
 // ------------------------------------------------------------------ Rappels J-1 / H-1 (cron)

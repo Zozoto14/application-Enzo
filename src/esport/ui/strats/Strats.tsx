@@ -11,6 +11,7 @@
  * Droits (vérifiés par le serveur) : strats.view|create|update|delete|share.
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
@@ -42,6 +43,10 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const assets = useAssetsTeam(client, detail.team);
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const [ouverte, setOuverte] = useState<string | undefined>(() => prendreStratDemandee());
+  // Lien direct d'une notification : l'élément visé s'ouvre.
+  useCible('strats', c => {
+    if (c.g === 'strat' && typeof c.strat === 'string') setOuverte(c.strat);
+  });
   const [strats, setStrats] = useState<Strat[] | undefined>();
   const [filtres, setFiltres] = useState<FiltresStrats>({});
   const [recherche, setRecherche] = useState('');

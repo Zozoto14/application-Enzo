@@ -19,6 +19,7 @@
  * est expliqué. Chaque message (erreur ou « Enregistré ») s'affiche À CÔTÉ du bouton qui l'a provoqué.
  */
 
+import { CibleSurlignee } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
@@ -1057,6 +1058,8 @@ function Commentaires({ theme, api, c, nouveauxDepuis, commenter, gerer, nom, jo
             <View style={{ flex: 1, height: 1, backgroundColor: theme.accent }} />
           </View>
         ) : null}
+        {/* Commentaire visé par une notification (lien direct) : mis en avant et amené à l'écran. */}
+        <CibleSurlignee theme={theme} cle={`cm-commentaire:${x.id}`}>
         <View style={{ gap: 4, borderLeftWidth: 3, borderLeftColor: nouveau ? theme.accent : theme.ligne, paddingLeft: ESP.s, backgroundColor: nouveau ? teinteTransparente(theme.accent, 0.08) : 'transparent' }} testID={`esport-cm-commentaire-${x.id}`} accessibilityLabel={nouveau ? trCm('fiche.nouveaux') : undefined}>
           <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={{ ...texte(theme, 13), fontWeight: '700' }}>{`${x.auteur ? nom(x.auteur) : (x.auteurNom ?? trCm('c.compte_supprime'))} · ${quand(x.creeLe)}${x.trello ? ' · Trello' : ''}`}</Text>
@@ -1068,6 +1071,7 @@ function Commentaires({ theme, api, c, nouveauxDepuis, commenter, gerer, nom, jo
           </View>
           <NoteMarkdown theme={theme} source={x.texte} />
         </View>
+        </CibleSurlignee>
         </React.Fragment>
         );
       })}

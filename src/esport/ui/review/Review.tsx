@@ -16,6 +16,7 @@
  * Droits (vérifiés par le serveur) : video_review.view|create|annotate|delete|react.
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
@@ -61,6 +62,10 @@ export function Review({ theme, client, detail, large, reviewId, onExporter }: P
   const api = useMemo(() => apiReview(client, teamId), [client, teamId]);
   const [ouverte, setOuverte] = useState<{ id: string; depart?: number } | undefined>(reviewId ? { id: reviewId } : undefined);
   const [message, setMessage] = useState<string | undefined>();
+  // Lien direct d'une notification (review créée, commentaire sur un repère) : la review s'ouvre.
+  useCible('review', c => {
+    if (c.g === 'review' && typeof c.review === 'string') setOuverte({ id: c.review });
+  });
   if (ouverte) {
     return (
       <DetailReviewEcran

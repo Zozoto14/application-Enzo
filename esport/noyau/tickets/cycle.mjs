@@ -27,6 +27,7 @@
  * ensuite, au mieux).
  */
 
+import { lienProfond } from '../notifications/cibles.mjs';
 import { echec, iso, jsonOu, nouvelId } from '../outils.mjs';
 import { evenement } from '../evenements.mjs';
 import { limiter } from '../limites.mjs';
@@ -877,10 +878,13 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
   const preferences = compte => lireReglage(base, `pref:${compte}`, { mpNouveau: false, mpMessage: true });
 
   /** MP Discord à un compte de l'app (s'il a lié son Discord), dans sa langue. */
-  async function mpCompte(compte, cle, vars) {
+  async function mpCompte(compte, cle, vars, cible = null) {
     const lie = await base.premier('SELECT dc.discord_user_id, c.langue FROM discord_comptes dc LEFT JOIN comptes c ON c.id = dc.compte_id WHERE dc.compte_id = ?', [compte]);
     if (!lie) return;
-    await envoyerMp(lie.discord_user_id, { content: tx(langueDe(lie.langue), cle, vars).slice(0, 2000) });
+    const langue = langueDe(lie.langue);
+    // Lien direct vers le ticket (et son message) dans l'app : le même que celui de la notification (cibles.mjs).
+    const lien = cible ? lienProfond(lienApp, cible) : '';
+    await envoyerMp(lie.discord_user_id, { content: `${tx(langue, cle, vars)}${lien ? `\n${tx(langue, 'lien_app')} : <${lien}>` : ''}`.slice(0, 2000) });
   }
 
   /** Nouveau ticket : MP aux comptes qui traitent la catégorie et l'ont demandé (la cloche passe par le bus). */
@@ -888,7 +892,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
     const comptes = [...(await comptesDeCategorie(base, ticket.categorie_id, { repondre: true }))].slice(0, 20);
     for (const c of comptes) {
       if (!(await preferences(c)).mpNouveau) continue;
-      await mpCompte(c, 'mp_nouveau', { numero: ticket.numero, categorie: sur(cat.nom.fr, 80), salon: `<#${ticket.salon_id}>` }).catch(() => undefined);
+      await mpCompte(c, 'mp_nouveau', { numero: ticket.numero, categorie: sur(cat.nom.fr, 80), salon: `<#${ticket.salon_id}>` }, { v: 1, g: 'ticket', ticket: ticket.id }).catch(() => undefined);
     }
   }
 
@@ -909,7 +913,7 @@ export function servicesCycleTickets({ base, maintenant = () => Date.now(), stoc
       [`${message.id}:${resp}`, resp, 'tk-message', JSON.stringify({ numero: Number(ticket.numero), ticket: ticket.id, categorie: ticket.categorie_id, nom: cat?.nom.fr ?? null }), iso(t), 'tickets', ticket.categorie_id],
     );
     await publierEnBase(base, { sujet: `compte:${resp}`, action: 'cree' }, t).catch(() => undefined);
-    if ((await preferences(resp)).mpMessage) await mpCompte(resp, 'mp_message', { numero: ticket.numero, auteur: sur(message.auteurNom, 80), salon: `<#${ticket.salon_id}>` }).catch(() => undefined);
+    if ((await preferences(resp)).mpMessage) await mpCompte(resp, 'mp_message', { numero: ticket.numero, auteur: sur(message.auteurNom, 80), salon: `<#${ticket.salon_id}>` }, { v: 1, g: 'ticket', ticket: ticket.id, message: message.id }).catch(() => undefined);
   }
 
   /** Message reçu d'un compte Discord lié à un compte de l'app qui répond aux tickets de cette catégorie : du staff. */

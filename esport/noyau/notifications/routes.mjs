@@ -5,6 +5,7 @@
  *   GET  /notifications/centre       liste paginée (filtres : categories, team, auteur, du, au, nonLues, ordre, suite, limite)
  *   GET  /notifications/compteur     { nonLues }
  *   POST /notifications/centre/lues  { ids: [...] } ou { tout: true } → { nonLues }
+ *   POST /notifications/cible        { cible } → { etat: 'ok' | 'supprime' | 'interdit', cible } (lien direct, cibles.mjs)
  *   GET  /notifications/preferences  { masquees, silencieuses, teams, categories }
  *   PUT  /notifications/preferences  { masquees?, silencieuses?, teams? }
  */
@@ -13,6 +14,7 @@ export async function routesNotifications({ nc, acteur, chemin, methode, url, li
   if (chemin === '/notifications/centre' && methode === 'GET') return nc.liste(acteur, Object.fromEntries(url.searchParams));
   if (chemin === '/notifications/compteur' && methode === 'GET') return nc.compteur(acteur);
   if (chemin === '/notifications/centre/lues' && methode === 'POST') return nc.marquerLues(acteur, await lireCorps());
+  if (chemin === '/notifications/cible' && methode === 'POST') return nc.verifier(acteur, await lireCorps());
   if (chemin === '/notifications/preferences') {
     if (methode === 'GET') return nc.preferences(acteur);
     if (methode === 'PUT') {

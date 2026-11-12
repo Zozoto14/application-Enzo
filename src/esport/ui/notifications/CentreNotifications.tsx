@@ -19,6 +19,7 @@ import { trNf, trnNf } from '../../i18n/notifications';
 import { trRp } from '../../i18n/roles';
 import { Icone } from '../../../ui/icones';
 import { CATEGORIES_NOTIFICATIONS, apiNotifications, signalerNotifications, surNotifications, type CategorieNotification, type LienNotification, type NotificationCentre, type PageNotifications as Page, type PreferencesNotifications } from '../../notifications/api';
+import type { CibleNotification } from '../../notifications/cibles';
 import { ICONES, bornesPeriode, dateRelative, grouperParJour, libelleCategorie, pastille, phraseCentre, titreJour, type Periode } from '../../notifications/logique';
 import { Retours, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Squelette, attenue, rayonControle, texte } from '../design';
@@ -234,8 +235,11 @@ export function PageNotifications({
   client: ClientEsport;
   large: boolean;
   fondateur?: boolean;
-  /** Ouvre l'élément (écran de l'app) ; rien si l'écran n'existe pas pour ce compte. */
-  onOuvrir(lien: LienNotification, teamId: string | null): void;
+  /**
+   * Ouvre l'élément : lien direct (`cible`, l'élément exact) s'il y en a un, sinon l'écran de sa section (`lien`) ;
+   * rien si l'écran n'existe pas pour ce compte.
+   */
+  onOuvrir(lien: LienNotification | null, teamId: string | null, cible?: CibleNotification): void;
   avant?: React.ReactNode;
 }) {
   const api = useMemo(() => apiNotifications(client), [client]);
@@ -304,7 +308,7 @@ export function PageNotifications({
 
   const ouvrir = (n: NotificationCentre) => {
     if (!n.lue) void marquer([n.id]);
-    if (n.lien) onOuvrir(n.lien, n.team?.id ?? null);
+    if (n.cible || n.lien) onOuvrir(n.lien, n.team?.id ?? null, n.cible ?? undefined);
   };
 
   const ouvrirPrefs = () => {
@@ -447,7 +451,7 @@ export function PageNotifications({
           </Text>
           <Carte theme={theme} dense style={{ gap: 0, paddingVertical: ESP.xxs }}>
             {g.elements.map(n => (
-              <LigneNotification key={n.id} theme={theme} n={n} noms={page?.noms ?? {}} onOuvrir={n.lien ? () => ouvrir(n) : undefined} onLue={() => void marquer([n.id])} />
+              <LigneNotification key={n.id} theme={theme} n={n} noms={page?.noms ?? {}} onOuvrir={n.lien || n.cible ? () => ouvrir(n) : undefined} onLue={() => void marquer([n.id])} />
             ))}
           </Carte>
         </View>

@@ -1,6 +1,6 @@
 import type { Profil } from '../../profils/profils';
 import type { AppHub, ContexteHub } from '../types';
-import { adresseProfonde, decisionLienProfond, fragmentApp, lireLienProfond } from './liensProfonds';
+import { aSousRoute, adresseProfonde, decisionLienProfond, effacerLienProfond, fragmentApp, lireLienProfond } from './liensProfonds';
 import { actionOnglet, enSaisie } from './raccourcis';
 
 const app = (id: string, options: Partial<AppHub> = {}): AppHub => ({ id, nom: id[0].toUpperCase() + id.slice(1), categorie: 'Test', description: '', icone: '•', teinte: 'quatre', ...options });
@@ -57,6 +57,30 @@ describe('liens profonds #/app/<id>', () => {
     const politique = { version: 1, apps: { taches: { active: true, defaut: 'complet' as const, maintenance: 'Mise à jour' } } };
     const contexte: ContexteHub = { profil: ami(['taches']), profils: { politique } as unknown as ContexteHub['profils'] };
     expect(decisionLienProfond('taches', REGISTRE, contexte)).toMatchObject({ genre: 'refuse', motif: 'maintenance' });
+  });
+});
+
+describe('liens profonds vers un écran dans l’app (#/app/<id>/…)', () => {
+  it('l’app est ouverte, et l’adresse de l’écran est gardée (rechargement au même endroit)', () => {
+    expect(lireLienProfond('#/app/esport/c/ticket?ticket=t1')).toBe('esport');
+    expect(aSousRoute('#/app/esport/c/ticket?ticket=t1')).toBe(true);
+    expect(aSousRoute('#/app/esport')).toBe(false);
+    expect(aSousRoute('#/app/esport?x')).toBe(false);
+    const g = globalThis as unknown as { location?: unknown; history?: unknown };
+    const avant = { location: g.location, history: g.history };
+    const remplacements: string[] = [];
+    try {
+      g.history = { replaceState: (_e: unknown, _t: string, url: string) => remplacements.push(url) };
+      g.location = { hash: '#/app/esport/c/ticket?ticket=t1', href: 'https://site.fr/#/app/esport/c/ticket?ticket=t1' };
+      effacerLienProfond();
+      expect(remplacements).toEqual([]);
+      g.location = { hash: '#/app/esport', href: 'https://site.fr/#/app/esport' };
+      effacerLienProfond();
+      expect(remplacements).toEqual(['https://site.fr/']);
+    } finally {
+      g.location = avant.location;
+      g.history = avant.history;
+    }
   });
 });
 

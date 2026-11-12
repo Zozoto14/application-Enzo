@@ -8,6 +8,7 @@
  * assign ; l'assigné fait avancer sa tâche même avec la seule lecture.
  */
 
+import { CibleSurlignee } from './notifications/Cible';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../hub/admin/ui/commun';
@@ -242,7 +243,9 @@ export function SectionObjectifs({
         <Panneau theme={theme} testID="esport-taches-liste">
           {taches?.length === 0 ? <EtatVide theme={theme} glyphe="☑︎" titre={tr('objectifs.aucune_tache')} texte={filtre === 'toutes' ? tr('objectifs.creez_la_premiere_tache') : tr('objectifs.rien_pour_ce_filtre')} /> : null}
           {taches?.map(t => (
-            <CarteTache key={t.id} theme={theme} tache={t} peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={s => modifier(t, { statut: s })} onSupprimer={() => supprimer(t)} />
+            <CibleSurlignee key={t.id} theme={theme} cle={`tache:${t.id}`}>
+              <CarteTache theme={theme} tache={t} peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={s => modifier(t, { statut: s })} onSupprimer={() => supprimer(t)} />
+            </CibleSurlignee>
           ))}
         </Panneau>
       ) : (
@@ -259,7 +262,9 @@ export function SectionObjectifs({
                     {LIBELLES_STATUT_TACHE[s]} · {colonne.length}
                   </Text>
                   {colonne.map(t => (
-                    <CarteTache key={t.id} theme={theme} tache={t} carte peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={st => modifier(t, { statut: st })} onSupprimer={() => supprimer(t)} />
+                    <CibleSurlignee key={t.id} theme={theme} cle={`tache:${t.id}`}>
+                      <CarteTache theme={theme} tache={t} carte peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={st => modifier(t, { statut: st })} onSupprimer={() => supprimer(t)} />
+                    </CibleSurlignee>
                   ))}
                 </View>
               );

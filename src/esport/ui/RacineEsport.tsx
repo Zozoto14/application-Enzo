@@ -15,7 +15,7 @@
  * marche à suivre ; rien d'autre ne casse.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { RetourHub } from '../../hub/Hub';
 import { Avis, BoutonHub, Champ } from '../../hub/admin/ui/commun';
@@ -49,7 +49,10 @@ import { demarrerUsage, noterPage } from '../usage';
 import { FenetreNouveautes, useNouveautes } from './devblog/Nouveautes';
 import { trDv } from '../i18n/devblog';
 import { ClocheNotifications, PageNotifications, useCompteurNotifications } from './notifications/CentreNotifications';
-import type { LienNotification } from '../notifications/api';
+import { apiNotifications, type LienNotification } from '../notifications/api';
+import { destinationCible, fragmentCible, fragmentEcran, fragmentPage, lireFragment, remplacerFragment, type CibleNotification, type EcranRoute } from '../notifications/cibles';
+import { FournisseurCible, type CibleActive } from './notifications/Cible';
+import { trNf } from '../i18n/notifications';
 import { useTempsReel } from '../tempsReel/hooks';
 import { IndicateurDirect } from '../tempsReel/ui';
 import { FournisseurEcriture } from './ecriture/ZoneEcriture';
@@ -92,6 +95,27 @@ export function normaliserVue(v: VueDemandee): Vue {
   return v as Vue;
 }
 
+/** Écran → adresse partageable (`#/app/esport/v/…`, notifications/cibles.ts). */
+export function ecranDeVue(v: Vue): EcranRoute {
+  if (v.v === 'team') return { v: 'team', id: v.id, sous: v.section };
+  if (v.v === 'cm') return { v: 'cm', sous: v.onglet };
+  if (v.v === 'membres' || v.v === 'administration') return { v: v.v, sous: v.sous };
+  if (v.v === 'tickets') return { v: 'tickets', sous: 'config' in v ? v.config : undefined };
+  return { v: v.v };
+}
+
+const VUES_SIMPLES = ['dashboard', 'teams', 'notifications', 'devblog', 'plus', 'assistant', 'boite', 'statistiques', 'jeux'];
+
+/** Adresse partageable → écran (inconnu : rien ; l'écran revérifie les droits comme toujours). */
+export function vueDEcran(e: EcranRoute): VueDemandee | undefined {
+  if (e.v === 'team') return e.id ? { v: 'team', id: e.id, section: e.sous as SectionTeam | undefined } : undefined;
+  if (e.v === 'cm') return { v: 'cm', onglet: e.sous as OngletCm | undefined };
+  if (e.v === 'membres') return { v: 'membres', sous: e.sous as SousOngletMembres | undefined };
+  if (e.v === 'administration') return { v: 'administration', sous: e.sous as SousOngletAdmin | undefined };
+  if (e.v === 'tickets') return { v: 'tickets', config: e.sous as SectionConfigTickets | undefined };
+  return VUES_SIMPLES.includes(e.v) ? ({ v: e.v } as VueDemandee) : undefined;
+}
+
 /** Page de team du CM du club → espace CM, sur la section correspondante (accueil de la team : accueil de l'espace). */
 export function versEspaceCm(v: Vue): Vue {
   if (v.v !== 'team' || v.id !== TEAM_CM_ID) return v;
@@ -117,10 +141,32 @@ export function Esport(props: PropsRacineApp) {
     return () => definirLangueDates('fr');
   }, [langueEsport]);
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
-  const [vueDemandee, setVue] = useState<VueDemandee>({ v: 'dashboard' });
+  const [vueDemandee, setVueBrute] = useState<VueDemandee>({ v: 'dashboard' });
+  // Liens directs (notifications, adresses partageables, liens des MP Discord) : élément ouvert, avis « n'existe plus » /
+  // « plus accès », adresse de l'élément tant qu'on y reste, numéro de navigation (rouvre l'écran visé).
+  const [cibleActive, setCibleActive] = useState<CibleActive | undefined>();
+  const [avisCible, setAvisCible] = useState<'supprime' | 'interdit' | 'erreur' | undefined>();
+  const [routeCible, setRouteCible] = useState<string | undefined>();
+  const [navN, setNavN] = useState(0);
+  const navRef = useRef(0);
+  /** Nouvelle navigation (lien de notification, adresse) : l'écran visé se rouvre, même s'il était déjà affiché. */
+  const nouvelleNav = useCallback(() => {
+    navRef.current += 1;
+    setNavN(navRef.current);
+    return navRef.current;
+  }, []);
+  /** Navigation ordinaire : quitte l'élément ouvert par un lien direct. */
+  const setVue = useCallback((v: VueDemandee) => {
+    setCibleActive(undefined);
+    setRouteCible(undefined);
+    setAvisCible(undefined);
+    setVueBrute(v);
+  }, []);
   const vueNormale = normaliserVue(vueDemandee);
   // Section CM (GET /cm/moi) : carte « CM du club » de la page Teams ; un ancien serveur sans section CM n'affiche rien.
   const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
+  // GET /cm/moi répondu (ou en échec) : un lien direct vers le CM sait alors où s'ouvrir (espace CM ou onglet CM de la team).
+  const [moiCmLu, setMoiCmLu] = useState(false);
   // Tickets Discord (GET /tickets/moi) : entrée « Tickets » pour qui voit les tickets ou les configure.
   const [moiTickets, setMoiTickets] = useState<MoiTickets | undefined>();
   const { width } = useWindowDimensions();
@@ -162,7 +208,10 @@ export function Esport(props: PropsRacineApp) {
       .then(m => {
         if (vivant) setMoiCm(m);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (vivant) setMoiCmLu(true);
+      });
     // Un ancien serveur sans tickets répond 404 : pas d'entrée « Tickets ».
     Promise.resolve()
       .then(() => apiTickets(clientPret).moi())
@@ -222,14 +271,95 @@ export function Esport(props: PropsRacineApp) {
 
   // Centre de notifications : compteur des non lues (cloche de l'en-tête, entrée de la barre latérale).
   const notifs = useCompteurNotifications(profilPret ? clientPret : undefined);
-  /** Ouvre l'écran d'une notification (si ce compte y a accès : sinon l'écran retombe sur une page permise). */
-  const ouvrirLien = useCallback((lien: LienNotification, teamId: string | null) => {
-    if (lien.vue === 'team') {
-      if (teamId) setVue({ v: 'team', id: teamId, section: lien.section as SectionTeam });
-    } else if (lien.vue === 'cm') setVue({ v: 'cm', onglet: lien.onglet as OngletCm });
-    else if (lien.vue === 'membres') setVue({ v: 'membres', sous: lien.sous });
-    else setVue({ v: lien.vue });
-  }, []);
+  /** Ouvre l'écran de la section d'une notification (si ce compte y a accès : sinon l'écran retombe sur une page permise). */
+  const ouvrirSection = useCallback(
+    (lien: LienNotification, teamId: string | null) => {
+      nouvelleNav();
+      if (lien.vue === 'team') {
+        if (teamId) setVue({ v: 'team', id: teamId, section: lien.section as SectionTeam });
+      } else if (lien.vue === 'cm') setVue({ v: 'cm', onglet: lien.onglet as OngletCm });
+      else if (lien.vue === 'membres') setVue({ v: 'membres', sous: lien.sous });
+      else setVue({ v: lien.vue });
+    },
+    [setVue, nouvelleNav],
+  );
+  /**
+   * Lien direct : le serveur vérifie que l'élément existe encore et que le compte y a encore accès, puis l'écran visé
+   * s'ouvre (bonne team, bon sous-onglet, élément ouvert et mis en avant). Sinon un avis clair, et l'on reste où l'on est.
+   * Serveur trop ancien ou injoignable : la section (`repli`), comme avant.
+   */
+  const allerVersCible = useCallback(
+    async (cible: CibleNotification, repli?: { lien: LienNotification | null; teamId: string | null }) => {
+      if (!clientPret) return;
+      setAvisCible(undefined);
+      let r: Awaited<ReturnType<ReturnType<typeof apiNotifications>['verifierCible']>>;
+      try {
+        r = await apiNotifications(clientPret).verifierCible(cible);
+      } catch {
+        if (repli?.lien) ouvrirSection(repli.lien, repli.teamId);
+        else setAvisCible('erreur');
+        return;
+      }
+      if (r.etat !== 'ok') {
+        setAvisCible(r.etat);
+        return;
+      }
+      const dest = destinationCible(r.cible, { espaceCm: cm });
+      if (!dest) {
+        if (repli?.lien) ouvrirSection(repli.lien, repli.teamId);
+        return;
+      }
+      setCibleActive({ cible: r.cible, n: nouvelleNav(), surligne: dest.surligne });
+      setRouteCible(fragmentCible(r.cible as CibleNotification));
+      setVueBrute(dest.vue as VueDemandee);
+    },
+    [clientPret, cm, ouvrirSection, nouvelleNav],
+  );
+  /** Ouvre une notification : son élément exact (lien direct), sinon sa section. */
+  const ouvrirLien = useCallback(
+    (lien: LienNotification | null, teamId: string | null, cible?: CibleNotification) => {
+      if (cible) void allerVersCible(cible, { lien, teamId });
+      else if (lien) ouvrirSection(lien, teamId);
+    },
+    [allerVersCible, ouvrirSection],
+  );
+  // Adresse partageable (web) : l'élément ouvert par un lien direct, sinon l'écran ; un rechargement garde l'endroit.
+  const pretPourAdresse = etat.e === 'pret' && Boolean(etat.moi.profil) && moiCmLu;
+  const adresseLue = useRef(false);
+  const suivreAdresse = useCallback(
+    (fragment: string | undefined) => {
+      const lu = lireFragment(fragment);
+      if (!lu) return false;
+      if ('cible' in lu) void allerVersCible(lu.cible);
+      else {
+        const v = vueDEcran(lu.ecran);
+        if (!v) return false;
+        nouvelleNav();
+        setVue(v);
+      }
+      return true;
+    },
+    [allerVersCible, setVue, nouvelleNav],
+  );
+  useEffect(() => {
+    if (!pretPourAdresse || adresseLue.current) return;
+    adresseLue.current = true;
+    suivreAdresse(fragmentPage());
+  }, [pretPourAdresse, suivreAdresse]);
+  useEffect(() => {
+    const g = globalThis as { addEventListener?(t: string, f: () => void): void; removeEventListener?(t: string, f: () => void): void };
+    if (!pretPourAdresse || !g.addEventListener) return undefined;
+    // Lien collé dans la barre d'adresse alors que l'app est ouverte.
+    const surFragment = () => void suivreAdresse(fragmentPage());
+    g.addEventListener('hashchange', surFragment);
+    return () => g.removeEventListener?.('hashchange', surFragment);
+  }, [pretPourAdresse, suivreAdresse]);
+  useEffect(() => {
+    if (!pretPourAdresse || !adresseLue.current) return;
+    remplacerFragment(routeCible ?? fragmentEcran(ecranDeVue(vue)));
+  }, [pretPourAdresse, routeCible, vue]);
+  // En quittant l'Esport : l'adresse revient à celle du hub.
+  useEffect(() => () => remplacerFragment(null), []);
 
   const exporter = contexte.enregistrerFichier ? (nom: string, contenu: string, type = 'application/json') => contexte.enregistrerFichier!(nom, contenu, type) : undefined;
   const fondateur = !contexte.profil || contexte.profil.admin;
@@ -258,7 +388,7 @@ export function Esport(props: PropsRacineApp) {
   } else if (vue.v === 'team') {
     contenu = (
       <PageTeam
-        key={vue.id}
+        key={`${vue.id}:${navN}`}
         theme={theme}
         client={etat.client}
         teamId={vue.id}
@@ -331,13 +461,13 @@ export function Esport(props: PropsRacineApp) {
       // par le serveur).
       // `config` : lien depuis Administration › Bot Esport HQ (Configuration, à la bonne section).
       const sectionConfig = 'config' in vue ? vue.config : undefined;
-      page = <PageTickets key={sectionConfig ?? 'tickets'} theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} sectionConfig={sectionConfig} />;
+      page = <PageTickets key={`${sectionConfig ?? 'tickets'}:${navN}`} theme={theme} client={etat.client} large={large} moi={moiTickets} onExporter={exporter} sectionConfig={sectionConfig} />;
     } else if (vue.v === 'administration' && administration) {
       // Administration : Statistiques, Jeux, Rôles et permissions, Devblog ; un sous-onglet par permission
       // (contrôlée par le serveur). `key` : un lien rouvre son sous-onglet.
       page = (
         <PageAdministration
-          key={vue.sous ?? 'administration'}
+          key={`${vue.sous ?? 'administration'}:${navN}`}
           theme={theme}
           client={etat.client}
           large={large}
@@ -368,7 +498,7 @@ export function Esport(props: PropsRacineApp) {
       // Trello, réglages (cm.gerer). `key` : le raccourci « Drive » rouvre l'espace sur son onglet.
       page = (
         <EspaceCm
-          key={vue.carte ? `carte-${vue.carte.carteId}` : (vue.onglet ?? 'cm')}
+          key={`${vue.carte ? `carte-${vue.carte.carteId}` : (vue.onglet ?? 'cm')}:${navN}`}
           theme={theme}
           client={etat.client}
           large={large}
@@ -386,7 +516,7 @@ export function Esport(props: PropsRacineApp) {
       // Membres : Trombinoscope (premier sous-onglet) et Tous les membres (liste, création, invitations).
       page = (
         <PageMembres
-          key={vue.v === 'membres' ? (vue.sous ?? 'trombi') : 'trombi'}
+          key={`${vue.v === 'membres' ? (vue.sous ?? 'trombi') : 'trombi'}:${navN}`}
           theme={theme}
           client={etat.client}
           contexte={contexte}
@@ -443,7 +573,20 @@ export function Esport(props: PropsRacineApp) {
       />
       <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>
         {/* Assistant d'écriture : le client de la session pour les champs de message (docs/esport/ia-api.md). */}
-        <FournisseurEcriture client={clientPret}>{contenu}</FournisseurEcriture>
+        <FournisseurEcriture client={clientPret}>
+          <FournisseurCible active={cibleActive}>{contenu}</FournisseurCible>
+        </FournisseurEcriture>
+        {/* Lien direct impossible à suivre : avis clair (jamais une page blanche). */}
+        {avisCible ? (
+          <View style={{ position: 'absolute', top: 8, left: 12, right: 12, alignItems: 'center' }} pointerEvents="box-none">
+            <View style={{ maxWidth: 560, width: '100%', flexDirection: 'row', alignItems: 'center', gap: ESP.xs, backgroundColor: theme.surface, borderRadius: 10, padding: ESP.xs, borderWidth: 1, borderColor: theme.ligne }} testID="esport-cible-avis">
+              <View style={{ flex: 1 }}>
+                <Avis theme={theme} genre={avisCible === 'erreur' ? 'critique' : 'alerte'} texte={trNf(avisCible === 'supprime' ? 'cible_supprime' : avisCible === 'interdit' ? 'cible_interdit' : 'cible_erreur')} testID={`esport-cible-${avisCible}`} />
+              </View>
+              <BoutonHub theme={theme} titre={trNf('cible_fermer')} onPress={() => setAvisCible(undefined)} testID="esport-cible-avis-fermer" />
+            </View>
+          </View>
+        ) : null}
         {/* Temps réel : pastille discrète « En direct » / « Reconnexion… » (docs/esport/temps-reel.md). */}
         {etat.e === 'pret' ? (
           <View pointerEvents="none" style={{ position: 'absolute', right: 12, bottom: 12 }}>

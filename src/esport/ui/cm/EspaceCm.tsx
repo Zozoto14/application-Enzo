@@ -46,6 +46,7 @@ import { Reunions } from './reunions/Reunions';
 import { trRe } from '../../i18n/reunions';
 import { useNouveautesDrive } from '../../cm/nouveautesDrive';
 import { apiReunions, plusJours, type Reunion } from '../../cm/reunions';
+import { useCible } from '../notifications/Cible';
 import { entreesTeamCm, groupeSectionTeam, type EntreeTeamCm, type OngletTeamCm, type SectionsTeam } from './SectionsTeamCm';
 
 type OngletBase = 'accueil' | 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reunions' | 'drive' | 'ressources' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
@@ -314,6 +315,11 @@ export function EspaceCm({
     setOnglet('tableaux');
     setDerniers(d => ({ ...d, contenus: 'tableaux' }));
   };
+  // Lien direct d'une notification (carte commentée, assignée, post à valider…) : le tableau de la carte s'ouvre (le
+  // tableau ouvre ensuite la carte, et la fiche met le commentaire en avant).
+  useCible('cm-espace', c => {
+    if (c.g === 'carte_cm' && typeof c.tableau === 'string' && voirCm) ouvrirTableau(c.tableau);
+  });
   // Tableau ouvert : la page prend toute la largeur (barre latérale réduite comprise) et toute la hauteur, avec des
   // marges serrées ; fil d'Ariane et sous-onglets sur une seule ligne (PC).
   const tableauOuvert = onglet === 'tableaux' && voirCm && Boolean(ouvert);

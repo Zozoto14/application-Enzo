@@ -8,6 +8,7 @@
  * menu « ⋯ » : « Gérer les badges » (catalogue, GestionBadges.tsx) et « Badge à plusieurs » (sélection de cartes).
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
@@ -30,6 +31,10 @@ export function Trombinoscope({ theme, client, large, onExporter }: { theme: The
   const [filtres, setFiltres] = useState<FiltresTrombi>(FILTRES_VIDES);
   const { marge } = useDensite();
   const [ouvert, setOuvert] = useState<{ compte: string; edition: boolean } | undefined>();
+  // Lien direct d'une notification (nouveau membre, fiche modifiée) : la fiche du membre s'ouvre.
+  useCible('trombi', c => {
+    if (c.g === 'membre' && typeof c.compte === 'string') setOuvert({ compte: c.compte, edition: false });
+  });
   const [gestion, setGestion] = useState(false);
   const [selection, setSelection] = useState<Set<string> | undefined>();
   const [badgeLot, setBadgeLot] = useState<string | undefined>();

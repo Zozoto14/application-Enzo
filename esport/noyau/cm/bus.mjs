@@ -170,7 +170,7 @@ export async function abonneCm(base, ev) {
       return;
     }
     case 'cm.commentaire_ajoute': {
-      const donnees = { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, membre: ev.acteur_id };
+      const donnees = { titre: charge.titre ?? null, carte, tableau: charge.tableau ?? null, commentaireId: charge.commentaireId ?? null, membre: ev.acteur_id };
       await envoyer(charge.mentions ?? [], 'cm-mention', donnees);
       // Personnes concernées (assignées, auteur de la carte, suiveurs ; migration 0045) : une seule notification non lue
       // par carte et par personne (pas de rafale quand la conversation s'anime).

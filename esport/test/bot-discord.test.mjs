@@ -416,7 +416,8 @@ test('annonce d’un scrim : embed soigné, mentions des SEULS convoqués liés,
   assert.ok(!convoques.includes('Fondateur'), 'jamais les Propriétaires par défaut');
   assert.equal(e.fields.find(f => f.name === '🗳️ Réponses').value, '✅ **0** Oui · 🤔 **0** Peut-être · ❌ **0** Non · ⏳ 4 sans réponse');
   assert.equal(e.footer.text, 'Team Alpha · Esport');
-  assert.equal(e.url, 'https://app.exemple/esport');
+  // Lien direct vers l'événement dans l'app, à sa date (docs/esport/notifications.md « Liens directs »).
+  assert.match(e.url, /^https:\/\/app\.exemple\/esport#\/app\/esport\/c\/evenement\?evenement=[0-9a-f-]+&occurrence=2026-10-22T[^&]+&team=[0-9a-f-]+$/);
   const boutons = m.corps.components[0].components;
   assert.deepEqual(boutons.map(b => [b.style, b.label, b.emoji.name]), [[3, 'Oui', '✅'], [2, 'Peut-être', '🤔'], [4, 'Non', '❌'], [5, 'Ouvrir dans l’app', '📲']]);
   // L'annonce est retenue pour être éditée.

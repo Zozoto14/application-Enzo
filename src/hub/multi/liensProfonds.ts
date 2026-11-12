@@ -60,6 +60,11 @@ export function decisionLienProfond(id: string, registre: readonly AppHub[], con
   return { genre: 'ouvrir', app };
 }
 
+/** Le fragment désigne-t-il un écran à l'intérieur de l'app (`#/app/<id>/…`) ? */
+export function aSousRoute(fragment: string | undefined | null): boolean {
+  return Boolean(fragment && lireLienProfond(fragment) && /^#\/app\/[^/?#&]+\/./.test(fragment));
+}
+
 /** Fragment courant de la page (web), sinon `undefined`. */
 export function fragmentCourant(): string | undefined {
   return (globalThis as { location?: { hash?: string } }).location?.hash;
@@ -72,6 +77,11 @@ export function fragmentCourant(): string | undefined {
 export function effacerLienProfond(): void {
   const g = globalThis as { location?: { hash?: string; href?: string }; history?: { replaceState?(etat: unknown, titre: string, url: string): void } };
   if (!g.location?.hash || !lireLienProfond(g.location.hash) || !g.history?.replaceState || !g.location.href) {
+    return;
+  }
+  // Adresse d'un écran DANS l'app (`#/app/esport/c/…`, lien direct d'une notification) : l'app la lit et la tient à
+  // jour elle-même ; la garder permet de recharger la page au même endroit.
+  if (aSousRoute(g.location.hash)) {
     return;
   }
   try {

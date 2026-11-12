@@ -22,6 +22,7 @@ import { FormReunion } from './FormReunion';
 import { DisposCm } from './Dispos';
 import { RendezVous } from './RendezVous';
 import { useTempsReel } from '../../../tempsReel/hooks';
+import { useCible } from '../../notifications/Cible';
 
 type Section = 'agenda' | 'dispos' | 'rdv';
 const DEBUT_GRILLE = 8 * 60;
@@ -121,6 +122,22 @@ function Agenda({ theme, api, client, large, moi, fuseau, onExporter, onRelireMo
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Lien direct d'une notification (invitation, rappel, réponse…) : l'agenda se place au jour de la réunion, puis l'ouvre.
+  useCible('cm-reunion-date', c => {
+    if (c.g === 'reunion_cm' && typeof c.debut === 'string' && Number.isFinite(Date.parse(c.debut))) setReference(murale(c.debut, fuseau).date);
+  });
+  useCible(
+    'cm-reunion',
+    c => {
+      if (c.g !== 'reunion_cm' || typeof c.reunion !== 'string') return true;
+      if (!reunions) return false;
+      const r = reunions.find(x => x.id === c.reunion && x.cle === c.debut) ?? reunions.find(x => x.id === c.reunion);
+      if (r) setOuverte({ id: r.id, cle: r.cle });
+      else if (typeof c.debut === 'string') setOuverte({ id: c.reunion, cle: c.debut });
+      return true;
+    },
+    [reunions],
+  );
   // Temps réel : réunion créée, déplacée, annulée ou réponse d'un invité → agenda relu (docs/esport/temps-reel.md).
   useTempsReel(client, 'cm:reunions', () => void charger().catch(() => undefined));
   const parJour = useMemo(() => {

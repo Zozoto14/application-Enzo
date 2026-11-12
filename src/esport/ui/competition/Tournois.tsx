@@ -11,6 +11,7 @@
  * participantes, rôles Discord) se gère dans Administration › Événements (docs/esport/evenements.md).
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/commun';
@@ -42,6 +43,10 @@ export function Tournois({ theme, client, detail, large, onAller }: PropsModule)
   const [liste, setListe] = useState<ListeTournois | undefined>();
   const [filtre, setFiltre] = useState<Filtre>('actifs');
   const [ouvert, setOuvert] = useState<string | undefined>(() => prendre(teamId, 'tournoi')?.id);
+  // Lien direct d'une notification : l'élément visé s'ouvre.
+  useCible('tournois', c => {
+    if (c.g === 'tournoi' && typeof c.tournoi === 'string') setOuvert(c.tournoi);
+  });
   const [edition, setEdition] = useState<{ tournoi?: DetailTournoi['tournoi'] } | null>(null);
   const { erreur, avis, agir } = useAgir();
   const recharger = useCallback(async () => setListe(await api.tournois(teamId)), [api, teamId]);

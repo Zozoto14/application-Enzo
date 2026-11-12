@@ -10,6 +10,7 @@
  * dans la barre et reçoit 403 en appel direct).
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
@@ -61,6 +62,10 @@ export function Scouting({ theme, client, detail, large, onAller }: PropsModule)
   const teamId = detail.team.id;
   const api = useMemo(() => apiScouting(client, teamId), [client, teamId]);
   const [ouvert, setOuvert] = useState<string | undefined>();
+  // Lien direct d'une notification : l'élément visé s'ouvre.
+  useCible('scouting', c => {
+    if (c.g === 'adversaire' && typeof c.adversaire === 'string') setOuvert(c.adversaire);
+  });
   const [message, setMessage] = useState<string | undefined>();
   const profil = useProfilJeuTeam(client, teamId);
   const suggestions = useMemo<SuggestionsJeu>(

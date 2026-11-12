@@ -12,6 +12,7 @@
  * « Déplacer vers… » partout) et pastilles de nouveautés par dossier (état « vu » gardé par le serveur).
  */
 
+import { useCible } from '../../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Interrupteur } from '../../../../hub/admin/ui/commun';
@@ -116,6 +117,18 @@ export function Drive({
   const [selection, setSelection] = useState<Map<string, ElementDrive>>(new Map());
   const [enSelection, setEnSelection] = useState(false);
   const [detail, setDetail] = useState<string | undefined>();
+  // Lien direct d'une notification (fichier partagé, ajouté, nouvelle version) : son dossier s'ouvre et le fichier
+  // s'affiche (aperçu et détails) ; un dossier visé s'ouvre.
+  useCible('drive', c => {
+    if (c.g !== 'drive') return;
+    const p = typeof c.portee === 'string' ? c.portee : undefined;
+    if (porteeFixe && p && p !== porteeFixe) return;
+    if (p) setPortee(p);
+    setDossier(typeof c.dossier === 'string' ? c.dossier : null);
+    setResultats(undefined);
+    setCorbeille(false);
+    if (typeof c.fichier === 'string') setDetail(c.fichier);
+  });
   const [dialogue, setDialogue] = useState<Dialogue | undefined>();
   const [corbeille, setCorbeille] = useState(false);
   const [versionTags, setVersionTags] = useState(0);

@@ -5,6 +5,7 @@
  * et vue par adversaire reliée au scouting. Saisie : FormulaireResultat.tsx, selon le profil du jeu.
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub } from '../../../hub/admin/ui/commun';
@@ -35,6 +36,10 @@ export function Resultats({ theme, client, detail, large, onAller }: PropsModule
   const [au, setAu] = useState('');
   const [onglet, setOnglet] = useState<Onglet>('historique');
   const [ouvert, setOuvert] = useState<string | undefined>(() => prendre(teamId, 'resultat')?.id);
+  // Lien direct d'une notification : l'élément visé s'ouvre.
+  useCible('resultats', c => {
+    if (c.g === 'resultat' && typeof c.resultat === 'string') setOuvert(c.resultat);
+  });
   const [adversaire, setAdversaire] = useState<string | undefined>();
   const [edition, setEdition] = useState<{ resultat?: Resultat; matchId?: string } | null>(() => {
     const i = prendre(teamId, 'resultat-match');

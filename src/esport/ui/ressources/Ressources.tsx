@@ -15,6 +15,7 @@
  * le serveur permet.
  */
 
+import { useCible } from '../notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
@@ -89,6 +90,10 @@ export function Ressources({ theme, client, detail, large, onAller }: PropsModul
   const [recherche, setRecherche] = useState('');
   const [vue, setVue] = useState<Vue>(vueMemorisee);
   const [ouverte, setOuverte] = useState<string | undefined>();
+  // Lien direct d'une notification : l'élément visé s'ouvre.
+  useCible('ressources', c => {
+    if (c.g === 'ressource' && typeof c.ressource === 'string') setOuverte(c.ressource);
+  });
   const [edition, setEdition] = useState<{ ressource?: DetailRessource } | undefined>();
   const [categoriesOuvert, setCategoriesOuvert] = useState(false);
   const [reglagesOuvert, setReglagesOuvert] = useState(false);

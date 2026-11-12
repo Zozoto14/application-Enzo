@@ -24,6 +24,7 @@ import { ProposerClip, GalerieClips } from './Clips';
 import { Tableau } from './Tableau';
 import { Drive } from './drive/Drive';
 import { useNouveautesDrive } from '../../cm/nouveautesDrive';
+import { useCible } from '../notifications/Cible';
 
 type Section = 'deposer' | 'tableau' | 'clips' | 'drive';
 
@@ -32,6 +33,11 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
   const api = useMemo(() => apiCm(client), [client]);
   const [page, setPage] = useState<PageTeamCm | undefined>();
   const [section, setSection] = useState<Section | undefined>();
+  // Lien direct d'une notification : le tableau (carte) ou le Drive (fichier) de la team.
+  useCible('cm-team', c => {
+    if (c.g === 'carte_cm') setSection('tableau');
+    else if (c.g === 'drive') setSection('drive');
+  });
   const { erreur, agir } = useAgir();
   const charger = useCallback(async () => setPage(await api.team(teamId)), [api, teamId]);
   useEffect(() => {

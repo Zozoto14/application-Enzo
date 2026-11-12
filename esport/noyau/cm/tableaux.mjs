@@ -1559,7 +1559,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       activite(c.id, tb.id, acteur.compte, 'commentaire', {}, t),
       { sql: 'UPDATE cm_cartes SET version = version + 1 WHERE id = ?', params: [c.id] },
       versionTableau(tb.id, t),
-      evenement('cm.commentaire_ajoute', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, mentions: mentionnes, concernes }, maintenant: t }),
+      evenement('cm.commentaire_ajoute', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, commentaireId: id, mentions: mentionnes, concernes }, maintenant: t }),
     ]);
     return carte(acteur, c.id);
   }

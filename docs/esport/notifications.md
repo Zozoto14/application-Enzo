@@ -13,8 +13,9 @@ Migration `0038_centre_notifications.sql`. Code serveur : `esport/noyau/notifica
 
 La page liste tout ce que le rôle du compte permet de voir : icône par catégorie, phrase, team (ou « Club »), auteur,
 date relative, regroupement par jour (« Aujourd'hui », « Hier », puis la date), lu / non lu (point à droite :
-« Marquer comme lu »), « Tout marquer comme lu », défilement infini (et « Afficher plus »). Un appui ouvre l'élément
-(page de la team et section, espace CM et onglet, Membres, Devblog, Jeux) et marque la notification lue.
+« Marquer comme lu »), « Tout marquer comme lu », défilement infini (et « Afficher plus »). Un appui marque la
+notification lue et mène **à l'endroit même** de l'élément (voir « Liens directs ») ; une ancienne notification sans
+lien direct ouvre sa section (page de la team et section, espace CM et onglet, Membres, Devblog, Jeux).
 
 ## Visibilité (règle stricte, côté serveur)
 
@@ -121,3 +122,60 @@ Catégorie **Tickets** (migration 0054, [tickets.md](tickets.md)) : seulement de
 Leur catégorie de ticket est gardée (`notifications.ticket_categorie_id`) et **relue à chaque lecture** : un compte qui
 ne voit plus cette catégorie ne voit plus ces notifications. Les événements `ticket.*` / `tickets.*` n'entrent jamais
 dans le fil commun (règle « aucun »), ni dans le récapitulatif e-mail.
+
+## Liens directs
+
+Migration `0076_notifications_cibles.sql`. Code : `esport/noyau/notifications/cibles.mjs` (serveur),
+`src/esport/notifications/cibles.ts` (traduction en écran, adresses), `src/esport/ui/notifications/Cible.tsx`
+(`useCible`, `CibleSurlignee`). Tests : `esport/test/notifications-cibles.test.mjs`, `src/esport/NotificationsLiens.test.tsx`.
+
+**Format** : chaque notification porte une **cible** stable et versionnée (colonne `cible`, JSON), jamais une adresse :
+`{ "v": 1, "g": "<genre>", ...identifiants }`, par exemple `{"v":1,"g":"carte_cm","carte":"…","commentaire":"…"}`.
+Fil : écrite à la création (`abonneCentre`) ; personnelles : calculée à la première lecture (comme la catégorie).
+Chaîne vide = pas de cible (notification d'avant la migration, ou section déjà au bon endroit) : le lien de section
+(`lien`) reste, comme avant.
+
+**Au clic** (cloche, page Notifications, téléphone compris) : la notification est marquée lue, puis
+`POST /notifications/cible { cible }` vérifie avec les rôles du moment que l'élément existe encore et que le compte y a
+encore accès, et complète la cible (tableau d'une carte, dossier d'un fichier, team et date d'un événement…) :
+`{ etat: 'ok', cible }`, `{ etat: 'supprime' }` (« Cet élément n'existe plus ») ou `{ etat: 'interdit' }` (« Vous n'avez
+plus accès à cet élément ») ; dans ces deux cas l'app affiche l'avis et reste où elle est (jamais une page blanche).
+Sinon l'app ouvre la bonne team, la bonne section ou le bon sous-onglet, ouvre l'élément (fiche, volet, détail) et met
+en avant l'élément visé (défilé jusqu'à lui, cadre accentué quelques secondes).
+
+**Adresses partageables** (web) : `#/app/esport/c/<genre>?<champ>=<valeur>&…` pour un élément (revérifié par le serveur
+à l'ouverture), `#/app/esport/v/<écran>[/<team>][/<section>]` pour un écran. L'app tient l'adresse à jour : un
+rechargement garde l'endroit ; un lien collé est suivi. Le hub garde ces adresses (`aSousRoute`, liensProfonds.ts).
+Les messages Discord qui pointent vers l'app utilisent les mêmes liens (`lienProfond(LIEN_APP, cible)`) : MP de nouveau
+ticket et de nouveau message (ticket et message), MP de réunion CM (la réunion), annonces, rappels et relances d'un
+événement du planning (l'événement à sa date).
+
+| Genre | Types (événements du bus, notifications personnelles) | Où il mène |
+| --- | --- | --- |
+| `ticket` | `ticket.*` (sauf corbeille / purge), `tk-nouveau`, `tk-assigne`, `tk-message`, `tk-note`, `tk-ferme` | Tickets : le ticket ouvert, le message mis en avant (`tk-message`) |
+| `carte_cm` | `cm.carte_*`, `cm.commentaire_ajoute`, `cm.depot`, `cm.post_*`, `cm-assigne`, `cm-urgence`, `cm-carte-terminee`, `cm-mention`, `cm-commentaire`, `cm-a-valider`, `cm-valide`, `cm-refuse`, `cm-depot` | Espace CM › Tableaux : le tableau, la fiche de la carte, le commentaire mis en avant ; sans espace CM : onglet CM de la team |
+| `clip_cm` | `cm.clip_*`, `cm-clip-propose`, `cm-clip-decide` | Espace CM › Clips |
+| `lien_cm` | `cm.lien_*` (sauf suppression), `cm-lien-partage` | Espace CM › DATA › Ressources |
+| `drive` | `cm.drive_fichier_*`, `cm.drive_version_ajoutee`, `cm.drive_dossier_*`, `cm.drive_restaure`, `drive.ajout` | Drive (club ou team) : le dossier ouvert, le fichier affiché (aperçu et détails) |
+| `reunion_cm` | `cm.reunion_*`, `cm-reunion-invite`, `-modifiee`, `-annulee`, `-reponse`, `-rappel` | Espace CM › Réunions : l'agenda au jour de la réunion, le détail ouvert |
+| `evenement` | `event.*` (sauf suppression), `attendance.*`, `evenement-nouveau`, `evenement-modifie`, `rappel-rsvp` | Team › Planning : à la date de l'occurrence, l'événement ouvert |
+| `tache`, `objectif` | `task.*`, `goal.*`, `tache-assignee`, `tache-echeance` | Team › Objectifs et tâches : la tâche mise en avant |
+| `reunion` | `meeting.*` (sauf suppression), `resume-depose`, `resume-publie`, `transcription-*` | Team › Résumés de réunion : le dépôt ouvert |
+| `strat`, `playbook` | `strat.*`, `playbook.*`, `playbook-valide` | Team › Strats (la strat ouverte) / Playbook |
+| `review` | `review.created`, `.updated`, `.marker_added`, `.comment_added`, `review-nouvelle`, `review-commentaire` | Team › Review vidéo : la review ouverte |
+| `ressource` | `resource.*` (sauf suppression), `ressource-*` | Team › Ressources : la ressource ouverte |
+| `adversaire` | `opponent.*` (sauf suppression) | Team › Scouting : la fiche de l'adversaire |
+| `tournoi`, `resultat` | `tournoi.*`, `match.resultat_*`, `tournoi-inscrit`, `tournoi-termine`, `resultat-saisi` | Team › Tournois / Résultats : la fiche ouverte |
+| `membre` | `member.joined`, `.added`, `.role_changed`, `.status_changed`, `trombi.fiche_*`, `trombi.photo_*`, `membre-arrive`, `trombi-modifiee` | Membres › Trombinoscope : la fiche du membre |
+| `demande_compte` | `member.account_*`, `demande-compte*` | Membres › Tous les membres (demandes) |
+| `sponsor` | `sponsors.prospect_*`, `.partenaire_*`, `.contrat_enregistre`, `.obligation_*`, `.responsable`, `.rappel_*`, `sp-*` | Espace CM › Sponsors |
+| `jeu` | `game.created`, `.updated`, `.updates_proposed`, `jeu-maj-proposee` | Administration › Jeux |
+| `devblog` | `devblog.publie`, `devblog-auto` | Devblog (publié) ; Administration › Devblog (brouillon de l'éditeur) |
+| (section) | réglages et éléments supprimés : `team.*`, `role.*`, `invitation.*`, `discord.*` (Bot, salons, échecs d'envoi), `cm.tableau_*`, `cm.reseau_*`, `roles.*`, `tickets.*`, `bienvenue`, `role-change`, `modules`, `note-partagee`, `cm-releve`… | la section de la règle (`lien`), déjà le bon endroit |
+
+Les types jamais affichés (règle « aucun » : réactions, jetons iCal, commandes du bot…) sont rangés sous `aucune`.
+
+**Ajouter un type** : le ranger sous son genre dans `CIBLES_EVENEMENTS` ou `CIBLES_PERSONNELLES` (`cibles.mjs`) ; les
+tests échouent tant qu'un type du bus ou une notification personnelle écrite par un module n'est pas rangé. Un nouveau
+genre : l'ajouter aux deux listes `GENRES_CIBLES` (serveur et app, vérifiées identiques), à `verifierCible` (existence et
+accès) et à `destinationCible` (écran), puis faire appliquer la cible par l'écran (`useCible`, `CibleSurlignee`).

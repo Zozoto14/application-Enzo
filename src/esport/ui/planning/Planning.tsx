@@ -40,6 +40,8 @@ import { Icone } from '../../../ui/icones';
 import { useTempsReel } from '../../tempsReel/hooks';
 import { ChampDate, ChampHeure } from '../../../ui/dates';
 import { ZoneEcriture } from '../ecriture/ZoneEcriture';
+import { useCible } from '../notifications/Cible';
+import type { CibleNotification } from '../../notifications/cibles';
 
 type Vue = 'mois' | 'semaine' | 'liste';
 type Formulaire = { mode: 'creer' } | { mode: 'serie'; id: string } | { mode: 'occurrence'; id: string; cle: string };
@@ -98,6 +100,26 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Lien direct d'une notification (événement, rappel, présence) : le planning se place à sa date, puis l'ouvre.
+  const jourCible = (c: CibleNotification) => (typeof c.occurrence === 'string' && Number.isFinite(Date.parse(c.occurrence)) ? aujourdhui(f.fuseau, Date.parse(c.occurrence)) : undefined);
+  useCible('planning-date', c => {
+    if (c.g !== 'evenement') return;
+    const jour = jourCible(c);
+    if (jour) setRef(jour);
+  });
+  useCible(
+    'planning-evenement',
+    c => {
+      if (c.g !== 'evenement') return true;
+      const jour = jourCible(c);
+      // Attend les occurrences de la période de l'événement.
+      if (!donnees || (jour && (jour < p.debut || jour >= p.fin))) return false;
+      const o = donnees.occurrences.find(x => x.evenementId === c.evenement && x.cle === c.occurrence) ?? donnees.occurrences.find(x => x.evenementId === c.evenement);
+      if (o) setSelection(o);
+      return true;
+    },
+    [donnees, p.debut, p.fin],
+  );
   // Temps réel : un autre a changé le planning ou une présence → relu en moins d'une seconde.
   useTempsReel(client, [`team:${teamId}:planning`, `team:${teamId}:attendance`], () => void charger().catch(() => undefined));
   useEffect(() => {

@@ -29,6 +29,7 @@ import { ComposeurTicket } from './ComposeurTicket';
 import { DialogueMention } from './MentionTicket';
 import { ChampPeriode } from '../../../ui/dates';
 import { ZoneEcriture } from '../ecriture/ZoneEcriture';
+import { CibleSurlignee, useCible } from '../notifications/Cible';
 
 const nomCat = (c: { nom: { fr: string; en: string } }) => (langueCourante() === 'en' ? c.nom.en || c.nom.fr : c.nom.fr || c.nom.en);
 const quand = (iso: string | null | undefined) => (iso ? formaterDate(iso, { dateStyle: 'medium', timeStyle: 'short' }) : '—');
@@ -111,6 +112,10 @@ export function ListeTickets({
   useEffect(() => {
     if (ouvrir?.id) setOuvert(ouvrir.id);
   }, [ouvrir?.id]);
+  // Lien direct d'une notification (ticket n° X, message) : le ticket s'ouvre ; le message est mis en avant (Bulle).
+  useCible('ticket', c => {
+    if (c.g === 'ticket' && typeof c.ticket === 'string') setOuvert(c.ticket);
+  });
   const relire = useCallback(() => setVersion(v => v + 1), []);
   useTempsReel(client, 'tickets', relire);
   useEffect(() => {
@@ -657,6 +662,14 @@ function DialogueSuppression({
 }
 
 function Bulle({ theme, m, api, ticketId }: { theme: ThemeHub; m: MessageTicket; api: ApiTickets; ticketId: string }) {
+  return (
+    <CibleSurlignee theme={theme} cle={`tk-msg:${m.id}`}>
+      <BulleMessage theme={theme} m={m} api={api} ticketId={ticketId} />
+    </CibleSurlignee>
+  );
+}
+
+function BulleMessage({ theme, m, api, ticketId }: { theme: ThemeHub; m: MessageTicket; api: ApiTickets; ticketId: string }) {
   const couleur = m.genre === 'note' ? '#E8A23A' : m.genre === 'systeme' ? theme.attenue : m.staff ? theme.accent : theme.ligne;
   return (
     <View testID={`esport-tk-msg-${m.id}`} style={{ borderLeftWidth: 3, borderLeftColor: couleur, paddingLeft: ESP.s, paddingVertical: ESP.xxs, gap: 2, backgroundColor: m.genre === 'note' ? teinteTransparente('#E8A23A', 0.1) : 'transparent', borderRadius: 4 }}>

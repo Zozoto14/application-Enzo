@@ -14,6 +14,7 @@
  * qu'il permet. Le PDF s'ouvre par un lien signé valable quelques minutes.
  */
 
+import { useCible } from './notifications/Cible';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../hub/admin/ui/commun';
@@ -412,6 +413,10 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
   const [boite, setBoite] = useState<Boite | undefined>();
   const [ouvert, setOuvert] = useState<{ teamId: string; id: string } | undefined>();
   const { enCours, erreur, agir, setErreur } = useAgir();
+  // Lien direct d'une notification (dépôt, transcription prête, résumé publié) : le dépôt s'ouvre.
+  useCible('resumes', c => {
+    if (c.g === 'reunion' && typeof c.reunion === 'string' && typeof c.team === 'string') setOuvert({ teamId: c.team, id: c.reunion });
+  });
   // Rappel du parent gardé dans une référence : une fonction recréée à chaque rendu ne relance pas le chargement.
   const rappel = useRef(onCompteurs);
   rappel.current = onCompteurs;

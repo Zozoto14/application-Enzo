@@ -86,6 +86,12 @@ const fr = {
   trombi: '{qui} a mis à jour le trombinoscope',
   roles_club: '{qui} a modifié les rôles du club',
   jeu_profil: '{qui} a modifié un profil de jeu{nom}',
+  // Liens directs (docs/esport/notifications.md « Liens directs »).
+  cible_supprime: 'Cet élément n’existe plus : il a été supprimé ou archivé.',
+  cible_interdit: 'Vous n’avez plus accès à cet élément.',
+  cible_erreur: 'Impossible d’ouvrir cet élément pour l’instant. Réessayez dans un moment.',
+  cible_fermer: 'Fermer',
+  cible_ouverture: 'Ouverture de l’élément…',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -165,6 +171,11 @@ const en: Record<keyof typeof fr, string> = {
   trombi: '{qui} updated the member directory',
   roles_club: '{qui} changed the club roles',
   jeu_profil: '{qui} changed a game profile{nom}',
+  cible_supprime: 'This item no longer exists: it was deleted or archived.',
+  cible_interdit: 'You no longer have access to this item.',
+  cible_erreur: 'This item cannot be opened right now. Please try again in a moment.',
+  cible_fermer: 'Close',
+  cible_ouverture: 'Opening the item…',
 };
 
 export type CleNf = keyof typeof fr;
