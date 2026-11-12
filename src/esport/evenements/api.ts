@@ -260,6 +260,77 @@ export interface SiteEvenement {
   etat: { ok: boolean; le: string; envoyees: number; recues: number; majSite: number; majApp: number; supprimees: number; erreurs: string[] } | null;
 }
 
+/** Salons de match Discord (docs/esport/evenements.md, « Salons de match ») : réglages de l'événement. */
+export type LangueSalons = 'bot' | 'fr' | 'en' | 'fr_en' | 'en_fr';
+export interface ReglagesSalonsMatch {
+  actif: boolean;
+  categorieId: string | null;
+  modeleNom: string;
+  /** Minutes entre la fin du match (ou son annulation) et la suppression du salon : 5 à 1440. */
+  delaiSuppressionMin: number;
+  /** Rappels 30 et 10 minutes avant le match. */
+  rappels: boolean;
+  langue: LangueSalons;
+  /** Création anticipée en heures avant l'horaire (0 : dès que les équipes du match sont connues). */
+  avanceH: number;
+  /** Rétention des historiques en jours (0 : jusqu'à la suppression de l'événement). */
+  retentionJours: number;
+}
+export type StatutSalonMatch = 'creation' | 'ouvert' | 'termine' | 'annule' | 'supprime';
+export interface EquipeSalonMatch {
+  nom: string;
+  tag: string;
+  /** Équipe reliée à une équipe de l'événement avec un rôle Discord. */
+  role: boolean;
+}
+export interface SalonMatch {
+  id: string;
+  cle: string;
+  genre: 'match' | 'lobby';
+  titre: string;
+  equipes: EquipeSalonMatch[];
+  salonId: string | null;
+  lien: string | null;
+  statut: StatutSalonMatch;
+  prevuLe: string | null;
+  resultatLe: string | null;
+  suppressionLe: string | null;
+  supprimeLe: string | null;
+  historique: boolean;
+  nbMessages: number;
+  erreur: string | null;
+}
+export interface MatchSiteSansSalon {
+  cle: string;
+  genre: 'match' | 'lobby';
+  titre: string;
+  statut: 'pending' | 'live' | 'finished';
+  prevuLe: string | null;
+  equipes: EquipeSalonMatch[];
+}
+export interface VueSalonsMatch {
+  reglages: ReglagesSalonsMatch;
+  choix: { limites: { delaiMin: number; delaiMax: number; modele: number; avanceMax: number; retentionMax: number }; langues: LangueSalons[]; defaut: ReglagesSalonsMatch };
+  lie: boolean;
+  bot: boolean;
+  erreurDiscord: string | null;
+  erreurSite: string | null;
+  categories: Array<{ id: string; nom: string }>;
+  salons: SalonMatch[];
+  matchs: MatchSiteSansSalon[];
+  etat: { le: string; crees: number; majs: number; resultats: number; annules: number; supprimes: number; attente: number; limite: boolean; erreur: string | null } | null;
+}
+export interface MessageHistorique {
+  id: string;
+  auteur: string;
+  auteurId: string | null;
+  bot: boolean;
+  contenu: string;
+  le: string | null;
+  pieces: Array<{ nom: string; url: string; taille: number }>;
+  embeds: string[];
+}
+
 export function apiEvenements(client: ClientEsport) {
   const r = <T>(chemin: string, methode?: string, corps?: unknown) =>
     client.requete<T>(chemin, methode, corps);
@@ -309,5 +380,11 @@ export function apiEvenements(client: ClientEsport) {
     ajouterHub: (id: string, c: SaisieHubEvenement) => r<VocauxEvenement>(`${un(id)}/vocaux`, 'POST', c),
     modifierHub: (id: string, hubId: string, c: SaisieHubEvenement) => r<VocauxEvenement>(`${un(id)}/vocaux/${encodeURIComponent(hubId)}`, 'PATCH', c),
     retirerHub: (id: string, hubId: string) => r<VocauxEvenement>(`${un(id)}/vocaux/${encodeURIComponent(hubId)}`, 'DELETE'),
+    salonsMatch: (id: string) => r<VueSalonsMatch>(`${un(id)}/salons-match`),
+    reglerSalonsMatch: (id: string, c: Partial<ReglagesSalonsMatch>) => r<VueSalonsMatch>(`${un(id)}/salons-match`, 'PUT', c),
+    synchroniserSalonsMatch: (id: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/synchro`, 'POST', {}),
+    creerSalonMatch: (id: string, cle: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/creer`, 'POST', { cle }),
+    supprimerSalonMatch: (id: string, salonId: string) => r<VueSalonsMatch>(`${un(id)}/salons-match/${encodeURIComponent(salonId)}/supprimer`, 'POST', {}),
+    historiqueSalonMatch: (id: string, salonId: string) => r<{ salon: SalonMatch; messages: MessageHistorique[] }>(`${un(id)}/salons-match/${encodeURIComponent(salonId)}/historique`),
   };
 }

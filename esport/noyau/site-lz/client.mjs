@@ -5,7 +5,8 @@
  * déploiement du site, jamais recopiée à la main) ne voyage JAMAIS. Chaque requête porte un horodatage, un nonce
  * aléatoire et une signature HMAC-SHA256 de « méthode, chemin, horodatage, nonce, empreinte du corps » : une requête
  * interceptée ne peut être ni modifiée ni rejouée. Côté site, cette clé n'ouvre que les tournois, équipes et joueurs de
- * tournoi (colonnes, filtres et actions fermés).
+ * tournoi, et en lecture seule les matchs, lobbies, résultats et phases (salons de match) ; colonnes, filtres et
+ * actions fermés.
  *
  * Compatibilité de déploiement : tant que le site n'a pas créé CLE_PONT (ancienne version), l'ancien accès par
  * « Bearer CLE_SERVICE » est utilisé ; le site le refuse à partir du 25/11/2026.
@@ -63,6 +64,11 @@ const COLONNES = {
   tournaments: 'id,name,status,created_at',
   tournament_teams: 'id,tournament_id,name,tag',
   tournament_players: 'id,team_id,pseudo,role,is_captain,discord_id,embark_id,sort_order',
+  // Salons de match (lecture seule côté site) : matchs 1v1, lobbies à N équipes, résultats, phases.
+  tournament_matches: 'id,tournament_id,stage_id,bracket,round,position,group_label,team_a_id,team_b_id,score_a,score_b,winner_id,status,scheduled_at,stream_url',
+  tournament_lobbies: 'id,tournament_id,round,position,label,status,scheduled_at,stream_url',
+  tournament_lobby_entries: 'id,lobby_id,team_id,placement,points,dnf,sort_order',
+  tournament_stages: 'id,tournament_id,kind,name,sort_order',
 };
 
 /**

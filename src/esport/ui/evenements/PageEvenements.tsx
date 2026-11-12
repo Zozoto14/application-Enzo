@@ -4,7 +4,8 @@
  * informations (nom, jeu, dates, statut), inscriptions (catégorie de tickets), rôles Discord (rôles automatiques,
  * modèle du nom, couleur, rôle repère : « placer les nouveaux rôles juste en dessous du rôle… », suppression
  * automatique après la fin, rôle staff : nom, catégories de tickets de l'événement), staff (StaffEvenement.tsx),
- * vocaux de l'événement (VocauxEvenement.tsx : ses hubs vocaux, créés et modifiés seulement ici) et équipes
+ * vocaux de l'événement (VocauxEvenement.tsx : ses hubs vocaux, créés et modifiés seulement ici), salons de match
+ * Discord (SalonsMatch.tsx) et équipes
  * participantes (EquipesEvenement.tsx). `evenementInitial` : fiche ouverte d'emblée (lien « Ouvrir l'événement » du
  * Bot Esport HQ). Le serveur valide tout.
  * Les tournois EXTÉRIEURS auxquels une team participe restent dans la team (Compétition › Tournois).
@@ -52,6 +53,7 @@ import {
 } from '../design';
 import { EquipesEvenement } from './EquipesEvenement';
 import { SiteEvenement } from './SiteEvenement';
+import { SalonsMatch } from './SalonsMatch';
 import { StaffEvenement } from './StaffEvenement';
 import { VocauxEvenement } from './VocauxEvenement';
 import { ChoixMultiple } from '../tickets/ConfigTickets';
@@ -582,6 +584,8 @@ export function PageEvenements({
           <VocauxEvenement theme={theme} api={api} client={client} fiche={fiche} />
 
           <SiteEvenement theme={theme} api={api} fiche={fiche} onFiche={setFiche} />
+
+          <SalonsMatch theme={theme} api={api} fiche={fiche} />
 
           <EquipesEvenement
             theme={theme}

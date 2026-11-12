@@ -9,7 +9,8 @@
  *    `{ creees, renommees, attribues, retires, absents, sansId, refus, limite, hierarchie, position }`.
  *  - `placerRoles(ctx, evt)` : PATCH /guilds/{g}/roles avec les positions qui changent (voir `positionsSous`).
  *  - `supprimerRoleEquipe(ctx, equipe)` : rôle et salon vocal d'une équipe retirée.
- *  - `nettoyerEvenement(ctx, id)` : rôles et salons vocaux des équipes supprimés (fin de l'événement).
+ *  - `nettoyerEvenement(ctx, id)` : salons de match fermés (historique gardé), rôles et salons vocaux des équipes
+ *    supprimés (fin de l'événement).
  *  - `tachesEvenementsDiscord(base, …)` : cron, nettoyage quand l'événement est terminé / annulé ou N heures après
  *    sa date de fin.
  * Hiérarchie : le bot ne crée, ne déplace et ne donne que des rôles placés SOUS son rôle le plus haut ; le rôle choisi
@@ -24,6 +25,7 @@ import { nomRole } from './inscriptions.mjs';
 import { idsSup, lireSup, raisonInterdite } from './staff-sup.mjs';
 import { lireVocaux } from '../vocaux/reglages.mjs';
 import { resynchroniserHubsEvenement } from '../vocaux/hubs.mjs';
+import { fermerSalonsEvenement } from './salons-match.mjs';
 
 /**
  * Hubs cachés de l'événement (vocaux/hubs.mjs) : leurs surcharges suivent les rôles des équipes, le rôle staff et les
@@ -486,13 +488,15 @@ export async function supprimerRoleEquipe(ctx, e) {
  */
 export async function nettoyerEvenement(ctx, evenementId) {
   const { base } = ctx;
+  // Salons de match (salons-match.mjs) : historique enregistré dans l'app, puis salons supprimés.
+  const sm = await fermerSalonsEvenement(ctx, evenementId);
   const s = await supprimerSalons(
     ctx,
     x => x.tournoiId === evenementId,
     'Esport HQ : fin de l’événement',
   );
   let roles = 0;
-  const echecs = [...s.echecs];
+  const echecs = [...sm.echecs, ...s.echecs];
   for (const e of await base.tous(
     'SELECT id, role_id FROM club_evenement_equipes WHERE evenement_id = ? AND role_id IS NOT NULL',
     [evenementId],
@@ -547,7 +551,7 @@ export async function nettoyerEvenement(ctx, evenementId) {
       [iso(ctx.maintenant()), iso(ctx.maintenant()), evenementId],
     );
   await resynchroniserHubs(ctx, evenementId);
-  return { roles, salons: s.n, echecs, ignores: sup.ignores };
+  return { roles, salons: s.n, salonsMatch: sm.salons, echecs, ignores: sup.ignores };
 }
 
 // ------------------------------------------------------------------ Rôle staff de l'événement

@@ -5,7 +5,7 @@
  * rétention (journal selon la durée de chaque team, événements traités, semaines de disponibilités personnalisées), agrégation journalière et rétention (90 jours)
  * des statistiques d'usage, ménage des compteurs de débit
  * et des tentatives anciennes, envois de vidéos inachevés (plus de 24 h), transcriptions demandées à une
- * API externe (désactivé par défaut), tickets Discord (relecture de secours, cycle de vie). Lancé par esport/serveur/cron.mjs.
+ * API externe (désactivé par défaut), tickets Discord (relecture de secours, cycle de vie), salons de match des événements. Lancé par esport/serveur/cron.mjs.
  *
  * Chaque étape est isolée : une erreur est consignée (rapport) sans empêcher les suivantes.
  */
@@ -38,6 +38,7 @@ import { tachesEvenementsDiscord } from './evenements-club/discord.mjs';
 import { servicesEvenements } from './evenements-club/service.mjs';
 import { clientSite, configSite } from './site-lz/client.mjs';
 import { creerPontSite } from './site-lz/pont.mjs';
+import { creerSalonsMatch } from './evenements-club/salons-match.mjs';
 import { expirerRolesTemp } from './roles-temp/moteur.mjs';
 
 /**
@@ -83,6 +84,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
       ev.brancherPont(pont);
       return pont.tacheCron();
     }],
+    // Salons de match Discord (migration 0073) : matchs du tournoi lié, rappels, résultats, suppressions avec historique.
+    ['salons de match', () => creerSalonsMatch({ base, site: siteLz ?? clientSite(() => configSite()), fetch: fetch ?? ((...a) => globalThis.fetch(...a)), jetonBot, maintenant, journal }).tacheCron()],
     // Rôles Discord temporaires (migration 0066) : rôles arrivés à échéance retirés (réessais : limite de débit, hiérarchie).
     ['rôles Discord temporaires', () => expirerRolesTemp(base, { jetonBot, maintenant, ...(fetch ? { fetch } : {}) })],
     ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],

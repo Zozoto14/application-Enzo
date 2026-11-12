@@ -31,6 +31,61 @@ créent et se gèrent **uniquement ici** : l'admin du site n'a plus de bouton po
 - Code : `esport/noyau/site-lz/` (client de l'API du site, pont). Migration 0070 (`site_tournoi_id`,
   `site_equipe_id`, `site_empreinte`). Tests : `esport/test/site-lz-pont.test.mjs`, `src/esport/Evenements.test.tsx`.
 
+## Salons de match
+
+Pour un événement lié à un tournoi du site, le bot ouvre **un salon texte privé par match** (1v1 ou lobby à plusieurs
+équipes, ex. 3v3v3v3) dans la catégorie Discord choisie, y poste tout ce qui compte, et le supprime une fois le match
+terminé en gardant son **historique dans l'app**.
+
+- **Réglages** (fiche › carte **« Salons de match »**, `evenements.gerer`) : activer ; **catégorie** Discord (ex.
+  « Matchs », sélecteur repliable) ; **nom des salons** (modèle `{round}-{equipes}` par défaut ; variables `{round}`
+  → `r1`, `{match}` → `m1` / `l1`, `{equipes}` → TAG des équipes, `{phase}`, `{evenement}` ; nom mis en minuscules,
+  sans accents ni espaces, 100 caractères au plus) ; **délai de suppression** après la fin (30 min par défaut, 5 à
+  1440) ; **rappels** 30 et 10 minutes avant (activés par défaut) ; **langue** des messages (celle du bot par défaut :
+  Tickets › Configuration › Général ; sinon français, anglais, ou les deux) ; **création anticipée** (0 par défaut : dès
+  que les équipes du match sont connues ; N : au plus tôt N heures avant l'horaire) ; **rétention des historiques**
+  (0 par défaut : jusqu'à la suppression de l'événement ; N : effacés N jours après la suppression du salon).
+- **Quand** : toutes les 5 minutes (cron) et, tant que l'événement est **en cours** (statut, ou dates du jour),
+  **chaque minute** par le processus qui tient la Gateway Discord (tickets, bienvenue ou salons vocaux activés) ;
+  « Synchroniser maintenant » à la demande. Les matchs sont lus sur le site par le pont signé, en **lecture seule**.
+- **Création** : match avec au moins deux équipes connues, pas encore terminé. Accès : `@everyone` sans accès ; le
+  **rôle Discord de chaque équipe** du match (voir, écrire, historique, fichiers) ; le **rôle staff** de l'événement et
+  les **rôles staff supplémentaires** (en plus : gérer les messages) ; le bot. Le site n'a pas d'« arbitre assigné »
+  par match : tout le staff de l'événement a accès. Message d'accueil : mention des rôles des équipes et des
+  **capitaines**, embed avec le match (phase, round), l'**horaire** `<t:…:F>` et relatif (ou « à définir »), le statut,
+  le stream, et chaque équipe (`[TAG] Nom`, rôle, joueurs mentionnés quand ils sont sur le serveur, capitaine).
+- **Équipe sans rôle** (équipe du site pas encore reliée à une équipe de l'événement) : signalée dans l'embed
+  (« pas de rôle Discord : n'a pas accès au salon ») et le **staff est averti** dans le salon (une fois).
+- **Mise à jour** : horaire, équipes ou phase changés sur le site → l'embed est modifié, les accès suivent les équipes,
+  et un court message « Mise à jour du match : horaire, équipes » mentionne les équipes.
+- **Rappels** : 30 et 10 minutes avant l'horaire, une seule fois chacun (jamais en retard : un salon créé à 20 minutes
+  du match n'envoie que celui des 10 minutes ; nouvel horaire : rappels repartis).
+- **Résultat** saisi sur le site (match terminé) → posté (scores et vainqueur, ou classement du lobby avec points), avec
+  l'heure de suppression ; un résultat corrigé est reposté ; un résultat retiré rouvre le salon.
+- **Match supprimé ou annulé sur le site** (ex. « Supprimer le déroulé ») → avis dans le salon, suppression après le
+  délai. Si le site ne répond pas, rien n'est considéré comme supprimé.
+- **Suppression** (délai écoulé, « Supprimer maintenant », fin ou suppression de l'événement) : l'**historique** est
+  enregistré (messages, auteurs, dates, embeds du bot en texte, pièces jointes **en liens** : les liens Discord expirent
+  au bout d'un moment, le nom du fichier reste), puis le salon est supprimé. Un salon supprimé n'est jamais recréé
+  automatiquement (« Créer maintenant » le recrée, l'ancien historique reste).
+- **Liste** (même carte) : chaque salon (match, équipes, lien Discord, statut, horaire, suppression programmée) avec
+  **Supprimer maintenant** et **Voir l'historique** ; les matchs du site sans salon avec **Créer maintenant** (même si la
+  création automatique est coupée ou pas encore due). L'historique est visible avec `evenements.gerer` (le Fondateur
+  l'a) ou par une personne du **staff de l'événement** (compte de l'app lié). C'est du contenu de l'événement, pas un
+  ticket confidentiel ; il n'est **jamais envoyé à une IA**.
+- **Sûreté** : une ligne par match (clé unique événement + match) et un bail par événement : jamais deux salons pour un
+  même match (plusieurs processus, redémarrage) ; un salon créé juste avant un arrêt brutal est retrouvé par son sujet
+  (`esport-hq:match:…`). 5 créations et 40 actions Discord au plus par passage, arrêt au premier refus pour limite de
+  débit (la suite au passage suivant). Discord limite une catégorie à 50 salons : les matchs suivants attendent.
+- **Permissions du bot** : Gérer les salons, Gérer les rôles (accès des salons), Voir les salons, Envoyer des messages,
+  Lire l'historique ; « Gérer les messages » pour la donner au staff (sinon le staff écrit sans pouvoir modérer) ; pour
+  que la mention d'un rôle d'équipe (non mentionnable) notifie, « Mentionner @everyone, @here et tous les rôles » (les
+  capitaines sont toujours notifiés).
+- Code : `esport/noyau/evenements-club/salons-match.mjs`, `src/esport/ui/evenements/SalonsMatch.tsx`. Migration 0073
+  (`club_evenements.salons_match`, table `club_salons_match`). Côté site : lecture des matchs, lobbies, résultats et
+  phases ouverte à la clé du pont (`api/serveur/cles.mjs`). Tests : `esport/test/salons-match.test.mjs`,
+  `src/esport/Evenements.test.tsx`.
+
 ## Droits
 
 Permission du club **`evenements.gerer`** (« Événements : gérer », catégorie Administration). Le Fondateur l'a
@@ -157,7 +212,8 @@ une IA.
 
 ## Fin de l'événement
 
-Bouton **Supprimer les rôles** (rôles et salons vocaux des équipes), ou automatiquement par le cron (5 min) dès que
+Bouton **Supprimer les rôles** (salons de match — historique gardé —, rôles et salons vocaux des équipes), ou
+automatiquement par le cron (5 min) dès que
 l'événement passe à **Terminé** ou **Annulé**, ou **N heures après sa date de fin**. Ensuite, plus aucun rôle n'est
 créé automatiquement pour cet événement (« Resynchroniser » reste possible tant qu'il n'est ni terminé ni annulé).
 
@@ -169,14 +225,15 @@ sont les seuls hubs du serveur, « les salons vocaux temporaires seront désacti
 
 1. **ses hubs vocaux** sont retirés des réglages des salons vocaux (même stockage, journal `tickets.config_modifiee`) ;
    s'il ne reste aucun hub, les salons vocaux temporaires sont désactivés (comme quand on retire le dernier hub) ;
-2. le **nettoyage de fin d'événement**, au mieux : salons vocaux des équipes supprimés sur Discord, rôles des équipes et
+2. le **nettoyage de fin d'événement**, au mieux : salons de match fermés (historique enregistré), salons vocaux des
+   équipes supprimés sur Discord, rôles des équipes et
    rôle staff supprimés, rôle staff retiré des rôles du staff des catégories de tickets. Un refus de Discord (ou
    l'absence de bot ou de serveur) **n'empêche pas** la suppression : il est noté dans le journal du serveur
    (`[esport] événement … supprimé : nettoyage Discord incomplet`), l'écran dit de supprimer à la main ce qui reste,
    et le rôle staff est quand même retiré des catégories de tickets ;
-3. l'événement, ses équipes, leurs membres et son staff.
+3. l'événement, ses équipes, leurs membres, son staff, ses salons de match et leurs historiques.
 
-La réponse de `DELETE /evenements/:id` : `{ ok, hubs, vocauxDesactives, nettoyage: { roles, salons, echecs, erreur } }`.
+La réponse de `DELETE /evenements/:id` : `{ ok, hubs, vocauxDesactives, nettoyage: { roles, salons, salonsMatch, echecs, erreur } }`.
 La fiche (`GET`) donne `suppression: { hubs, desactiveVocaux }` pour la confirmation.
 
 ## Vocaux de l'événement
@@ -242,8 +299,14 @@ Routes (`evenements.gerer`, 403 sinon) :
 | `POST /evenements/:id/import` | Propositions lues dans les tickets `{ categorieId }` |
 | `POST /evenements/:id/roles` | Resynchroniser les rôles (bilan) |
 | `POST /evenements/:id/roles/supprimer` | Supprimer les rôles et les salons des équipes |
+| `GET`, `PUT /evenements/:id/salons-match` | Salons de match : réglages, catégories du serveur, salons, matchs du site sans salon, dernier passage ; enregistrer les réglages |
+| `POST /evenements/:id/salons-match/synchro` | Synchroniser maintenant |
+| `POST /evenements/:id/salons-match/creer` | Créer maintenant `{ cle }` (`m:<id>` match, `l:<id>` lobby) |
+| `POST /evenements/:id/salons-match/:s/supprimer` | Supprimer maintenant (historique enregistré) |
+| `GET /evenements/:id/salons-match/:s/historique` | Historique (`evenements.gerer` ou staff de l'événement) |
 
 ## Données
 
-`club_evenements`, `club_evenement_equipes`, `club_evenement_membres` et `club_evenement_staff` suivent l'export de la base
-(Administration). RGPD : l'effacement d'un compte (par son Discord ID) retire la personne des équipes et du staff des événements.
+`club_evenements`, `club_evenement_equipes`, `club_evenement_membres`, `club_evenement_staff` et `club_salons_match`
+suivent l'export de la base (Administration). RGPD : l'effacement d'un compte (par son Discord ID) retire la personne des
+équipes et du staff des événements, et efface les historiques de salons de match où elle a écrit.

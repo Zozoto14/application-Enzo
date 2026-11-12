@@ -20,6 +20,8 @@
  * activés, avec l'intent GUILD_VOICE_STATES (non privilégié) ; le moteur reçoit les événements vocaux et salons, et
  * chaque passage du meneur supprime les salons vides arrivés au délai. Sans Gateway (relecture de secours), aucune
  * arrivée dans un hub n'est vue : l'app le dit (Administration › Bot Esport HQ › Fonctionnalités).
+ * SALONS DE MATCH (evenements-club/salons-match.mjs) : le meneur fait aussi leur passage rapide (`tachesMeneur`, au
+ * plus une fois par minute, événements en cours) ; sans meneur, le cron s'en charge toutes les 5 minutes.
  * MAINTIEN EN ÉVEIL : Passenger arrête un processus qui ne reçoit plus de requête (quelques minutes) ; le meneur
  * appelle donc sa propre adresse publique (`reveil`, URL_PUBLIQUE/sante) toutes les 4 min pour garder la Gateway.
  *
@@ -141,6 +143,7 @@ export function creerSuperviseurTickets({
   intervalleReveil = INTERVALLE_REVEIL_MS,
   vocaux: optionsVocaux = {},
   fetchRest = null,
+  tachesMeneur = null,
   journal = console,
 }) {
   let minuterie = null;
@@ -162,6 +165,7 @@ export function creerSuperviseurTickets({
   let membresRefusesLe = 0;
   const telecharger = telechargeurCdn(fetchDiscord);
   let vocaux = null;
+  let tachesEnCours = null;
   // Moteur des salons vocaux temporaires (meneur seulement : il ne reçoit que les événements de SA Gateway).
   // `fetchRest` (serveur Node : adaptateurs/fetchDiscordNode.mjs) : connexion persistante vers discord.com, gardée
   // chaude par le moteur (création et déplacement sans DNS ni négociation TLS).
@@ -293,6 +297,16 @@ export function creerSuperviseurTickets({
       if (vivant) await moteur.passage().catch(err => journal.error?.('[esport] vocaux : passage', err?.message ?? err));
       // Rôles Discord temporaires arrivés à échéance : retirés ici sans attendre le cron (toutes les 5 minutes), par le seul meneur.
       await expirerRolesTemp(base, { fetch: fetchDiscord, jetonBot, maintenant }).catch(err => journal.error?.('[esport] rôles temporaires : échéance', err?.message ?? err));
+      // Salons de match des événements (evenements-club/salons-match.mjs) : passage rapide, au plus une fois par minute.
+      // Sans attendre (le site ou Discord peuvent être lents : le bail et la Gateway passent d'abord), un seul à la fois.
+      if (tachesMeneur && !tachesEnCours) {
+        tachesEnCours = Promise.resolve()
+          .then(tachesMeneur)
+          .catch(err => journal.error?.('[esport] salons de match : passage', err?.message ?? err))
+          .finally(() => {
+            tachesEnCours = null;
+          });
+      }
       let mode = vivant ? 'direct' : 'secours';
       let releve = null;
       if (mode === 'secours' ? t - dernierSecours >= intervalleSecours : rattraper) {
@@ -330,6 +344,7 @@ export function creerSuperviseurTickets({
       if (minuterie) clearInterval(minuterie);
       minuterie = null;
       await enCours?.catch(() => undefined);
+      await tachesEnCours;
       await arreterGateway();
       moteur.arreter();
       if (meneur) await rendreBail(base, identifiant, maintenant()).catch(() => undefined);

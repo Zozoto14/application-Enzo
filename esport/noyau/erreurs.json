@@ -969,7 +969,18 @@
   "IA indisponible pour le moment : réessayez dans un instant.": "AI unavailable right now: please try again in a moment.",
   "Assistant d’écriture désactivé par le Fondateur.": "Writing assistant disabled by the Founder.",
   "L’assistant d’écriture n’est pas ouvert à votre rôle.": "The writing assistant isn’t open to your role.",
-  "Réglage de l’assistant d’écriture : actif oui ou non, groupes parmi club, cm, staff_teams et joueurs.": "Writing assistant setting: active yes or no, groups among club, cm, staff_teams and joueurs."
+  "Réglage de l’assistant d’écriture : actif oui ou non, groupes parmi club, cm, staff_teams et joueurs.": "Writing assistant setting: active yes or no, groups among club, cm, staff_teams and joueurs.",
+  "Activé : oui ou non.": "Enabled: yes or no.",
+  "Catégorie Discord invalide.": "Invalid Discord category.",
+  "Rappels : oui ou non.": "Reminders: yes or no.",
+  "Choisissez la catégorie Discord des salons de match.": "Choose the Discord category of the match channels.",
+  "Une synchronisation est déjà en cours, réessayez dans un instant.": "A sync is already running, please try again in a moment.",
+  "Match invalide.": "Invalid match.",
+  "Ce match a déjà son salon.": "This match already has its channel.",
+  "Salon de match introuvable.": "Match channel not found.",
+  "Une synchronisation est en cours, réessayez dans un instant.": "A sync is running, please try again in a moment.",
+  "Discord limite les requêtes : réessayez dans une minute.": "Discord is rate limiting requests: please try again in a minute.",
+  "Discord a refusé la suppression du salon (permission « Gérer les salons »).": "Discord refused to delete the channel (“Manage Channels” permission)."
  },
  "motifs": [
   [
@@ -1471,6 +1482,26 @@
   [
    "^Ce tournoi du site est déjà lié à l’événement « (.+) »\\.$",
    "This website tournament is already linked to the event “$1”."
+  ],
+  [
+   "^Modèle du nom : 1 à (\\d+) caractères\\.$",
+   "Name template: 1 to $1 characters."
+  ],
+  [
+   "^Délai de suppression : (\\d+) à (\\d+) minutes\\.$",
+   "Deletion delay: $1 to $2 minutes."
+  ],
+  [
+   "^Création anticipée : 0 à (\\d+) heures\\.$",
+   "Early creation: 0 to $1 hours."
+  ],
+  [
+   "^Rétention : 0 à (\\d+) jours\\.$",
+   "Retention: 0 to $1 days."
+  ],
+  [
+   "^Salon non créé(.*)\\.$",
+   "Channel not created$1."
   ]
  ]
 }

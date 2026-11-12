@@ -256,6 +256,8 @@ export const TABLES = [
   ['club_evenement_equipes', 'id'],
   ['club_evenement_membres', 'id'],
   ['club_evenement_staff', 'id'],
+  // Salons de match Discord des événements et leurs historiques (migration 0073).
+  ['club_salons_match', 'id'],
   // Rôles Discord temporaires des teams (migration 0066).
   ['roles_temp_reglages', 'team_id'],
   ['roles_temp_octrois', 'accorde_le, id'],

@@ -25,6 +25,7 @@ import { lireVocaux, validerVocaux } from '../vocaux/reglages.mjs';
 import { evenement as evenementBus } from '../evenements.mjs';
 import { rendreHubs } from '../vocaux/hubs.mjs';
 import { LIMITES_SUP, idsSup, lireSup } from './staff-sup.mjs';
+import { routesSalonsMatch } from './salons-match.mjs';
 
 /** Pourquoi un rôle existant ne peut pas être choisi comme rôle staff (il pourrait être supprimé à la fin). */
 const MESSAGES_INTERDIT = {
@@ -793,6 +794,9 @@ export function servicesEvenements({
         params: [id],
       },
       { sql: 'DELETE FROM club_evenement_staff WHERE evenement_id = ?', params: [id] },
+      // Salons de match : lignes et historiques effacés avec l'événement (salons fermés au nettoyage ci-dessus).
+      { sql: 'DELETE FROM club_salons_match WHERE evenement_id = ?', params: [id] },
+      { sql: "DELETE FROM tickets_reglages WHERE cle = ?", params: [`salons_match:${id}`] },
       { sql: 'DELETE FROM club_evenements WHERE id = ?', params: [id] },
     ]);
     return { ok: true, hubs: hubs.length, vocauxDesactives, nettoyage };
@@ -1177,11 +1181,14 @@ export function servicesEvenements({
  *   POST                /evenements/:id/roles/supprimer  supprimer les rôles et les salons des équipes
  *   GET|PUT             /evenements/:id/site             tournoi du site LigneZero lié ; { tournoiId } lier / délier
  *   POST                /evenements/:id/site/synchro     synchroniser les équipes avec le site
+ *   GET|PUT             /evenements/:id/salons-match     salons de match Discord : vue ; réglages
+ *   POST                /evenements/:id/salons-match/synchro|creer, /:s/supprimer ; GET /:s/historique
  */
 export async function routesEvenements({
   ev,
   vc,
   pont,
+  sm,
   acteur,
   chemin,
   methode: m,
@@ -1247,6 +1254,11 @@ export async function routesEvenements({
     if (p.length === 2 && m === 'GET') return pont.vue(acteur, id);
     if (p.length === 2 && m === 'PUT') return pont.lier(acteur, id, await lireCorps());
     if (p.length === 3 && x === 'synchro' && m === 'POST') return pont.synchroniserMaintenant(acteur, id);
+  }
+  // Salons de match Discord (salons-match.mjs) : réglages, liste, créer / supprimer maintenant, historique.
+  if (quoi === 'salons-match' && sm) {
+    const r = await routesSalonsMatch({ sm, ev, acteur, id, p, m, lireCorps, limite });
+    if (r !== undefined) return r;
   }
   if (p.length === 2 && quoi === 'import' && m === 'POST') {
     await limite('tickets_discord', acteur.compte);

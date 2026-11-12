@@ -18,6 +18,7 @@ import type {
   FicheEvenement,
   PropositionEquipe,
   VocauxEvenement,
+  VueSalonsMatch,
 } from './evenements/api';
 import type { Hub } from './vocaux/api';
 import { choisirDans, deplier } from '../ui/selecteurs/deplier';
@@ -171,6 +172,25 @@ function vocauxDe(peutModifier = true): VocauxEvenement {
     choix: { limites: { hubs: 10, roles: 20, places: 99, modele: 90 }, modeleDefaut: '{tag} — {nom}' },
   };
 }
+
+function salonsMatchDe(): VueSalonsMatch {
+  return {
+    reglages: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0 },
+    choix: { limites: { delaiMin: 5, delaiMax: 1440, modele: 80, avanceMax: 168, retentionMax: 3650 }, langues: ['bot', 'fr', 'en', 'fr_en', 'en_fr'], defaut: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0 } },
+    lie: true,
+    bot: true,
+    erreurDiscord: null,
+    erreurSite: null,
+    categories: [{ id: '700000000000000060', nom: 'Matchs' }, { id: '700000000000000061', nom: 'Tickets' }],
+    salons: [{ id: 'sm1', cle: 'm:44444444-4444-4444-8444-000000000001', genre: 'match', titre: 'Upper bracket · Round 1 · Match 1', equipes: [{ nom: 'Ligne Zéro', tag: 'LZ0', role: true }, { nom: 'Delta', tag: 'DLT', role: false }], salonId: '730000000000000001', lien: 'https://discord.com/channels/700/730000000000000001', statut: 'termine', prevuLe: '2026-11-21T18:00:00.000Z', resultatLe: '2026-11-21T18:40:00.000Z', suppressionLe: '2026-11-21T19:10:00.000Z', supprimeLe: null, historique: false, nbMessages: 0, erreur: null }],
+    matchs: [{ cle: 'l:55555555-5555-4555-8555-000000000001', genre: 'lobby', titre: 'Lobby 1 · Round 1', statut: 'pending', prevuLe: null, equipes: [{ nom: 'Ligne Zéro', tag: 'LZ0', role: true }, { nom: 'Bravo', tag: 'BRV', role: true }, { nom: 'Charlie', tag: 'CHA', role: true }] }],
+    etat: { le: '2026-11-21T18:41:00.000Z', crees: 1, majs: 0, resultats: 1, annules: 0, supprimes: 0, attente: 0, limite: false, erreur: null },
+  };
+}
+let salonsMatch = salonsMatchDe();
+beforeEach(() => {
+  salonsMatch = salonsMatchDe();
+});
 
 function fauxClient(
   fiche: FicheEvenement,
@@ -362,6 +382,23 @@ function fauxClient(
       vocaux.hubs = vocaux.hubs.filter(h => h.id !== unHub[1]);
       return { ...vocaux };
     }
+    // Salons de match Discord.
+    if (chemin === '/evenements/ev1/salons-match' && !methode) return salonsMatch;
+    if (chemin === '/evenements/ev1/salons-match' && methode === 'PUT') {
+      salonsMatch.reglages = { ...salonsMatch.reglages, ...(corps as object) };
+      return salonsMatch;
+    }
+    if (chemin === '/evenements/ev1/salons-match/creer' && methode === 'POST') {
+      salonsMatch.matchs = [];
+      salonsMatch.salons = [...salonsMatch.salons, { ...salonsMatch.salons[0], id: 'sm2', cle: (corps as { cle: string }).cle, titre: 'Lobby 1 · Round 1', statut: 'ouvert', historique: false }];
+      return salonsMatch;
+    }
+    if (chemin === '/evenements/ev1/salons-match/sm1/supprimer' && methode === 'POST') {
+      salonsMatch.salons = salonsMatch.salons.map(x => (x.id === 'sm1' ? { ...x, statut: 'supprime' as const, lien: null, historique: true, supprimeLe: '2026-11-21T19:00:00.000Z' } : x));
+      return salonsMatch;
+    }
+    if (chemin === '/evenements/ev1/salons-match/sm1/historique')
+      return { salon: salonsMatch.salons[0], messages: [{ id: 'msg1', auteur: 'Kira', auteurId: '810000000000000101', bot: false, contenu: 'Prêts !', le: '2026-11-21T18:00:00.000Z', pieces: [{ nom: 'lineup.png', url: 'https://cdn.discordapp.com/a/lineup.png', taille: 2048 }], embeds: [] }] };
     if (chemin === '/vocaux/discord')
       return {
         bot: true,
@@ -718,4 +755,62 @@ test('Site LigneZero : tournoi du site lié, équipes synchronisées, fiche relu
   await fireEvent.press(screen.getByTestId('esport-ev-site-synchro'));
   expect(await screen.findByText('Synchronisé avec le site.')).toBeTruthy();
   expect(appels.filter(a => a.chemin === '/evenements/ev1' && !a.methode).length).toBeGreaterThan(1);
+});
+
+test('salons de match : réglages (activé, catégorie, délai, rappels, langue) enregistrés', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-salons-match')).toBeTruthy();
+  await fireEvent(screen.getByTestId('esport-ev-sm-actif'), 'valueChange', true);
+  await choisirDans('esport-ev-sm-categorie', '700000000000000060');
+  await fireEvent.changeText(screen.getByTestId('esport-ev-sm-delai'), '45 min');
+  await fireEvent(screen.getByTestId('esport-ev-sm-rappels'), 'valueChange', false);
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-langue-fr_en'));
+  await fireEvent.changeText(screen.getByTestId('esport-ev-sm-modele'), '{phase}-{equipes}');
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-enregistrer'));
+  expect(await screen.findByText('Réglages des salons de match enregistrés.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match' && a.methode === 'PUT')!.corps).toEqual({ actif: true, categorieId: '700000000000000060', modeleNom: '{phase}-{equipes}', delaiSuppressionMin: 45, rappels: false, langue: 'fr_en', avanceH: 0, retentionJours: 0 });
+  expect(screen.getByTestId('esport-ev-sm-dernier')).toBeTruthy();
+});
+
+test('salons de match : liste (statut, équipe sans rôle, suppression programmée), créer, supprimer maintenant, historique', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-sm-salon-sm1')).toBeTruthy();
+  expect(screen.getByText('Upper bracket · Round 1 · Match 1')).toBeTruthy();
+  expect(screen.getByText('[LZ0] Ligne Zéro - [DLT] Delta (sans rôle Discord)')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-statut')).toBeTruthy();
+  expect(screen.getByText('terminé')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-dates').props.children).toMatch(/suppression : /);
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-ouvrir')).toBeTruthy();
+  expect(screen.queryByTestId('esport-ev-sm-salon-sm1-historique')).toBeNull();
+  // Match du site sans salon : « Créer maintenant ».
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-match-l:55555555-5555-4555-8555-000000000001-creer'));
+  expect(await screen.findByText('Salon créé.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match/creer')!.corps).toEqual({ cle: 'l:55555555-5555-4555-8555-000000000001' });
+  expect(screen.getByTestId('esport-ev-sm-salon-sm2')).toBeTruthy();
+  // Supprimer maintenant (confirmé), puis l'historique.
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-salon-sm1-supprimer'));
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-salon-sm1-supprimer-confirmer'));
+  expect(await screen.findByText('Salon supprimé, historique enregistré.')).toBeTruthy();
+  expect(screen.queryByTestId('esport-ev-sm-salon-sm1-ouvrir')).toBeNull();
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-salon-sm1-historique'));
+  expect(await screen.findByTestId('esport-ev-sm-historique')).toBeTruthy();
+  expect(screen.getByText('Prêts !')).toBeTruthy();
+  expect(screen.getByText('Pièce jointe : lineup.png')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-historique-fermer'));
+  expect(screen.queryByTestId('esport-ev-sm-historique')).toBeNull();
+});
+
+test('salons de match : anglais, événement non lié au site', async () => {
+  definirLangue('en');
+  salonsMatch.lie = false;
+  salonsMatch.salons = [];
+  salonsMatch.matchs = [];
+  const { client } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByText('Match channels')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-non-lie')).toBeTruthy();
+  expect(screen.getByText('No match channel yet.')).toBeTruthy();
+  expect(screen.queryByTestId('esport-ev-sm-synchro')).toBeNull();
 });
