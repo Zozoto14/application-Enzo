@@ -268,7 +268,7 @@ export interface ReglagesSalonsMatch {
   modeleNom: string;
   /** Minutes entre la fin du match (ou son annulation) et la suppression du salon : 5 à 1440. */
   delaiSuppressionMin: number;
-  /** Rappels 30 et 10 minutes avant le match. */
+  /** Rappel 10 minutes avant le match. */
   rappels: boolean;
   langue: LangueSalons;
   /** Création anticipée en heures avant l'horaire (0 : dès que les équipes du match sont connues). */

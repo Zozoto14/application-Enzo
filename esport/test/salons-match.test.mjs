@@ -1,7 +1,7 @@
 /**
  * Salons de match Discord des événements liés à un tournoi du site LigneZero (evenements-club/salons-match.mjs,
  * migration 0073) : réglages, création (salon privé, accès des rôles des équipes — lobby à 3 équipes —, du staff et du
- * bot), embed et mentions, équipe sans rôle signalée au staff, mise à jour (embed modifié + « Mise à jour »), rappels
+ * bot), embed et mentions, équipe sans rôle signalée au staff, mise à jour (embed modifié + « Mise à jour »), rappel 10 min
  * une seule fois, résultat puis suppression après le délai avec historique enregistré, match supprimé du site, aucun
  * doublon (passages simultanés, redémarrage, salon déjà créé retrouvé), suppression manuelle, historique réservé,
  * fin et suppression de l'événement, cron et passage rapide, export et effacement RGPD. Faux site et faux Discord : jamais de réseau réel.
@@ -216,7 +216,7 @@ test('équipe sans rôle Discord : signalée dans l’embed, staff averti une fo
   assert.equal(k.discord.etat.salons.get(ll.salon_id).permission_overwrites.filter(o => o.allow === DROITS_EQUIPE).length, 3);
 });
 
-test('mise à jour : horaire et équipes changés → embed modifié, accès suivis, « Mise à jour » ; rappels une seule fois', async () => {
+test('mise à jour : horaire et équipes changés → embed modifié, accès suivis, « Mise à jour » ; rappel 10 min avant une seule fois', async () => {
   const k = await monter();
   await activer(k);
   const lm = (await lignes(k)).find(x => x.site_match_id === `m:${M1}`);
@@ -237,20 +237,18 @@ test('mise à jour : horaire et équipes changés → embed modifié, accès sui
   await synchro(k);
   assert.equal(messagesDe(k, lm.salon_id).length, avant + 1, 'rien de nouveau');
 
-  // Rappels : 30 minutes avant (une fois), puis 10 minutes avant (une fois).
+  // Rappel : seulement 10 minutes avant (une fois) ; aucun rappel 30 minutes avant.
   const rappels = () => messagesDe(k, lm.salon_id).filter(m => /Rappel/.test(m.content ?? '')).length;
   k.b.horloge.t = Date.parse('2026-10-20T12:03:00.000Z');
   await synchro(k);
-  assert.equal(rappels(), 1);
-  await synchro(k);
-  assert.equal(rappels(), 1);
+  assert.equal(rappels(), 0, 'pas de rappel 30 minutes avant');
   k.b.horloge.t = Date.parse('2026-10-20T12:21:00.000Z');
   await synchro(k);
-  assert.equal(rappels(), 2);
+  assert.equal(rappels(), 1);
   await synchro(k);
   k.b.horloge.t = Date.parse('2026-10-20T12:25:00.000Z');
   await synchro(k);
-  assert.equal(rappels(), 2);
+  assert.equal(rappels(), 1, 'une seule fois');
   assert.match(messagesDe(k, lm.salon_id).filter(m => /Rappel/.test(m.content)).at(-1).content, /<t:\d+:R>/);
 });
 

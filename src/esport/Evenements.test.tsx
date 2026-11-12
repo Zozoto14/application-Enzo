@@ -769,6 +769,7 @@ test('salons de match : réglages (activé, catégorie, délai, rappels, langue)
   await fireEvent(screen.getByTestId('esport-ev-sm-actif'), 'valueChange', true);
   await choisirDans('esport-ev-sm-categorie', '700000000000000060');
   await fireEvent.changeText(screen.getByTestId('esport-ev-sm-delai'), '45 min');
+  expect(screen.getByText('Rappel 10 min avant')).toBeTruthy();
   await fireEvent(screen.getByTestId('esport-ev-sm-rappels'), 'valueChange', false);
   await fireEvent.press(screen.getByTestId('esport-ev-sm-langue-fr_en'));
   await fireEvent.changeText(screen.getByTestId('esport-ev-sm-modele'), '{phase}-{equipes}');

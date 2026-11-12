@@ -41,7 +41,7 @@ terminé en gardant son **historique dans l'app**.
   « Matchs », sélecteur repliable) ; **nom des salons** (modèle `{round}-{equipes}` par défaut ; variables `{round}`
   → `r1`, `{match}` → `m1` / `l1`, `{equipes}` → TAG des équipes, `{phase}`, `{evenement}` ; nom mis en minuscules,
   sans accents ni espaces, 100 caractères au plus) ; **délai de suppression** après la fin (30 min par défaut, 5 à
-  1440) ; **rappels** 30 et 10 minutes avant (activés par défaut) ; **langue** des messages (celle du bot par défaut :
+  1440) ; **« Rappel 10 min avant »** (activé par défaut) ; **langue** des messages (celle du bot par défaut :
   Tickets › Configuration › Général ; sinon français, anglais, ou les deux) ; **création anticipée** (0 par défaut : dès
   que les équipes du match sont connues ; N : au plus tôt N heures avant l'horaire) ; **rétention des historiques**
   (0 par défaut : jusqu'à la suppression de l'événement ; N : effacés N jours après la suppression du salon) ;
@@ -72,8 +72,8 @@ terminé en gardant son **historique dans l'app**.
   message « Mise à jour du match : staff assigné » qui mentionne le nouveau staff (pas les équipes).
 - **Mise à jour** : horaire, équipes ou phase changés sur le site → l'embed est modifié, les accès suivent les équipes,
   et un court message « Mise à jour du match : horaire, équipes » mentionne les équipes.
-- **Rappels** : 30 et 10 minutes avant l'horaire, une seule fois chacun (jamais en retard : un salon créé à 20 minutes
-  du match n'envoie que celui des 10 minutes ; nouvel horaire : rappels repartis).
+- **Rappel** : 10 minutes avant l'horaire, une seule fois (jamais en retard : un salon créé à moins de 10 minutes du
+  match ne l'envoie pas ; nouvel horaire : rappel réarmé). Pas de rappel 30 minutes avant.
 - **Résultat** saisi sur le site (match terminé) → posté (scores et vainqueur, ou classement du lobby avec points), avec
   l'heure de suppression ; un résultat corrigé est reposté ; un résultat retiré rouvre le salon.
 - **Match supprimé ou annulé sur le site** (ex. « Supprimer le déroulé ») → avis dans le salon, suppression après le

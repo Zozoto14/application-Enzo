@@ -4,7 +4,7 @@
  *
  * Réglages par événement (`club_evenements.salons_match`, fiche › « Salons de match ») : activé, catégorie Discord
  * « Matchs », modèle du nom (`{round}-{equipes}`, nettoyé), délai de suppression après la fin (30 min par défaut,
- * 5 à 1440), rappels (30 et 10 min avant), langue (celle du bot par défaut), création anticipée (0 : dès que les
+ * 5 à 1440), rappel (10 min avant), langue (celle du bot par défaut), création anticipée (0 : dès que les
  * équipes du match sont connues), rétention des historiques (0 : jusqu'à la suppression de l'événement).
  *
  * Synchronisation (`synchroniser(evenementId)`) : le cron (toutes les 5 min) et le processus meneur de la Gateway
@@ -15,7 +15,7 @@
  *    staff supplémentaires (en plus : gérer les messages) ; le bot. Message d'accueil (embed : match, phase, horaire
  *    `<t:…:F>` et relatif, équipes avec TAG, joueurs mentionnés, capitaines) et mention des rôles et capitaines ;
  *  - horaire ou équipes changés sur le site → embed modifié, accès mis à jour, court message « Mise à jour » ;
- *  - rappels 30 et 10 minutes avant (une seule fois chacun) ;
+ *  - rappel 10 minutes avant (une seule fois ; colonne rappel30_le de la migration 0073 inutilisée) ;
  *  - résultat saisi (match terminé) → résultat posté, suppression programmée après le délai ;
  *  - match supprimé du site → avis posté, suppression programmée après le délai ;
  *  - équipe du match sans rôle Discord (pas reliée à une équipe de l'événement) → signalée dans l'embed, staff averti ;
@@ -588,13 +588,12 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     ligne.salon_id = String(salon.id);
     ligne.statut = 'ouvert';
     const msg = await poster(ligne, { content: `${p.texte}\n${tx(mode, 'pret')}`.trim().slice(0, 2000), embeds: [embedMatch(evt, m, equipes, mode)], allowed_mentions: p.allowed }, compteur);
-    // Rappels déjà dépassés (salon créé à moins de 30 / 10 minutes du match) : jamais envoyés en retard.
+    // Rappel déjà dépassé (salon créé à moins de 10 minutes du match) : jamais envoyé en retard.
     const avant = m.prevu ? Date.parse(m.prevu) - t0() : Infinity;
     await maj(ligne.id, {
       message_id: msg.ok ? String(msg.corps?.id ?? '') || null : null,
       empreinte: empreinteMatch(m),
       prevu_le: m.prevu,
-      rappel30_le: avant <= 30 * MINUTE ? iso(t0()) : null,
       rappel10_le: avant <= 10 * MINUTE ? iso(t0()) : null,
     });
     await avertirSansRole(evt, ligne, equipes, mode, compteur, m);
@@ -661,24 +660,21 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         prevu_le: m.prevu,
         titre: titreDe(m, langues(mode)[0]),
         infos: JSON.stringify({ equipes: equipes.map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })), staff: (m.staff ?? []).map(x => ({ nom: x.nom, present: Boolean(x.discordId && !x.absent) })) }),
-        // Nouvel horaire : rappels repartis (sauf ceux déjà dépassés).
-        ...(horaire ? { rappel30_le: reste <= 30 * MINUTE ? iso(t0()) : null, rappel10_le: reste <= 10 * MINUTE ? iso(t0()) : null } : {}),
+        // Nouvel horaire : rappel réarmé (sauf s'il est déjà dépassé).
+        ...(horaire ? { rappel10_le: reste <= 10 * MINUTE ? iso(t0()) : null } : {}),
       });
       if (horaire) {
-        ligne.rappel30_le = reste <= 30 * MINUTE ? iso(t0()) : null;
         ligne.rappel10_le = reste <= 10 * MINUTE ? iso(t0()) : null;
       }
       await avertirSansRole(evt, ligne, equipes, mode, compteur, m);
     }
     if (compteur.limite || ligne.statut === 'supprime') return;
-    // Rappels (une seule fois chacun ; à moins de 10 minutes, le rappel des 30 minutes n'est plus envoyé).
+    // Rappel 10 minutes avant (une seule fois).
     if (reglages.rappels && m.prevu && !fini && m.statut === 'pending') {
       const reste = Date.parse(m.prevu) - t0();
-      const du10 = !ligne.rappel10_le && reste <= 10 * MINUTE && reste > -5 * MINUTE;
-      const du30 = !ligne.rappel30_le && !du10 && reste <= 30 * MINUTE && reste > 10 * MINUTE;
-      if (du10 || du30) {
+      if (!ligne.rappel10_le && reste <= 10 * MINUTE && reste > -5 * MINUTE) {
         const r = await poster(ligne, { content: `${p.texte} ${tx(mode, 'rappel', { quand: quand(Date.parse(m.prevu)) })}`.trim().slice(0, 2000), allowed_mentions: p.allowed }, compteur);
-        if (r.ok) await maj(ligne.id, du10 ? { rappel10_le: iso(t0()), rappel30_le: ligne.rappel30_le ?? iso(t0()) } : { rappel30_le: iso(t0()) });
+        if (r.ok) await maj(ligne.id, { rappel10_le: iso(t0()) });
       }
     }
     if (compteur.limite || ligne.statut === 'supprime') return;
