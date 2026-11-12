@@ -170,6 +170,10 @@ const fr = {
   'comparer.version': 'Version {n} de cette strat',
   'comparer.avec': 'Comparer avec',
   'comparer.actuelle': 'Strat actuelle',
+  'aide.raccourcis': 'Raccourcis clavier (?)',
+  'aide.liste': 'V sélection · H main · A pion · C capacité · F flèche · L ligne · R forme · T texte · M marqueur · O vision · E gomme · G aimantation · 1 à 5 joueur · Espace lecture · Ctrl+Z annuler · Ctrl+Maj+Z ou Ctrl+Y rétablir · Ctrl+C / Ctrl+V copier, coller · Suppr effacer · Ctrl+S enregistrer · Ctrl+D dupliquer l’étape · [ et ] étapes · flèches : déplacer la sélection (Maj : plus loin) · + / - / 0 zoom · Échap désélectionner',
+  'editeur.callout': 'Callout : {nom}',
+  'temps_reel.nouvelle_version': '{qui} a enregistré la version {n} de cette strat. Rechargez-la pour la voir (vos changements non enregistrés seraient perdus).',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -336,6 +340,10 @@ const en: Record<keyof typeof fr, string> = {
   'comparer.version': 'Version {n} of this strat',
   'comparer.avec': 'Compare with',
   'comparer.actuelle': 'Current strat',
+  'aide.raccourcis': 'Keyboard shortcuts (?)',
+  'aide.liste': 'V select · H pan · A token · C ability · F arrow · L line · R shape · T text · M marker · O vision · E eraser · G snap · 1 to 5 player · Space play · Ctrl+Z undo · Ctrl+Shift+Z or Ctrl+Y redo · Ctrl+C / Ctrl+V copy, paste · Del delete · Ctrl+S save · Ctrl+D duplicate step · [ and ] steps · arrows: move the selection (Shift: further) · + / - / 0 zoom · Esc deselect',
+  'editeur.callout': 'Callout: {nom}',
+  'temps_reel.nouvelle_version': '{qui} saved version {n} of this strat. Reload it to see it (your unsaved changes would be lost).',
 };
 
 export type CleSt = keyof typeof fr;

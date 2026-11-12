@@ -26,7 +26,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, RegularPolygon, Stage, Text as KText, Wedge } from 'react-konva';
 import { initiales, type AgentAsset, type CacheImages, type CapaciteAsset, type CarteAsset } from '../../strats/assets';
 import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
-import { aimanter, cadreImage, centre, dimensionFixe, etatLecture, poignees, primitiveZone, tirerPoignee, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
+import { aimanter, cadreImage, centre, dansPolygone, dimensionFixe, etatLecture, poignees, primitiveZone, tirerPoignee, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
 import { COULEURS_EQUIPES, echelleEffective, type GenreMarqueur } from '../../strats/modeles';
 import { tr } from '../../i18n';
 
@@ -73,6 +73,8 @@ export interface PropsCanevas {
   ordreSuivant?: number;
   selection?: string;
   onSelection(id: string | undefined): void;
+  /** Callout (zone nommée du profil) sous le pointeur. */
+  onCallout?(nom: string | undefined): void;
   vue: Vue;
   onVue(v: Vue): void;
   onAction(a: Action): void;
@@ -443,7 +445,16 @@ export default function CanevasStrat(p: PropsCanevas) {
     }
   }
 
+  const calloutSous = useRef<string | undefined>(undefined);
   function auPointeurBouge() {
+    if (p.onCallout && carte?.zones?.length) {
+      const pt = position(false);
+      const z = pt ? carte.zones.find(x => dansPolygone(pt.x, pt.y, x.points)) : undefined;
+      if (z?.nom !== calloutSous.current) {
+        calloutSous.current = z?.nom;
+        p.onCallout(z?.nom);
+      }
+    }
     if (!brouillon || pincement.current) return;
     const pt = position(brouillon.type === 'forme');
     if (!pt) return;

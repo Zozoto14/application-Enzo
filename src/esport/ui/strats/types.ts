@@ -3,6 +3,7 @@
 import type { ThemeHub } from '../../../hub/themes';
 import type { ApiStrats } from '../../strats/api';
 import type { Assets } from '../../strats/assets';
+import type { ClientEsport } from '../../client';
 
 export interface PropsEditeur {
   theme: ThemeHub;
@@ -16,4 +17,6 @@ export interface PropsEditeur {
   onOuvrir(id: string): void;
   /** La strat vient d'être supprimée (corbeille) : la liste revient avec le toast « Annuler ». */
   onSupprimee(strat: { id: string; titre: string }): void;
+  /** Temps réel : prévenir quand quelqu'un d'autre enregistre la strat ouverte (absent : sans temps réel). */
+  client?: ClientEsport;
 }

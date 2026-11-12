@@ -88,6 +88,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       <>
       <Editeur
         theme={theme}
+        client={client}
         api={api}
         teamId={teamId}
         stratId={ouverte}

@@ -61,6 +61,7 @@ import { trSs } from '../../i18n/stratsSuppr';
 import { tr } from '../../i18n';
 import { trSt, type CleSt } from '../../i18n/strats2';
 import { Glyphe } from '../../../ui/icones';
+import { useTempsReel } from '../../tempsReel/hooks';
 import { Chronologie, FicheCapacite, Inspecteur, ListeUtilitaires, PanneauJoueurs, couleurPhase, libellePhase } from './Panneaux';
 import { documentImpression } from './impression';
 
@@ -142,7 +143,7 @@ async function telecharger(url: string, nom: string) {
 /** Attend deux images du navigateur (le canevas a redessiné l'étape demandée). */
 const deuxImages = () => new Promise<void>(ok => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(ok, 60))));
 
-export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, onOuvrir, onSupprimee }: PropsEditeur) {
+export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, onOuvrir, onSupprimee, client }: PropsEditeur) {
   const [strat, setStrat] = useState<Strat | undefined>();
   const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [h, setH] = useState<Historique | undefined>();
@@ -173,8 +174,28 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const [enLecture, setEnLecture] = useState(false);
   const [presentation, setPresentation] = useState(false);
   const [comparer, setComparer] = useState(false);
+  const [aide, setAide] = useState(false);
+  const [callout, setCallout] = useState<string | undefined>();
+  const [distant, setDistant] = useState<{ revision: number; pseudo: string | null } | undefined>();
   const exportRef = useRef<ExportCanevas | undefined>(undefined);
+  const revisionRef = useRef(0);
+  revisionRef.current = revision;
   const { enCours, erreur, avis, agir, setErreur } = useAgir();
+  // Temps réel : quelqu'un d'autre enregistre cette strat → bandeau « Recharger » (le verrou optimiste protège déjà l'enregistrement).
+  useTempsReel(
+    client,
+    [`team:${teamId}:strat_editor`],
+    messages => {
+      if (!messages.some(m => m.cle === `strat:${stratId}` && m.action !== 'supprime')) return;
+      void api
+        .detail(teamId, stratId)
+        .then(s => {
+          if (s.revision > revisionRef.current) setDistant({ revision: s.revision, pseudo: s.majPar.pseudo });
+        })
+        .catch(() => undefined);
+    },
+    { actif: Boolean(client) },
+  );
 
   const charger = useCallback(async () => {
     const s = await api.detail(teamId, stratId);
@@ -185,6 +206,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     setRevision(s.revision);
     setEtape(0);
     setConflit(undefined);
+    setDistant(undefined);
   }, [api, teamId, stratId]);
   useEffect(() => {
     void agir('', charger);
@@ -387,7 +409,8 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         ev.preventDefault();
         const pas = ev.shiftKey ? 20 : 4;
         faire({ type: 'deplacer', etape: iEtape, id: selection, dx: k === 'arrowleft' ? -pas : k === 'arrowright' ? pas : 0, dy: k === 'arrowup' ? -pas : k === 'arrowdown' ? pas : 0 });
-      } else if (k === 'g') setAimant(a => (a ? 0 : 10));
+      } else if (k === '?') setAide(a => !a);
+      else if (k === 'g') setAimant(a => (a ? 0 : 10));
       else if (TOUCHES_OUTILS[k]) setOutil(TOUCHES_OUTILS[k]);
       else if (/^[1-9]$/.test(k) && Number(k) <= (doc?.joueurs.length ?? 0)) {
         setJoueur(Number(k) - 1);
@@ -446,6 +469,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     ordreSuivant: prochainOrdre(etapeCourante),
     selection,
     onSelection: setSelection,
+    onCallout: setCallout,
     onAction: peutModifier ? faire : () => undefined,
     images: cacheImages,
     onPret: surPret,
@@ -479,6 +503,9 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       </Pastille>
       <Pastille theme={theme} actif={false} onPress={() => setVue(VUE_INITIALE)} libelle={tr('strats.editeur.vue_entiere_0')} testID="esport-editeur-zoom-zero">
         <Text style={{ color: theme.texte, fontSize: 12 }}>{Math.round(vue.echelle * 100)} %</Text>
+      </Pastille>
+      <Pastille theme={theme} actif={aide} onPress={() => setAide(a => !a)} libelle={trSt('aide.raccourcis')} testID="esport-editeur-aide">
+        <Glyphe valeur="question" style={{ color: theme.texte, fontSize: 16 }} />
       </Pastille>
     </View>
   );
@@ -765,13 +792,26 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
           <BoutonHub theme={theme} titre={tr('strats.editeur.garder_la_mienne_ecraser')} variante="danger" onPress={() => (setErreur(undefined), void enregistrer(conflit))} testID="esport-editeur-ecraser" />
         </View>
       ) : null}
+      {distant ? (
+        <View style={[styles.ligne, { gap: 8, borderWidth: 1, borderColor: theme.alerte, borderRadius: 8, padding: 8 }]} testID="esport-editeur-distant">
+          <Text style={{ color: theme.texte, flex: 1, minWidth: 200, ...police(theme.policeTexte) }}>{trSt('temps_reel.nouvelle_version', { qui: distant.pseudo ?? '?', n: distant.revision })}</Text>
+          <BoutonHub theme={theme} titre={tr('strats.editeur.recharger_la_version_du')} onPress={() => void agir('', charger)} testID="esport-editeur-distant-recharger" />
+        </View>
+      ) : null}
       {!peutModifier ? <Text style={attenue}>{tr('strats.editeur.lecture_seule_votre_role')}</Text> : null}
+      {aide ? (
+        <Panneau theme={theme} testID="esport-editeur-raccourcis">
+          <Intertitre theme={theme}>{trSt('aide.raccourcis')}</Intertitre>
+          <Text style={{ color: theme.texte, fontSize: 13, lineHeight: 20, ...police(theme.policeTexte) }}>{trSt('aide.liste')}</Text>
+        </Panneau>
+      ) : null}
       {reglagesStrat}
       {peutModifier ? barreOutils : null}
       {comparer ? <Comparaison theme={theme} api={api} teamId={teamId} strat={strat} doc={doc} etape={iEtape} assets={assets} taille={large ? Math.min(560, (largeur || 900) / 2 - 12) : Math.min(taille, 420)} /> : null}
       <View style={{ flexDirection: large ? 'row' : 'column', gap: 12, alignItems: 'flex-start' }}>
         <View style={{ flex: 1, width: '100%', gap: 8, minWidth: 0 }} onLayout={ev => setLargeur(ev.nativeEvent.layout.width)}>
           {canevas(taille)}
+          <Text style={attenue} testID="esport-editeur-callout">{callout ? trSt('editeur.callout', { nom: callout }) : ' '}</Text>
           {!carteAsset?.minimap && !doc.carte.image ? <Text style={attenue}>{trSt('editeur.sans_image')}</Text> : null}
           {carteAsset && !carteAsset.echelle ? <Text style={attenue} testID="esport-editeur-non-calibree">{trSt('editeur.non_calibree')}</Text> : null}
           {chronologie}
