@@ -173,6 +173,11 @@ export function fauxDiscordRest({ gateway, guild = '700000000000000001', bot = '
       etat.salons.set(s.id, s);
       return rep(s, 201);
     }
+    // Positions des salons : [{ id, position }].
+    if (chemin === `/guilds/${guild}/channels` && methode === 'PATCH') {
+      for (const x of Array.isArray(corps) ? corps : []) if (etat.salons.has(x.id)) etat.salons.get(x.id).position = x.position;
+      return rep(undefined, 204);
+    }
     if (chemin === `/guilds/${guild}/roles` && methode === 'POST') {
       const r = { id: id(), position: 1, ...corps };
       etat.roles.set(r.id, r);

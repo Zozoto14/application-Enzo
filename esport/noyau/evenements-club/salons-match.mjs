@@ -19,6 +19,10 @@
  *  - résultat saisi (match terminé) → résultat posté, suppression programmée après le délai ;
  *  - match supprimé du site → avis posté, suppression programmée après le délai ;
  *  - équipe du match sans rôle Discord (pas reliée à une équipe de l'événement) → signalée dans l'embed, staff averti ;
+ *  - staff assigné au match sur le site (avec Discord lié) → accès par membre (comme le staff), mentionné dans l'embed
+ *    (« Staff assigné ») ; absent du serveur ou sans Discord : signalé au staff ; assignation changée → accès et embed ;
+ *  - « Placer sous le salon » (réglage facultatif) → salons créés dans la catégorie du salon repère et rangés juste sous
+ *    lui par horaire (un PATCH des positions) ; repère supprimé : catégorie choisie, staff averti une fois ;
  *  - suppression due → historique enregistré dans l'app (messages, auteurs, pièces jointes en liens), salon supprimé.
  * Idempotent : une ligne par match (clé unique), un bail par événement (un seul processus à la fois), un salon créé mais
  * pas encore noté (processus arrêté net) est retrouvé par son sujet (`esport-hq:match:<clé>`) au lieu d'être recréé.
@@ -30,6 +34,7 @@ import { lireGeneral, instructionReglage } from '../tickets/reglages.mjs';
 import { DROITS_BOT, rest } from '../tickets/discord.mjs';
 import { bilingue } from '../tickets/textes.mjs';
 import { idsSup } from './staff-sup.mjs';
+import { ECRITS, positionsSousHub } from '../vocaux/hubs.mjs';
 
 export const REGLAGES_DEFAUT = Object.freeze({
   actif: false,
@@ -40,6 +45,7 @@ export const REGLAGES_DEFAUT = Object.freeze({
   langue: 'bot',
   avanceH: 0,
   retentionJours: 0,
+  ancreId: null,
 });
 export const LIMITES_SALONS = Object.freeze({ delaiMin: 5, delaiMax: 1440, modele: 80, avanceMax: 168, retentionMax: 3650, creationsParPassage: 5, actionsParPassage: 40, salonsParCategorie: 50, pagesHistorique: 20 });
 export const LANGUES_SALONS = Object.freeze(['bot', 'fr', 'en', 'fr_en', 'en_fr']);
@@ -73,6 +79,12 @@ const T = {
     suppression: 'Ce salon sera supprimé {quand} (l’historique reste dans l’app).',
     annule: 'Ce match a été supprimé ou annulé sur le site.',
     sans_role: 'Attention staff : équipe(s) sans rôle Discord, elles ne voient pas ce salon : {liste}. Reliez-les à une équipe de l’événement (Administration › Événements).',
+    staff_introuvable: 'Attention staff : staff assigné sur le site introuvable sur le serveur Discord (pas d’accès au salon) : {liste}.',
+    staff_assigne: 'Staff assigné',
+    staff_absent: 'absent du serveur',
+    staff_sans_discord: 'pas de Discord lié',
+    maj_staff: 'staff assigné',
+    ancre_absente: 'Attention staff : le salon repère « Placer sous le salon » a été supprimé sur Discord ; les salons de match sont créés dans la catégorie choisie. Choisissez un autre salon dans l’app (Administration › Événements).',
     heure: 'Horaire',
     a_definir: 'à définir',
     statut: 'Statut',
@@ -108,6 +120,12 @@ const T = {
     suppression: 'This channel will be deleted {quand} (the history stays in the app).',
     annule: 'This match was deleted or cancelled on the website.',
     sans_role: 'Staff, heads up: team(s) without a Discord role cannot see this channel: {liste}. Link them to an event team (Administration › Events).',
+    staff_introuvable: 'Staff, heads up: staff assigned on the website not found on the Discord server (no access to the channel): {liste}.',
+    staff_assigne: 'Assigned staff',
+    staff_absent: 'not on the server',
+    staff_sans_discord: 'no linked Discord',
+    maj_staff: 'assigned staff',
+    ancre_absente: 'Staff, heads up: the “Place below channel” anchor was deleted on Discord; match channels are created in the chosen category. Pick another channel in the app (Administration › Events).',
     heure: 'Time',
     a_definir: 'to be decided',
     statut: 'Status',
@@ -157,6 +175,7 @@ export function lireReglages(v) {
   if (LANGUES_SALONS.includes(x.langue)) r.langue = x.langue;
   if (Number.isInteger(x.avanceH)) r.avanceH = Math.min(LIMITES_SALONS.avanceMax, Math.max(0, x.avanceH));
   if (Number.isInteger(x.retentionJours)) r.retentionJours = Math.min(LIMITES_SALONS.retentionMax, Math.max(0, x.retentionJours));
+  if (typeof x.ancreId === 'string' && ID.test(x.ancreId)) r.ancreId = x.ancreId;
   return r;
 }
 
@@ -191,7 +210,11 @@ export function validerReglages(c, actuel = REGLAGES_DEFAUT) {
   }
   if (c.avanceH !== undefined) r.avanceH = entier(c.avanceH, 0, LIMITES_SALONS.avanceMax, 'salons-match-avance', `Création anticipée : 0 à ${LIMITES_SALONS.avanceMax} heures.`);
   if (c.retentionJours !== undefined) r.retentionJours = entier(c.retentionJours, 0, LIMITES_SALONS.retentionMax, 'salons-match-retention', `Rétention : 0 à ${LIMITES_SALONS.retentionMax} jours.`);
-  if (r.actif && !r.categorieId) throw echec(400, 'salons-match-categorie', 'Choisissez la catégorie Discord des salons de match.');
+  if (c.ancreId !== undefined) {
+    if (c.ancreId !== null && (typeof c.ancreId !== 'string' || !ID.test(c.ancreId))) throw echec(400, 'salons-match-ancre', 'Salon repère invalide.');
+    r.ancreId = c.ancreId;
+  }
+  if (r.actif && !r.categorieId && !r.ancreId) throw echec(400, 'salons-match-categorie', 'Choisissez la catégorie Discord des salons de match.');
   return r;
 }
 
@@ -225,18 +248,26 @@ function titreDe(m, l) {
 /**
  * Lit les matchs et lobbies du tournoi lié (pont signé, lecture seule). Rend `{ matchs, equipes }` : `matchs` =
  * [{ cle, genre, siteId, round, position, groupe, bracket, label, phase, equipes: [teamId], statut, prevu, stream,
- * resultat }], `equipes` = Map(teamId → { id, nom, tag, joueurs }). Lève si le site ne répond pas (rien n'est alors
+ * staff: [{ nom, discordId }], resultat }], `equipes` = Map(teamId → { id, nom, tag, joueurs }). Lève si le site ne répond pas (rien n'est alors
  * considéré comme supprimé).
  */
 export async function lireMatchsSite(site, tournoiId) {
   const parT = [{ col: 'tournament_id', op: 'eq', val: tournoiId }];
   const ordre = [{ col: 'round', asc: true }, { col: 'position', asc: true }];
-  const [m1, lobbies, equipesS, phases] = await Promise.all([
+  const [m1, lobbies, equipesS, phases, staffS] = await Promise.all([
     site.lister('tournament_matches', parT, ordre),
     site.lister('tournament_lobbies', parT, ordre),
     site.lister('tournament_teams', parT),
     site.lister('tournament_stages', parT).catch(() => []),
+    // Staff assigné (site à jour, migration 0008) : nom affiché et Discord ID ; ancien site : aucun.
+    site.lister('tournament_match_staff_discord', parT).catch(() => []),
   ]);
+  const staffDe = (col, id) =>
+    staffS
+      .filter(x => x[col] === id)
+      .map(x => ({ nom: String(x.display_name ?? '').slice(0, 100), discordId: ID.test(String(x.discord_id ?? '')) ? String(x.discord_id) : null }))
+      .sort((a, b) => String(a.discordId ?? a.nom).localeCompare(String(b.discordId ?? b.nom)))
+      .slice(0, 20);
   const entrees = lobbies.length ? await site.lister('tournament_lobby_entries', [{ col: 'lobby_id', op: 'in', val: lobbies.map(l => l.id) }], [{ col: 'sort_order', asc: true }]) : [];
   const joueurs = equipesS.length ? await site.lister('tournament_players', [{ col: 'team_id', op: 'in', val: equipesS.map(e => e.id) }], [{ col: 'sort_order', asc: true }]) : [];
   const equipes = new Map(
@@ -272,6 +303,7 @@ export async function lireMatchsSite(site, tournoiId) {
       statut: ['pending', 'live', 'finished'].includes(m.status) ? m.status : 'pending',
       prevu: m.scheduled_at ? new Date(m.scheduled_at).toISOString() : null,
       stream: typeof m.stream_url === 'string' && /^https:\/\//.test(m.stream_url) ? m.stream_url : null,
+      staff: staffDe('match_id', m.id),
       resultat: fini ? { scores: [{ equipe: m.team_a_id, score: m.score_a ?? null }, { equipe: m.team_b_id, score: m.score_b ?? null }].filter(x => x.equipe), vainqueur: m.winner_id ?? null } : null,
     });
   }
@@ -292,13 +324,16 @@ export async function lireMatchsSite(site, tournoiId) {
       statut: ['pending', 'live', 'finished'].includes(l.status) ? l.status : 'pending',
       prevu: l.scheduled_at ? new Date(l.scheduled_at).toISOString() : null,
       stream: typeof l.stream_url === 'string' && /^https:\/\//.test(l.stream_url) ? l.stream_url : null,
+      staff: staffDe('lobby_id', l.id),
       resultat: fini ? { classement: es.map(e => ({ equipe: e.team_id, placement: e.placement ?? null, points: Number(e.points ?? 0), dnf: Boolean(e.dnf) })) } : null,
     });
   }
   return { matchs, equipes };
 }
 
-const empreinteMatch = m => JSON.stringify([m.prevu, [...m.equipes].sort(), m.round, m.position, m.groupe, m.bracket, m.label]);
+/** Staff assigné dans l'empreinte (ajouté seulement s'il y en a : les empreintes d'avant restent valables). */
+const cleStaff = m => (m.staff ?? []).map(x => x.discordId ?? `nom:${x.nom}`).sort();
+const empreinteMatch = m => JSON.stringify([m.prevu, [...m.equipes].sort(), m.round, m.position, m.groupe, m.bracket, m.label, ...(cleStaff(m).length ? [cleStaff(m)] : [])]);
 const empreinteResultat = m => (m.resultat ? JSON.stringify(m.resultat) : null);
 
 // ------------------------------------------------------------------ Service
@@ -377,6 +412,10 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       const role = e.roleId ? `<@&${e.roleId}>` : `*${lib(mode, 'sans_role_court')}*`;
       return { name: `${e.tag ? `[${e.tag}] ` : ''}${e.nom}`.slice(0, 256), value: `${role}\n${joueurs || lib(mode, 'aucun_joueur')}`.slice(0, 1024), inline: equipes.length <= 4 };
     });
+    if (m.staff?.length) {
+      const liste = m.staff.map(x => (x.discordId && !x.absent ? `<@${x.discordId}>` : `${x.nom || '?'} (${lib(mode, x.discordId ? 'staff_absent' : 'staff_sans_discord')})`)).join(', ');
+      fields.push({ name: lib(mode, 'staff_assigne'), value: liste.slice(0, 1024), inline: false });
+    }
     return { title: titre.slice(0, 256), description: lignes.join('\n').slice(0, 4000), color: 0x5865f2, fields, footer: { text: `Esport HQ · ${String(evt.nom ?? '').slice(0, 100)}` } };
   }
 
@@ -403,7 +442,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     return { texte: [...roles.map(r => `<@&${r}>`), ...users.map(u => `<@${u}>`)].join(' '), allowed: { parse: [], roles: roles.slice(0, 100), users: users.slice(0, 100) } };
   };
 
-  function surcharges(evt, equipes, guildId, idBot, { gestion = true } = {}) {
+  function surcharges(evt, equipes, guildId, idBot, { gestion = true, assignes = [] } = {}) {
     const o = [{ id: guildId, type: 0, allow: '0', deny: VOIR.toString() }];
     const vus = new Set([guildId]);
     for (const e of equipes) {
@@ -416,6 +455,12 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       if (vus.has(String(r))) continue;
       vus.add(String(r));
       o.push({ id: String(r), type: 0, allow: gestion ? DROITS_STAFF : DROITS_STAFF_SANS_GESTION, deny: '0' });
+    }
+    // Staff assigné au match sur le site (présent sur le serveur) : accès par membre, mêmes droits que le staff.
+    for (const x of assignes) {
+      if (!x.discordId || x.absent || vus.has(x.discordId) || String(x.discordId) === String(idBot)) continue;
+      vus.add(x.discordId);
+      o.push({ id: x.discordId, type: 1, allow: gestion ? DROITS_STAFF : DROITS_STAFF_SANS_GESTION, deny: '0' });
     }
     if (idBot) o.push({ id: String(idBot), type: 1, allow: DROITS_BOT, deny: '0' });
     return o;
@@ -504,7 +549,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
    * Crée le salon d'un match (ligne réservée par la clé unique). `force` : création manuelle (sans attendre la création
    * anticipée, même avec une seule équipe connue).
    */
-  async function creerSalon({ evt, reglages, ligne, m, equipes, d, mode, compteur, salonsServeur }) {
+  async function creerSalon({ evt, reglages, ligne, m, equipes, d, mode, compteur, salonsServeur, parentId = reglages.categorieId }) {
     const idBot = await idDuBot();
     const vars = {
       round: `r${m.round}`,
@@ -518,13 +563,13 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     // Salon déjà créé par un passage interrompu (processus arrêté avant de noter l'identifiant) : retrouvé par son sujet.
     let salon = (salonsServeur ?? []).find(s => Number(s.type) === 0 && String(s.topic ?? '').includes(`${MARQUEUR}${m.cle}`) && String(s.topic ?? '').includes(evt.id.slice(0, 8)));
     if (!salon) {
-      const corps = { name: nom, type: 0, parent_id: reglages.categorieId, topic: `${titre} · ${MARQUEUR}${m.cle} · ${evt.id.slice(0, 8)}`.slice(0, 1024), permission_overwrites: surcharges(evt, equipes, d.guildId, idBot) };
+      const corps = { name: nom, type: 0, ...(parentId ? { parent_id: parentId } : {}), topic: `${titre} · ${MARQUEUR}${m.cle} · ${evt.id.slice(0, 8)}`.slice(0, 1024), permission_overwrites: surcharges(evt, equipes, d.guildId, idBot, { assignes: m.staff }) };
       compteur.n++;
       let r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${d.guildId}/channels`, corps, { raison: 'Esport HQ : salon de match' });
       // Le bot ne peut accorder que ce qu'il a : sans « Gérer les messages », le staff écrit sans pouvoir modérer.
       if (!r.ok && (r.code === 50013 || r.statut === 403)) {
         compteur.n++;
-        r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${d.guildId}/channels`, { ...corps, permission_overwrites: surcharges(evt, equipes, d.guildId, idBot, { gestion: false }) }, { raison: 'Esport HQ : salon de match' });
+        r = await rest(fetchDiscord, jetonBot, 'POST', `/guilds/${d.guildId}/channels`, { ...corps, permission_overwrites: surcharges(evt, equipes, d.guildId, idBot, { gestion: false, assignes: m.staff }) }, { raison: 'Esport HQ : salon de match' });
       }
       if (r.statut === 429) {
         compteur.limite = true;
@@ -535,9 +580,11 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         return false;
       }
       salon = r.corps;
+      // Placement sous le salon repère (fin du passage) : le nouveau salon entre dans la liste lue au début.
+      if (Array.isArray(salonsServeur)) salonsServeur.push(salon);
     }
     const p = pings(equipes);
-    await maj(ligne.id, { salon_id: String(salon.id), statut: 'ouvert', titre, infos: JSON.stringify({ equipes: equipes.map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })) }), erreur: null });
+    await maj(ligne.id, { salon_id: String(salon.id), statut: 'ouvert', titre, infos: JSON.stringify({ equipes: equipes.map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })), staff: (m.staff ?? []).map(x => ({ nom: x.nom, present: Boolean(x.discordId && !x.absent) })) }), erreur: null });
     ligne.salon_id = String(salon.id);
     ligne.statut = 'ouvert';
     const msg = await poster(ligne, { content: `${p.texte}\n${tx(mode, 'pret')}`.trim().slice(0, 2000), embeds: [embedMatch(evt, m, equipes, mode)], allowed_mentions: p.allowed }, compteur);
@@ -550,17 +597,25 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       rappel30_le: avant <= 30 * MINUTE ? iso(t0()) : null,
       rappel10_le: avant <= 10 * MINUTE ? iso(t0()) : null,
     });
-    await avertirSansRole(evt, ligne, equipes, mode, compteur);
+    await avertirSansRole(evt, ligne, equipes, mode, compteur, m);
     return true;
   }
 
   /** Équipes sans rôle Discord : signalées une fois (par ensemble d'équipes) au staff de l'événement. */
-  async function avertirSansRole(evt, ligne, equipes, mode, compteur) {
-    const sans = equipes.filter(e => !e.roleId).map(e => `${e.tag ? `[${e.tag}] ` : ''}${e.nom}`);
-    const cle = JSON.stringify(sans.sort());
-    if (!sans.length || ligne.avertis === cle) return;
-    const staff = [evt.staff_role_id, ...(evt.roles_supprimes_le ? [] : idsSup(evt.staff_roles_sup))].filter(x => x && ID.test(String(x))).map(String);
-    await poster(ligne, { content: `${staff.map(r => `<@&${r}>`).join(' ')} ${tx(mode, 'sans_role', { liste: sans.join(', ') })}`.trim().slice(0, 2000), allowed_mentions: { parse: [], roles: staff } }, compteur);
+  async function avertirSansRole(evt, ligne, equipes, mode, compteur, m = null) {
+    const sans = equipes.filter(e => !e.roleId).map(e => `${e.tag ? `[${e.tag}] ` : ''}${e.nom}`).sort();
+    const introuvables = (m?.staff ?? []).filter(x => !x.discordId || x.absent).map(x => x.nom || x.discordId || '?').sort();
+    // Clé : ancien format (liste des équipes) tant qu'aucun staff n'est introuvable.
+    const cle = introuvables.length ? JSON.stringify({ equipes: sans, staff: introuvables }) : JSON.stringify(sans);
+    if ((!sans.length && !introuvables.length) || ligne.avertis === cle) return;
+    const avant = jsonOu(ligne.avertis, null);
+    const dejaEquipes = Array.isArray(avant) ? avant : (avant?.equipes ?? []);
+    const dejaStaff = Array.isArray(avant) ? [] : (avant?.staff ?? []);
+    const roles = [evt.staff_role_id, ...(evt.roles_supprimes_le ? [] : idsSup(evt.staff_roles_sup))].filter(x => x && ID.test(String(x))).map(String);
+    const textes = [];
+    if (sans.length && JSON.stringify(sans) !== JSON.stringify(dejaEquipes)) textes.push(tx(mode, 'sans_role', { liste: sans.join(', ') }, 900));
+    if (introuvables.length && JSON.stringify(introuvables) !== JSON.stringify(dejaStaff)) textes.push(tx(mode, 'staff_introuvable', { liste: introuvables.join(', ') }, 900));
+    if (textes.length) await poster(ligne, { content: `${roles.map(r => `<@&${r}>`).join(' ')} ${textes.join('\n')}`.trim().slice(0, 2000), allowed_mentions: { parse: [], roles } }, compteur);
     await maj(ligne.id, { avertis: cle });
     ligne.avertis = cle;
   }
@@ -577,6 +632,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       const quoi = [];
       if (avant[0] !== m.prevu) quoi.push('maj_horaire');
       if (JSON.stringify(avant[1] ?? []) !== JSON.stringify([...m.equipes].sort())) quoi.push('maj_equipes');
+      if (JSON.stringify(avant[7] ?? []) !== JSON.stringify(cleStaff(m))) quoi.push('maj_staff');
       if (!quoi.length) quoi.push('maj_titre');
       if (ligne.message_id) {
         compteur.n++;
@@ -586,14 +642,17 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
           return;
         }
       }
-      if (quoi.includes('maj_equipes')) {
-        // Accès : rôles des équipes du match (ajoutés, retirés), staff et bot inchangés.
+      if (quoi.includes('maj_equipes') || quoi.includes('maj_staff')) {
+        // Accès : rôles des équipes du match et staff assigné (ajoutés, retirés), staff de l'événement et bot inchangés.
         compteur.n++;
-        const r = await rest(fetchDiscord, jetonBot, 'PATCH', `/channels/${ligne.salon_id}`, { permission_overwrites: surcharges(evt, equipes, d.guildId, await idDuBot()) }, { raison: 'Esport HQ : équipes du match modifiées' });
-        if (!r.ok && (r.code === 50013 || r.statut === 403)) await rest(fetchDiscord, jetonBot, 'PATCH', `/channels/${ligne.salon_id}`, { permission_overwrites: surcharges(evt, equipes, d.guildId, await idDuBot(), { gestion: false }) }, { raison: 'Esport HQ : équipes du match modifiées' });
+        const r = await rest(fetchDiscord, jetonBot, 'PATCH', `/channels/${ligne.salon_id}`, { permission_overwrites: surcharges(evt, equipes, d.guildId, await idDuBot(), { assignes: m.staff }) }, { raison: 'Esport HQ : équipes du match modifiées' });
+        if (!r.ok && (r.code === 50013 || r.statut === 403)) await rest(fetchDiscord, jetonBot, 'PATCH', `/channels/${ligne.salon_id}`, { permission_overwrites: surcharges(evt, equipes, d.guildId, await idDuBot(), { gestion: false, assignes: m.staff }) }, { raison: 'Esport HQ : équipes du match modifiées' });
       }
       const texte = tx(mode, 'maj', { quoi: quoi.map(q => lib(mode, q)).join(', ') });
-      await poster(ligne, { content: `${p.texte} ${texte}`.trim().slice(0, 2000), allowed_mentions: p.allowed }, compteur);
+      // Seul le staff assigné a changé : mention du staff assigné présent, pas des équipes.
+      const staffPresent = (m.staff ?? []).filter(x => x.discordId && !x.absent).map(x => x.discordId);
+      const ping = quoi.length === 1 && quoi[0] === 'maj_staff' ? { texte: staffPresent.map(u => `<@${u}>`).join(' '), allowed: { parse: [], users: staffPresent } } : p;
+      await poster(ligne, { content: `${ping.texte} ${texte}`.trim().slice(0, 2000), allowed_mentions: ping.allowed }, compteur);
       if (ligne.statut === 'supprime') return;
       const horaire = avant[0] !== m.prevu;
       const reste = m.prevu ? Date.parse(m.prevu) - t0() : Infinity;
@@ -601,7 +660,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         empreinte: empreinteMatch(m),
         prevu_le: m.prevu,
         titre: titreDe(m, langues(mode)[0]),
-        infos: JSON.stringify({ equipes: equipes.map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })) }),
+        infos: JSON.stringify({ equipes: equipes.map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })), staff: (m.staff ?? []).map(x => ({ nom: x.nom, present: Boolean(x.discordId && !x.absent) })) }),
         // Nouvel horaire : rappels repartis (sauf ceux déjà dépassés).
         ...(horaire ? { rappel30_le: reste <= 30 * MINUTE ? iso(t0()) : null, rappel10_le: reste <= 10 * MINUTE ? iso(t0()) : null } : {}),
       });
@@ -609,7 +668,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         ligne.rappel30_le = reste <= 30 * MINUTE ? iso(t0()) : null;
         ligne.rappel10_le = reste <= 10 * MINUTE ? iso(t0()) : null;
       }
-      await avertirSansRole(evt, ligne, equipes, mode, compteur);
+      await avertirSansRole(evt, ligne, equipes, mode, compteur, m);
     }
     if (compteur.limite || ligne.statut === 'supprime') return;
     // Rappels (une seule fois chacun ; à moins de 10 minutes, le rappel des 30 minutes n'est plus envoyé).
@@ -651,6 +710,43 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     return n;
   }
 
+  /**
+   * Salons de match rangés juste sous le salon repère, par horaire (le plus tôt d'abord, sans horaire à la fin), sans
+   * toucher aux salons au-dessus du repère (même calcul que les hubs vocaux, vocaux/hubs.mjs). Un seul PATCH des
+   * positions qui changent ; refus pour limite de débit : au passage suivant. Rend le nombre de salons déplacés.
+   */
+  async function placerSousAncre(evenementId, ancre, salons, d, compteur) {
+    const lignes = await base.tous("SELECT salon_id, prevu_le, cree_le FROM club_salons_match WHERE evenement_id = ? AND statut IN ('ouvert', 'termine', 'annule') AND salon_id IS NOT NULL", [evenementId]);
+    const groupe = lignes
+      .sort((a, b) => (a.prevu_le ? Date.parse(a.prevu_le) : Infinity) - (b.prevu_le ? Date.parse(b.prevu_le) : Infinity) || String(a.cree_le).localeCompare(String(b.cree_le)))
+      .map(l => String(l.salon_id));
+    const positions = positionsSousHub(salons, ancre, groupe, ECRITS);
+    if (!positions.length) return 0;
+    compteur.n++;
+    const r = await rest(fetchDiscord, jetonBot, 'PATCH', `/guilds/${d.guildId}/channels`, positions, { raison: 'Esport HQ : salons de match sous le salon choisi' });
+    if (r.statut === 429) compteur.limite = true;
+    return r.ok ? positions.length : 0;
+  }
+
+  /** Repère supprimé sur Discord : le staff est averti une fois (dans un salon de match ouvert) ; réarmé s'il revient. */
+  async function signalerAncre(evt, reglages, absente, mode, compteur) {
+    const cle = `salons_match_ancre:${evt.id}`;
+    const deja = jsonOu((await base.premier('SELECT valeur FROM tickets_reglages WHERE cle = ?', [cle]))?.valeur, null);
+    if (!absente) {
+      if (deja) await base.executer('DELETE FROM tickets_reglages WHERE cle = ?', [cle]);
+      return;
+    }
+    if (deja?.ancreId === reglages.ancreId || compteur.limite) return;
+    const ligne = await base.premier("SELECT * FROM club_salons_match WHERE evenement_id = ? AND statut = 'ouvert' AND salon_id IS NOT NULL ORDER BY cree_le DESC", [evt.id]);
+    if (!ligne) return; // aucun salon où l'écrire : au prochain passage
+    const roles = [evt.staff_role_id, ...(evt.roles_supprimes_le ? [] : idsSup(evt.staff_roles_sup))].filter(x => x && ID.test(String(x))).map(String);
+    const r = await poster(ligne, { content: `${roles.map(x => `<@&${x}>`).join(' ')} ${tx(mode, 'ancre_absente')}`.trim().slice(0, 2000), allowed_mentions: { parse: [], roles } }, compteur);
+    if (r.ok) {
+      const i = instructionReglage(cle, { ancreId: reglages.ancreId, le: iso(t0()) }, null, t0());
+      await base.executer(i.sql, i.params);
+    }
+  }
+
   /** Une synchronisation (sous bail). Rend le bilan. */
   async function synchroniserSousBail(evenementId, { forcer = null } = {}) {
     const evt = await base.premier('SELECT * FROM club_evenements WHERE id = ?', [evenementId]);
@@ -670,7 +766,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       bilan.limite = compteur.limite;
       return bilan;
     }
-    if (!reglages.categorieId) {
+    if (!reglages.categorieId && !reglages.ancreId) {
       bilan.erreur = 'categorie';
       return bilan;
     }
@@ -685,12 +781,48 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     const lignes = new Map((await lignesDe(evenementId)).map(l => [l.site_match_id, l]));
     const vus = new Set();
     let salonsServeur = null;
+    let salonsLus = false;
     const lireSalons = async () => {
       if (salonsServeur) return salonsServeur;
       compteur.n++;
       const r = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${d.guildId}/channels`);
-      salonsServeur = r.ok && Array.isArray(r.corps) ? r.corps : [];
+      if (r.statut === 429) compteur.limite = true;
+      salonsLus = r.ok && Array.isArray(r.corps);
+      salonsServeur = salonsLus ? r.corps : [];
       return salonsServeur;
+    };
+    // « Placer sous le salon » : les salons naissent dans la catégorie du salon repère et sont rangés juste sous lui.
+    let ancre = null;
+    let parentId = reglages.categorieId;
+    if (reglages.ancreId) {
+      const salons = await lireSalons();
+      ancre = salons.find(x => String(x.id) === reglages.ancreId) ?? null;
+      if (ancre) parentId = ancre.parent_id ? String(ancre.parent_id) : null;
+      else if (salonsLus) {
+        // Repère supprimé sur Discord : catégorie choisie (à défaut, aucune création), staff averti une fois.
+        bilan.erreur = 'ancre-introuvable';
+        if (!reglages.categorieId) {
+          bilan.limite = compteur.limite;
+          return bilan;
+        }
+      } else {
+        bilan.limite = compteur.limite;
+        return bilan; // liste des salons illisible (limite de débit…) : au passage suivant
+      }
+    }
+    // Staff assigné : présent sur le serveur ? (une lecture par personne et par passage)
+    const membres = new Map();
+    const enrichirStaff = async m => {
+      for (const x of m.staff ?? []) {
+        if (!x.discordId) continue;
+        if (!membres.has(x.discordId)) {
+          compteur.n++;
+          const r = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${d.guildId}/members/${x.discordId}`);
+          if (r.statut === 429) compteur.limite = true;
+          membres.set(x.discordId, r.ok ? true : r.code === 10007 || (r.statut === 404 && r.code !== 10004) ? false : null);
+        }
+        x.absent = membres.get(x.discordId) === false;
+      }
     };
     let creations = 0;
     // Les plus proches d'abord (horaire, puis round et position).
@@ -708,6 +840,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       }
       const equipes = equipesDuMatch(m, lu.equipes, app);
       let ligne = lignes.get(m.cle);
+      if (m.staff?.length && (!ligne || ['ouvert', 'termine', 'creation'].includes(ligne.statut))) await enrichirStaff(m);
       if (ligne && ['ouvert', 'termine'].includes(ligne.statut) && ligne.salon_id) {
         const avant = ligne.empreinte;
         const avantR = ligne.resultat_empreinte;
@@ -726,7 +859,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         continue;
       }
       const salons = await lireSalons();
-      if (salons.filter(s => String(s.parent_id ?? '') === reglages.categorieId).length >= LIMITES_SALONS.salonsParCategorie && !salons.some(s => String(s.topic ?? '').includes(`${MARQUEUR}${m.cle}`))) {
+      if (parentId && salons.filter(s => String(s.parent_id ?? '') === parentId).length >= LIMITES_SALONS.salonsParCategorie && !salons.some(s => String(s.topic ?? '').includes(`${MARQUEUR}${m.cle}`))) {
         bilan.erreur = 'categorie-pleine';
         bilan.attente++;
         continue;
@@ -738,8 +871,10 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         if (!ligne || ligne.statut !== 'creation' || ligne.salon_id) continue;
       }
       creations++;
-      if (await creerSalon({ evt, reglages, ligne, m, equipes, d, mode, compteur, salonsServeur: salons })) bilan.crees++;
+      if (await creerSalon({ evt, reglages, ligne, m, equipes, d, mode, compteur, salonsServeur: salons, parentId })) bilan.crees++;
     }
+    if (ancre && !compteur.limite) bilan.places = await placerSousAncre(evenementId, ancre, salonsServeur ?? [], d, compteur);
+    if (reglages.ancreId) await signalerAncre(evt, reglages, !ancre, mode, compteur);
     // Matchs disparus du site : avis, suppression programmée.
     for (const l of lignes.values()) {
       if (vus.has(l.site_match_id)) continue;
@@ -857,6 +992,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     genre: l.genre,
     titre: l.titre,
     equipes: (jsonOu(l.infos, {})?.equipes ?? []).map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.role) })),
+    staff: (jsonOu(l.infos, {})?.staff ?? []).map(x => ({ nom: x.nom, present: Boolean(x.present) })),
     salonId: l.salon_id ?? null,
     lien: l.salon_id && guildId && l.statut !== 'supprime' ? `https://discord.com/channels/${guildId}/${l.salon_id}` : null,
     statut: l.statut,
@@ -881,10 +1017,18 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     const reglages = lireReglages(evt.salons_match);
     const d = await ctxDiscord();
     let categories = [];
+    let salonsTexte = [];
     let erreurDiscord = d.erreur;
     if (!d.erreur) {
       const r = await rest(fetchDiscord, jetonBot, 'GET', `/guilds/${d.guildId}/channels`);
-      if (r.ok && Array.isArray(r.corps)) categories = r.corps.filter(s => Number(s.type) === 4).sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)).map(s => ({ id: String(s.id), nom: String(s.name ?? '') }));
+      if (r.ok && Array.isArray(r.corps)) {
+        categories = r.corps.filter(s => Number(s.type) === 4).sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)).map(s => ({ id: String(s.id), nom: String(s.name ?? '') }));
+        // « Placer sous le salon » : salons écrits (et catégories, pour les regrouper), dans l'ordre de Discord.
+        salonsTexte = r.corps
+          .filter(s => Number(s.type) === 4 || ECRITS.has(Number(s.type)))
+          .map(s => ({ id: String(s.id), nom: String(s.name ?? ''), type: Number(s.type) === 4 ? 'categorie' : 'texte', parent: s.parent_id ? String(s.parent_id) : null, position: Number(s.position ?? 0) }))
+          .sort((a, b) => a.position - b.position);
+      }
       else erreurDiscord = `discord-${r.statut}`;
     }
     const lignes = await lignesDe(id);
@@ -899,7 +1043,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         matchs = lu.matchs
           .filter(m => !actives.has(m.cle) && !m.resultat)
           .slice(0, 200)
-          .map(m => ({ cle: m.cle, genre: m.genre, titre: titreDe(m, 'fr'), statut: m.statut, prevuLe: m.prevu, equipes: equipesDuMatch(m, lu.equipes, app).map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })) }));
+          .map(m => ({ cle: m.cle, genre: m.genre, titre: titreDe(m, 'fr'), statut: m.statut, prevuLe: m.prevu, equipes: equipesDuMatch(m, lu.equipes, app).map(e => ({ nom: e.nom, tag: e.tag, role: Boolean(e.roleId) })), staff: (m.staff ?? []).map(x => ({ nom: x.nom, present: Boolean(x.discordId) })) }));
       } catch (e) {
         erreurSite = String(e?.message ?? e).slice(0, 200);
       }
@@ -912,6 +1056,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       erreurDiscord,
       erreurSite,
       categories,
+      salonsTexte,
       salons: lignes.map(l => publique(l, d.guildId)),
       matchs,
       etat: await lireEtat(id),
@@ -943,7 +1088,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     if (typeof cle !== 'string' || !/^[ml]:[0-9a-f-]{36}$/i.test(cle)) throw echec(400, 'salons-match-cle', 'Match invalide.');
     if (!evt.site_tournoi_id) throw echec(400, 'site-non-lie', 'Choisissez d’abord le tournoi du site.');
     const reglages = lireReglages(evt.salons_match);
-    if (!reglages.categorieId) throw echec(400, 'salons-match-categorie', 'Choisissez la catégorie Discord des salons de match.');
+    if (!reglages.categorieId && !reglages.ancreId) throw echec(400, 'salons-match-categorie', 'Choisissez la catégorie Discord des salons de match.');
     const d = await ctxDiscord();
     if (d.erreur === 'bot-absent') throw echec(503, 'bot-absent', 'Bot Discord non configuré (DISCORD_BOT_TOKEN).');
     if (d.erreur) throw echec(400, 'vocaux-serveur', 'Choisissez d’abord le serveur Discord (Tickets › Configuration › Général).');

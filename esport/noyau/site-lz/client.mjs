@@ -69,6 +69,7 @@ const COLONNES = {
   tournament_lobbies: 'id,tournament_id,round,position,label,status,scheduled_at,stream_url',
   tournament_lobby_entries: 'id,lobby_id,team_id,placement,points,dnf,sort_order',
   tournament_stages: 'id,tournament_id,kind,name,sort_order',
+  tournament_match_staff_discord: 'match_id,lobby_id,display_name,discord_id',
 };
 
 /**

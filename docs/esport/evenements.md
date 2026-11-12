@@ -44,18 +44,32 @@ terminé en gardant son **historique dans l'app**.
   1440) ; **rappels** 30 et 10 minutes avant (activés par défaut) ; **langue** des messages (celle du bot par défaut :
   Tickets › Configuration › Général ; sinon français, anglais, ou les deux) ; **création anticipée** (0 par défaut : dès
   que les équipes du match sont connues ; N : au plus tôt N heures avant l'horaire) ; **rétention des historiques**
-  (0 par défaut : jusqu'à la suppression de l'événement ; N : effacés N jours après la suppression du salon).
+  (0 par défaut : jusqu'à la suppression de l'événement ; N : effacés N jours après la suppression du salon) ;
+  **« Placer sous le salon »** (facultatif, sélecteur repliable des salons écrits rangés par catégorie).
+- **Placer sous le salon** : choisi, les salons de match sont créés dans la **catégorie de ce salon** (le sélecteur de
+  catégorie s'efface et affiche celle-ci en lecture seule) puis rangés **juste en dessous**, par horaire (le plus tôt
+  d'abord, sans horaire à la fin), en un seul `PATCH /guilds/{g}/channels` des positions qui changent (même calcul que
+  « placer sous le hub » des salons vocaux) ; les salons au-dessus du repère ne bougent jamais ; un horaire changé sur le
+  site re-trie au passage suivant ; une limite de débit (429) reporte le rangement au passage suivant. Repère supprimé
+  sur Discord : les salons sont créés dans la catégorie choisie (sans elle, aucune création), le staff est averti une
+  fois dans un salon de match, et le dernier passage l'indique. Sans repère : la catégorie choisie, salons ajoutés à la
+  fin.
 - **Quand** : toutes les 5 minutes (cron) et, tant que l'événement est **en cours** (statut, ou dates du jour),
   **chaque minute** par le processus qui tient la Gateway Discord (tickets, bienvenue ou salons vocaux activés) ;
   « Synchroniser maintenant » à la demande. Les matchs sont lus sur le site par le pont signé, en **lecture seule**.
 - **Création** : match avec au moins deux équipes connues, pas encore terminé. Accès : `@everyone` sans accès ; le
   **rôle Discord de chaque équipe** du match (voir, écrire, historique, fichiers) ; le **rôle staff** de l'événement et
-  les **rôles staff supplémentaires** (en plus : gérer les messages) ; le bot. Le site n'a pas d'« arbitre assigné »
-  par match : tout le staff de l'événement a accès. Message d'accueil : mention des rôles des équipes et des
+  les **rôles staff supplémentaires** (en plus : gérer les messages) ; le **staff assigné** au match sur le site (accès
+  par membre, mêmes droits que le staff) ; le bot. Message d'accueil : mention des rôles des équipes et des
   **capitaines**, embed avec le match (phase, round), l'**horaire** `<t:…:F>` et relatif (ou « à définir »), le statut,
   le stream, et chaque équipe (`[TAG] Nom`, rôle, joueurs mentionnés quand ils sont sur le serveur, capitaine).
 - **Équipe sans rôle** (équipe du site pas encore reliée à une équipe de l'événement) : signalée dans l'embed
   (« pas de rôle Discord : n'a pas accès au salon ») et le **staff est averti** dans le salon (une fois).
+- **Horaire et staff assigné** : saisis sur le site (Admin › Tournois, sous chaque match et lobby : « Horaire », vide =
+  à définir ; « Staff assigné », comptes staff/admin du site avec Discord lié). Le staff assigné est mentionné dans
+  l'embed (« Staff assigné ») ; une personne absente du serveur Discord (ou sans Discord lié) y est notée, n'a pas
+  d'accès, et le staff de l'événement est averti une fois. Assignation changée sur le site → accès et embed mis à jour,
+  message « Mise à jour du match : staff assigné » qui mentionne le nouveau staff (pas les équipes).
 - **Mise à jour** : horaire, équipes ou phase changés sur le site → l'embed est modifié, les accès suivent les équipes,
   et un court message « Mise à jour du match : horaire, équipes » mentionne les équipes.
 - **Rappels** : 30 et 10 minutes avant l'horaire, une seule fois chacun (jamais en retard : un salon créé à 20 minutes
@@ -83,7 +97,8 @@ terminé en gardant son **historique dans l'app**.
   capitaines sont toujours notifiés).
 - Code : `esport/noyau/evenements-club/salons-match.mjs`, `src/esport/ui/evenements/SalonsMatch.tsx`. Migration 0073
   (`club_evenements.salons_match`, table `club_salons_match`). Côté site : lecture des matchs, lobbies, résultats et
-  phases ouverte à la clé du pont (`api/serveur/cles.mjs`). Tests : `esport/test/salons-match.test.mjs`,
+  phases, et du staff assigné (vue `tournament_match_staff_discord` : nom et Discord ID) ouverte à la clé du pont
+  (`api/serveur/cles.mjs`, migration 0008 du site). Tests : `esport/test/salons-match.test.mjs`,
   `src/esport/Evenements.test.tsx`.
 
 ## Droits

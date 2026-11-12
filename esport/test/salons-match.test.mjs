@@ -51,6 +51,7 @@ function fauxSite() {
     tournament_stages: [],
     tournament_matches: [{ id: M1, tournament_id: T1, stage_id: null, bracket: 'winner', round: 1, position: 1, group_label: null, team_a_id: EA, team_b_id: EB, score_a: null, score_b: null, winner_id: null, status: 'pending', scheduled_at: '2026-10-20T12:00:00.000Z', stream_url: null }],
     tournament_lobbies: [{ id: L1, tournament_id: T1, round: 1, position: 1, label: null, status: 'pending', scheduled_at: '2026-10-20T14:00:00.000Z', stream_url: null }],
+    tournament_match_staff_discord: [],
     tournament_lobby_entries: [
       { id: 'e1', lobby_id: L1, team_id: EA, placement: null, points: 0, dnf: false, sort_order: 0 },
       { id: 'e2', lobby_id: L1, team_id: EB, placement: null, points: 0, dnf: false, sort_order: 1 },
@@ -435,4 +436,115 @@ test('meneur de la Gateway : passage rapide lancé sans attendre (le bail passe 
     await sup.arreter();
     await gw.arreter();
   }
+});
+
+const ANCRE = '740000000000000001';
+const DESSUS = '740000000000000000';
+const DESSOUS = '740000000000000002';
+const M2 = '44444444-4444-4444-8444-000000000009';
+const placements = k => k.discord.appels.filter(a => a.methode === 'PATCH' && a.chemin === `/guilds/${k.GUILD}/channels`);
+
+async function monterAncre() {
+  const k = await monter();
+  for (const [id, name, position] of [[DESSUS, 'annonces', 1], [ANCRE, 'matchs-du-jour', 3], [DESSOUS, 'resultats', 4]]) k.discord.etat.salons.set(id, { id, type: 0, name, parent_id: CAT, guild_id: k.GUILD, permission_overwrites: [], position });
+  k.site.tables.tournament_matches.push({ ...k.site.tables.tournament_matches[0], id: M2, position: 2, team_a_id: EB, team_b_id: EC, scheduled_at: null });
+  return k;
+}
+
+test('placer sous le salon : catégorie du repère, salons rangés juste sous lui par horaire (sans horaire à la fin), re-tri quand un horaire change', async () => {
+  const k = await monterAncre();
+  // Sans catégorie choisie : celle du salon repère.
+  const v = await activer(k, { categorieId: null, ancreId: ANCRE });
+  assert.equal(v.reglages.ancreId, ANCRE);
+  assert.ok(v.salonsTexte.some(x => x.id === ANCRE && x.type === 'texte' && x.parent === CAT));
+  assert.ok(v.salonsTexte.some(x => x.id === CAT && x.type === 'categorie'));
+  const par = async cle => (await lignes(k)).find(x => x.site_match_id === cle).salon_id;
+  const [sM1, sL1, sM2] = [await par(`m:${M1}`), await par(`l:${L1}`), await par(`m:${M2}`)];
+  for (const id of [sM1, sL1, sM2]) assert.equal(k.discord.etat.salons.get(id).parent_id, CAT);
+  // Un seul PATCH : repère (3), puis M1 (12h), L1 (14h), M2 (sans horaire) ; le salon du dessous suit ; celui du dessus ne bouge pas.
+  assert.equal(placements(k).length, 1);
+  assert.deepEqual(placements(k)[0].corps, [{ id: sM1, position: 4 }, { id: sL1, position: 5 }, { id: sM2, position: 6 }, { id: DESSOUS, position: 7 }]);
+  // Rien ne change : aucun nouveau PATCH.
+  await synchro(k);
+  assert.equal(placements(k).length, 1);
+  // M2 passe à 11h : re-tri.
+  k.site.tables.tournament_matches.find(x => x.id === M2).scheduled_at = '2026-10-20T11:00:00.000Z';
+  await synchro(k);
+  assert.equal(placements(k).length, 2);
+  assert.deepEqual(placements(k)[1].corps, [{ id: sM2, position: 4 }, { id: sM1, position: 5 }, { id: sL1, position: 6 }]);
+  assert.equal(k.discord.etat.salons.get(DESSUS).position, 1);
+});
+
+test('placer sous le salon : limite de débit → au passage suivant ; repère supprimé → catégorie choisie, staff averti une fois', async () => {
+  const k = await monterAncre();
+  k.discord.programme.push({ si: (m, c) => m === 'PATCH' && c === `/guilds/${k.GUILD}/channels`, statut: 429, corps: { retry_after: 30, global: false } });
+  await activer(k, { ancreId: ANCRE });
+  assert.equal(placements(k).length, 1, 'refusé (429)');
+  assert.equal((await synchro(k)).etat.places, 4, 'rangés au passage suivant');
+  // Repère supprimé sur Discord.
+  k.discord.etat.salons.delete(ANCRE);
+  k.site.tables.tournament_matches.push({ ...k.site.tables.tournament_matches[0], id: '44444444-4444-4444-8444-000000000010', position: 3, scheduled_at: null });
+  const v = await synchro(k);
+  assert.equal(v.etat.erreur, 'ancre-introuvable');
+  const nouveau = (await lignes(k)).find(x => x.site_match_id === 'm:44444444-4444-4444-8444-000000000010');
+  assert.equal(k.discord.etat.salons.get(nouveau.salon_id).parent_id, CAT, 'catégorie choisie');
+  const avertis = () => [...k.discord.etat.messages.values()].flat().filter(m => /salon repère/.test(m.content ?? ''));
+  assert.equal(avertis().length, 1);
+  assert.match(avertis()[0].content, new RegExp(`<@&${k.staffRole}>`));
+  await synchro(k);
+  assert.equal(avertis().length, 1, 'une seule fois');
+  // Repère supprimé et aucune catégorie : aucune création.
+  await k.api(k.sm, undefined, { methode: 'PUT', corps: { categorieId: null } });
+  const avant = salonsCrees(k).length;
+  k.site.tables.tournament_matches.push({ ...k.site.tables.tournament_matches[0], id: '44444444-4444-4444-8444-000000000011', position: 4 });
+  await synchro(k);
+  assert.equal(salonsCrees(k).length, avant);
+  assert.throws(() => validerReglages({ ancreId: 'x' }), e => e.code === 'salons-match-ancre');
+  assert.equal(validerReglages({ actif: true, ancreId: ANCRE }).ancreId, ANCRE);
+});
+
+test('staff assigné sur le site : accès par membre, mentionné dans l’embed, absents signalés ; assignation changée → accès et embed', async () => {
+  const k = await monter();
+  const ARB = '810000000000000301';
+  const ARB2 = '810000000000000302';
+  const ABS = '810000000000000303';
+  k.discord.etat.absents.add(ABS);
+  k.site.tables.tournament_match_staff_discord.push(
+    { id: 's1', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p1', display_name: 'Arbitre', discord_id: ARB },
+    { id: 's2', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p2', display_name: 'Absent', discord_id: ABS },
+    { id: 's3', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p3', display_name: 'Sans Discord', discord_id: null },
+  );
+  await activer(k);
+  const lm = (await lignes(k)).find(x => x.site_match_id === `m:${M1}`);
+  const salon = () => k.discord.etat.salons.get(lm.salon_id);
+  assert.equal(salon().permission_overwrites.find(o => o.id === ARB).allow, DROITS_STAFF);
+  assert.equal(salon().permission_overwrites.find(o => o.id === ARB).type, 1);
+  assert.equal(salon().permission_overwrites.find(o => o.id === ABS), undefined, 'absent du serveur : pas d’accès');
+  const [accueil] = messagesDe(k, lm.salon_id);
+  const champ = accueil.embeds[0].fields.find(f => f.name === 'Staff assigné');
+  assert.match(champ.value, new RegExp(`<@${ARB}>`));
+  assert.match(champ.value, /Absent \(absent du serveur\)/);
+  assert.match(champ.value, /Sans Discord \(pas de Discord lié\)/);
+  const alertes = () => messagesDe(k, lm.salon_id).filter(m => /introuvable sur le serveur/.test(m.content ?? ''));
+  assert.equal(alertes().length, 1);
+  assert.match(alertes()[0].content, /Absent, Sans Discord/);
+  // Le lobby n'a pas de staff assigné : pas de champ.
+  const ll = (await lignes(k)).find(x => x.site_match_id === `l:${L1}`);
+  assert.ok(!messagesDe(k, ll.salon_id)[0].embeds[0].fields.some(f => f.name === 'Staff assigné'));
+  await synchro(k);
+  assert.equal(alertes().length, 1, 'une fois');
+  // Assignation changée sur le site : ARB remplacé par ARB2.
+  k.site.tables.tournament_match_staff_discord = [{ id: 's4', tournament_id: T1, match_id: M1, lobby_id: null, profile_id: 'p4', display_name: 'Arbitre 2', discord_id: ARB2 }];
+  await synchro(k);
+  assert.ok(salon().permission_overwrites.some(o => o.id === ARB2 && o.allow === DROITS_STAFF));
+  assert.ok(!salon().permission_overwrites.some(o => o.id === ARB));
+  const patch = k.discord.appels.filter(a => a.methode === 'PATCH' && a.chemin === `/channels/${lm.salon_id}/messages/${lm.message_id}`).at(-1);
+  assert.match(patch.corps.embeds[0].fields.find(f => f.name === 'Staff assigné').value, new RegExp(`<@${ARB2}>`));
+  const maj = messagesDe(k, lm.salon_id).at(-1);
+  assert.match(maj.content, /Mise à jour du match : staff assigné/);
+  assert.match(maj.content, new RegExp(`<@${ARB2}>`));
+  assert.doesNotMatch(maj.content, new RegExp(`<@&${k.roles.ALP}>`), 'les équipes ne sont pas mentionnées');
+  // Liste dans l'app : staff assigné.
+  const v = (await k.api(k.sm)).corps;
+  assert.deepEqual(v.salons.find(x => x.id === lm.id).staff, [{ nom: 'Arbitre 2', present: true }]);
 });

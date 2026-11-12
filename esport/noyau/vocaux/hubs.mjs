@@ -131,17 +131,20 @@ export async function resynchroniserHubsEvenement(ctx, reglages, evenementId) {
 }
 
 /** Salons « vocaux » au sens du tri de Discord (vocal, scène) : rangés après les salons écrits d'une catégorie. */
-const VOCAUX = new Set([2, 13]);
+export const VOCAUX = new Set([2, 13]);
+/** Salons « écrits » au sens du tri de Discord (texte, annonces, forum, médias) : un même groupe de positions. */
+export const ECRITS = new Set([0, 5, 15, 16]);
 
 /**
  * Positions à envoyer pour ranger les salons temporaires d'un hub juste sous lui (voir l'en-tête). `salons` : salons du
  * cache (id, type, parent_id, position) ; `groupe` : ids des salons temporaires du hub, du plus récent au plus ancien.
- * Rend `[{ id, position }]` (seulement ce qui change), vide s'il n'y a rien à faire.
+ * `types` : groupe de tri de Discord du repère (vocaux par défaut ; ECRITS pour les salons de match sous un salon
+ * écrit). Rend `[{ id, position }]` (seulement ce qui change), vide s'il n'y a rien à faire.
  */
-export function positionsSousHub(salons, hub, groupe) {
+export function positionsSousHub(salons, hub, groupe, types = VOCAUX) {
   const parent = hub.parent_id ?? null;
   const freres = salons
-    .filter(c => (c.parent_id ?? null) === parent && VOCAUX.has(Number(c.type)))
+    .filter(c => (c.parent_id ?? null) === parent && types.has(Number(c.type)))
     .map(c => ({ id: String(c.id), position: Number(c.position ?? 0) }))
     .sort((a, b) => a.position - b.position || (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
   const iHub = freres.findIndex(c => c.id === String(hub.id));

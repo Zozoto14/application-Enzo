@@ -304,6 +304,15 @@ const fr = {
   'sm.equipes_inconnues': 'équipes pas encore connues',
   'sm.creer': 'Créer maintenant',
   'sm.cree': 'Salon créé.',
+  'sm.ancre': 'Placer sous le salon (facultatif)',
+  'sm.ancre_aucun': 'Aucun (à la fin de la catégorie)',
+  'sm.categorie_ancre': 'Catégorie : {categorie} (celle du salon choisi)',
+  'sm.sans_categorie_parent': 'aucune (hors catégorie)',
+  'sm.ancre_introuvable': 'Salon choisi introuvable sur le serveur : la catégorie choisie sert de repli.',
+  'sm.ancre_aide': 'Les salons de match sont créés dans la catégorie de ce salon et rangés juste en dessous, par horaire (le plus tôt d’abord, sans horaire à la fin). S’il est supprimé sur Discord, la catégorie choisie sert de repli et le staff est averti.',
+  'sm.erreur.ancre-introuvable': 'le salon « Placer sous le salon » a été supprimé sur Discord (catégorie choisie utilisée)',
+  'sm.staff': 'Staff assigné : {liste}',
+  'sm.staff_absent': 'introuvable sur Discord',
 };
 
 const en: Record<keyof typeof fr, string> = {
@@ -601,6 +610,15 @@ const en: Record<keyof typeof fr, string> = {
   'sm.equipes_inconnues': 'teams not known yet',
   'sm.creer': 'Create now',
   'sm.cree': 'Channel created.',
+  'sm.ancre': 'Place below channel (optional)',
+  'sm.ancre_aucun': 'None (end of the category)',
+  'sm.categorie_ancre': 'Category: {categorie} (the chosen channel’s)',
+  'sm.sans_categorie_parent': 'none (no category)',
+  'sm.ancre_introuvable': 'Chosen channel not found on the server: the chosen category is used instead.',
+  'sm.ancre_aide': 'Match channels are created in this channel’s category and placed right below it, by time (earliest first, undated last). If it is deleted on Discord, the chosen category is used instead and the staff is warned.',
+  'sm.erreur.ancre-introuvable': 'the “Place below channel” channel was deleted on Discord (chosen category used)',
+  'sm.staff': 'Assigned staff: {liste}',
+  'sm.staff_absent': 'not found on Discord',
 };
 
 export type CleEv = keyof typeof fr;

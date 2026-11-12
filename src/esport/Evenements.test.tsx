@@ -175,14 +175,19 @@ function vocauxDe(peutModifier = true): VocauxEvenement {
 
 function salonsMatchDe(): VueSalonsMatch {
   return {
-    reglages: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0 },
-    choix: { limites: { delaiMin: 5, delaiMax: 1440, modele: 80, avanceMax: 168, retentionMax: 3650 }, langues: ['bot', 'fr', 'en', 'fr_en', 'en_fr'], defaut: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0 } },
+    reglages: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0, ancreId: null },
+    choix: { limites: { delaiMin: 5, delaiMax: 1440, modele: 80, avanceMax: 168, retentionMax: 3650 }, langues: ['bot', 'fr', 'en', 'fr_en', 'en_fr'], defaut: { actif: false, categorieId: null, modeleNom: '{round}-{equipes}', delaiSuppressionMin: 30, rappels: true, langue: 'bot', avanceH: 0, retentionJours: 0, ancreId: null } },
     lie: true,
     bot: true,
     erreurDiscord: null,
     erreurSite: null,
     categories: [{ id: '700000000000000060', nom: 'Matchs' }, { id: '700000000000000061', nom: 'Tickets' }],
-    salons: [{ id: 'sm1', cle: 'm:44444444-4444-4444-8444-000000000001', genre: 'match', titre: 'Upper bracket · Round 1 · Match 1', equipes: [{ nom: 'Ligne Zéro', tag: 'LZ0', role: true }, { nom: 'Delta', tag: 'DLT', role: false }], salonId: '730000000000000001', lien: 'https://discord.com/channels/700/730000000000000001', statut: 'termine', prevuLe: '2026-11-21T18:00:00.000Z', resultatLe: '2026-11-21T18:40:00.000Z', suppressionLe: '2026-11-21T19:10:00.000Z', supprimeLe: null, historique: false, nbMessages: 0, erreur: null }],
+    salonsTexte: [
+      { id: '700000000000000060', nom: 'Matchs', type: 'categorie', parent: null, position: 1 },
+      { id: '700000000000000070', nom: 'matchs-du-jour', type: 'texte', parent: '700000000000000060', position: 2 },
+      { id: '700000000000000071', nom: 'general', type: 'texte', parent: null, position: 0 },
+    ],
+    salons: [{ id: 'sm1', cle: 'm:44444444-4444-4444-8444-000000000001', genre: 'match', titre: 'Upper bracket · Round 1 · Match 1', equipes: [{ nom: 'Ligne Zéro', tag: 'LZ0', role: true }, { nom: 'Delta', tag: 'DLT', role: false }], staff: [{ nom: 'Arbitre', present: true }, { nom: 'Ghost', present: false }], salonId: '730000000000000001', lien: 'https://discord.com/channels/700/730000000000000001', statut: 'termine', prevuLe: '2026-11-21T18:00:00.000Z', resultatLe: '2026-11-21T18:40:00.000Z', suppressionLe: '2026-11-21T19:10:00.000Z', supprimeLe: null, historique: false, nbMessages: 0, erreur: null }],
     matchs: [{ cle: 'l:55555555-5555-4555-8555-000000000001', genre: 'lobby', titre: 'Lobby 1 · Round 1', statut: 'pending', prevuLe: null, equipes: [{ nom: 'Ligne Zéro', tag: 'LZ0', role: true }, { nom: 'Bravo', tag: 'BRV', role: true }, { nom: 'Charlie', tag: 'CHA', role: true }] }],
     etat: { le: '2026-11-21T18:41:00.000Z', crees: 1, majs: 0, resultats: 1, annules: 0, supprimes: 0, attente: 0, limite: false, erreur: null },
   };
@@ -769,7 +774,7 @@ test('salons de match : réglages (activé, catégorie, délai, rappels, langue)
   await fireEvent.changeText(screen.getByTestId('esport-ev-sm-modele'), '{phase}-{equipes}');
   await fireEvent.press(screen.getByTestId('esport-ev-sm-enregistrer'));
   expect(await screen.findByText('Réglages des salons de match enregistrés.')).toBeTruthy();
-  expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match' && a.methode === 'PUT')!.corps).toEqual({ actif: true, categorieId: '700000000000000060', modeleNom: '{phase}-{equipes}', delaiSuppressionMin: 45, rappels: false, langue: 'fr_en', avanceH: 0, retentionJours: 0 });
+  expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match' && a.methode === 'PUT')!.corps).toEqual({ actif: true, categorieId: '700000000000000060', modeleNom: '{phase}-{equipes}', delaiSuppressionMin: 45, rappels: false, langue: 'fr_en', avanceH: 0, retentionJours: 0, ancreId: null });
   expect(screen.getByTestId('esport-ev-sm-dernier')).toBeTruthy();
 });
 
@@ -783,6 +788,7 @@ test('salons de match : liste (statut, équipe sans rôle, suppression programm�
   expect(screen.getByText('terminé')).toBeTruthy();
   expect(screen.getByTestId('esport-ev-sm-salon-sm1-dates').props.children).toMatch(/suppression : /);
   expect(screen.getByTestId('esport-ev-sm-salon-sm1-ouvrir')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-salon-sm1-staff').props.children).toBe('Staff assigné : Arbitre, Ghost (introuvable sur Discord)');
   expect(screen.queryByTestId('esport-ev-sm-salon-sm1-historique')).toBeNull();
   // Match du site sans salon : « Créer maintenant ».
   await fireEvent.press(screen.getByTestId('esport-ev-sm-match-l:55555555-5555-4555-8555-000000000001-creer'));
@@ -813,4 +819,22 @@ test('salons de match : anglais, événement non lié au site', async () => {
   expect(screen.getByTestId('esport-ev-sm-non-lie')).toBeTruthy();
   expect(screen.getByText('No match channel yet.')).toBeTruthy();
   expect(screen.queryByTestId('esport-ev-sm-synchro')).toBeNull();
+});
+
+test('salons de match : « Placer sous le salon » (salons écrits par catégorie), catégorie dérivée en lecture seule, retiré → catégorie', async () => {
+  const { client, appels } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-sm-categorie-modifier')).toBeTruthy();
+  await choisirDans('esport-ev-sm-ancre', '700000000000000070');
+  expect(screen.queryByTestId('esport-ev-sm-categorie-modifier')).toBeNull();
+  expect(screen.getByTestId('esport-ev-sm-categorie-ancre').props.children).toBe('Catégorie : Matchs (celle du salon choisi)');
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-enregistrer'));
+  expect(await screen.findByText('Réglages des salons de match enregistrés.')).toBeTruthy();
+  expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match' && a.methode === 'PUT')!.corps).toMatchObject({ ancreId: '700000000000000070' });
+  // Salon hors catégorie.
+  await choisirDans('esport-ev-sm-ancre', '700000000000000071');
+  expect(screen.getByTestId('esport-ev-sm-categorie-ancre').props.children).toBe('Catégorie : aucune (hors catégorie) (celle du salon choisi)');
+  // Retiré : le sélecteur de catégorie revient.
+  await choisirDans('esport-ev-sm-ancre', '-');
+  expect(screen.getByTestId('esport-ev-sm-categorie-modifier')).toBeTruthy();
 });

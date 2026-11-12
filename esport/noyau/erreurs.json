@@ -980,7 +980,8 @@
   "Salon de match introuvable.": "Match channel not found.",
   "Une synchronisation est en cours, réessayez dans un instant.": "A sync is running, please try again in a moment.",
   "Discord limite les requêtes : réessayez dans une minute.": "Discord is rate limiting requests: please try again in a minute.",
-  "Discord a refusé la suppression du salon (permission « Gérer les salons »).": "Discord refused to delete the channel (“Manage Channels” permission)."
+  "Discord a refusé la suppression du salon (permission « Gérer les salons »).": "Discord refused to delete the channel (“Manage Channels” permission).",
+  "Salon repère invalide.": "Invalid anchor channel."
  },
  "motifs": [
   [

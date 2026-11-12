@@ -275,6 +275,13 @@ export interface ReglagesSalonsMatch {
   avanceH: number;
   /** Rétention des historiques en jours (0 : jusqu'à la suppression de l'événement). */
   retentionJours: number;
+  /** « Placer sous le salon » : salon écrit repère (sa catégorie remplace `categorieId`), ou null. */
+  ancreId: string | null;
+}
+/** Staff assigné au match sur le site ; `present` : sur le serveur Discord (salon) ou avec un Discord lié (match du site). */
+export interface StaffSalonMatch {
+  nom: string;
+  present: boolean;
 }
 export type StatutSalonMatch = 'creation' | 'ouvert' | 'termine' | 'annule' | 'supprime';
 export interface EquipeSalonMatch {
@@ -289,6 +296,7 @@ export interface SalonMatch {
   genre: 'match' | 'lobby';
   titre: string;
   equipes: EquipeSalonMatch[];
+  staff?: StaffSalonMatch[];
   salonId: string | null;
   lien: string | null;
   statut: StatutSalonMatch;
@@ -307,6 +315,7 @@ export interface MatchSiteSansSalon {
   statut: 'pending' | 'live' | 'finished';
   prevuLe: string | null;
   equipes: EquipeSalonMatch[];
+  staff?: StaffSalonMatch[];
 }
 export interface VueSalonsMatch {
   reglages: ReglagesSalonsMatch;
@@ -316,6 +325,8 @@ export interface VueSalonsMatch {
   erreurDiscord: string | null;
   erreurSite: string | null;
   categories: Array<{ id: string; nom: string }>;
+  /** Salons écrits et catégories du serveur (« Placer sous le salon »), dans l'ordre de Discord. */
+  salonsTexte: Array<{ id: string; nom: string; type: 'texte' | 'categorie'; parent: string | null; position: number }>;
   salons: SalonMatch[];
   matchs: MatchSiteSansSalon[];
   etat: { le: string; crees: number; majs: number; resultats: number; annules: number; supprimes: number; attente: number; limite: boolean; erreur: string | null } | null;

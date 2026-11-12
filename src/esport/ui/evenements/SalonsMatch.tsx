@@ -15,11 +15,12 @@ import { trEv, type CleEv } from '../../i18n/evenements';
 import type { FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte, type Ton } from '../design';
-import { SelecteurRepliable } from '../../../ui/selecteurs/SelecteurRepliable';
+import { SelecteurRepliable, optionsSalons } from '../../../ui/selecteurs/SelecteurRepliable';
 
 type Api = ReturnType<typeof apiEvenements>;
 type Saisie = Omit<ReglagesSalonsMatch, 'delaiSuppressionMin' | 'avanceH' | 'retentionJours'> & { delaiSuppressionMin: string; avanceH: string; retentionJours: string };
 
+const AUCUN = '-';
 const chiffres = (v: string) => v.replace(/\D/g, '');
 const versSaisie = (r: ReglagesSalonsMatch): Saisie => ({ ...r, delaiSuppressionMin: String(r.delaiSuppressionMin), avanceH: String(r.avanceH), retentionJours: String(r.retentionJours) });
 const date = (v: string | null) => (v ? formaterDate(v, { dateStyle: 'medium', timeStyle: 'short' }) : '');
@@ -29,6 +30,7 @@ const libelleErreur = (c: string) => {
   const t = trEv(cle as CleEv);
   return t === cle ? c : t;
 };
+const nomsStaff = (staff: Array<{ nom: string; present: boolean }>) => staff.map(x => `${x.nom}${x.present ? '' : ` (${trEv('sm.staff_absent')})`}`).join(', ');
 const nomsEquipes = (equipes: EquipeSalonMatch[]) => equipes.map(e => `${e.tag ? `[${e.tag}] ` : ''}${e.nom}${e.role ? '' : ` (${trEv('sm.sans_role')})`}`).join(' - ');
 
 export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; fiche: FicheEvenement }) {
@@ -49,7 +51,7 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
   const enregistrer = () =>
     void agir('enregistrer', async () => {
       const n = (s: string) => Number.parseInt(s || '0', 10);
-      recevoir(await api.reglerSalonsMatch(id, { actif: f.actif, categorieId: f.categorieId, modeleNom: f.modeleNom, delaiSuppressionMin: n(f.delaiSuppressionMin), rappels: f.rappels, langue: f.langue, avanceH: n(f.avanceH), retentionJours: n(f.retentionJours) }));
+      recevoir(await api.reglerSalonsMatch(id, { actif: f.actif, categorieId: f.categorieId, ancreId: f.ancreId, modeleNom: f.modeleNom, delaiSuppressionMin: n(f.delaiSuppressionMin), rappels: f.rappels, langue: f.langue, avanceH: n(f.avanceH), retentionJours: n(f.retentionJours) }));
       return trEv('sm.enregistre');
     });
   const e = v.etat;
@@ -68,11 +70,24 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
         <Text style={{ ...texte(theme), flex: 1, minWidth: 0 }}>{trEv('sm.actif')}</Text>
         <Interrupteur theme={theme} libelle={trEv('sm.actif')} valeur={f.actif} onChanger={actif => setF({ ...f, actif })} testID="esport-ev-sm-actif" />
       </View>
-      {v.categories.length ? (
+      {/* « Placer sous le salon » (facultatif) : la catégorie suit alors celle du salon choisi (lecture seule). */}
+      {v.salonsTexte.length ? (
+        <SelecteurRepliable theme={theme} nature="salon" libelle={trEv('sm.ancre')} valeur={f.ancreId ?? AUCUN} options={[{ id: AUCUN, nom: trEv('sm.ancre_aucun') }, ...optionsSalons(v.salonsTexte, ['texte'])]} onChoisir={x => setF({ ...f, ancreId: x === AUCUN ? null : x })} testID="esport-ev-sm-ancre" />
+      ) : null}
+      {f.ancreId ? (
+        <Text style={attenue(theme)} testID="esport-ev-sm-categorie-ancre">
+          {(() => {
+            const a = v.salonsTexte.find(x => x.id === f.ancreId);
+            const cat = a?.parent ? v.salonsTexte.find(x => x.id === a.parent)?.nom : null;
+            return a ? trEv('sm.categorie_ancre', { categorie: cat ?? trEv('sm.sans_categorie_parent') }) : trEv('sm.ancre_introuvable');
+          })()}
+        </Text>
+      ) : v.categories.length ? (
         <SelecteurRepliable theme={theme} nature="categorie" libelle={trEv('sm.categorie')} valeur={f.categorieId ?? undefined} options={v.categories} onChoisir={categorieId => setF({ ...f, categorieId })} testID="esport-ev-sm-categorie" />
       ) : (
         <Text style={attenue(theme)} testID="esport-ev-sm-sans-categorie">{trEv('sm.sans_categorie')}</Text>
       )}
+      {f.ancreId ? <Text style={attenue(theme)}>{trEv('sm.ancre_aide')}</Text> : null}
       <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
         <Champ theme={theme} libelle={trEv('sm.modele')} valeur={f.modeleNom} onChanger={modeleNom => setF({ ...f, modeleNom })} maxLength={lim.modele} testID="esport-ev-sm-modele" style={{ flexGrow: 2, flexBasis: 220, minWidth: 0 }} />
         <Champ theme={theme} libelle={trEv('sm.delai', { min: String(lim.delaiMin), max: String(lim.delaiMax) })} valeur={f.delaiSuppressionMin} onChanger={x => setF({ ...f, delaiSuppressionMin: chiffres(x) })} maxLength={4} clavier="number-pad" testID="esport-ev-sm-delai" style={{ flexGrow: 1, flexBasis: 160, minWidth: 0 }} />
@@ -113,6 +128,7 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
             <Badge theme={theme} ton={TON[s.statut]} texte={trEv(`sm.statut.${s.statut}` as CleEv)} testID={`esport-ev-sm-salon-${s.id}-statut`} />
           </View>
           {s.equipes.length ? <Text style={attenue(theme)}>{nomsEquipes(s.equipes)}</Text> : null}
+          {s.staff?.length ? <Text style={attenue(theme)} testID={`esport-ev-sm-salon-${s.id}-staff`}>{trEv('sm.staff', { liste: nomsStaff(s.staff) })}</Text> : null}
           <Text style={attenue(theme)} testID={`esport-ev-sm-salon-${s.id}-dates`}>
             {[s.prevuLe ? trEv('sm.prevu', { le: date(s.prevuLe) }) : '', s.suppressionLe ? trEv('sm.suppression_le', { le: date(s.suppressionLe) }) : '', s.supprimeLe ? trEv('sm.supprime_le', { le: date(s.supprimeLe) }) : '', s.erreur ? trEv('sm.erreur_salon', { erreur: s.erreur }) : ''].filter(Boolean).join(' · ')}
           </Text>
@@ -133,7 +149,7 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
       {v.matchs.map(m => (
         <View key={m.cle} style={{ gap: ESP.xxs, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.xs }} testID={`esport-ev-sm-match-${m.cle}`}>
           <Text style={{ ...texte(theme), fontWeight: '600' }}>{m.titre}</Text>
-          <Text style={attenue(theme)}>{[m.equipes.length ? nomsEquipes(m.equipes) : trEv('sm.equipes_inconnues'), m.prevuLe ? trEv('sm.prevu', { le: date(m.prevuLe) }) : ''].filter(Boolean).join(' · ')}</Text>
+          <Text style={attenue(theme)}>{[m.equipes.length ? nomsEquipes(m.equipes) : trEv('sm.equipes_inconnues'), m.prevuLe ? trEv('sm.prevu', { le: date(m.prevuLe) }) : '', m.staff?.length ? trEv('sm.staff', { liste: nomsStaff(m.staff) }) : ''].filter(Boolean).join(' · ')}</Text>
           <View style={{ alignSelf: 'flex-start' }}>
             <BoutonHub theme={theme} titre={trEv('sm.creer')} desactive={!m.equipes.length || enCours === 'creer'} onPress={() => void agir('creer', async () => {
                     recevoir(await api.creerSalonMatch(id, m.cle));
