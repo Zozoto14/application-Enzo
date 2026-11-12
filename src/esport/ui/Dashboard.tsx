@@ -8,6 +8,9 @@
  * serveur ne renvoie que les teams autorisées, et un bloc vaut `null` quand
  * le module est coupé ou que la permission manque : il n'est pas affiché.
  * Toucher une carte ouvre la team.
+ *
+ * To do (migration 0074) : récap des cartes CM favorites et assignées au compte, dans les tableaux qu'il choisit
+ * (cm/TodoDashboard.tsx) ; absent pour qui n'a pas de tableau CM.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -24,6 +27,7 @@ import { tr, trn } from '../i18n';
 import { trDv } from '../i18n/devblog';
 import { nomRole } from '../client';
 import { nomIssue, ordinal } from '../competition/libelles';
+import { TodoDashboard } from './cm/TodoDashboard';
 
 /** « jeu. 22/10 · 20:00 » (heure de l'appareil). */
 export function quandCourt(iso: string): string {
@@ -57,11 +61,14 @@ export function Dashboard({
   onMembres,
   onTeams,
   onNouveautes,
+  onOuvrirCarte,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
   large: boolean;
   pseudo?: string;
+  /** To do du Dashboard (cartes CM) : ouvre une carte. Sans lui, pas de To do. */
+  onOuvrirCarte?(c: { tableauId: string; carteId: string; portee: string }): void;
   onOuvrir(teamId: string): void;
   onBoite(): void;
   onMembres?(): void;
@@ -109,6 +116,7 @@ export function Dashboard({
           />
         </Carte>
       ) : null}
+      {tableau && onOuvrirCarte ? <TodoDashboard theme={theme} client={client} large={large} onOuvrirCarte={onOuvrirCarte} /> : null}
       {g && tableau && tableau.teams.length > 0 ? (
         <>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: large ? ESP.m : ESP.s }} testID="esport-dashboard-global">

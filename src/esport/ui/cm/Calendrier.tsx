@@ -6,20 +6,28 @@
  * le compte a le droit de voir (planning s'il en est membre ; sinon compétition publiable seulement : voir
  * esport/noyau/cm/calendriers.mjs). Un interrupteur par team (sa couleur), choix mémorisé par compte en base
  * (`calendrier.teams`). Toucher un événement : son détail, et « Créer un post pour cet événement ».
+ *
+ * Cartes datées (migration 0074) : les cartes à échéance des tableaux « au calendrier » (réglage du tableau, oui par
+ * défaut) y sont, liées à leur carte (toucher : la fiche s'ouvre). Avec cm.editer : la poignée « ⠿ » se dépose sur un
+ * autre jour (même heure murale, heure du club) et change l'échéance de la carte ; « Nouvelle carte » crée une carte
+ * datée sur un tableau et une colonne choisis. Changer l'échéance dans la fiche la déplace ici (temps réel).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanResponder, Pressable, Text, View, type GestureResponderEvent, type PanResponderGestureState, type ViewStyle } from 'react-native';
+import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import { PORTEE_CLUB, type ApiCm, type CalendrierTeam, type CarteTransverse, type EvenementTeam, type Reseau } from '../../cm/api';
+import { PORTEE_CLUB, type ApiCm, type CalendrierTeam, type CarteDatee, type CarteTransverse, type EvenementTeam, type ListeCm, type Reseau, type TableauListe } from '../../cm/api';
+import { deplacerAuJour, finEcheance, jourSous, saisieVersInstant, type CaseJour } from '../../cm/calendrier';
+import { useTempsReel } from '../../tempsReel/hooks';
+import { bloquerSelection, libererSelection, STYLE_SAISISSABLE } from './selectionGlisser';
 import { CLES_RESEAUX } from '../../cm/reseaux';
 import { couleurUrgence, fondCarteUrgence } from '../../cm/urgence';
 import { formaterDate } from '../../i18n';
 import { trCm, type CleCm } from '../../i18n/cm';
-import { Retours, styles, useAgir } from '../commun';
+import { Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, Volet, attenue, texte, type EtatPresse } from '../design';
-import { Aide, FUSEAU_CLUB, PastilleReseau, TON_STATUT, murale, nomStatut, quand } from './commun';
+import { Aide, ChampInstant, FUSEAU_CLUB, PastilleReseau, TON_STATUT, murale, nomListe, nomStatut, nomTableau, quand } from './commun';
 import { PastilleUrgence, FiltreUrgenceCm, libelleUrgence, passeFiltreUrgence, type FiltreUrgence } from './Drapeau';
 
 type Mode = 'semaine' | 'mois';
@@ -65,13 +73,16 @@ export function Calendrier({
   api,
   large,
   onOuvrirTableau,
+  onOuvrirCarte,
   creerPost = false,
 }: {
   theme: ThemeHub;
   api: ApiCm;
   large: boolean;
   onOuvrirTableau(id: string): void;
-  /** Le compte prépare des posts (cm.editer quelque part) : bouton « Créer un post pour cet événement ». */
+  /** Ouvre la fiche d'une carte datée (sinon : son tableau). */
+  onOuvrirCarte?(tableauId: string, carteId: string): void;
+  /** Le compte prépare des posts (cm.editer quelque part) : « Créer un post pour cet événement », « Nouvelle carte ». */
   creerPost?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>(large ? 'mois' : 'semaine');
@@ -79,12 +90,81 @@ export function Calendrier({
   const [reseau, setReseau] = useState<Reseau | ''>('');
   const [urgence, setUrgence] = useState<FiltreUrgence>('');
   const [cartes, setCartes] = useState<CarteTransverse[] | undefined>();
-  const { erreur, agir } = useAgir();
+  const [echeances, setEcheances] = useState<CarteDatee[]>([]);
+  const { erreur, avis, agir } = useAgir();
   const jours = useMemo(() => joursDe(mode, reference), [mode, reference]);
-  const charger = useCallback(async () => setCartes((await api.calendrier(jours[0], jours[jours.length - 1], reseau || undefined)).cartes), [api, jours, reseau]);
+  const charger = useCallback(async () => {
+    const r = await api.calendrier(jours[0], jours[jours.length - 1], reseau || undefined);
+    setCartes(r.cartes);
+    setEcheances(Array.isArray(r.echeances) ? r.echeances : []);
+  }, [api, jours, reseau]);
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Une carte datée change ailleurs (fiche, autre personne, To do) : le calendrier suit (sauf pendant un glisser).
+  const glisseEnCours = useRef(false);
+  useTempsReel(api.client, 'cm', () => {
+    if (!glisseEnCours.current) void charger().catch(() => undefined);
+  });
+  const [nouvelle, setNouvelle] = useState<string | undefined>();
+  // Glisser une carte datée vers un autre jour (grille du PC) : cases mesurées au début du geste.
+  const refsJours = useRef(new Map<string, React.ComponentRef<typeof View>>());
+  const cases = useRef<CaseJour[]>([]);
+  const [cibleJour, setCibleJour] = useState<string | undefined>();
+  const cibleJourRef = useRef<string | undefined>(undefined);
+  const mesurerJours = useCallback(async () => {
+    const lignes = await Promise.all(
+      [...refsJours.current.entries()].map(
+        ([jour, v]) =>
+          new Promise<CaseJour | null>(ok => {
+            const m = (v as unknown as { measureInWindow?: (f: (x: number, y: number, l: number, h: number) => void) => void }).measureInWindow;
+            if (typeof m !== 'function') return ok(null);
+            try {
+              m.call(v, (x, y, l, h) => ok(Number.isFinite(x) && l > 0 ? { jour, x, y, l, h } : null));
+            } catch {
+              ok(null);
+            }
+          }),
+      ),
+    );
+    cases.current = lignes.filter((x): x is CaseJour => Boolean(x));
+  }, []);
+  /** Dépose une carte datée sur un jour : même heure murale (club) ; l'échéance de la carte change (cm.editer). */
+  const deplacerEcheance = useCallback(
+    (c: CarteDatee, jour: string) => {
+      if (murale(c.echeance, FUSEAU_CLUB).date === jour) return;
+      const echeance = deplacerAuJour(c.echeance, jour, FUSEAU_CLUB);
+      setEcheances(l => l.map(x => (x.id === c.id ? { ...x, echeance } : x)));
+      void agir('deplacer', async () => {
+        await api.modifierCarte(c.id, { echeance, versionAttendue: c.version });
+        await charger();
+        return trCm('calendrier.deplacee', { titre: c.titre, date: formaterDate(`${jour}T12:00:00Z`, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) });
+      }).then(ok => {
+        if (!ok) void charger().catch(() => undefined);
+      });
+    },
+    [agir, api, charger],
+  );
+  const glisser = {
+    debut: () => {
+      glisseEnCours.current = true;
+      void mesurerJours();
+    },
+    bouge: (x: number, y: number) => {
+      const j = jourSous(cases.current, x, y);
+      if (j !== cibleJourRef.current) {
+        cibleJourRef.current = j;
+        setCibleJour(j);
+      }
+    },
+    fin: (c: CarteDatee, annuler: boolean) => {
+      const j = cibleJourRef.current;
+      glisseEnCours.current = false;
+      cibleJourRef.current = undefined;
+      setCibleJour(undefined);
+      if (!annuler && j) deplacerEcheance(c, j);
+    },
+  };
   // Calendriers des teams : lecture seule ; teams affichées mémorisées par compte (toutes par défaut).
   const [teamsCal, setTeamsCal] = useState<CalendrierTeam[]>([]);
   const [affichees, setAffichees] = useState<Record<string, boolean>>({});
@@ -141,6 +221,15 @@ export function Calendrier({
     }
     return m;
   }, [cartes, urgence]);
+  const echeancesParJour = useMemo(() => {
+    const m = new Map<string, CarteDatee[]>();
+    for (const c of echeances.filter(x => passeFiltreUrgence(urgence, x.urgence))) {
+      const j = murale(c.echeance, FUSEAU_CLUB).date;
+      if (!m.has(j)) m.set(j, []);
+      m.get(j)!.push(c);
+    }
+    return m;
+  }, [echeances, urgence]);
   const decaler = (sens: number) => {
     const d = new Date(reference);
     setReference(mode === 'semaine' ? reference + sens * 7 * JOUR : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + sens, 15));
@@ -202,8 +291,30 @@ export function Calendrier({
       <Text style={{ ...texte(theme, 12) }} numberOfLines={2}>{`${e.jour ? '' : `${murale(e.debut, FUSEAU_CLUB).heure} · `}${e.titre}`}</Text>
     </Pressable>
   );
-  const contenuJour = (j: string) => [...(parJour.get(j) ?? []).map(element), ...(evenementsParJour.get(j) ?? []).map(evenement)];
-  const videJour = (j: string) => !(parJour.get(j) ?? []).length && !(evenementsParJour.get(j) ?? []).length;
+  const elementEcheance = (c: CarteDatee) => {
+    const fin = finEcheance(c.echeance, c.echeanceDuree);
+    const heure = `${murale(c.echeance, FUSEAU_CLUB).heure}${fin ? `–${murale(fin, FUSEAU_CLUB).heure}` : ''}`;
+    const couleur = c.urgence && !c.terminee ? couleurUrgence(c.urgence, theme.sombre) : theme.accent;
+    const deplacable = large && c.droits.editer && !c.terminee;
+    return (
+      <View key={`e-${c.id}`} style={{ flexDirection: 'row', alignItems: 'stretch', borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: teinteTransparente(couleur, 0.7), backgroundColor: fondCarteUrgence(c.terminee ? null : c.urgence, theme.surface, theme.sombre), opacity: c.terminee ? 0.6 : 1 }} testID={`esport-cm-calendrier-carte-${c.id}`}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={trCm('calendrier.echeance_libelle', { titre: c.titre, heure, tableau: c.tableau ? nomTableau(c.tableau) : '' })}
+          accessibilityHint={trCm('calendrier.echeance_ouvrir')}
+          onPress={() => (onOuvrirCarte ? onOuvrirCarte(c.tableauId, c.id) : onOuvrirTableau(c.tableauId))}
+          testID={`esport-cm-calendrier-carte-${c.id}-ouvrir`}
+          style={(e: EtatPresse) => ({ flex: 1, minWidth: 0, padding: 4, gap: 2, minHeight: 32, borderRadius: 6, backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.12) : 'transparent' })}>
+          <Text style={{ ...texte(theme, 12), fontWeight: '700', ...(c.terminee ? { textDecorationLine: 'line-through', color: theme.attenue } : null) }} numberOfLines={2}>{`⚑ ${heure} · ${c.titre}`}</Text>
+          {c.urgence && !c.terminee ? <PastilleUrgence theme={theme} niveau={c.urgence} sansLibelleAccessible testID={`esport-cm-calendrier-carte-${c.id}-urgence`} /> : null}
+          <Text style={attenue(theme, 11)} numberOfLines={1}>{[c.tableau ? nomTableau(c.tableau) : '', c.liste ? nomListe(c.liste) : ''].filter(Boolean).join(' · ')}</Text>
+        </Pressable>
+        {deplacable ? <PoigneeEcheance theme={theme} titre={c.titre} glisser={{ debut: glisser.debut, bouge: glisser.bouge, fin: annuler => glisser.fin(c, annuler) }} testID={`esport-cm-calendrier-carte-${c.id}-poignee`} /> : null}
+      </View>
+    );
+  };
+  const contenuJour = (j: string) => [...(parJour.get(j) ?? []).map(element), ...(echeancesParJour.get(j) ?? []).map(elementEcheance), ...(evenementsParJour.get(j) ?? []).map(evenement)];
+  const videJour = (j: string) => !(parJour.get(j) ?? []).length && !(echeancesParJour.get(j) ?? []).length && !(evenementsParJour.get(j) ?? []).length;
 
   return (
     <View style={{ gap: ESP.m }} testID="esport-cm-calendrier">
@@ -216,7 +327,10 @@ export function Calendrier({
             {titre}
           </Text>
         </View>
-        <Segments theme={theme} libelle={trCm('calendrier.vue')} valeur={mode} options={[['semaine', trCm('calendrier.semaine')], ['mois', trCm('calendrier.mois')]]} onChoisir={v => setMode(v as Mode)} testID="esport-cm-calendrier-mode" />
+        <View style={[styles.ligne, { gap: ESP.xs }]}>
+          {creerPost ? <BoutonHub theme={theme} titre={trCm('calendrier.nouvelle_carte')} variante="plein" onPress={() => setNouvelle(jours.includes(aujourdhui) ? aujourdhui : jours[0])} testID="esport-cm-calendrier-nouvelle" /> : null}
+          <Segments theme={theme} libelle={trCm('calendrier.vue')} valeur={mode} options={[['semaine', trCm('calendrier.semaine')], ['mois', trCm('calendrier.mois')]]} onChoisir={v => setMode(v as Mode)} testID="esport-cm-calendrier-mode" />
+        </View>
       </View>
       <View style={[styles.ligne, { gap: ESP.xs }]}>
         <BoutonHub theme={theme} titre={trCm('calendrier.tous_reseaux')} variante={reseau ? 'normal' : 'plein'} onPress={() => setReseau('')} testID="esport-cm-calendrier-reseau-tous" />
@@ -249,7 +363,7 @@ export function Calendrier({
           </View>
         </View>
       ) : null}
-      <Retours theme={theme} erreur={erreur} prefixe="esport-cm-calendrier" />
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-cm-calendrier" />
       {large ? (
         <View style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: 10, overflow: 'hidden' }}>
           <View style={{ flexDirection: 'row' }}>
@@ -262,8 +376,28 @@ export function Calendrier({
           {Array.from({ length: jours.length / 7 }, (_, s) => (
             <View key={s} style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: theme.ligne }}>
               {jours.slice(s * 7, s * 7 + 7).map(j => (
-                <View key={j} style={{ flex: 1, minHeight: mode === 'mois' ? 110 : 260, padding: 4, gap: 4, borderLeftWidth: 1, borderLeftColor: theme.ligne, backgroundColor: j === aujourdhui ? teinteTransparente(theme.accent, 0.08) : 'transparent', opacity: mode === 'mois' && Number(j.slice(5, 7)) - 1 !== mois ? 0.5 : 1 }} testID={`esport-cm-calendrier-jour-${j}`}>
-                  <Text style={{ ...attenue(theme, 12), fontWeight: j === aujourdhui ? '800' : '400' }}>{String(Number(j.slice(8)))}</Text>
+                <View
+                  key={j}
+                  ref={r => {
+                    if (r) refsJours.current.set(j, r);
+                    else refsJours.current.delete(j);
+                  }}
+                  style={{ flex: 1, minHeight: mode === 'mois' ? 110 : 260, padding: 4, gap: 4, borderLeftWidth: 1, borderLeftColor: theme.ligne, backgroundColor: cibleJour === j ? teinteTransparente(theme.accent, 0.22) : j === aujourdhui ? teinteTransparente(theme.accent, 0.08) : 'transparent', opacity: mode === 'mois' && Number(j.slice(5, 7)) - 1 !== mois ? 0.5 : 1 }}
+                  testID={`esport-cm-calendrier-jour-${j}`}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ ...attenue(theme, 12), fontWeight: j === aujourdhui ? '800' : '400' }}>{String(Number(j.slice(8)))}</Text>
+                    {creerPost ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={trCm('calendrier.nouvelle_carte_jour', { date: formaterDate(`${j}T12:00:00Z`, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }) })}
+                        onPress={() => setNouvelle(j)}
+                        hitSlop={6}
+                        testID={`esport-cm-calendrier-jour-${j}-nouvelle`}
+                        style={(e: EtatPresse) => ({ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: e.hovered || e.focused ? teinteTransparente(theme.accent, 0.18) : 'transparent' })}>
+                        <Text style={{ color: theme.attenue, fontSize: 15, lineHeight: 17 }}>+</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                   {contenuJour(j)}
                 </View>
               ))}
@@ -283,6 +417,21 @@ export function Calendrier({
           {mode === 'mois' && jours.every(videJour) ? <Text style={attenue(theme)}>{trCm('calendrier.vide')}</Text> : null}
         </View>
       )}
+      {nouvelle ? (
+        <NouvelleCarteDatee
+          theme={theme}
+          api={api}
+          jour={nouvelle}
+          onFermer={() => setNouvelle(undefined)}
+          onCree={titre => {
+            setNouvelle(undefined);
+            void agir('nouvelle', async () => {
+              await charger();
+              return trCm('calendrier.nouvelle.creee', { titre });
+            });
+          }}
+        />
+      ) : null}
       {detail ? <DetailEvenement theme={theme} api={api} detail={detail} creerPost={creerPost} onFermer={() => setDetail(undefined)} onOuvrirTableau={onOuvrirTableau} /> : null}
     </View>
   );
@@ -341,3 +490,102 @@ function DetailEvenement({ theme, api, detail, creerPost, onFermer, onOuvrirTabl
   );
 }
 
+
+/** Poignée « ⠿ » d'une carte datée : se saisit (souris ou doigt) et se dépose sur un autre jour de la grille. */
+function PoigneeEcheance({ theme, titre, glisser, testID }: { theme: ThemeHub; titre: string; glisser: { debut(): void; bouge(x: number, y: number): void; fin(annuler: boolean): void }; testID: string }) {
+  const rappel = useRef(glisser);
+  rappel.current = glisser;
+  const geste = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (e: GestureResponderEvent) => {
+        e.preventDefault?.();
+        bloquerSelection();
+        rappel.current.debut();
+      },
+      onPanResponderMove: (_e: GestureResponderEvent, g: PanResponderGestureState) => rappel.current.bouge(g.moveX, g.moveY),
+      onPanResponderRelease: () => {
+        libererSelection();
+        rappel.current.fin(false);
+      },
+      onPanResponderTerminate: () => {
+        libererSelection();
+        rappel.current.fin(true);
+      },
+    }),
+  ).current;
+  useEffect(() => libererSelection, []);
+  return (
+    <View
+      {...geste.panHandlers}
+      testID={testID}
+      accessibilityLabel={trCm('calendrier.poignee', { titre })}
+      accessibilityHint={trCm('calendrier.poignee_aide')}
+      style={{ width: 20, alignItems: 'center', justifyContent: 'center', cursor: 'grab', ...STYLE_SAISISSABLE } as unknown as ViewStyle}>
+      <Text style={{ color: theme.attenue, fontSize: 13 }}>⠿</Text>
+    </View>
+  );
+}
+
+/**
+ * « Nouvelle carte » depuis le calendrier : tableau (ceux où le compte édite et qui sont au calendrier), colonne, titre,
+ * échéance (jour touché, midi par défaut ; heure du club). La carte créée est au calendrier tout de suite.
+ */
+export function NouvelleCarteDatee({ theme, api, jour, onFermer, onCree }: { theme: ThemeHub; api: ApiCm; jour: string; onFermer(): void; onCree(titre: string, tableauId: string, carteId: string): void }) {
+  const [tableaux, setTableaux] = useState<TableauListe[] | undefined>();
+  const [tableauId, setTableauId] = useState<string | undefined>();
+  const [listes, setListes] = useState<ListeCm[]>([]);
+  const [listeId, setListeId] = useState<string | undefined>();
+  const [titre, setTitre] = useState('');
+  const [echeance, setEcheance] = useState<string | null>(`${jour} 12:00`);
+  const { erreur, agir, enCours } = useAgir();
+  useEffect(() => {
+    void agir('', async () => {
+      const permis = (await api.tableaux()).tableaux.filter(t => t.droits?.editer && t.calendrier !== false && !t.archive);
+      setTableaux(permis);
+      setTableauId(t => t ?? permis[0]?.id);
+    });
+  }, [agir, api]);
+  useEffect(() => {
+    if (!tableauId) return undefined;
+    let vivant = true;
+    void agir('', async () => {
+      const d = await api.tableau(tableauId);
+      if (!vivant) return;
+      const actives = d.listes.filter(l => !l.archive);
+      setListes(actives);
+      setListeId((actives.find(l => !l.fin) ?? actives[0])?.id);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, [agir, api, tableauId]);
+  const instant = saisieVersInstant(echeance, FUSEAU_CLUB);
+  const pret = Boolean(tableauId && listeId && titre.trim() && instant);
+  const creer = () =>
+    agir('creer', async () => {
+      if (!tableauId || !listeId || !instant) return;
+      const r = await api.creerCarte(tableauId, { listeId, titre: titre.trim().slice(0, 200), echeance: instant });
+      onCree(titre.trim(), tableauId, r.carte.id);
+    });
+  // Valeur initiale du champ : ISO (le champ affiche l'heure du club) ; ensuite, la saisie « AAAA-MM-JJ HH:MM ».
+  const valeurChamp = useMemo(() => saisieVersInstant(`${jour} 12:00`, FUSEAU_CLUB), [jour]);
+  return (
+    <Volet theme={theme} visible titre={trCm('calendrier.nouvelle_carte')} onFermer={onFermer} testID="esport-cm-calendrier-nouvelle-volet">
+      {tableaux && !tableaux.length ? <Aide theme={theme}>{trCm('calendrier.nouvelle.aucun')}</Aide> : null}
+      {tableaux?.length ? (
+        <>
+          <Choix theme={theme} libelle={trCm('calendrier.nouvelle.tableau')} valeur={tableauId} repliable options={tableaux.map(t => ({ id: t.id, nom: `${nomTableau(t)}${t.team?.nom ? ` · ${t.team.nom}` : ''}`, couleur: t.couleur }))} onChoisir={setTableauId} testID="esport-cm-calendrier-nouvelle-tableau" />
+          {listes.length ? <Choix theme={theme} libelle={trCm('calendrier.nouvelle.liste')} valeur={listeId} repliable options={listes.map(l => ({ id: l.id, nom: nomListe(l) }))} onChoisir={setListeId} testID="esport-cm-calendrier-nouvelle-liste" /> : null}
+          <Champ theme={theme} libelle={trCm('calendrier.nouvelle.titre')} valeur={titre} onChanger={setTitre} maxLength={200} testID="esport-cm-calendrier-nouvelle-titre" />
+          <ChampInstant theme={theme} libelle={trCm('fiche.echeance')} valeur={valeurChamp} fuseau={FUSEAU_CLUB} onChanger={setEcheance} testID="esport-cm-calendrier-nouvelle-echeance" />
+          <Aide theme={theme}>{trCm('calendrier.nouvelle.aide')}</Aide>
+          <BoutonHub theme={theme} titre={trCm('calendrier.nouvelle.creer')} variante="plein" desactive={!pret || enCours === 'creer'} onPress={() => void creer()} testID="esport-cm-calendrier-nouvelle-creer" />
+        </>
+      ) : null}
+      <Retours theme={theme} erreur={erreur} prefixe="esport-cm-calendrier-nouvelle" />
+    </Volet>
+  );
+}

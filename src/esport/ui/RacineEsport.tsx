@@ -72,7 +72,7 @@ type Vue =
   | { v: 'devblog' }
   | { v: 'notifications' }
   | { v: 'membres'; sous?: SousOngletMembres }
-  | { v: 'cm'; onglet?: OngletCm }
+  | { v: 'cm'; onglet?: OngletCm; carte?: { tableauId: string; carteId: string } }
   | { v: 'assistant' }
   | { v: 'boite' }
   | { v: 'team'; id: string; section?: SectionTeam };
@@ -322,6 +322,8 @@ export function Esport(props: PropsRacineApp) {
           onMembres={() => setVue({ v: 'membres', sous: 'tous' })}
           onTeams={() => setVue({ v: 'teams' })}
           onNouveautes={() => setVue({ v: 'devblog' })}
+          // To do (migration 0074) : la carte s'ouvre dans l'espace CM ; sans espace CM (rôle de team), l'onglet CM de la team.
+          onOuvrirCarte={c => (cm ? setVue({ v: 'cm', carte: { tableauId: c.tableauId, carteId: c.carteId } }) : c.portee !== 'club' ? setVue({ v: 'team', id: c.portee, section: 'module:cm' }) : undefined)}
         />
       );
     } else if (vue.v === 'tickets' && tickets && moiTickets) {
@@ -366,13 +368,14 @@ export function Esport(props: PropsRacineApp) {
       // Trello, réglages (cm.gerer). `key` : le raccourci « Drive » rouvre l'espace sur son onglet.
       page = (
         <EspaceCm
-          key={vue.onglet ?? 'cm'}
+          key={vue.carte ? `carte-${vue.carte.carteId}` : (vue.onglet ?? 'cm')}
           theme={theme}
           client={etat.client}
           large={large}
           moi={moiCm}
           onExporter={exporter}
           ongletInitial={vue.onglet}
+          carteInitiale={vue.carte}
           fondateur={etat.moi.superAdmin}
           onQuitter={() => setVue({ v: 'teams' })}
           onOuvrirTeam={id => setVue({ v: 'team', id })}

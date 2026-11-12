@@ -715,6 +715,43 @@ Toucher un événement ouvre son **détail** ; **« Créer un post pour cet év�
 post brouillon daté du début de l'événement dans « Idées » du tableau « Contenus » du club (sinon de la team), team
 liée, textes FR / EN **pré-remplis** si le match ou le tournoi est publiable, puis ouvre le tableau.
 
+### Cartes au calendrier (migration 0074)
+
+Les cartes **datées** (échéance) apparaissent dans le calendrier, à l'heure du club, liées à leur carte : la toucher
+ouvre sa **fiche** (dans son tableau). Une carte sans échéance n'y est pas. Réglage **par tableau** (menu ⋯ du tableau,
+`cm.gerer`) : « Afficher les cartes dans le calendrier » (`cm_tableaux.calendrier`, **oui par défaut**). Les tableaux
+restreints ne montrent leurs cartes qu'à ceux qui les voient (mêmes règles que le tableau). Le filtre par réseau ne
+garde que les posts.
+
+- **Durée** facultative de l'échéance (fiche › Détails, `cm_cartes.echeance_duree`, 5 minutes à 24 heures) : la carte
+  occupe ce créneau (« 18:00–19:30 »).
+- **Déplacer** (PC, `cm.editer`) : la poignée « ⠿ » se dépose sur un autre jour ; l'échéance de la carte change en
+  gardant son **heure murale** (Europe/Paris, changement d'heure compris) et part au serveur en instant UTC (verrou
+  optimiste : `versionAttendue`). Changer l'échéance dans la fiche déplace la carte dans le calendrier (temps réel).
+- **« Nouvelle carte »** (en-tête, ou « + » d'un jour) : tableau (ceux où le compte édite et qui sont au calendrier),
+  colonne (la première qui n'est pas une colonne de fin par défaut), titre, échéance (midi du jour touché). La carte
+  créée (`POST /cm/tableaux/:id/cartes { echeance, echeanceDuree? }`) est aussitôt au calendrier et dans son tableau.
+
+## To do du Dashboard et cartes favorites (migration 0074)
+
+**Favoris** : étoile **personnelle** sur une carte (tuile du tableau pour une carte favorite, menu ⋯ « Ajouter aux
+favoris », fiche de la carte), `POST /cm/cartes/:id/favori { favori }` (`cm.voir` suffit ; table `cm_carte_favoris`).
+Seuls les autres appareils du compte sont prévenus (sujet temps réel `compte:<id>`).
+
+**To do** (Dashboard, `GET /cm/todo`) : pour qui voit au moins un tableau CM (espace CM ou onglet CM d'une team) :
+
+- **Favoris** en tête (de tous les tableaux visibles), puis les cartes **assignées** au compte dans les **tableaux
+  choisis** (tous par défaut), groupées par tableau puis par colonne ;
+- jamais une carte terminée (colonne de fin), archivée, supprimée, ni d'un tableau restreint dont le compte n'est pas ;
+- tri : urgence décroissante, puis échéance la plus proche (dépassées d'abord ; sans échéance ou échéance « faite »
+  après), puis ordre manuel ;
+- actions : ouvrir la carte (espace CM ; sans espace, l'onglet CM de la team), **Terminer**
+  (`POST /cm/cartes/:id/terminer` : bas de la première colonne de fin du tableau, `cm.editer` ; 409 sans colonne de fin),
+  retirer des favoris ;
+- réglage **par compte** côté serveur : `cm_preferences`, clé `todo.dashboard` = `{ tableaux: [uuid…], assignees, favoris }`
+  (`PUT /cm/preferences/todo.dashboard`) ;
+- temps réel : relu sur le sujet `cm` (cartes) et `compte` (étoiles posées ailleurs).
+
 ## Import Trello
 
 **CM › Import Trello** (`cm.gerer`, depuis le site ou l'app PC) :

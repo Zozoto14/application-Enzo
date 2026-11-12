@@ -23,6 +23,8 @@ export async function exportCm(base, compte) {
     // Commentaires non lus (migration 0045) : quand il a ouvert chaque carte (ou marqué un tableau lu) et les cartes suivies.
     cmCommentairesVus: (await q('SELECT v.cle, v.vu_le, c.titre FROM cm_commentaires_vus v LEFT JOIN cm_cartes c ON c.id = v.cle WHERE v.compte_id = ? ORDER BY v.vu_le')).map(v => ({ cible: v.cle === '*' ? 'premier passage' : v.cle.startsWith('t:') ? `tableau : ${tableaux.get(v.cle.slice(2)) ?? v.cle.slice(2)}` : `carte : ${v.titre ?? v.cle}`, vuLe: v.vu_le })),
     cmCartesSuivies: (await q('SELECT c.tableau_id, c.titre, s.cree_le FROM cm_carte_suivis s JOIN cm_cartes c ON c.id = s.carte_id WHERE s.compte_id = ? AND c.supprime_le IS NULL ORDER BY s.cree_le')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre, depuis: c.cree_le })),
+    // Cartes favorites (migration 0074).
+    cmCartesFavorites: (await q('SELECT c.tableau_id, c.titre, f.cree_le FROM cm_carte_favoris f JOIN cm_cartes c ON c.id = f.carte_id WHERE f.compte_id = ? AND c.supprime_le IS NULL ORDER BY f.cree_le')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre, depuis: c.cree_le })),
     cmCartesAssignees: (await q('SELECT c.tableau_id, c.titre FROM cm_carte_membres m JOIN cm_cartes c ON c.id = m.carte_id WHERE m.compte_id = ? AND c.supprime_le IS NULL')).map(c => ({ tableau: tableaux.get(c.tableau_id) ?? null, titre: c.titre })),
     cmCommentaires: (await q('SELECT c.titre, x.texte, x.cree_le FROM cm_commentaires x JOIN cm_cartes c ON c.id = x.carte_id WHERE x.auteur_id = ? AND x.supprime_le IS NULL ORDER BY x.cree_le')).map(x => ({ carte: x.titre, texte: x.texte, date: x.cree_le })),
     cmClips: (await q('SELECT team_id, genre, url, titre, description, instant, statut, motif, cree_le FROM cm_clips WHERE propose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: teams.get(x.team_id) ?? null, genre: x.genre, url: x.url ?? null, titre: x.titre, description: x.description, instant: x.instant === null ? null : Number(x.instant), statut: x.statut, motif: x.motif ?? null, date: x.cree_le })),
@@ -66,6 +68,7 @@ export async function effacementCm(base, compte) {
     // Migration 0045 : son état « lu » des commentaires et ses cartes suivies disparaissent.
     { sql: 'DELETE FROM cm_commentaires_vus WHERE compte_id = ?', params: [compte] },
     { sql: 'DELETE FROM cm_carte_suivis WHERE compte_id = ?', params: [compte] },
+    { sql: 'DELETE FROM cm_carte_favoris WHERE compte_id = ?', params: [compte] },
     { sql: 'UPDATE cm_commentaires SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
     { sql: 'UPDATE cm_activite SET acteur_id = NULL WHERE acteur_id = ?', params: [compte] },
     { sql: 'UPDATE cm_clips SET propose_par = NULL WHERE propose_par = ?', params: [compte] },

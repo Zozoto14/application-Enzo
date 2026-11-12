@@ -44,6 +44,7 @@ import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copie
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
 import { GestionEtiquettes } from './GestionEtiquettes';
+import { EtoileFavori } from './Favori';
 import { LiensLies } from './liens/LiensLies';
 import { useVerrouOptimiste } from '../../tempsReel/hooks';
 import { BandeauConflit, PastillePresence } from '../../tempsReel/ui';
@@ -177,6 +178,11 @@ export function FicheCarte({
       {/* Niveau d'urgence en grand, tout en haut de la fiche. */}
       <BandeauUrgence theme={theme} niveau={c.urgence} />
       <PastillePresence theme={theme} presences={verrou.presences} testID="esport-cm-fiche-presence" />
+      {/* Étoile du compte (migration 0074) : la carte remonte en tête du To do du Dashboard. */}
+      <View style={[styles.ligne, { gap: ESP.xs }]} testID="esport-cm-fiche-favori-ligne">
+        <EtoileFavori theme={theme} favori={c.favori === true} titre={c.titre} taille={18} desactive={enCours === 'favori'} onBasculer={() => void faire('favori', () => api.favori(c.id, !c.favori))} testID="esport-cm-fiche-favori" />
+        <Text style={attenue(theme, 13)}>{c.favori ? trCm('favori.dans_favoris') : trCm('favori.ajouter')}</Text>
+      </View>
       {/* Conflit : « Recharger » relit la carte ; les saisies non enregistrées restent (brouillons). */}
       <BandeauConflit theme={theme} verrou={verrou} onRecharger={charger} testID="esport-cm-fiche-conflit" />
       {/* Un post publié est verrouillé : son titre ne se modifie plus (dépublier d'abord). */}
@@ -233,6 +239,7 @@ export function FicheCarte({
         {dr.editer ? (
           <>
             <Echeance theme={theme} valeur={c.echeance} fuseau={fuseau} onEnregistrer={echeance => faire('echeance', () => api.modifierCarte(c.id, { echeance }), trCm('c.enregistre'))} />
+            {c.echeance ? <DureeEcheance theme={theme} valeur={c.echeanceDuree ?? null} onChoisir={echeanceDuree => void faire('echeance', () => api.modifierCarte(c.id, { echeanceDuree }), trCm('c.enregistre'))} /> : null}
             {c.echeance ? (
               <View style={[styles.ligne, { gap: ESP.xs }]}>
                 <Case theme={theme} coche={c.echeanceFaite} libelle={trCm('fiche.echeance_faite')} onChanger={v => void faire('faite', () => api.modifierCarte(c.id, { echeanceFaite: v }))} testID="esport-cm-fiche-echeance-faite" />
@@ -717,6 +724,16 @@ function Echeance({ theme, valeur, fuseau, onEnregistrer }: { theme: ThemeHub; v
       {saisie !== undefined ? <BoutonHub theme={theme} titre={trCm('c.enregistrer')} onPress={() => onEnregistrer(saisie)} testID="esport-cm-fiche-echeance-ok" /> : null}
     </View>
   );
+}
+
+/** Durées proposées pour une échéance au calendrier (minutes ; 0 : ponctuelle). */
+export const DUREES_ECHEANCE = [0, 15, 30, 60, 90, 120, 180, 240, 480] as const;
+export const nomDuree = (m: number): string => (!m ? trCm('duree.aucune') : m < 60 ? trCm('duree.minutes', { n: m }) : m % 60 ? trCm('duree.heures_minutes', { h: Math.floor(m / 60), m: m % 60 }) : trCm('duree.heures', { n: m / 60 }));
+
+/** Durée de l'échéance au calendrier (migration 0074) : la carte occupe ce créneau dans Contenus › Calendrier. */
+function DureeEcheance({ theme, valeur, onChoisir }: { theme: ThemeHub; valeur: number | null; onChoisir(v: number | null): void }) {
+  const options = DUREES_ECHEANCE.includes((valeur ?? 0) as (typeof DUREES_ECHEANCE)[number]) ? [...DUREES_ECHEANCE] : [...DUREES_ECHEANCE, valeur ?? 0].sort((a, b) => a - b);
+  return <Choix theme={theme} libelle={trCm('fiche.echeance_duree')} valeur={String(valeur ?? 0)} repliable options={options.map(m => ({ id: String(m), nom: nomDuree(m) }))} onChoisir={v => onChoisir(Number(v) || null)} testID="esport-cm-fiche-echeance-duree" />;
 }
 
 function Description({ theme, valeur, enCours, joueurs, onEnregistrer }: { theme: ThemeHub; valeur: string; enCours: boolean; joueurs: string[]; onEnregistrer(v: string): void }) {

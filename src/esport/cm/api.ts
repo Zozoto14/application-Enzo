@@ -158,6 +158,8 @@ export interface TableauListe {
   droits?: DroitsTableau;
   /** Fond (migration 0042) ; null : fond du thème. */
   fond?: FondTableau | null;
+  /** Cartes datées (échéance) affichées au calendrier du CM (migration 0074) ; absent d'un serveur ancien : oui. */
+  calendrier?: boolean;
 }
 export interface ListeTableaux {
   tableaux: TableauListe[];
@@ -195,6 +197,10 @@ export interface CarteResume {
   couverture: { couleur?: string; image?: string } | null;
   echeance: string | null;
   echeanceFaite: boolean;
+  /** Durée de l'échéance au calendrier, en minutes (migration 0074) ; null : ponctuelle. */
+  echeanceDuree?: number | null;
+  /** Carte en favori pour ce compte (migration 0074). */
+  favori?: boolean;
   datePublication: string | null;
   post: boolean;
   statut: StatutPost | null;
@@ -276,6 +282,10 @@ export interface CarteDetail {
   couverture: { couleur?: string; pieceId?: string } | null;
   echeance: string | null;
   echeanceFaite: boolean;
+  /** Durée de l'échéance au calendrier, en minutes (migration 0074). */
+  echeanceDuree?: number | null;
+  /** Carte en favori pour ce compte (migration 0074). */
+  favori?: boolean;
   datePublication: string | null;
   urgence?: Urgence | null;
   /** Terminée le … par … (migration 0050) ; null : carte ouverte. */
@@ -352,6 +362,49 @@ export interface CarteTransverse {
   textes?: TextesPost;
   droits: { valider: boolean; editer: boolean };
 }
+/** Carte datée au calendrier du CM (migration 0074) : liée à la carte, déplaçable avec cm.editer. */
+export interface CarteDatee extends CarteTransverse {
+  echeance: string;
+  echeanceFaite: boolean;
+  echeanceDuree: number | null;
+  terminee: boolean;
+  liste: { id: string; nom: string | null; cle: CleListe | null } | null;
+}
+/** Carte du To do du Dashboard (migration 0074). */
+export interface CarteTodo {
+  id: string;
+  titre: string;
+  tableauId: string;
+  liste: { id?: string; nom?: string | null; cle?: CleListe | null; position: number };
+  teamId: string | null;
+  urgence: Urgence | null;
+  echeance: string | null;
+  echeanceFaite: boolean;
+  echeanceDuree: number | null;
+  terminee: boolean;
+  position: number;
+  post: boolean;
+  statut: StatutPost | null;
+  version: number;
+  favori: boolean;
+  assignee: boolean;
+  /** « Terminer » possible : cm.editer et une colonne de fin sur le tableau. */
+  terminable: boolean;
+}
+export interface ReglageTodo {
+  /** Tableaux choisis ; vide : tous. */
+  tableaux: string[];
+  assignees: boolean;
+  favoris: boolean;
+}
+export interface Todo {
+  reglage: ReglageTodo;
+  tableaux: Array<TableauListe & { editer: boolean; colonneFin: boolean }>;
+  favoris: CarteTodo[];
+  cartes: CarteTodo[];
+}
+export const CLE_TODO = 'todo.dashboard';
+
 export interface EtatCm {
   versions: Record<string, number>;
   aValider: number;
@@ -465,6 +518,8 @@ export interface SaisieCarte {
   description?: string;
   echeance?: string | null;
   echeanceFaite?: boolean;
+  /** Minutes (5 à 1 440) ; null : ponctuelle (migration 0074). */
+  echeanceDuree?: number | null;
   datePublication?: string | null;
   couverture?: { couleur: string } | { pieceId: string } | null;
   teamId?: string | null;
@@ -495,7 +550,7 @@ export function apiCm(client: ClientEsport) {
     /** Accès au tableau (migration 0046). */
     accesTableau: (id: string) => r<ReglageAcces>(`/cm/tableaux/${e(id)}/acces`),
     changerAccesTableau: (id: string, acces: AccesTableau, regles: RegleAcces[]) => r<ReglageAcces>(`/cm/tableaux/${e(id)}/acces`, 'PUT', { acces, regles: regles.map(x => ({ genre: x.genre, cible: x.cible, niveau: x.niveau })) }),
-    modifierTableau: (id: string, t: { nom?: string | null; couleur?: string; description?: string; archive?: boolean; fond?: SaisieFond }) => r<DetailTableau>(`/cm/tableaux/${e(id)}`, 'PATCH', t),
+    modifierTableau: (id: string, t: { nom?: string | null; couleur?: string; description?: string; archive?: boolean; fond?: SaisieFond; calendrier?: boolean }) => r<DetailTableau>(`/cm/tableaux/${e(id)}`, 'PATCH', t),
     /** Choix d'affichage du compte (colonnes réduites `tableau.<id>.reduites`, calendriers `calendrier.teams`). */
     preferences: () => r<{ preferences: Record<string, unknown> }>('/cm/preferences'),
     changerPreference: (cle: string, valeur: unknown) => r<{ ok: true }>(`/cm/preferences/${e(cle)}`, 'PUT', { valeur }),
@@ -545,7 +600,15 @@ export function apiCm(client: ClientEsport) {
     urgences: () => r<{ cartes: CarteTransverse[] }>('/cm/urgences'),
     /** Cartes terminées par semaine (lundi à dimanche) sur les tableaux visibles, la semaine en cours en dernier. */
     terminees: (semaines = 8) => r<{ semaines: Array<{ debut: string; n: number }>; total: number }>(`/cm/terminees?semaines=${semaines}`),
-    calendrier: (du: string, au: string, reseau?: Reseau) => r<{ cartes: CarteTransverse[] }>(`/cm/calendrier${requeteUrl({ du, au, reseau })}`),
+    /** Posts prévus (date de publication) et, sans filtre de réseau, cartes datées des tableaux au calendrier (migration 0074). */
+    calendrier: (du: string, au: string, reseau?: Reseau) => r<{ cartes: CarteTransverse[]; echeances?: CarteDatee[] }>(`/cm/calendrier${requeteUrl({ du, au, reseau })}`),
+    /** To do du Dashboard (migration 0074) : favorites et cartes assignées des tableaux choisis. */
+    todo: () => r<Todo>('/cm/todo'),
+    changerReglageTodo: (reglage: ReglageTodo) => r<{ ok: true }>(`/cm/preferences/${e(CLE_TODO)}`, 'PUT', { valeur: reglage }),
+    /** Étoile du compte sur une carte (migration 0074). */
+    favori: (id: string, favori: boolean) => r<{ ok: true; favori: boolean }>(`/cm/cartes/${e(id)}/favori`, 'POST', { favori }),
+    /** Range la carte dans la première colonne de fin de son tableau (elle devient terminée). */
+    terminer: (id: string) => r<{ ok: true; listeId?: string }>(`/cm/cartes/${e(id)}/terminer`, 'POST', {}),
     recherche: (q: string) => r<{ cartes: CarteTransverse[] }>(`/cm/recherche${requeteUrl({ q })}`),
     team: (teamId: string) => r<PageTeamCm>(`/cm/teams/${e(teamId)}`),
     deposer: (teamId: string, d: { genre: GenreDepot; titre: string; description: string; liens: string[]; envois: string[] }) => r<{ id: string; tableauId: string }>(`/cm/teams/${e(teamId)}/depots`, 'POST', d),

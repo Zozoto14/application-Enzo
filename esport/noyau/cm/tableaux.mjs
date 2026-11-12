@@ -65,6 +65,7 @@ const MAX_CHECKLISTS = 20;
 const MAX_ELEMENTS = 200;
 const MAX_PIECES = 50;
 const MAX_MEMBRES = 20;
+const MAX_ECHEANCES_CALENDRIER = 600;
 const COMMENTAIRE_MAX = 4000;
 const ECART_MIN = 1e-6;
 
@@ -74,7 +75,13 @@ const ECART_MIN = 1e-6;
  */
 export const FONDS_COULEURS = Object.freeze(['bleu', 'vert', 'orange', 'rouge', 'violet', 'rose', 'ciel', 'gris']);
 export const FONDS_DEGRADES = Object.freeze(['aurore', 'ocean', 'foret', 'crepuscule', 'neon', 'nuit']);
-const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.(reduites)|calendrier\.teams)$/;
+const CLE_PREFERENCE = /^(tableau\.[0-9a-f-]{36}\.(reduites)|calendrier\.teams|todo\.dashboard)$/;
+/** Préférence du To do du Dashboard (migration 0074). */
+export const CLE_TODO = 'todo.dashboard';
+const MAX_TODO = 200;
+const MAX_TODO_TABLEAUX = 100;
+/** Durée d'une échéance au calendrier (minutes, migration 0074) : 5 minutes à 24 heures. */
+const DUREE_MAX = 24 * 60;
 const PREFERENCE_MAX = 4000;
 
 // ------------------------------------------------------------------ Outils purs
@@ -114,6 +121,20 @@ const lireTri = v => {
   if (v !== 'auto' && v !== 'manuel') throw echec(400, 'tri', 'Tri de colonne illisible (auto ou manuel).');
   return v;
 };
+
+/** Durée d'une échéance (minutes, migration 0074) : null / '' = aucune ; sinon un entier de 5 à 1 440. */
+export function lireDuree(v) {
+  if (v === undefined || v === null || v === '' || v === 0) return null;
+  if (!Number.isInteger(v) || v < 5 || v > DUREE_MAX) throw echec(400, 'echeance-duree', 'Durée illisible (5 minutes à 24 heures).');
+  return v;
+}
+
+/** Réglage du To do du Dashboard (migration 0074) : tableaux choisis (vide : tous), cartes assignées, favorites. */
+export function lireReglageTodo(v) {
+  const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  const tableaux = Array.isArray(o.tableaux) ? [...new Set(o.tableaux.filter(x => typeof x === 'string' && MOTIF_UUID.test(x)))].slice(0, MAX_TODO_TABLEAUX) : [];
+  return { tableaux, assignees: o.assignees !== false, favoris: o.favoris !== false };
+}
 
 const nomListe = v => {
   const nom = texteNettoye(v, 80);
@@ -350,6 +371,16 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { ok: true, suivie: corps?.suivre !== false };
   }
 
+  /** `POST /cm/cartes/:id/favori { favori }` : étoile (ou plus d'étoile) sur une carte visible, pour ce compte seul (migration 0074). */
+  async function favori(acteur, carteId, corps) {
+    const { carte: c } = await carteVisible(acteur, carteId);
+    if (!acteur.compte) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (corps?.favori !== undefined && typeof corps.favori !== 'boolean') throw echec(400, 'favori', 'Favori illisible.');
+    if (corps?.favori === false) await base.executer('DELETE FROM cm_carte_favoris WHERE carte_id = ? AND compte_id = ?', [c.id, acteur.compte]);
+    else await base.executer('INSERT INTO cm_carte_favoris (carte_id, compte_id, cree_le) VALUES (?, ?, ?) ON CONFLICT (carte_id, compte_id) DO NOTHING', [c.id, acteur.compte, iso(maintenant())]);
+    return { ok: true, favori: corps?.favori !== false };
+  }
+
   async function piecesIds(carteId) {
     return (await base.tous('SELECT id FROM cm_pieces WHERE carte_id = ? AND supprime_le IS NULL', [carteId])).map(l => l.id);
   }
@@ -400,6 +431,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       trello: Boolean(t.trello_id),
       // Accès (migration 0046) : 'tous' ou 'restreint' (cadenas dans la liste) ; jamais la liste des personnes ici.
       acces: t.acces === 'restreint' ? 'restreint' : 'tous',
+      // Cartes datées au calendrier du CM (migration 0074) : oui par défaut.
+      calendrier: Number(t.calendrier ?? 1) !== 0,
       majLe: t.maj_le,
       fond: fondPublic(t),
       ...extra,
@@ -536,6 +569,12 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       champs.push('couleur');
       valeurs.push(lireCouleur(corps.couleur));
     }
+    // Cartes datées au calendrier du CM (migration 0074).
+    if (corps?.calendrier !== undefined) {
+      if (typeof corps.calendrier !== 'boolean') throw echec(400, 'calendrier', 'Réglage du calendrier illisible.');
+      champs.push('calendrier');
+      valeurs.push(corps.calendrier ? 1 : 0);
+    }
     if (corps?.archive !== undefined) {
       if (tb.cle_defaut && corps.archive) throw echec(409, 'tableau-defaut', 'Le tableau par défaut ne s’archive pas.');
       champs.push('archive_le');
@@ -577,7 +616,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const listes = await base.tous(`SELECT * FROM cm_listes WHERE tableau_id = ? ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le`, [id]);
     const etiquettes = await base.tous('SELECT * FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom, id', [id]);
     const cartes = await base.tous(
-      `SELECT id, liste_id, team_id, titre, CASE WHEN description = '' THEN 0 ELSE 1 END AS a_desc, position, couverture, echeance, echeance_faite, date_publication, post, statut, reseaux, origine, depot_genre, archive_le, version, cree_par, maj_le, urgence, terminee_le
+      `SELECT id, liste_id, team_id, titre, CASE WHEN description = '' THEN 0 ELSE 1 END AS a_desc, position, couverture, echeance, echeance_faite, echeance_duree, date_publication, post, statut, reseaux, origine, depot_genre, archive_le, version, cree_par, maj_le, urgence, terminee_le
          FROM cm_cartes WHERE tableau_id = ? AND supprime_le IS NULL ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le LIMIT ?`,
       [id, MAX_CARTES_TABLEAU],
     );
@@ -620,6 +659,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     const pseudos = await pseudosDe(base, [...new Set(cartes.flatMap(c => memb.get(c.id) ?? []))]);
     const non = await nonLus(acteur, [tb.id]);
+    // Cartes favorites du compte (migration 0074).
+    const favoris = new Set(acteur.compte ? (await base.tous('SELECT f.carte_id FROM cm_carte_favoris f JOIN cm_cartes c ON c.id = f.carte_id WHERE f.compte_id = ? AND c.tableau_id = ?', [acteur.compte, id])).map(l => l.carte_id) : []);
     return {
       nonLus: non.total,
       tableau: tableauPublic(tb, noms, { fond: fondPublic(tb, await imageFond(tb, acteur, origine)) }),
@@ -639,6 +680,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
           couverture: couv?.couleur ? { couleur: couv.couleur } : couvertures.has(c.id) ? { image: couvertures.get(c.id) } : null,
           echeance: c.echeance ?? null,
           echeanceFaite: Number(c.echeance_faite) === 1,
+          echeanceDuree: c.echeance_duree === null || c.echeance_duree === undefined ? null : Number(c.echeance_duree),
+          favori: favoris.has(c.id),
           datePublication: c.date_publication ?? null,
           post: Number(c.post) === 1,
           statut: c.statut ?? null,
@@ -788,6 +831,12 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const texte = JSON.stringify(valeur);
     if (texte.length > PREFERENCE_MAX) throw echec(400, 'preference', 'Préférence trop longue.');
     if (cle.endsWith('.reduites') && !(Array.isArray(valeur) && valeur.length <= 100 && valeur.every(x => typeof x === 'string' && MOTIF_UUID.test(x)))) throw echec(400, 'preference', 'Préférence illisible.');
+    if (cle === CLE_TODO) {
+      const ok = valeur && typeof valeur === 'object' && !Array.isArray(valeur) && Object.keys(valeur).every(k => ['tableaux', 'assignees', 'favoris'].includes(k))
+        && (valeur.tableaux === undefined || (Array.isArray(valeur.tableaux) && valeur.tableaux.length <= MAX_TODO_TABLEAUX && valeur.tableaux.every(x => typeof x === 'string' && MOTIF_UUID.test(x))))
+        && ['assignees', 'favoris'].every(k => valeur[k] === undefined || typeof valeur[k] === 'boolean');
+      if (!ok) throw echec(400, 'preference', 'Préférence illisible.');
+    }
     if (cle === 'calendrier.teams' && !(valeur && typeof valeur === 'object' && !Array.isArray(valeur) && Object.entries(valeur).every(([k, v]) => MOTIF_UUID.test(k) && typeof v === 'boolean'))) throw echec(400, 'preference', 'Préférence illisible.');
     const t = iso(maintenant());
     await base.executer('INSERT INTO cm_preferences (compte_id, cle, valeur, maj_le) VALUES (?, ?, ?, ?) ON CONFLICT (compte_id, cle) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le', [acteur.compte, cle, texte, t]);
@@ -1034,6 +1083,9 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (Number(n?.n ?? 0) >= MAX_CARTES_TABLEAU) throw echec(409, 'trop-de-cartes', `${MAX_CARTES_TABLEAU} cartes au plus par tableau.`);
     const t = maintenant();
     const post = corps?.post === true;
+    // Échéance dès la création (migration 0074 : « Nouvelle carte » du calendrier) ; la carte datée va au calendrier.
+    const echeance = lireInstantCm(corps?.echeance, ctx.team?.fuseau ?? FUSEAU_CLUB, 'echeance');
+    const duree = echeance ? lireDuree(corps?.echeanceDuree) : null;
     const { id, instructions } = instructionsCarte({
       tableauId: tb.id,
       listeId: liste.id,
@@ -1050,6 +1102,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       terminee: Number(liste.fin) === 1,
       t,
     });
+    if (echeance) instructions.splice(1, 0, { sql: 'UPDATE cm_cartes SET echeance = ?, echeance_duree = ? WHERE id = ?', params: [echeance, duree, id] });
     await base.lot([...instructions, evenement('cm.carte_creee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: id, charge: { titre: lireTitre(corps?.titre), tableau: tb.id, post }, maintenant: t })]);
     return carte(acteur, id);
   }
@@ -1089,6 +1142,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const vuAvant = acteur.compte ? seuilVu(await lireVus(acteur.compte), tb.id, c.id) : null;
     if (vu && acteur.compte) await marquerVu(acteur.compte, c.id);
     const suivie = acteur.compte ? Boolean(await base.premier('SELECT carte_id FROM cm_carte_suivis WHERE carte_id = ? AND compte_id = ?', [c.id, acteur.compte])) : false;
+    const favori = acteur.compte ? Boolean(await base.premier('SELECT carte_id FROM cm_carte_favoris WHERE carte_id = ? AND compte_id = ?', [c.id, acteur.compte])) : false;
     const etiquettes = (await base.tous('SELECT ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_etiquettes e ON e.id = ce.etiquette_id WHERE ce.carte_id = ? ORDER BY e.position, e.nom, e.id', [c.id])).map(l => l.etiquette_id);
     const membres = (await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
     const checklists = await base.tous('SELECT * FROM cm_checklists WHERE carte_id = ? ORDER BY position', [c.id]);
@@ -1113,6 +1167,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
         couverture: couv,
         echeance: c.echeance ?? null,
         echeanceFaite: Number(c.echeance_faite) === 1,
+        echeanceDuree: c.echeance_duree === null || c.echeance_duree === undefined ? null : Number(c.echeance_duree),
         datePublication: c.date_publication ?? null,
         urgence: c.urgence ?? null,
         termineeLe: c.terminee_le ?? null,
@@ -1150,6 +1205,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
         vuAvant,
         nonLus: commentaires.filter(x => nouveauPour(x, acteur.compte, vuAvant)).length,
         suivie,
+        favori,
         pieces: await Promise.all(
           pieces.map(async p => {
             const f = p.fichier_id ? fichiers.get(p.fichier_id) : null;
@@ -1224,9 +1280,12 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     if (corps?.titre !== undefined) contenu.titre = champs.titre = lireTitre(corps.titre);
     if (corps?.description !== undefined) champs.description = nettoyerNote(corps.description ?? '', NOTE_MAX);
     // Le reste : éditeurs seulement (un correspondant ne change que le titre, la description et les pièces de son dépôt).
-    const reserve = ['echeance', 'echeanceFaite', 'datePublication', 'couverture', 'teamId', 'etiquettes', 'membres', 'archive', 'post', 'reseaux', 'textes', 'liens', 'urgence'];
+    const reserve = ['echeance', 'echeanceFaite', 'echeanceDuree', 'datePublication', 'couverture', 'teamId', 'etiquettes', 'membres', 'archive', 'post', 'reseaux', 'textes', 'liens', 'urgence'];
     if (!editeur && reserve.some(k => corps?.[k] !== undefined)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     if (corps?.echeance !== undefined) champs.echeance = lireInstantCm(corps.echeance, fuseau, 'echeance');
+    // Durée au calendrier (migration 0074) ; une carte sans échéance n'en a pas.
+    if (corps?.echeanceDuree !== undefined) champs.echeance_duree = lireDuree(corps.echeanceDuree);
+    if (champs.echeance === null) champs.echeance_duree = null;
     if (corps?.echeanceFaite !== undefined) champs.echeance_faite = corps.echeanceFaite ? 1 : 0;
     if (corps?.datePublication !== undefined) contenu.datePublication = champs.date_publication = lireInstantCm(corps.datePublication, fuseau, 'date-publication');
     if (corps?.couverture !== undefined) champs.couverture = await lireCouverture(c.id, corps.couverture);
@@ -1360,6 +1419,20 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     lot.push(versionTableau(tb.id, t));
     await base.lot(lot);
     return { ok: true };
+  }
+
+  /**
+   * `POST /cm/cartes/:id/terminer` (To do du Dashboard, migration 0074) : range la carte en bas de la PREMIÈRE colonne de
+   * fin de son tableau (elle devient terminée, comme par un glisser-déposer). 409 si le tableau n'a pas de colonne de fin.
+   */
+  async function terminer(acteur, id) {
+    const { carte: c, tableau: tb, ctx } = await carteVisible(acteur, id);
+    exiger(ctx, 'cm.editer');
+    if (c.terminee_le) return { ok: true, deja: true };
+    const fin = await base.premier('SELECT id FROM cm_listes WHERE tableau_id = ? AND fin = 1 AND archive_le IS NULL ORDER BY position, cree_le LIMIT 1', [tb.id]);
+    if (!fin) throw echec(409, 'pas-de-colonne-fin', 'Ce tableau n’a pas de colonne de fin.');
+    await deplacerCarte(acteur, id, { listeId: fin.id });
+    return { ok: true, listeId: fin.id };
   }
 
   async function supprimerCarte(acteur, id) {
@@ -1761,6 +1834,15 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { portees, liste: [...(portees.club.has(permission) ? [PORTEE_CLUB] : []), ...[...portees.teams].filter(([, s]) => s.has(permission)).map(([id]) => id)] };
   }
 
+  /** Échéance d'une carte (migration 0074 : durée au calendrier). */
+  const detailsEcheance = c => ({
+    echeance: c.echeance ?? null,
+    echeanceFaite: Number(c.echeance_faite) === 1,
+    echeanceDuree: c.echeance_duree === null || c.echeance_duree === undefined ? null : Number(c.echeance_duree),
+    terminee: Boolean(c.terminee_le),
+  });
+  const listePublique = l => (l ? { id: l.id, nom: l.nom ?? null, cle: l.cle ?? null } : null);
+
   const resumeCarte = (c, tableaux, portees) => {
     const tb = tableaux.get(c.tableau_id);
     return {
@@ -1814,7 +1896,18 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const cartes = (await lignesParIds(base, 'SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND post = 1 AND date_publication >= ? AND date_publication < ? AND tableau_id', [...tableauxVus.keys()], { paramsAvant: [iso(a), iso(b)] }))
       .filter(c => !reseau || jsonOu(c.reseaux, []).includes(reseau))
       .sort((x, y) => String(x.date_publication).localeCompare(String(y.date_publication)));
-    return { cartes: cartes.map(c => resumeCarte(c, tableauxVus, portees)) };
+    // Cartes datées (échéance) des tableaux « au calendrier » (migration 0074) : liées à la carte, déplaçables (cm.editer).
+    const auCalendrier = [...tableauxVus.values()].filter(t => Number(t.calendrier ?? 1) !== 0 && !t.archive_le).map(t => t.id);
+    const datees = reseau
+      ? []
+      : (await lignesParIds(base, 'SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND echeance IS NOT NULL AND echeance >= ? AND echeance < ? AND tableau_id', auCalendrier, { paramsAvant: [iso(a), iso(b)] })).sort(
+          (x, y) => String(x.echeance).localeCompare(String(y.echeance)) || String(x.id).localeCompare(String(y.id)),
+        );
+    const listes = new Map((await lignesParIds(base, 'SELECT id, nom, cle FROM cm_listes WHERE id', [...new Set(datees.map(c => c.liste_id))])).map(l => [l.id, l]));
+    return {
+      cartes: cartes.map(c => resumeCarte(c, tableauxVus, portees)),
+      echeances: datees.slice(0, MAX_ECHEANCES_CALENDRIER).map(c => ({ ...resumeCarte(c, tableauxVus, portees), ...detailsEcheance(c), liste: listePublique(listes.get(c.liste_id)) })),
+    };
   }
 
   /** `GET /cm/recherche?q` : cartes des tableaux visibles dont le titre ou la description contient `q`. */
@@ -1863,6 +1956,67 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       semainesListe.push({ debut: jour, n: parSemaine.get(jour) ?? 0 });
     }
     return { semaines: semainesListe, total: semainesListe.reduce((x, y) => x + y.n, 0) };
+  }
+
+  /**
+   * `GET /cm/todo` : le « To do » du Dashboard (migration 0074). Tableaux proposés : ceux que le compte voit (restreints
+   * compris s'il en est, jamais les autres ; l'onglet CM d'une team compte), non archivés. Cartes : ses FAVORITES (tous ses
+   * tableaux visibles) et celles qui lui sont ASSIGNÉES dans les tableaux choisis (`cm_preferences`, clé `todo.dashboard` ;
+   * aucun choix : tous). Jamais une carte terminée (colonne de fin), archivée ou supprimée. Tri des tableaux : urgence
+   * décroissante, puis échéance la plus proche (dépassées d'abord ; sans échéance ou échéance faite après), puis ordre manuel.
+   */
+  async function todo(acteur) {
+    if (!acteur.compte) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const { portees, liste } = await porteesAvec(acteur, 'cm.voir', { onglet: true });
+    if (!liste.length) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const visibles = [...(await tableauxDe(acteur, liste)).values()].filter(t => !t.archive_le);
+    const pref = await base.premier('SELECT valeur FROM cm_preferences WHERE compte_id = ? AND cle = ?', [acteur.compte, CLE_TODO]);
+    const reglage = lireReglageTodo(jsonOu(pref?.valeur, null));
+    const ids = new Set(visibles.map(t => t.id));
+    const choisis = reglage.tableaux.filter(id => ids.has(id));
+    const dans = new Set(choisis.length ? choisis : [...ids]);
+    const tous = [...ids];
+    const favoris = new Set(tous.length ? (await lignesParIds(base, 'SELECT f.carte_id FROM cm_carte_favoris f JOIN cm_cartes c ON c.id = f.carte_id WHERE f.compte_id = ? AND c.tableau_id', tous, { paramsAvant: [acteur.compte] })).map(l => l.carte_id) : []);
+    const assignees = new Set(tous.length ? (await lignesParIds(base, 'SELECT m.carte_id FROM cm_carte_membres m JOIN cm_cartes c ON c.id = m.carte_id WHERE m.compte_id = ? AND c.tableau_id', tous, { paramsAvant: [acteur.compte] })).map(l => l.carte_id) : []);
+    const voulues = [...new Set([...(reglage.favoris ? favoris : []), ...(reglage.assignees ? assignees : [])])];
+    const lignes = (await lignesParIds(base, 'SELECT * FROM cm_cartes WHERE supprime_le IS NULL AND archive_le IS NULL AND terminee_le IS NULL AND id', voulues)).filter(
+      c => ids.has(c.tableau_id) && ((reglage.favoris && favoris.has(c.id)) || (reglage.assignees && assignees.has(c.id) && dans.has(c.tableau_id))),
+    );
+    const listes = new Map((await lignesParIds(base, 'SELECT * FROM cm_listes WHERE id', [...new Set(lignes.map(c => c.liste_id))])).map(l => [l.id, l]));
+    const fins = new Set((await lignesParIds(base, 'SELECT DISTINCT tableau_id FROM cm_listes WHERE fin = 1 AND archive_le IS NULL AND tableau_id', tous)).map(l => l.tableau_id));
+    const tableaux = new Map(visibles.map(t => [t.id, t]));
+    const editer = t => permissionsAuNiveau(permissionsSur(portees, t.portee), t.niveau).has('cm.editer');
+    // Instant d'échéance qui compte (+∞ sans échéance, ou échéance faite) : comparaison numérique, jamais selon la langue.
+    const echeanceTri = c => (c.echeance && Number(c.echeance_faite) !== 1 && Number.isFinite(Date.parse(c.echeance)) ? Date.parse(c.echeance) : Number.POSITIVE_INFINITY);
+    const ecart = (u, v) => (u === v ? 0 : u < v ? -1 : 1);
+    lignes.sort((x, y) => rangUrgence(y.urgence) - rangUrgence(x.urgence) || ecart(echeanceTri(x), echeanceTri(y)) || Number(x.position) - Number(y.position) || String(x.id).localeCompare(String(y.id)));
+    const carteTodo = c => {
+      const tb = tableaux.get(c.tableau_id);
+      return {
+        id: c.id,
+        titre: c.titre,
+        tableauId: c.tableau_id,
+        liste: { ...listePublique(listes.get(c.liste_id)), position: Number(listes.get(c.liste_id)?.position ?? 0) },
+        teamId: c.team_id ?? null,
+        urgence: c.urgence ?? null,
+        ...detailsEcheance(c),
+        position: Number(c.position),
+        post: Number(c.post) === 1,
+        statut: c.statut ?? null,
+        version: Number(c.version),
+        favori: favoris.has(c.id),
+        assignee: assignees.has(c.id),
+        terminable: editer(tb) && fins.has(tb.id),
+      };
+    };
+    visibles.sort((a, b) => (a.portee === PORTEE_CLUB ? 0 : 1) - (b.portee === PORTEE_CLUB ? 0 : 1) || (a.cle_defaut ? 0 : 1) - (b.cle_defaut ? 0 : 1) || Number(a.position) - Number(b.position) || String(a.cree_le).localeCompare(String(b.cree_le)));
+    const toutes = lignes.slice(0, MAX_TODO).map(carteTodo);
+    return {
+      reglage: { ...reglage, tableaux: choisis },
+      tableaux: visibles.map(t => ({ ...tableauPublic(t, portees.noms), editer: editer(t), colonneFin: fins.has(t.id) })),
+      favoris: toutes.filter(c => c.favori),
+      cartes: toutes.filter(c => !c.favori),
+    };
   }
 
   /** `GET /cm/etat` : versions des tableaux visibles et nombre de posts à valider (rafraîchissement léger). */
@@ -1924,6 +2078,9 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     etat,
     preferences,
     changerPreference,
+    favori,
+    terminer,
+    todo,
     // Pour les autres services de la section (dépôts, clips, import) :
     tableauVisible,
     carteVisible,

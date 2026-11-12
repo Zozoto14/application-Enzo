@@ -1254,8 +1254,8 @@ export const nomRole = (nom: string): string => {
   const systeme = CATALOGUE.rolesSysteme.find(r => r.nom === nom);
   return systeme ? trOu(`cat.role.${systeme.cle}.nom`, nom) : nom;
 };
-/** Type de réunion : les cinq types système (reconnus à leur nom français) sont traduits, pas ceux créés par la team. */
-const TYPES_REUNION_SYSTEME: Record<string, string> = { Hebdo: 'weekly', Mensuel: 'monthly', 'Débrief de match': 'debrief', Staff: 'staff', Autre: 'autre' };
+/** Type de réunion : les six types système (reconnus à leur nom français ; Review : migration 0074) sont traduits, pas ceux créés par la team. */
+const TYPES_REUNION_SYSTEME: Record<string, string> = { Hebdo: 'weekly', Mensuel: 'monthly', 'Débrief de match': 'debrief', Staff: 'staff', Autre: 'autre', Review: 'review' };
 export const nomTypeReunion = (nom: string): string => (TYPES_REUNION_SYSTEME[nom] ? trOu(`cat.typereunion.${TYPES_REUNION_SYSTEME[nom]}`, nom) : nom);
 export const descriptionRole = (r: { cle: string; description: string }): string => trOu(`cat.role.${r.cle}.description`, r.description);
 export const nomPreset = (p: { cle: string; nom: string }): string => trOu(`cat.preset.${p.cle}.nom`, p.nom);

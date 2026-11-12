@@ -45,6 +45,7 @@ import { ChoixDrive } from './drive/ChoixDrive';
 import { Aide, BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand, signalerEtatCm } from './commun';
 import { BandeUrgence, CompteurUrgence, Drapeau, LegendeUrgence, PastilleUrgence, SelecteurUrgence, libelleUrgence, useMouvementReduit } from './Drapeau';
 import { FicheCarte } from './FicheCarte';
+import { EtoileFavori } from './Favori';
 import { GestionEtiquettes } from './GestionEtiquettes';
 import { AccesTableau } from './AccesTableau';
 
@@ -186,12 +187,15 @@ export function Tableau({
   versionServeur,
   teams = [],
   onRetour,
+  carteInitiale,
   testID = 'esport-cm-tableau',
 }: {
   theme: ThemeHub;
   api: ApiCm;
   id: string;
   large: boolean;
+  /** Carte dont la fiche s'ouvre d'abord (To do du Dashboard, calendrier ; migration 0074). */
+  carteInitiale?: string;
   /** Version connue du serveur (GET /cm/etat) : recharge le tableau s'il a changé ailleurs. */
   versionServeur?: number;
   /** Teams liables à une carte (tableau du club). */
@@ -209,7 +213,10 @@ export function Tableau({
   const [plein, setPlein] = useState(false);
   /** Échap tapé dans un champ (ajout d'une carte…) : il ferme le champ, pas le plein écran. */
   const echapDansChamp = useRef(false);
-  const [ouverte, setOuverte] = useState<string | undefined>();
+  const [ouverte, setOuverte] = useState<string | undefined>(carteInitiale);
+  useEffect(() => {
+    if (carteInitiale) setOuverte(carteInitiale);
+  }, [carteInitiale]);
   const [ajout, setAjout] = useState<string | undefined>();
   const [titreAjout, setTitreAjout] = useState('');
   // Création en chaîne (comme Trello) : le champ reste ouvert ; les cartes créées apparaissent tout de suite (optimiste).
@@ -672,12 +679,29 @@ export function Tableau({
       setChoixFond(false);
     });
 
+  /** Étoile du compte (migration 0074) : tout de suite à l'écran, puis enregistrée (annulée si le serveur refuse). */
+  const basculerFavori = (c: CarteResume) => {
+    const favori = !c.favori;
+    setD(x => (x ? { ...x, cartes: x.cartes.map(y => (y.id === c.id ? { ...y, favori } : y)) } : x));
+    setAnnonce(trCm(favori ? 'favori.annonce_ajoute' : 'favori.annonce_retire', { titre: c.titre }));
+    void agir('favori', async () => {
+      try {
+        await api.favori(c.id, favori);
+      } catch (e) {
+        setD(x => (x ? { ...x, cartes: x.cartes.map(y => (y.id === c.id ? { ...y, favori: !favori } : y)) } : x));
+        throw e;
+      }
+    });
+  };
+  const actionFavori = (c: CarteResume): ActionSecondaire => ({ titre: c.favori ? trCm('favori.retirer') : trCm('favori.ajouter'), onPress: () => basculerFavori(c), testID: `esport-cm-carte-${c.id}-favori-menu` });
+
   const actionsCarte = (c: CarteResume, l: ListeCm, i: number, vues: CarteResume[]): ActionSecondaire[] => {
-    if (!d?.droits.editer) return [{ titre: trCm('carte.ouvrir'), onPress: () => setOuverte(c.id), testID: `esport-cm-carte-${c.id}-ouvrir` }];
+    if (!d?.droits.editer) return [{ titre: trCm('carte.ouvrir'), onPress: () => setOuverte(c.id), testID: `esport-cm-carte-${c.id}-ouvrir` }, actionFavori(c)];
     const toutes = (parListe.get(l.id) ?? []).filter(x => x.id !== c.id && !x.archive);
     const li = listes.findIndex(x => x.id === l.id);
     return [
       { titre: trCm('carte.ouvrir'), onPress: () => setOuverte(c.id), testID: `esport-cm-carte-${c.id}-ouvrir` },
+      actionFavori(c),
       ...(i > 0 && !autos.has(l.id) ? [{ titre: trCm('carte.monter'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i - 1)), testID: `esport-cm-carte-${c.id}-monter` }] : []),
       ...(i < vues.length - 1 && !autos.has(l.id) ? [{ titre: trCm('carte.descendre'), onPress: () => deplacerCarte(c, l.id, indexServeur(toutes, vues.filter(x => x.id !== c.id), i + 1)), testID: `esport-cm-carte-${c.id}-descendre` }] : []),
       ...(li > 0 ? [{ titre: trCm('carte.liste_precedente'), onPress: () => deplacerCarte(c, listes[li - 1].id, (parListe.get(listes[li - 1].id) ?? []).filter(x => !x.archive).length), testID: `esport-cm-carte-${c.id}-gauche` }] : []),
@@ -889,6 +913,7 @@ export function Tableau({
                           maintenant={maintenant}
                           onOuvrir={() => (pendants.current.has(c.id) ? undefined : setOuverte(c.id))}
                           actions={pendants.current.has(c.id) ? [] : actionsCarte(c, l, i, vues)}
+                          onFavori={pendants.current.has(c.id) ? undefined : () => basculerFavori(c)}
                           glisser={d.droits.editer && !pendants.current.has(c.id) ? { debut: (x, y) => void debut(c, x, y), bouge, fin } : undefined}
                         />
                         </PlaceCarte>
@@ -1022,6 +1047,17 @@ export function Tableau({
               d.droits.editer && { titre: trCm('fond.changer'), onPress: () => setChoixFond(true), testID: 'esport-cm-tableau-fond' },
               d.droits.editer && { titre: trCm('etiquette.gerer'), onPress: () => setGestionEtiquettes(true), testID: 'esport-cm-tableau-etiquettes' },
               d.droits.acces && { titre: trCm('acces.menu'), onPress: () => setReglageAcces(true), testID: 'esport-cm-tableau-acces' },
+              // Cartes datées au calendrier du CM (migration 0074) : réglage partagé du tableau.
+              d.droits.gerer && {
+                titre: t.calendrier === false ? trCm('tableau.calendrier_afficher') : trCm('tableau.calendrier_masquer'),
+                onPress: () =>
+                  void agir('calendrier', async () => {
+                    await api.modifierTableau(t.id, { calendrier: t.calendrier === false });
+                    await recharger();
+                    return trCm(t.calendrier === false ? 'tableau.calendrier_affiche' : 'tableau.calendrier_masque');
+                  }),
+                testID: 'esport-cm-tableau-calendrier',
+              },
               d.droits.gerer && { titre: trCm('tableau.renommer'), onPress: () => setRenommer({ id: t.id, nom: nomTableau(t) }), testID: 'esport-cm-tableau-renommer' },
               d.droits.gerer &&
                 !t.cleDefaut && {
@@ -1485,6 +1521,7 @@ function TuileCarte({
   maintenant,
   onOuvrir,
   actions,
+  onFavori,
   glisser,
 }: {
   theme: ThemeHub;
@@ -1494,6 +1531,8 @@ function TuileCarte({
   maintenant: number;
   onOuvrir(): void;
   actions: ActionSecondaire[];
+  /** Étoile (migration 0074) : visible sur la tuile d'une carte favorite ; « Ajouter aux favoris » est dans le menu. */
+  onFavori?(): void;
   glisser?: { debut(x: number, y: number): void; bouge(x: number, y: number): void; fin(annuler: boolean): void };
 }) {
   // Carte terminée (colonne de fin) : coche verte, titre atténué, drapeau d'urgence conservé mais grisé, jamais en retard.
@@ -1599,6 +1638,7 @@ function TuileCarte({
           ) : null}
         </Pressable>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 2, paddingRight: 2 }}>
+          {c.favori && onFavori ? <EtoileFavori theme={theme} favori titre={c.titre} taille={14} onBasculer={onFavori} testID={`esport-cm-carte-${c.id}-favori`} /> : null}
           {glisser ? <Poignee theme={theme} titre={c.titre} glisser={glisser} testID={`esport-cm-carte-${c.id}-poignee`} /> : null}
           {actions.length ? <MenuActions theme={theme} compact actions={actions} testID={`esport-cm-carte-${c.id}-menu`} libelle={trCm('carte.actions', { titre: c.titre })} /> : null}
         </View>

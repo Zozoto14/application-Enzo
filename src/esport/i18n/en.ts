@@ -1413,6 +1413,7 @@ export const en: Record<Cle, string> = {
   'cat.typereunion.debrief': 'Match debrief',
   'cat.typereunion.staff': 'Staff',
   'cat.typereunion.autre': 'Other',
+  'cat.typereunion.review': 'Review',
   'cat.role.remplacant.nom': 'Substitute / Guest',
   'cat.role.remplacant.description': 'Limited read access.',
   'cat.preset.valorant_complet.nom': 'Full Valorant team',

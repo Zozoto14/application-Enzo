@@ -1547,6 +1547,7 @@ export const fr = {
   'cat.typereunion.debrief': 'Débrief de match',
   'cat.typereunion.staff': 'Staff',
   'cat.typereunion.autre': 'Autre',
+  'cat.typereunion.review': 'Review',
   'cat.role.remplacant.nom': 'Remplaçant / Invité',
   'cat.role.remplacant.description': 'Lecture limitée.',
   'cat.preset.valorant_complet.nom': 'Team Valorant complète',

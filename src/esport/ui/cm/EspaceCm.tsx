@@ -194,6 +194,7 @@ export function EspaceCm({
   onQuitter,
   onOuvrirTeam,
   sectionsTeam,
+  carteInitiale,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -210,6 +211,8 @@ export function EspaceCm({
   onOuvrirTeam?(id: string): void;
   /** Sections du CM du club, la team (Équipe CM, Planning, Dispos, Paramètres…) : fournies par RacineEsport. */
   sectionsTeam?: SectionsTeam;
+  /** Carte à ouvrir d'abord (To do du Dashboard, migration 0074) : son tableau, puis sa fiche. */
+  carteInitiale?: { tableauId: string; carteId: string };
 }) {
   const api = useMemo(() => apiCm(client), [client]);
   // Rubrique Sponsors (migration 0024) : permissions du club, indépendantes de la section CM.
@@ -225,6 +228,7 @@ export function EspaceCm({
   const [onglet, setOnglet] = useState<OngletCm>(() => {
     const permis: Partial<Record<OngletCm, boolean>> = { accueil, drive, sponsors, reunions, ressources, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
     // Section du CM du club (lien vers sa page de team) : vérifiée une fois la team lue.
+    if (carteInitiale && voirCm) return 'tableaux';
     if (ongletInitial && (ongletInitial.startsWith('team:') || (permis[ongletInitial as OngletBase] ?? voirCm))) return ongletInitial;
     return accueil ? 'accueil' : drive ? 'drive' : sponsors ? 'sponsors' : reunions ? 'reunions' : ressources ? 'ressources' : 'tableaux';
   });
@@ -232,7 +236,9 @@ export function EspaceCm({
   const [derniers, setDerniers] = useState<Partial<Record<GroupeCmId, OngletCm>>>({});
   // Le CM du club, la team (migrations 0068 et 0069) : ses sections dans l'espace (membres, planning, dispos…).
   const [detailTeam, setDetailTeam] = useState<DetailTeam | undefined>();
-  const [ouvert, setOuvert] = useState<string | undefined>();
+  const [ouvert, setOuvert] = useState<string | undefined>(carteInitiale?.tableauId);
+  // Fiche à ouvrir dans le tableau ouvert (To do du Dashboard, carte datée du calendrier).
+  const [carteOuverte, setCarteOuverte] = useState<string | undefined>(carteInitiale?.carteId);
   // Dossier du Drive à ouvrir (depuis « où est lié » d'une ressource) ; `n` relance l'ouverture du même dossier.
   const [dossierDrive, setDossierDrive] = useState<{ portee: string; id: string; n: number } | undefined>();
   // Pastille « Nouveau » des ressources partagées : aussi pour qui n'a que des ressources partagées.
@@ -266,7 +272,10 @@ export function EspaceCm({
   const courante = toutes.find(e => e.id === onglet);
   const groupe = groupes.find(g => g.entrees.some(e => e.id === onglet));
   const choisir = (id: OngletCm) => {
-    if (id === 'tableaux') setOuvert(undefined);
+    if (id === 'tableaux') {
+      setOuvert(undefined);
+      setCarteOuverte(undefined);
+    }
     setOnglet(id);
     setDerniers(d => ({ ...d, [groupeDeOnglet(id)]: id }));
   };
@@ -300,6 +309,7 @@ export function EspaceCm({
     choisir('drive');
   };
   const ouvrirTableau = (id: string) => {
+    setCarteOuverte(undefined);
     setOuvert(id);
     setOnglet('tableaux');
     setDerniers(d => ({ ...d, contenus: 'tableaux' }));
@@ -380,13 +390,25 @@ export function EspaceCm({
       ) : null}
       {onglet === 'tableaux' && voirCm ? (
         ouvert ? (
-          <Tableau theme={theme} api={api} id={ouvert} large={large} teams={teams} versionServeur={etat?.versions[ouvert]} onRetour={() => setOuvert(undefined)} />
+          <Tableau theme={theme} api={api} id={ouvert} large={large} teams={teams} versionServeur={etat?.versions[ouvert]} carteInitiale={carteOuverte} onRetour={() => setOuvert(undefined)} />
         ) : (
           <ListeTableauxCm theme={theme} api={api} large={large} onOuvrir={setOuvert} nonLus={etat?.nonLus?.tableaux} />
         )
       ) : null}
       {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={ouvrirTableau} /> : null}
-      {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} creerPost={moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.editer'))} onOuvrirTableau={ouvrirTableau} /> : null}
+      {onglet === 'calendrier' ? (
+        <Calendrier
+          theme={theme}
+          api={api}
+          large={large}
+          creerPost={moi.club.includes('cm.editer') || moi.teams.some(t => t.permissions.includes('cm.editer'))}
+          onOuvrirTableau={ouvrirTableau}
+          onOuvrirCarte={(tableauId, carteId) => {
+            ouvrirTableau(tableauId);
+            setCarteOuverte(carteId);
+          }}
+        />
+      ) : null}
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
       {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}

@@ -53,7 +53,7 @@ L'accueil de la team montre les derniers résumés.
   passe le dépôt en Terminé tout seul et prévient le déposant. **Remplacer le PDF** garde l'ancien dans
   l'historique (versions consultables par les rédacteurs). Sur iPhone et iPad (app native), le dépôt de PDF se fait
   depuis le PC ou le site.
-- **Types de réunion** : les types globaux (Hebdo, Mensuel, Débrief de match, Staff, Autre, gérés par le Fondateur)
+- **Types de réunion** : les types globaux (Hebdo, Mensuel, Débrief de match, Staff, Review — migration 0074 —, Autre, gérés par le Fondateur)
   et ceux de la team. Visibilité par type : « Team » ou « Staff ». Changer la visibilité d'un type s'applique aussi
   aux résumés déjà publiés.
 

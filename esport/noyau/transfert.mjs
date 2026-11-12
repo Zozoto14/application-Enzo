@@ -138,6 +138,8 @@ export const TABLES = [
   // Commentaires non lus (migration 0045) : état « vu » par compte, cartes suivies.
   ['cm_commentaires_vus', 'compte_id, cle'],
   ['cm_carte_suivis', 'carte_id, compte_id'],
+  // Cartes favorites par compte (migration 0074).
+  ['cm_carte_favoris', 'carte_id, compte_id'],
   ['cm_fichiers', 'id'],
   ['cm_pieces', 'id'],
   ['cm_activite', 'id'],

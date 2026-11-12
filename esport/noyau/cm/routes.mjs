@@ -19,6 +19,8 @@
  *   PATCH|DELETE      /cm/commentaires/:id ; DELETE /cm/pieces/:id ; POST /cm/pieces/:id/lien { telecharger }
  *   GET               /cm/a-valider ; /cm/urgences (cartes critiques et urgentes) ; /cm/terminees?semaines (cartes terminées par semaine) ; /cm/calendrier?du&au&reseau ; /cm/recherche?q
  *   GET               /cm/calendrier/teams?du&au                 calendriers des teams (lecture seule, superposés)
+ *   GET               /cm/todo                                   To do du Dashboard (favorites, cartes assignées ; migration 0074)
+ *   POST              /cm/cartes/:id/favori { favori } ; /cm/cartes/:id/terminer   étoile du compte ; ranger dans la colonne de fin
  *   GET|PUT           /cm/preferences ; /cm/preferences/:cle     choix d'affichage du compte (colonnes réduites…)
  *   GET               /cm/teams/:t ; POST …/depots ; GET …/matchs ; GET …/resume?genre&id&prefixe ; GET …/membres
  *   GET|POST          /cm/teams/:t/clips ; GET /cm/clips?statut&team ; PATCH|DELETE /cm/clips/:id ; POST …/carte ; POST …/lien
@@ -108,6 +110,8 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   if (n === 1 && a === 'terminees' && m === 'GET') return tb.terminees(acteur, { semaines: q.get('semaines') ? Number(q.get('semaines')) : undefined });
   if (n === 1 && a === 'calendrier' && m === 'GET') return tb.calendrier(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, reseau: q.get('reseau') || undefined });
   if (n === 1 && a === 'recherche' && m === 'GET') return tb.recherche(acteur, { q: q.get('q') || '' });
+  // To do du Dashboard (migration 0074) : favorites et cartes assignées des tableaux choisis.
+  if (n === 1 && a === 'todo' && m === 'GET') return tb.todo(acteur);
   // Calendriers des teams superposés au calendrier éditorial (lecture seule, ce que le compte a le droit de voir).
   if (n === 2 && a === 'calendrier' && b === 'teams' && m === 'GET' && cm.calendriers) return cm.calendriers.teams(acteur, { du: q.get('du') || undefined, au: q.get('au') || undefined, langue });
   // Choix d'affichage mémorisés par compte (migration 0042).
@@ -235,6 +239,8 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
       if (c === 'checklists') return tb.creerChecklist(acteur, b, corps);
       if (c === 'commentaires') return tb.commenter(acteur, b, corps);
       if (c === 'suivre') return tb.suivre(acteur, b, corps);
+      if (c === 'favori') return tb.favori(acteur, b, corps);
+      if (c === 'terminer') return tb.terminer(acteur, b);
       if (c === 'pieces') return tb.ajouterPiece(acteur, b, corps);
     }
   }

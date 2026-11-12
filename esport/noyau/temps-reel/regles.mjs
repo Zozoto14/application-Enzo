@@ -195,6 +195,8 @@ export function objetDe(chemin) {
 export function publicationsDe(methode, chemin, acteur) {
   if (methode === 'GET' || methode === 'HEAD' || methode === 'OPTIONS') return [];
   if (IGNORES.some(m => m.test(chemin)) && !/\/envois\/[^/]+\/fin$/.test(chemin)) return [];
+  // Carte favorite (migration 0074) : personnelle, seuls les autres appareils du compte relisent (To do du Dashboard).
+  if (/^\/cm\/cartes\/[^/]+\/favori$/.test(chemin)) return acteur?.compte ? [{ sujet: `compte:${acteur.compte}` }] : [];
   // Notifications lues, préférences du centre : les autres appareils du compte suivent.
   if (chemin === '/notifications' || chemin.startsWith('/notifications/')) return acteur?.compte ? [{ sujet: `compte:${acteur.compte}` }] : [];
   const objet = objetDe(chemin);
