@@ -5,6 +5,7 @@
  * de l'IA), images de maps déposées (lien signé, droits).
  */
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { banc, teamAvecMembres } from './aide.mjs';
 import { baseVierge, lireMigrations } from './base.mjs';
@@ -15,6 +16,7 @@ import { svgEtape } from '../noyau/strats/svg.mjs';
 import { appliquerChangement, normaliserChangements } from '../noyau/jeux/differences.mjs';
 import { donneesPourIa, reporterChampsLocaux, validerDonnees } from '../noyau/jeux/schema.mjs';
 import { verifierImageJeu } from '../noyau/jeux/images.mjs';
+import { mapValorant } from '../noyau/jeux/import.mjs';
 
 /** Une « image » PNG minimale (en-tête IHDR correct) de `l` × `h` pixels, en base64. */
 function pngBase64(l = 512, h = 512) {
@@ -340,29 +342,34 @@ function fauxWeb(maps, { images = {} } = {}) {
   return { fetchImport, demandes };
 }
 
-const MAP_ASCENT = {
-  uuid: '7eaecc1b-4337-bbf6-6ab9-04b8f06b3319',
-  displayName: 'Ascent',
-  tacticalDescription: 'A/B Sites',
-  displayIcon: 'https://media.valorant-api.com/maps/7eaecc1b/displayicon.png',
-  xMultiplier: 7e-5,
-  yMultiplier: -7e-5,
-  xScalarToAdd: 0.813895,
-  yScalarToAdd: 0.573242,
-  callouts: [
-    { regionName: 'Site', superRegionName: 'A', location: { x: 6000, y: -5000 } },
-    { regionName: 'Spawn', superRegionName: 'Defender Side', location: { x: 8000, y: -1000 } },
-    { regionName: 'Main', superRegionName: 'A', location: { x: 3000, y: -4000 } },
-  ],
-};
+/** Réponse réelle de https://valorant-api.com/v1/maps (abrégée : 6 maps, quelques callouts ; 2026-11-12). */
+const MAPS_VALORANT = JSON.parse(readFileSync(new URL('./donnees/valorant-api-maps.json', import.meta.url), 'utf8')).data;
+const MAP_ASCENT = MAPS_VALORANT.find(m => m.displayName === 'Ascent');
+const MAP_HAVEN = MAPS_VALORANT.find(m => m.displayName === 'Haven');
+
+test('valorant-api.com réel : maps hors compétition écartées (Gauntlet, The Range, Skirmish, Team Deathmatch), échelle et callouts', () => {
+  const maps = MAPS_VALORANT.map(mapValorant).filter(Boolean);
+  assert.deepEqual(maps.map(m => m.nom), ['Ascent', 'Haven'], 'displayIcon nul ou multiplicateurs à 0 : écartées');
+  const ascent = maps[0];
+  assert.equal(ascent.pxParMetre, 7, '7e-5 × 100 unités par mètre × 1000');
+  assert.equal(maps[1].pxParMetre, 7.5);
+  assert.deepEqual(ascent.reperes.map(r => r.nom).sort(), ['A Main', 'A Site', 'Attacker Spawn', 'B Main', 'B Site', 'Defender Spawn', 'Mid Top']);
+  assert.equal(ascent.reperes.find(r => r.nom === 'Defender Spawn').type, 'spawn-defense', 'les deux spawns gardés');
+  assert.equal(ascent.reperes.find(r => r.nom === 'Attacker Spawn').type, 'spawn-attaque');
+  // Toutes les positions tombent dans la minimap (repère 0..1000).
+  for (const m of maps) for (const r of m.reperes) assert.ok(r.x > 0 && r.x < 1000 && r.y > 0 && r.y < 1000, `${m.nom} ${r.nom} ${r.x},${r.y}`);
+  const site = MAP_ASCENT.callouts.find(c => c.regionName === 'Site' && c.superRegionName === 'A');
+  const a = ascent.reperes.find(r => r.nom === 'A Site');
+  assert.deepEqual([a.x, a.y], [Math.round((site.location.y * MAP_ASCENT.xMultiplier + MAP_ASCENT.xScalarToAdd) * 10000) / 10, Math.round((site.location.x * MAP_ASCENT.yMultiplier + MAP_ASCENT.yScalarToAdd) * 10000) / 10]);
+});
 
 test('import Valorant (faux valorant-api.com) : minimap déposée, échelle calculée, callouts ; idempotent ; adresses et types contrôlés', async () => {
-  const nouvelle = { ...MAP_ASCENT, uuid: 'n', displayName: 'Novamap', displayIcon: 'https://media.valorant-api.com/maps/n/displayicon.png', callouts: [] };
-  const range = { ...MAP_ASCENT, displayName: 'The Range', tacticalDescription: null, displayIcon: 'https://media.valorant-api.com/maps/r/displayicon.png' };
-  const piege = { ...MAP_ASCENT, displayName: 'Bind', displayIcon: 'https://exemple.invalid/bind.png' };
-  const web = fauxWeb([MAP_ASCENT, nouvelle, range, piege], {
+  const nouvelle = { ...MAP_HAVEN, uuid: 'n', displayName: 'Novamap', displayIcon: 'https://media.valorant-api.com/maps/n/displayicon.png', callouts: [] };
+  const piege = { ...MAP_HAVEN, displayName: 'Bind', displayIcon: 'https://exemple.invalid/bind.png' };
+  const web = fauxWeb([...MAPS_VALORANT, nouvelle, piege], {
     images: {
       [MAP_ASCENT.displayIcon]: { octets: pngOctets(1024, 1024) },
+      [MAP_HAVEN.displayIcon]: { octets: pngOctets(1024, 1000) },
       [nouvelle.displayIcon]: { octets: pngOctets(512, 512), type: 'text/html' },
     },
   });
@@ -373,10 +380,11 @@ test('import Valorant (faux valorant-api.com) : minimap déposée, échelle calc
   let r = await b.appel('/jeux/valorant/importer', { methode: 'POST', jeton: f, corps: {} });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   const lignes = Object.fromEntries(r.corps.rapport.map(l => [l.carte, l]));
-  assert.deepEqual(lignes.Ascent, { carte: 'Ascent', image: 'importee', echelle: 'importee', reperes: 3 });
+  assert.deepEqual(lignes.Ascent, { carte: 'Ascent', image: 'importee', echelle: 'importee', reperes: 7 });
+  assert.equal(lignes.Haven.image, 'importee');
   assert.equal(lignes.Novamap.erreur, 'import-type', 'type annoncé vérifié');
   assert.equal(lignes.Bind.erreur, 'import-adresse', 'hôte hors de la liste autorisée');
-  assert.equal(lignes['The Range'], undefined, 'map hors compétition ignorée');
+  for (const n of ['Gauntlet', 'The Range', 'District', 'Skirmish A']) assert.equal(lignes[n], undefined, `${n} : hors compétition, ignorée`);
   assert.ok(web.demandes.every(d => d.redirect === 'error'), 'jamais de redirection suivie');
   assert.ok(!web.demandes.some(d => d.url.includes('exemple.invalid')), 'aucune requête vers un hôte refusé');
   const ascent = r.corps.jeu.donnees.cartes.find(c => c.cle === 'ascent');
@@ -384,9 +392,10 @@ test('import Valorant (faux valorant-api.com) : minimap déposée, échelle calc
   assert.equal(ascent.echelle.methode, 'import');
   assert.equal(ascent.source.fournisseur, 'valorant-api.com');
   assert.ok(r.corps.jeu.images[ascent.fichier].url);
-  const site = ascent.reperes.find(x => x.type === 'site');
-  assert.deepEqual([site.nom, site.x, site.y, site.importe], ['A Site', Math.round((-5000 * 7e-5 + 0.813895) * 10000) / 10, Math.round((6000 * -7e-5 + 0.573242) * 10000) / 10, true]);
-  assert.equal(ascent.reperes.find(x => x.nom === 'Spawn').type, 'spawn-defense');
+  const site = ascent.reperes.find(x => x.nom === 'A Site');
+  assert.equal(site.type, 'site');
+  assert.equal(site.importe, true);
+  assert.equal(ascent.reperes.find(x => x.nom === 'Defender Spawn').type, 'spawn-defense');
   const nova = r.corps.jeu.donnees.cartes.find(c => c.cle === 'novamap');
   assert.equal(nova.actif, false, 'map ajoutée hors du pool');
   // Calibrage à la main, repère à la main : gardés ; second import idempotent (aucune nouvelle image).
@@ -403,7 +412,7 @@ test('import Valorant (faux valorant-api.com) : minimap déposée, échelle calc
   assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM jeu_images', [])).n), avant);
   const a2 = r.corps.jeu.donnees.cartes.find(c => c.cle === 'ascent');
   assert.equal(a2.echelle.pxParMetre, 10, 'calibrage manuel gardé');
-  assert.equal(a2.reperes.filter(x => x.importe).length, 3);
+  assert.equal(a2.reperes.filter(x => x.importe).length, 7);
   assert.ok(a2.reperes.some(x => x.nom === 'Mon repère'));
   // Réseau absent : erreur claire, profil intact.
   const b2 = await banc();

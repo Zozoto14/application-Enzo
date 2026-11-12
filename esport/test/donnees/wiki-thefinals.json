@@ -1,0 +1,374 @@
+{
+ "_": "Réponses JSON réelles (abrégées) de https://www.thefinals.wiki/w/api.php, enregistrées le 2026-11-12 (esport/test/cartes-proposees.test.mjs). Aucune image.",
+ "reponses": {
+  "https://www.thefinals.wiki/w/api.php?action=query&format=json&formatversion=2&meta=siteinfo&siprop=general%7Crightsinfo": {
+   "batchcomplete": true,
+   "query": {
+    "general": {
+     "mainpage": "Main Page",
+     "base": "https://www.thefinals.wiki/wiki/Main_Page",
+     "sitename": "THE FINALS Wiki",
+     "mainpageisdomainroot": false,
+     "logo": "https://www.thefinals.wiki/w/resources/assets/change-your-logo.svg",
+     "generator": "MediaWiki 1.46.0",
+     "phpversion": "8.5.12",
+     "phpsapi": "fpm-fcgi",
+     "dbtype": "mysql",
+     "dbversion": "10.11.18-MariaDB-0+deb12u1",
+     "imagewhitelistenabled": false,
+     "langconversion": true,
+     "linkconversion": true,
+     "titleconversion": true,
+     "linkprefixcharset": "",
+     "linkprefix": "",
+     "linktrail": "/^([a-z]+)(.*)$/sD",
+     "legaltitlechars": " %!\"$&'()*,\\-.\\/0-9:;=?@A-Z\\\\^_`a-z~\\x80-\\xFF+",
+     "invalidusernamechars": "@:>=",
+     "allunicodefixes": false,
+     "git-hash": "2d545afbbfe26273f266e7ec1a6e4223f1c7d7c6",
+     "git-branch": "REL1_46",
+     "case": "first-letter",
+     "lang": "en",
+     "fallback": [],
+     "rtl": false,
+     "fallback8bitEncoding": "windows-1252",
+     "readonly": false,
+     "writeapi": true,
+     "maxarticlesize": 2621440,
+     "timezone": "UTC",
+     "timeoffset": 0,
+     "articlepath": "/wiki/$1",
+     "scriptpath": "/w",
+     "script": "/w/index.php",
+     "variantarticlepath": false,
+     "server": "https://www.thefinals.wiki",
+     "servername": "www.thefinals.wiki",
+     "wikiid": "finalwiki",
+     "time": "2026-11-12T19:11:48Z",
+     "misermode": false,
+     "uploadsenabled": true,
+     "maxuploadsize": 104857600,
+     "minuploadchunksize": 1024,
+     "galleryoptions": {
+      "imagesPerRow": 0,
+      "imageWidth": 120,
+      "imageHeight": 120,
+      "captionLength": true,
+      "showBytes": true,
+      "showDimensions": true,
+      "mode": "traditional"
+     },
+     "thumblimits": {
+      "0": 120,
+      "1": 150,
+      "2": 180,
+      "3": 200,
+      "4": 220,
+      "5": 250,
+      "6": 300,
+      "7": 400
+     },
+     "imagelimits": {
+      "0": {
+       "width": 320,
+       "height": 240
+      },
+      "1": {
+       "width": 640,
+       "height": 480
+      },
+      "2": {
+       "width": 800,
+       "height": 600
+      },
+      "3": {
+       "width": 1024,
+       "height": 768
+      },
+      "4": {
+       "width": 1280,
+       "height": 1024
+      },
+      "5": {
+       "width": 2560,
+       "height": 2048
+      }
+     },
+     "favicon": "https://www.thefinals.wiki/w/resources/assets/favicon.ico",
+     "centralidlookupprovider": "local",
+     "allcentralidlookupproviders": [
+      "local"
+     ],
+     "interwikimagic": true,
+     "magiclinks": {
+      "ISBN": false,
+      "PMID": false,
+      "RFC": false
+     },
+     "categorycollation": "uppercase",
+     "nofollowlinks": true,
+     "nofollownsexceptions": [],
+     "nofollowdomainexceptions": [
+      "mediawiki.org"
+     ],
+     "externallinktarget": false,
+     "citeresponsivereferences": true,
+     "linter": {
+      "high": [
+       "deletable-table-tag",
+       "duplicate-ids",
+       "html5-misnesting",
+       "misc-tidy-replacement-issues",
+       "multiline-html-table-in-list",
+       "multiple-unclosed-formatting-tags",
+       "pwrap-bug-workaround",
+       "self-closed-tag",
+       "template-arg-in-extension-tag",
+       "tidy-font-bug",
+       "tidy-whitespace-bug",
+       "unclosed-quotes-in-heading"
+      ],
+      "medium": [
+       "bogus-image-options",
+       "fostered",
+       "misnested-tag",
+       "multi-colon-escape",
+       "wikilink-in-extlink"
+      ],
+      "low": [
+       "empty-heading",
+       "missing-end-tag",
+       "missing-end-tag-in-heading",
+       "night-mode-unaware-background-color",
+       "obsolete-tag",
+       "stripped-tag"
+      ]
+     }
+    },
+    "rightsinfo": {
+     "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+     "text": "Creative Commons Attribution-ShareAlike"
+    }
+   }
+  },
+  "https://www.thefinals.wiki/w/api.php?action=query&format=json&formatversion=2&gcmlimit=50&gcmnamespace=0&gcmtitle=Category%3AArenas&generator=categorymembers&prop=revisions&rvprop=content&rvslots=main": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 17,
+      "ns": 0,
+      "title": "Monaco",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{Outdated|reason=Arena was reworked with the release of [[PRIME TIME]] season|tiny=no}}{{Infobox Arena| image=Monaco_Arena_PrimeTime_Thumb.png| introduced=[[Closed Alpha]]| sponsors=[[OSPUZE]]|variants={{ArenaVariants/Infobox}}| gamemodes={{ArenaSupportedGamemodes/Infobox}} }}\n'''Monaco 2017''' was the first permanent [[Arenas|arena]] introduced to the game and was available for the first time in the [[Closed Alpha]]. It is based on the real-life town of [[wikipedia:Monaco-Ville|Monaco-Ville]] in the [[wikipedia:French Riviera|French Riviera]]. The arena is set on the [[wikipedia:Rock_of_Monaco|Rock of Monaco]] and features historic landmarks, dense urban streets, and lush gardens and parks\n==Overview==\n{{Infographic\n|infographic-class=right\n|display=image\n|Image=MonacoOverview Hi-Res.jpg\n|Text= Map of Monaco Arena by Embark Studios\n}}\nMonaco is a very open and wide arena with a lot of long sight lines and lengthy traversal times. It rewards players who can play from a distance and move through the environment quickly. It features 3 arena variants, each introducing new obstacles and challenges to overco"
+         }
+        }
+       }
+      ]
+     },
+     {
+      "pageid": 455,
+      "ns": 0,
+      "title": "Practice Range",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{Infobox Arena| image=TestRange Default.jpg| introduced=[[Closed Beta 1]] | sponsors=[[OSPUZE]]| variants={{ArenaVariants/Infobox}}| gamemodes={{ArenaSupportedGamemodes/Infobox}}}}\n[[File:TestRange Default.jpg|thumb|Practice Range loading screen]]\nThe '''Practice Range''' is a special [[Arenas|Arena]] in THE FINALS where contestants can test out different [[Builds]], [[Weapons]], [[Gadgets]], and [[Specializations]] in a closed space. It features various environments, structures, dummies, and training facilities. Contestants can swap their build and loadout at any point by using one of several terminals in the arena.\n== Locations ==\n{| class=\"wikitable\"\n!Name\n!Description\n|-\n|Hall\n|Contesta"
+         }
+        }
+       }
+      ]
+     },
+     {
+      "pageid": 1219,
+      "ns": 0,
+      "title": "Las Vegas",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{Removed|tiny=no}}{{Infobox Arena| image=Las-Vegas-2023_Loading-Screen.png| introduced=[[Season 1]]| sponsors=[[OSPUZE]]|variants={{ArenaVariants/Infobox}}| gamemodes={{ArenaSupportedGamemodes/Infobox}} }}'''Las Vegas 2032''' was introduced with the launch of the game and [[Season 1]], and was the fourth [[Arenas|Arena]] to be added. It is based on the real-life city of Las Vegas in the United States and features various casinos and attractions. \n\nIn [[Season 6]], Las Vegas was replaced by the reworked version [[Las Vegas Stadium]]. It later returned in the same season as a part of [[World Tour]] arena rotation, then later was added to the pull of  [[gamemodes]]. \n\nWith the release of [[PRI\n==Overview==\n{{Infographic\n|infographic-class=right\n|display=image\n|Image=Atsuhiro_Las-Vegas_Overview-MAp.png\n|Text= Map of Las Vegas Arena by Atsuhiro\n}}\nLas Vegas is a moderately sized arena with open streets and building roofs that are dangerously open to traverse and tight insides of the buildings that offer a lot of cover.\n\n==Arena Variants ==\n=== {{Icon|Standard Issue|size=medium}} Standard Issue ===\n{{Quote|A"
+         }
+        }
+       }
+      ]
+     },
+     {
+      "pageid": 7853,
+      "ns": 0,
+      "title": "Las Vegas Stadium",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{Stub}}{{Outdated|reason=Arena was reworked with the release of [[PRIME TIME]] season|tiny=no}}{{Infobox Arena| image=Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg| introduced=[[Season 6]]| sponsors=[[ALFA ACTA]], [[OSPUZE]], [[ENGIMO]]| gamemodes={{ArenaSupportedGamemodes/Infobox}}|variants={{ArenaVariants/Infobox}} }}\n'''Las Vegas Stadium''' was introduced with [[Season 6]] and was the ninth [[Arenas|arena]] to be added. It is a reworked version of [[Las Vegas]] that transforms the original into a championship stadium, with a focus on improved movement, cleaner sightlines, and smoother combat flow. Season 6 [[Sponsors|sponsors]] [[OSPUZE]], [[ALFA ACTA]], and [[ENGIMO]] took over the cas\n==Overview==\n{{Infographic\n|infographic-class=right\n|display=image\n|Image=Nama-404_Icon.png\n|Text= Map of Las Vegas Stadium Arena.\n}}\nLas Vegas is a moderately sized arena with open streets and building roofs that are dangerously open to traverse and tight insides of the buildings that offer a lot of cover.\n\n==Arena Variants ==\n=== {{Icon|Standard Issue|size=medium}} Standard Issue ===\n{{Quote|A standard arena, ready"
+         }
+        }
+       }
+      ]
+     },
+     {
+      "pageid": 8183,
+      "ns": 0,
+      "title": "NOZOMI/CITADEL",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{DISPLAYTITLE:NOZOMI/CITADEL}}\n{{Infobox Arena| image=NOZOMI Placeholder.png| introduced=[[Season 7]]| sponsors=[[CNS]]<br>[[VAIIYA]]| gamemodes={{ArenaSupportedGamemodes/Infobox}}|variants={{ArenaVariants/Infobox}} }}\n'''NOZOMI/CITADEL''' was introduced with [[Season 7]] and was the twelfth [[Arenas|Arena]] to be added. The location of this arena is heavily inspired by Japan, especially Tokyo. The arena is split into two parts: Nozomi, the [[CNS]] district feels more playful, overgrown, colorful, and inspired by neon-punk aesthetics; this part of the map is free-flowing, allowing for creative approaches. Citadel, the [[VAIIYA]] district feels more dystopian, sterile, industrial, and minima\n==Overview==\n{{Infographic\n|infographic-class=right\n|display=image\n|Image=NozomiCitadel_Overview.png\n|Text= Map of NOZOMI/CITADEL Arena by Embark Studios\n}}\nNOZOMI/CITADEL is a medium sized arena that offers multitude of different environments, from close quarter residential buildings to open areas. Multiple sections are separated by the void but offer multiple different ways to approach them. Arena rewards adaptabil"
+         }
+        }
+       }
+      ]
+     },
+     {
+      "pageid": 17652,
+      "ns": 0,
+      "title": "Starlight Hollow",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{Stub}}{{Infobox Arena| image=Starlight_Hollow_Standard_Day.png| introduced=[[Season 11]]| sponsors=[[ALFA ACTA]]| variants={{ArenaVariants/Infobox}}| gamemodes={{ArenaSupportedGamemodes/Infobox}}}}\n'''Starlight Hollow''' was introduced with [[Season 10]] and was the fourteenth permanent [[Arenas|Arena]] to be added. It follows the fantasy theming of the season, featuring medieval villages and displaying a castle in the distance. Map is mostly open field with occasional patches of trees and 3 villages that are comprised of wooden houses of varying size. Map was created for [[Point Break]] and [[Team Deathmatch]] modes, so it is split into 3 playable areas, each featuring one of the villages\n==Overview==\n{{Infographic\n|infographic-class=right\n|display=image\n|Image=Starlight Hollow_Overview.png\n|Text= \n}}\nStarlight Hollow is a large arena, primarily getting it size from how long it spans in a single direction. It is a very open map, offering very little cover. Arena rewards mobility and distant engagements. It features a single variant with two different time-of-day modifiers that change visibility of the"
+         }
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://www.thefinals.wiki/w/api.php?action=query&format=json&formatversion=2&prop=revisions&rvprop=content&rvslots=main&titles=Template%3AArenaVariantData": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 23562,
+      "ns": 10,
+      "title": "Template:ArenaVariantData",
+      "revisions": [
+       {
+        "slots": {
+         "main": {
+          "contentmodel": "wikitext",
+          "contentformat": "text/x-wiki",
+          "content": "{{ArenaVariantData/TableIntro}}\n{{Arenas\n|Arena=Monaco\n|Variant=Standard Issue\n|Image=Monaco Default Afternoon.jpg\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash, Team Deathmatch, Power Shift, Point Break, Cashout (Bots)\n|LimitedTimeModes=Bank It, Head2Head\n}}\n{{Arenas\n|Arena=Monaco\n|Variant=Suspended Structures\n|Image=Monaco SuspendedStructures Afternoon.jpg\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash\n|LimitedTimeModes=Bank It, Head2Head\n}}\n{{Arenas\n|Arena=Monaco\n|Variant=Duck and Cover\n|Image=Monaco DuckAndCover Afternoon.jpg\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash\n|LimitedTimeModes=Bank It, Head2Head\n}}\n{{Arenas\n|Arena=Las Vegas\n|Variant=Standard Issue\n|Image=Las-Vegas-2023 Loading-Screen.png\n|TemporaryUnavailableModes=Cashout, Ranked Cashout, Quick Cash, Cashout (Bots)\n|LimitedTimeModes=Bank It, Head2Head\n}}\n{{Arenas\n|Arena=Las Vegas\n|Variant=Sandstorm\n|TemporaryUnavailableModes=Cashout, Ranked Cashout, Quick Cash\n|LimitedTimeModes=Bank It, Head2Head\n}}\n{{Arenas\n|Arena=Las Vegas\n|Variant=Tripwires & Turrets\n|Image=THE FINALS Steal The Spotlight.png\n|LimitedTimeModes=Steal The Spotlight\n}}\n{{Arenas\n|Arena=Las Vegas Stadium\n|Variant=Standard Issue\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash, Team Deathmatch, Power Shift, Point Break\n}}\n{{Arenas\n|Arena=Las Vegas Stadium\n|Variant=Sandstorm\n|Image=Las Vegas Stadium Sandstorm.png\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash\n}}\n{{Arenas\n|Arena=NOZOMI/CITADEL\n|Variant=Standard Issue\n|Image=NOZOMI_Afternoon.png\n|Gamemodes=Cashout, Ranked Cashout, Quick Cash, Power Shift, Team Deathmatch, Point Break, Solo Showdown\n}}\n{{Arenas\n|Arena=Starlight Hollow\n|Variant=Standard Issue\n|Image=Starlight Hollow Standard Day.png\n|Gamemodes=Point Break, Team Deathmatch\n|LimitedTimeModes=Dragon's Claim\n}}\n"
+         }
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://www.thefinals.wiki/w/api.php?action=query&format=json&formatversion=2&iiprop=url%7Csize%7Cmime&iiurlwidth=2048&prop=imageinfo&titles=File%3ALoading+Screen+Las+Vegas+Stadium+Afternoon.jpg%7CFile%3AMonacoOverview+Hi-Res.jpg%7CFile%3AMonaco+Arena+PrimeTime+Thumb.png%7CFile%3ANozomiCitadel+Overview.png": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 1093,
+      "ns": 6,
+      "title": "File:MonacoOverview Hi-Res.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 579966,
+        "width": 2751,
+        "height": 2646,
+        "thumburl": "https://www.thefinals.wiki/w/images/thumb/c/c1/MonacoOverview_Hi-Res.jpg/2048px-MonacoOverview_Hi-Res.jpg.webp",
+        "thumbwidth": 2048,
+        "thumbheight": 1970,
+        "responsiveUrls": {
+         "2": "https://www.thefinals.wiki/w/images/c/c1/MonacoOverview_Hi-Res.jpg"
+        },
+        "url": "https://www.thefinals.wiki/w/images/c/c1/MonacoOverview_Hi-Res.jpg",
+        "descriptionurl": "https://www.thefinals.wiki/wiki/File:MonacoOverview_Hi-Res.jpg",
+        "descriptionshorturl": "https://www.thefinals.wiki/w/index.php?curid=1093",
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 7857,
+      "ns": 6,
+      "title": "File:Loading Screen Las Vegas Stadium Afternoon.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 996920,
+        "width": 2500,
+        "height": 1406,
+        "thumburl": "https://www.thefinals.wiki/w/images/thumb/f/fa/Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg/2048px-Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg.webp",
+        "thumbwidth": 2048,
+        "thumbheight": 1152,
+        "responsiveUrls": {
+         "2": "https://www.thefinals.wiki/w/images/f/fa/Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg"
+        },
+        "url": "https://www.thefinals.wiki/w/images/f/fa/Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg",
+        "descriptionurl": "https://www.thefinals.wiki/wiki/File:Loading_Screen_Las_Vegas_Stadium_Afternoon.jpg",
+        "descriptionshorturl": "https://www.thefinals.wiki/w/index.php?curid=7857",
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 8309,
+      "ns": 6,
+      "title": "File:NozomiCitadel Overview.png",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1044084,
+        "width": 2048,
+        "height": 2048,
+        "thumburl": "https://www.thefinals.wiki/w/images/d/dd/NozomiCitadel_Overview.png",
+        "thumbwidth": 2048,
+        "thumbheight": 2048,
+        "url": "https://www.thefinals.wiki/w/images/d/dd/NozomiCitadel_Overview.png",
+        "descriptionurl": "https://www.thefinals.wiki/wiki/File:NozomiCitadel_Overview.png",
+        "descriptionshorturl": "https://www.thefinals.wiki/w/index.php?curid=8309",
+        "mime": "image/png"
+       }
+      ]
+     },
+     {
+      "pageid": 28385,
+      "ns": 6,
+      "title": "File:Monaco Arena PrimeTime Thumb.png",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 3263641,
+        "width": 1920,
+        "height": 1080,
+        "thumburl": "https://www.thefinals.wiki/w/images/7/7d/Monaco_Arena_PrimeTime_Thumb.png",
+        "thumbwidth": 1920,
+        "thumbheight": 1080,
+        "url": "https://www.thefinals.wiki/w/images/7/7d/Monaco_Arena_PrimeTime_Thumb.png",
+        "descriptionurl": "https://www.thefinals.wiki/wiki/File:Monaco_Arena_PrimeTime_Thumb.png",
+        "descriptionshorturl": "https://www.thefinals.wiki/w/index.php?curid=28385",
+        "mime": "image/png"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

@@ -38,8 +38,9 @@ import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
 import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, reporterChampsLocaux, validerDonnees, validerEntete } from './schema.mjs';
 import { servicesImagesJeux, verifierOctetsImage, TYPES_IMAGE_JEU } from './images.mjs';
-import { CARTES_THEFINALS, HOTES_VALORANT, TAILLE_MAX_IMAGE_IMPORT, TAILLE_MAX_JSON_IMPORT, URL_MAPS_VALORANT, echelleApproxTheFinals, echelleDepuisUnitesParMetre, mapValorant, telechargerBorne } from './import.mjs';
+import { CARTES_THEFINALS, HOTES_VALORANT, TAILLE_MAX_IMAGE_IMPORT, TAILLE_MAX_JSON_IMPORT, URL_MAPS_VALORANT, echelleApproxTheFinals, echelleDepuisUnitesParMetre, fusionnerReperes, mapValorant, telechargerBorne } from './import.mjs';
 import { modeleDuJeu } from '../strats/modeles.mjs';
+import { servicesCartesProposees } from './cartesProposees.mjs';
 
 export const PERMISSION_JEUX = 'jeux.gerer';
 export const PERMISSIONS_GLOBALES = [PERMISSION_JEUX];
@@ -141,6 +142,8 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
   }
 
   const donneesDe = j => validerDonnees(jsonOu(j.donnees, {}), { tolerant: true }).donnees;
+  // Maps proposées (migration 0078) : préparées par le serveur, appliquées au profil seulement à la validation.
+  const proposees = servicesCartesProposees({ base, images, fetchImport, maintenant, exigerGestion, ligneJeu, donneesDe, ecrireVersion, detail, modeleDe: j => modeleDuJeu(j.modele_strat, j.cle) });
 
   function resumeProfil(d) {
     return {
@@ -274,14 +277,9 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
             }
           }
           // Callouts importés : remplacés à chaque import ; les repères posés à la main restent.
-          const manuels = (c.reperes ?? []).filter(r => !r.importe);
-          const pris = new Set(manuels.map(r => r.cle));
-          const importes = m.reperes
-            .map(r => ({ ...r, cle: cleDe(r.nom) }))
-            .filter(r => r.cle && !pris.has(r.cle) && (pris.add(r.cle), true))
-            .slice(0, Math.max(0, 120 - manuels.length));
-          c.reperes = [...manuels, ...importes.map(r => ({ ...r, importe: true }))];
-          ligne.reperes = importes.length;
+          const f = fusionnerReperes(c.reperes, m.reperes);
+          c.reperes = f.reperes;
+          ligne.reperes = f.n;
         } catch (e) {
           if (!e?.code) throw e;
           ligne.erreur = e.code;
@@ -435,6 +433,7 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     const purge = await images.preparerPurge(cle);
     await base.lot([
       ...purge.instructions,
+      proposees.purge(cle),
       { sql: 'DELETE FROM ia_propositions WHERE jeu_cle = ?', params: [cle] },
       { sql: "UPDATE ia_travaux SET statut = 'abandonne', maj_le = ? WHERE jeu_cle = ? AND statut IN ('attente', 'pret')", params: [iso(t), cle] },
       { sql: 'DELETE FROM jeu_versions WHERE jeu_cle = ?', params: [cle] },
@@ -1407,6 +1406,12 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     pourTeam,
     deposerImage,
     importerCartes,
+    cartesProposees: proposees.liste,
+    preparerCartes: proposees.preparer,
+    validerCartes: proposees.valider,
+    rejeterCartes: proposees.rejeter,
+    remplacerImageProposee: proposees.remplacerImage,
+    calibrerProposee: proposees.calibrer,
     servirImage: images.servir,
     creer,
     modifier,

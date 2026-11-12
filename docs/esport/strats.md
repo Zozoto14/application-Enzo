@@ -89,9 +89,10 @@ Suppr · Ctrl+S · Ctrl+D dupliquer l'étape · [ et ] étapes · flèches : dé
 ## Ce que le Fondateur prépare (Administration › Jeux)
 
 1. Choisir le **modèle de strat** de chaque jeu (Valorant : déjà `valorant` ; The Finals : `thefinals`).
-2. **Importer les images et l'échelle** (fiche du jeu, carte « Images et échelle des maps ») : pour Valorant, un clic
-   (minimaps de valorant-api.com, échelle calculée, callouts) ; pour The Finals, collez une adresse d'image par map
-   (ou déposez les images à la main) ; aucune image n'est dans le dépôt de code.
+2. **Maps proposées** (fiche du jeu) : « Préparer les maps (à valider) » ; The Finals depuis le wiki communautaire
+   (vues de dessus, pool suggéré, échelle approximative), Valorant depuis valorant-api.com (minimaps, échelle
+   calculée, callouts) ; revoir, puis « Valider toutes » (voir profils-jeu.md). L'import direct (carte « Images et
+   échelle des maps ») reste possible ; aucune image n'est dans le dépôt de code.
 3. **Calibrer** ce qui reste approximatif (The Finals : échelle par défaut « à vérifier ») avec deux points.
 4. Tracer les **callouts** et poser les **repères** (sites A/B/C, spawns ; cashouts et coffres pour The Finals ;
    étages).

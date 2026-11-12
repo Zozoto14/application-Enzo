@@ -1,6 +1,15 @@
 {
  "_": "Messages d'erreur de l'API (français, avec un code stable) -> anglais. Utilisé par l'app (src/esport/i18n) et le bot Discord ; contrôlé par esport/test/langues.test.mjs.",
  "messages": {
+  "Réponse du wiki The Finals illisible.": "Unreadable response from The Finals wiki.",
+  "Le wiki The Finals a refusé la requête.": "The Finals wiki refused the request.",
+  "Le wiki The Finals ne liste aucune arène.": "The Finals wiki lists no arena.",
+  "Profil complet : 80 maps au plus.": "Profile full: 80 maps at most.",
+  "Aucune map à valider.": "No map to approve.",
+  "Aucune map à rejeter.": "No map to reject.",
+  "Proposition introuvable.": "Proposal not found.",
+  "Cette proposition a déjà été validée ou rejetée.": "This proposal has already been approved or rejected.",
+  "Calibrage invalide : deux points distincts et une distance réelle en mètres.": "Invalid calibration: two distinct points and a real distance in metres.",
   "Réponse de valorant-api.com illisible.": "Unreadable response from valorant-api.com.",
   "valorant-api.com ne donne aucune map exploitable.": "valorant-api.com gives no usable map.",
   "Import automatique : Valorant et The Finals seulement (déposez les images à la main).": "Automatic import: Valorant and The Finals only (upload images manually).",

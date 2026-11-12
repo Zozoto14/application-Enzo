@@ -1,0 +1,322 @@
+{
+ "status": 200,
+ "data": [
+  {
+   "uuid": "dd3a1cd9-41b1-50ea-3bd6-a7bb3c5978bd",
+   "displayName": "Gauntlet",
+   "narrativeDescription": null,
+   "tacticalDescription": null,
+   "coordinates": null,
+   "displayIcon": null,
+   "listViewIcon": "https://media.valorant-api.com/maps/dd3a1cd9-41b1-50ea-3bd6-a7bb3c5978bd/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/dd3a1cd9-41b1-50ea-3bd6-a7bb3c5978bd/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/dd3a1cd9-41b1-50ea-3bd6-a7bb3c5978bd/splash.png",
+   "backgroundImage": null,
+   "stylizedBackgroundImage": null,
+   "premierBackgroundImage": null,
+   "assetPath": "ShooterGame/Content/Maps/AbilityDraft/ADraft_PrimaryAsset",
+   "mapUrl": "/Game/Maps/AbilityDraft/AbilityDraft",
+   "xMultiplier": 0,
+   "yMultiplier": 0,
+   "xScalarToAdd": 0,
+   "yScalarToAdd": 0,
+   "callouts": null
+  },
+  {
+   "uuid": "7eaecc1b-4337-bbf6-6ab9-04b8f06b3319",
+   "displayName": "Ascent",
+   "narrativeDescription": null,
+   "tacticalDescription": "A/B Sites",
+   "coordinates": "45°26'BF'N,12°20'Q'E",
+   "displayIcon": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/displayicon.png",
+   "listViewIcon": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/splash.png",
+   "backgroundImage": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/backgroundimage.png",
+   "stylizedBackgroundImage": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/stylizedbackgroundimage.png",
+   "premierBackgroundImage": "https://media.valorant-api.com/maps/7eaecc1b-4337-bbf6-6ab9-04b8f06b3319/premierbackgroundimage.png",
+   "assetPath": "ShooterGame/Content/Maps/Ascent/Ascent_PrimaryAsset",
+   "mapUrl": "/Game/Maps/Ascent/Ascent",
+   "xMultiplier": 7e-05,
+   "yMultiplier": -7e-05,
+   "xScalarToAdd": 0.813895,
+   "yScalarToAdd": 0.573242,
+   "callouts": [
+    {
+     "regionName": "Main",
+     "superRegion": "ECalloutSuperRegion::A",
+     "superRegionName": "A",
+     "location": {
+      "x": 5321.6206,
+      "y": -4710.1274,
+      "z": 399.99994
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Site",
+     "superRegion": "ECalloutSuperRegion::A",
+     "superRegionName": "A",
+     "location": {
+      "x": 6153.585,
+      "y": -6626.2114,
+      "z": 499.99933
+     },
+     "scale3D": {
+      "x": 1,
+      "y": 1.0309942,
+      "z": 1
+     },
+     "rotation": null
+    },
+    {
+     "regionName": "Spawn",
+     "superRegion": "ECalloutSuperRegion::AttackerSide",
+     "superRegionName": "Attacker Side",
+     "location": {
+      "x": 60,
+      "y": 50,
+      "z": 190
+     },
+     "scale3D": {
+      "x": 1,
+      "y": 1,
+      "z": 4.25
+     },
+     "rotation": {
+      "pitch": 0,
+      "yaw": 90.00012,
+      "roll": 0
+     }
+    },
+    {
+     "regionName": "Main",
+     "superRegion": "ECalloutSuperRegion::B",
+     "superRegionName": "B",
+     "location": {
+      "x": -1983.6713,
+      "y": -5840.8125,
+      "z": 100
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Site",
+     "superRegion": "ECalloutSuperRegion::B",
+     "superRegionName": "B",
+     "location": {
+      "x": -2344.065,
+      "y": -7548.511,
+      "z": 99.33539
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Spawn",
+     "superRegion": "ECalloutSuperRegion::DefenderSide",
+     "superRegionName": "Defender Side",
+     "location": {
+      "x": 1995.2354,
+      "y": -9744.923,
+      "z": 300.0053
+     },
+     "scale3D": {
+      "x": 1,
+      "y": 1.0453641,
+      "z": 1
+     },
+     "rotation": {
+      "pitch": 0,
+      "yaw": 90.526955,
+      "roll": 0
+     }
+    },
+    {
+     "regionName": "Top",
+     "superRegion": "ECalloutSuperRegion::Mid",
+     "superRegionName": "Mid",
+     "location": {
+      "x": 2753.9297,
+      "y": -2129.6155,
+      "z": 400
+     },
+     "scale3D": null,
+     "rotation": null
+    }
+   ]
+  },
+  {
+   "uuid": "a9009649-421f-d5d5-f80c-0cbe02c125bb",
+   "displayName": "Skirmish A",
+   "narrativeDescription": null,
+   "tacticalDescription": null,
+   "coordinates": null,
+   "displayIcon": null,
+   "listViewIcon": "https://media.valorant-api.com/maps/a9009649-421f-d5d5-f80c-0cbe02c125bb/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/a9009649-421f-d5d5-f80c-0cbe02c125bb/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/a9009649-421f-d5d5-f80c-0cbe02c125bb/splash.png",
+   "backgroundImage": "https://media.valorant-api.com/maps/a9009649-421f-d5d5-f80c-0cbe02c125bb/backgroundimage.png",
+   "stylizedBackgroundImage": "https://media.valorant-api.com/maps/a9009649-421f-d5d5-f80c-0cbe02c125bb/stylizedbackgroundimage.png",
+   "premierBackgroundImage": null,
+   "assetPath": "ShooterGame/Content/Maps/Duel/Duel_1/Skirmish_1_PrimaryAsset",
+   "mapUrl": "/Game/Maps/Duel/Duel_1/Skirmish_A",
+   "xMultiplier": 0,
+   "yMultiplier": 0,
+   "xScalarToAdd": 0,
+   "yScalarToAdd": 0,
+   "callouts": null
+  },
+  {
+   "uuid": "690b3ed2-4dff-945b-8223-6da834e30d24",
+   "displayName": "District",
+   "narrativeDescription": null,
+   "tacticalDescription": null,
+   "coordinates": null,
+   "displayIcon": "https://media.valorant-api.com/maps/690b3ed2-4dff-945b-8223-6da834e30d24/displayicon.png",
+   "listViewIcon": "https://media.valorant-api.com/maps/690b3ed2-4dff-945b-8223-6da834e30d24/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/690b3ed2-4dff-945b-8223-6da834e30d24/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/690b3ed2-4dff-945b-8223-6da834e30d24/splash.png",
+   "backgroundImage": null,
+   "stylizedBackgroundImage": "https://media.valorant-api.com/maps/690b3ed2-4dff-945b-8223-6da834e30d24/stylizedbackgroundimage.png",
+   "premierBackgroundImage": null,
+   "assetPath": "ShooterGame/Content/Maps/HURM/HURM_Alley/HURM_Alley_PrimaryAsset",
+   "mapUrl": "/Game/Maps/HURM/HURM_Alley/HURM_Alley",
+   "xMultiplier": 0,
+   "yMultiplier": 0,
+   "xScalarToAdd": 0,
+   "yScalarToAdd": 0,
+   "callouts": [
+    {
+     "regionName": "Box",
+     "superRegion": "ECalloutSuperRegion::AttackerSide",
+     "superRegionName": "Attacker Side",
+     "location": {
+      "x": -2225,
+      "y": 1700,
+      "z": -200
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Nest",
+     "superRegion": "ECalloutSuperRegion::AttackerSide",
+     "superRegionName": "Attacker Side",
+     "location": {
+      "x": -2200,
+      "y": 800,
+      "z": -200
+     },
+     "scale3D": null,
+     "rotation": null
+    }
+   ]
+  },
+  {
+   "uuid": "ee613ee9-28b7-4beb-9666-08db13bb2244",
+   "displayName": "The Range",
+   "narrativeDescription": null,
+   "tacticalDescription": null,
+   "coordinates": "45°26'FF'N,12°20'Q'E",
+   "displayIcon": null,
+   "listViewIcon": "https://media.valorant-api.com/maps/ee613ee9-28b7-4beb-9666-08db13bb2244/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/ee613ee9-28b7-4beb-9666-08db13bb2244/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/ee613ee9-28b7-4beb-9666-08db13bb2244/splash.png",
+   "backgroundImage": null,
+   "stylizedBackgroundImage": null,
+   "premierBackgroundImage": null,
+   "assetPath": "ShooterGame/Content/Maps/Poveglia/Poveglia_PrimaryAsset",
+   "mapUrl": "/Game/Maps/Poveglia/Range",
+   "xMultiplier": 0,
+   "yMultiplier": 0,
+   "xScalarToAdd": 0,
+   "yScalarToAdd": 0,
+   "callouts": null
+  },
+  {
+   "uuid": "2bee0dc9-4ffe-519b-1cbd-7fbe763a6047",
+   "displayName": "Haven",
+   "narrativeDescription": null,
+   "tacticalDescription": "A/B/C Sites",
+   "coordinates": "27°28'A'N,89°38'WZ'E",
+   "displayIcon": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/displayicon.png",
+   "listViewIcon": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/listviewicon.png",
+   "listViewIconTall": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/listviewicontall.png",
+   "splash": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/splash.png",
+   "backgroundImage": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/backgroundimage.png",
+   "stylizedBackgroundImage": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/stylizedbackgroundimage.png",
+   "premierBackgroundImage": "https://media.valorant-api.com/maps/2bee0dc9-4ffe-519b-1cbd-7fbe763a6047/premierbackgroundimage.png",
+   "assetPath": "ShooterGame/Content/Maps/Triad/Triad_PrimaryAsset",
+   "mapUrl": "/Game/Maps/Triad/Triad",
+   "xMultiplier": 7.5e-05,
+   "yMultiplier": -7.5e-05,
+   "xScalarToAdd": 1.09345,
+   "yScalarToAdd": 0.642728,
+   "callouts": [
+    {
+     "regionName": "Site",
+     "superRegion": "ECalloutSuperRegion::A",
+     "superRegionName": "A",
+     "location": {
+      "x": 6309.3076,
+      "y": -9225.703,
+      "z": 300
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Spawn",
+     "superRegion": "ECalloutSuperRegion::AttackerSide",
+     "superRegionName": "Attacker Side",
+     "location": {
+      "x": 1741.7622,
+      "y": -2642.7925,
+      "z": 278.31885
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Site",
+     "superRegion": "ECalloutSuperRegion::B",
+     "superRegionName": "B",
+     "location": {
+      "x": 1884.706,
+      "y": -9231.335,
+      "z": 700.1339
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Site",
+     "superRegion": "ECalloutSuperRegion::C",
+     "superRegionName": "C",
+     "location": {
+      "x": -2378.1328,
+      "y": -9010.557,
+      "z": 199.99994
+     },
+     "scale3D": null,
+     "rotation": null
+    },
+    {
+     "regionName": "Spawn",
+     "superRegion": "ECalloutSuperRegion::DefenderSide",
+     "superRegionName": "Defender Side",
+     "location": {
+      "x": 2946.3042,
+      "y": -12714.707,
+      "z": 300.0011
+     },
+     "scale3D": null,
+     "rotation": null
+    }
+   ]
+  }
+ ]
+}

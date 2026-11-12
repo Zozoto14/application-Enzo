@@ -46,12 +46,49 @@ dans son stockage, avec leur source (fournisseur, adresse, date, empreinte) :
   depuis `xMultiplier` (1 m = 100 unités du jeu : unités par mètre = |xMultiplier| × 100 × 1000), callouts
   (`regionName`, `superRegionName`, `location` → repères : sites, spawns, callouts). Les maps de compétition absentes
   du profil sont ajoutées **hors du pool** (à cocher) ;
-- **The Finals** : pas d'API officielle : une adresse https d'image par map, saisie dans la carte d'import (aucune
-  adresse fiable n'est pré-remplie) ; échelle **approximative** par défaut (1000 unités ≈ 250 m), marquée « à vérifier ».
+  Vérifié sur l'API réelle (2026-11) : les maps hors compétition (Gauntlet, The Range, Skirmish, entraînement) ont
+  `displayIcon` nul et des multiplicateurs à 0, les maps de Team Deathmatch des multiplicateurs à 0 : écartées ; les
+  deux spawns s'appellent « Attacker Spawn » et « Defender Spawn », les callouts du milieu « Mid … » ;
+- **The Finals** : import direct par adresses https saisies (une par map) ; préférez « Maps proposées » ci-dessous ;
+  échelle **approximative** par défaut (1000 unités ≈ 250 m), marquée « à vérifier ».
 Sécurité : https vers un site public (Valorant : `valorant-api.com`, `media.valorant-api.com` seulement), aucune
 redirection suivie, 15 s, 10 Mo par image, type annoncé et contenu vérifiés. Idempotent : une image inchangée n'est
 pas re-déposée, les callouts importés sont remplacés, un calibrage fait à la main et une image déposée à la main sont
 gardés (case « Remplacer aussi les images déposées à la main » pour forcer).
+
+**Maps proposées** (fiche du jeu, carte « Maps proposées », Valorant et The Finals) : le serveur PRÉPARE les maps,
+le gestionnaire les VALIDE ; **rien n'est appliqué au profil avant la validation**.
+- **The Finals** : wiki communautaire THE FINALS Wiki (wiki.gg, MediaWiki), API `https://www.thefinals.wiki/w/api.php` :
+  arènes de la catégorie `Category:Arenas` ; variantes et modes lus dans `Template:ArenaVariantData` (une arène
+  sans aucun mode Cashout n'est pas proposée : ancienne Las Vegas, Practice Range, arènes d'événement) ; **pool
+  compétitif suggéré** si « Ranked Cashout » ; image : la **vue de dessus** de la section « Overview » de la page
+  (`{{Infographic|Image=…}}`), sinon l'illustration de l'arène (signalée « pas de vue de dessus ») ; licence lue
+  dans `meta=siteinfo` (aujourd'hui Creative Commons Attribution-ShareAlike 4.0) et **attribution enregistrée**
+  avec l'image (« Source : THE FINALS Wiki (wiki.gg), page « Monaco » ; textes sous licence … ») ; échelle
+  **approximative** (1000 unités ≈ 250 m), à vérifier ; aucun repère ni étage (le wiki n'en donne pas les
+  coordonnées). Vérifié sur le wiki réel (2026-11) : 11 arènes proposées (Bernal, Fangwai City, Fortune Stadium,
+  Galaxy Estates, Kyoto, Las Vegas Stadium, Monaco, NOZOMI/CITADEL, Seoul, Skyway Stadium, SYS$HORIZON), toutes
+  avec image, dont 10 vues de dessus (Las Vegas Stadium : illustration).
+- **Valorant** : valorant-api.com, comme l'import direct ; l'écran montre ce que la validation changera (nouvelle
+  map, image ajoutée / remplacée / identique, échelle, nombre de callouts).
+
+Pour le Fondateur (ou un gestionnaire des jeux) :
+1. Administration › Jeux › le jeu (The Finals ou Valorant) › carte « Maps proposées » › **Préparer les maps (à
+   valider)**. Le serveur télécharge tout (une dizaine de secondes) ; chaque map arrive « À valider ».
+2. Pour chaque map : regardez l'aperçu, l'échelle, la source et la licence, le pool suggéré.
+   - **Remplacer l'image** : adresse https d'une autre image, ou un fichier (site et app PC) ;
+   - **Calibrer** : touchez deux points dont vous connaissez la distance réelle, saisissez-la en mètres ;
+   - **Rejeter** : la map n'entre pas dans le profil.
+3. **Valider** (une map) ou **Valider toutes** : une seule nouvelle version du profil (motif `cartes-proposees`),
+   visible dans l'historique et restaurable. Les maps nouvelles entrent dans le pool si c'est suggéré.
+4. Plus tard, **Rafraîchir les propositions** : les maps encore « À valider » sont mises à jour (votre image et
+   votre calibrage gardés) ; une map validée ou rejetée ne revient « À valider » que si l'image de la source a
+   changé ; le profil n'est jamais touché par la préparation. À la validation, un calibrage fait à la main dans le
+   profil et les repères posés à la main sont gardés.
+Sécurité : uniquement `www.thefinals.wiki` (The Finals), `valorant-api.com` et `media.valorant-api.com` (Valorant) pour
+la préparation, https, sans redirection, 10 Mo par image, type annoncé et contenu vérifiés ; « Remplacer l'image » par
+adresse : https vers un site public. Les images sont rangées dans le stockage du serveur (`jeu_images`), jamais
+dans le dépôt ; une image identique n'est jamais re-déposée.
 
 **Données pré-remplies, à vérifier** : « Pré-remplir les capacités » (agents de Valorant, classes de The Finals) et
 « Compléter avec le modèle The Finals » (formats 3v3v3v3, modes, maps sans image avec leurs étages, classes Light /
@@ -200,6 +237,9 @@ sont comptées à part, sans plafond (rien n'est payé), mais bornées en durée
 | `POST /jeux` · `GET` / `PATCH` / `DELETE /jeux/:cle` | jeux.gerer (`GET` d'un profil actif : tous) | Créer, lire, modifier (`version` attendue), supprimer |
 | `POST /jeux/:cle/archiver` · `PUT /jeux/:cle/maj` | jeux.gerer | Archiver ; vérification automatique et fréquence |
 | `POST /jeux/:cle/importer` | jeux.gerer | Import serveur des images et de l'échelle `{ version, urls?, remplacer? }` ; rend `{ rapport, jeu }` |
+| `GET /jeux/:cle/cartes-proposees` · `POST …/preparer` | jeux.gerer | Maps proposées (et ce qu'elles changeraient) ; préparation par le serveur, rend `{ rapport, cartes, images }` |
+| `POST /jeux/:cle/cartes-proposees/valider` · `…/rejeter` | jeux.gerer | `{ cartes: [clés] }` ou `{ toutes: true }` (valider : nouvelle version du profil) |
+| `POST /jeux/:cle/cartes-proposees/:carte/image` · `PUT …/:carte/echelle` | jeux.gerer | Remplacer l'image `{ url }` ou `{ type, donnees, nom }` ; calibrage `{ points, distance }` |
 | `POST /jeux/:cle/images` | jeux.gerer | Dépôt d'une image de map `{ type, donnees (base64), nom }` ; à citer ensuite dans `cartes[].fichier` |
 | `GET /jeux/images/:id?c&exp&sig` | lien signé | Image déposée (les profils rendus portent `images` : liens signés de 6 h) |
 | `GET /jeux/:cle/versions` · `GET …/versions/:n` · `POST …/versions/:n/restaurer` | jeux.gerer | Historique, restauration |
@@ -214,8 +254,13 @@ Tables (migration 0021, comprises dans l'export / import de la base) : `jeux`, `
 `ia_propositions`, `ia_appels`, `ia_reglages`, `permissions_globales`. À l'import dans une base neuve, les profils
 préconfigurés par la migration sont remplacés par ceux de l'export.
 
-Tables de la migration 0075 : colonne `jeux.modele_strat`, table `jeu_images`.
+Tables de la migration 0075 : colonne `jeux.modele_strat`, table `jeu_images`. Migration 0078 : `jeu_cartes_proposees`
+(une ligne par map proposée : statut, proposition, image, empreinte de la source).
+Code : `esport/noyau/jeux/import.mjs` (téléchargeur borné, valorant-api.com), `wiki-thefinals.mjs` (wiki The Finals),
+`cartesProposees.mjs` (propositions) ; écran `src/esport/ui/jeux/CartesProposees.tsx`.
 
 Tests : `esport/test/profils-jeu.test.mjs`, `esport/test/strats-modeles.test.mjs` (modèle, détails des maps et des
-capacités, images), `esport/test/ia-assistant.test.mjs` (faux serveur d'IA et faux web :
+capacités, images, import réel abrégé de valorant-api.com), `esport/test/cartes-proposees.test.mjs` (réponses JSON réelles
+du wiki enregistrées et abrégées, `esport/test/donnees/wiki-thefinals.json` ; images simulées), `src/esport/CartesProposees.test.tsx`,
+`esport/test/ia-assistant.test.mjs` (faux serveur d'IA et faux web :
 aucun appel réseau réel), `src/esport/ProfilsJeu.test.tsx`.

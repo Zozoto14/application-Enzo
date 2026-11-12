@@ -175,6 +175,7 @@ export function DetailsCarte({
       </View>
       {!deposer ? <Text style={attenue(theme, 12)}>{trJc('carte.image_enregistrer_dabord')}</Text> : null}
       {c.source ? <Text style={attenue(theme, 12)} testID={`${testID}-source`}>{trJc('carte.source', { fournisseur: c.source.fournisseur, le: c.source.le?.slice(0, 10) ?? '' })}{c.source.aVerifier ? ` ${trJc('carte.source_a_verifier')}` : ''}</Text> : null}
+      {c.source?.attribution ? <Text style={attenue(theme, 11)} testID={`${testID}-attribution`}>{c.source.attribution}</Text> : null}
       {avis ? <Text style={{ ...texte(theme, 13), color: theme.ok }}>{avis}</Text> : null}
       {erreur ? <Text style={{ ...texte(theme, 13), color: theme.critique }} testID={`${testID}-erreur`}>{erreur}</Text> : null}
 

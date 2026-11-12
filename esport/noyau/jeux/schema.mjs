@@ -262,7 +262,7 @@ function lireNiveau(v, c) {
 }
 
 /** Échelle : deux points du repère et la distance réelle (m) ; unités par mètre recalculées ici. */
-function lireEchelle(v, c) {
+export function lireEchelle(v, c) {
   if (v === undefined || v === null) return null;
   if (!estObjet(v)) throw new Invalide(c, 'objet');
   const points = Array.isArray(v.points) && v.points.length === 4 ? v.points.map((n, i) => coordonnee(n, `${c}.points.${i}`)) : null;
@@ -283,7 +283,22 @@ function lireSource(v, c) {
   if (!url) throw new Invalide(`${c}.url`, 'image');
   const le = typeof v.le === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v.le) ? v.le : null;
   const empreinte = typeof v.empreinte === 'string' && /^[0-9a-f]{64}$/.test(v.empreinte) ? v.empreinte : null;
-  return { fournisseur: texteNettoye(v.fournisseur, 60) || 'web', url, ...(le ? { le } : {}), ...(empreinte ? { empreinte } : {}), aVerifier: booleen(v.aVerifier, false) };
+  // Page d'origine, licence et attribution (maps proposées depuis un wiki : affichées avec l'image).
+  const page = v.page ? imageSure(v.page, `${c}.page`) : null;
+  const licenceUrl = v.licenceUrl ? imageSure(v.licenceUrl, `${c}.licenceUrl`) : null;
+  const licence = texteNettoye(v.licence, 120);
+  const attribution = texteNettoye(v.attribution, 400);
+  return {
+    fournisseur: texteNettoye(v.fournisseur, 60) || 'web',
+    url,
+    ...(le ? { le } : {}),
+    ...(empreinte ? { empreinte } : {}),
+    aVerifier: booleen(v.aVerifier, false),
+    ...(page ? { page } : {}),
+    ...(licence ? { licence } : {}),
+    ...(licenceUrl ? { licenceUrl } : {}),
+    ...(attribution ? { attribution } : {}),
+  };
 }
 
 /** Détails facultatifs d'une map (absents quand vides). */

@@ -7,8 +7,12 @@
  *    l'éditeur), multiplicateurs (`xMultiplier`, `yMultiplier`, `xScalarToAdd`, `yScalarToAdd` : unités du jeu →
  *    coordonnées normalisées de la minimap ; 1 m = 100 unités du jeu) → échelle calculée sans calibrage à la
  *    main ; `callouts` (regionName, superRegionName, location) → repères nommés (sites, spawns, callouts).
- *  - The Finals : pas d'API officielle ; liste d'adresses d'images fournie (modifiable) par le gestionnaire, et
- *    une échelle APPROXIMATIVE par défaut, marquée « à vérifier » (calibrage à deux points pour la corriger).
+ *    Vérifié sur l'API réelle (2026-11) : les maps hors compétition (Gauntlet, The Range, Skirmish, entraînement)
+ *    ont `displayIcon` nul et des multiplicateurs à 0, les maps de Team Deathmatch une minimap mais des
+ *    multiplicateurs à 0 : toutes écartées ici ; les minimaps sont carrées (1024 × 1024).
+ *  - The Finals : pas d'API officielle ; proposition automatique depuis le wiki communautaire (wiki-thefinals.mjs,
+ *    maps proposées à valider), ou adresses d'images fournies par le gestionnaire ; échelle APPROXIMATIVE par
+ *    défaut, marquée « à vérifier » (calibrage à deux points pour la corriger).
  *
  * Réseau : https seulement, hôtes autorisés (Valorant) ou publics (adresses saisies), sans redirection, délai
  * borné, 10 Mo par image, type annoncé ET contenu vérifiés. Idempotent : une image inchangée (même empreinte)
@@ -117,6 +121,33 @@ function typeCallout(c) {
 }
 
 /**
+ * Nom d'un callout de valorant-api.com : « A Main », « Mid Top » ; les spawns, dont la région est « Spawn »
+ * des deux côtés, deviennent « Attacker Spawn » et « Defender Spawn » (sinon le second serait perdu au
+ * dédoublonnage) ; les autres régions d'un côté (« Attacker Side ») gardent leur seul nom.
+ */
+function nomCallout(c) {
+  const region = String(c.regionName).trim();
+  const zone = String(c.superRegionName ?? '').trim();
+  if (/^spawn$/i.test(region)) return /defender/i.test(zone) ? 'Defender Spawn' : 'Attacker Spawn';
+  return `${zone && !/side$/i.test(zone) ? `${zone} ` : ''}${region}`.trim().slice(0, 30);
+}
+
+/**
+ * Repères importés d'une map : remplacés à chaque import ; les repères posés à la main (sans `importe`) restent.
+ * Rend `{ reperes, n }` (n : repères importés gardés).
+ */
+export function fusionnerReperes(existants, importes, max = 120) {
+  const manuels = (existants ?? []).filter(r => !r.importe);
+  const pris = new Set(manuels.map(r => r.cle));
+  const nouveaux = importes
+    .map(r => ({ ...r, cle: r.cle ?? cleDe(r.nom) }))
+    .filter(r => r.cle && !pris.has(r.cle) && (pris.add(r.cle), true))
+    .slice(0, Math.max(0, max - manuels.length))
+    .map(r => ({ ...r, importe: true }));
+  return { reperes: [...manuels, ...nouveaux], n: nouveaux.length };
+}
+
+/**
  * Une map de valorant-api.com → ce que l'import en garde : clé, nom, minimap, échelle (unités par mètre),
  * repères (callouts). Rend null si la map n'est pas jouable en compétition (pas de minimap ou de multiplicateurs).
  * Repère : coordonnées normalisées de la minimap (carrée, remplit le repère) : x = jeuY × xMultiplier + xScalarToAdd,
@@ -132,7 +163,7 @@ export function mapValorant(m) {
   const reperes = (Array.isArray(m.callouts) ? m.callouts : [])
     .filter(c => c?.location && Number.isFinite(Number(c.location.x)) && Number.isFinite(Number(c.location.y)) && typeof c.regionName === 'string')
     .map(c => {
-      const nom = `${c.superRegionName && !/^(mid|attacker side|defender side)$/i.test(c.superRegionName) ? `${c.superRegionName} ` : ''}${c.regionName}`.trim().slice(0, 30);
+      const nom = nomCallout(c);
       return { nom, type: typeCallout(c), x: repere(Number(c.location.y) * xm + Number(m.xScalarToAdd ?? 0)), y: repere(Number(c.location.x) * ym + Number(m.yScalarToAdd ?? 0)) };
     })
     .filter(r => (vus.has(r.nom) ? false : (vus.add(r.nom), true)))

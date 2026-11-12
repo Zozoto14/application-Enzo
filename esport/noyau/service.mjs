@@ -1068,6 +1068,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE jeu_versions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
       { sql: 'UPDATE ia_travaux SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
       { sql: 'UPDATE ia_propositions SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
+      { sql: 'UPDATE jeu_cartes_proposees SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
       ...effacementCompetition(compte),
       // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
       ...(await effacementCm(base, compte)),

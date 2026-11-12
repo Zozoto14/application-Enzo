@@ -182,6 +182,58 @@ export interface SourceCarte {
   le?: string;
   empreinte?: string;
   aVerifier: boolean;
+  /** Page d'origine (wiki), licence et attribution (maps proposées). */
+  page?: string;
+  licence?: string;
+  licenceUrl?: string;
+  attribution?: string;
+}
+
+export type StatutCarteProposee = 'a-valider' | 'validee' | 'rejetee';
+/** Ce que la validation changerait dans le profil. */
+export interface ChangementsCarte {
+  nouvelle: boolean;
+  image: 'ajout' | 'remplacement' | 'identique' | 'aucune';
+  echelle: 'ajout' | 'remplacement' | 'identique' | 'gardee' | 'aucune';
+  reperes: number;
+}
+/** Map proposée par le serveur (wiki The Finals, valorant-api.com), à valider. */
+export interface CarteProposee {
+  cle: string;
+  nom: string;
+  statut: StatutCarteProposee;
+  fournisseur: string;
+  fichier: string | null;
+  vueDessus: boolean;
+  imageManuelle: boolean;
+  imageUrl: string | null;
+  page: string | null;
+  licence: { texte: string; url: string | null } | null;
+  attribution: string | null;
+  echelle: EchelleCarte | null;
+  echelleManuelle: boolean;
+  competitive: boolean | null;
+  horsCompetition: boolean;
+  variantes: string[];
+  modes: string[];
+  reperes: number;
+  erreur: string | null;
+  dansProfil: boolean;
+  changements: ChangementsCarte;
+  majLe: string;
+  decideLe: string | null;
+}
+export interface ListeCartesProposees {
+  cleJeu: string;
+  version: number;
+  modele: ModeleStrat;
+  cartes: CarteProposee[];
+  images: Record<string, ImageJeu>;
+}
+export interface LignePreparation {
+  carte: string;
+  statut: 'nouvelle' | 'rafraichie' | 'mise-a-jour' | 'deja-validee' | 'deja-rejetee';
+  erreur?: string;
 }
 
 /** Lien signé (6 h) d'une image déposée, et ses dimensions en pixels. */
@@ -438,6 +490,15 @@ export function apiJeux(client: ClientEsport) {
     /** Import serveur des images de maps et de l'échelle (Valorant : valorant-api.com ; The Finals : `urls`). */
     importer: (cle: string, corps: { version?: number; urls?: Record<string, string>; remplacer?: boolean }) =>
       client.requete<{ rapport: LigneImport[]; inchange: boolean; jeu: ProfilJeu }>(`${j(cle)}/importer`, 'POST', corps),
+    cartesProposees: (cle: string) => client.requete<ListeCartesProposees>(`${j(cle)}/cartes-proposees`),
+    preparerCartes: (cle: string) => client.requete<ListeCartesProposees & { rapport: LignePreparation[] }>(`${j(cle)}/cartes-proposees/preparer`, 'POST', {}),
+    validerCartes: (cle: string, corps: { cartes?: string[]; toutes?: boolean }) =>
+      client.requete<ListeCartesProposees & { validees: string[]; jeu: ProfilJeu }>(`${j(cle)}/cartes-proposees/valider`, 'POST', corps),
+    rejeterCartes: (cle: string, cartes: string[]) => client.requete<ListeCartesProposees>(`${j(cle)}/cartes-proposees/rejeter`, 'POST', { cartes }),
+    remplacerImageProposee: (cle: string, carte: string, corps: { url: string } | { type: string; donnees: string; nom?: string }) =>
+      client.requete<ListeCartesProposees>(`${j(cle)}/cartes-proposees/${encodeURIComponent(carte)}/image`, 'POST', corps),
+    calibrerProposee: (cle: string, carte: string, corps: { points: number[]; distance: number }) =>
+      client.requete<ListeCartesProposees>(`${j(cle)}/cartes-proposees/${encodeURIComponent(carte)}/echelle`, 'PUT', corps),
     archiver: (cle: string, archive: boolean) => client.requete<ProfilJeu>(`${j(cle)}/archiver`, 'POST', { archive }),
     supprimer: (cle: string) => client.requete<{ ok: boolean }>(j(cle), 'DELETE'),
     versions: async (cle: string) => (await client.requete<{ versions: VersionJeu[] }>(`${j(cle)}/versions`)).versions,

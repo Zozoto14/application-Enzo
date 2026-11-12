@@ -24,6 +24,12 @@
  *   POST   /jeux/ia/travaux/:id/valider           le Fondateur valide le brouillon corrigé
  *   DELETE /jeux/ia/travaux/:id                   abandonner
  *   POST   /jeux/:cle/importer                    images des maps et échelle téléchargées par le serveur (jeux.gerer) { version, urls?, remplacer? }
+ *   GET    /jeux/:cle/cartes-proposees            maps proposées (à valider, validées, rejetées) et ce qu'elles changeraient (jeux.gerer)
+ *   POST   /jeux/:cle/cartes-proposees/preparer   le serveur prépare les propositions (wiki The Finals, valorant-api.com)
+ *   POST   /jeux/:cle/cartes-proposees/valider    { cartes: [clés] } ou { toutes: true } : appliquées au profil (nouvelle version)
+ *   POST   /jeux/:cle/cartes-proposees/rejeter    { cartes: [clés] }
+ *   POST   /jeux/:cle/cartes-proposees/:carte/image    « Remplacer l'image » { type, donnees, nom } ou { url }
+ *   PUT    /jeux/:cle/cartes-proposees/:carte/echelle  calibrage à deux points { points, distance }
  *   POST   /jeux/:cle/images                      dépôt d'une image (fond de map) { type, donnees base64, nom } (jeux.gerer)
  *   GET    /jeux/images/:id?c&exp&sig             image par lien signé (sans session, routeImageJeu)
  *   GET    /teams/:id/jeu                         profil du jeu de la team (tout membre)
@@ -114,6 +120,23 @@ async function routesJeuxBrutes({ jeux, acteur, chemin, methode: m, url, lireCor
     const corps = await lireCorps();
     await limite('ia', acteur.compte);
     return jeux.importerCartes(acteur, cle, corps);
+  }
+  if (p[1] === 'cartes-proposees') {
+    if (p.length === 2 && m === 'GET') return jeux.cartesProposees(acteur, cle);
+    if (p.length === 3 && p[2] === 'preparer' && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('ia', acteur.compte);
+      return jeux.preparerCartes(acteur, cle, corps);
+    }
+    if (p.length === 3 && p[2] === 'valider' && m === 'POST') return jeux.validerCartes(acteur, cle, await lireCorps());
+    if (p.length === 3 && p[2] === 'rejeter' && m === 'POST') return jeux.rejeterCartes(acteur, cle, await lireCorps());
+    if (p.length === 4 && p[3] === 'image' && m === 'POST') {
+      const corps = await lireCorps(TAILLE_MAX_CORPS_IMAGE_JEU);
+      if (typeof corps?.url === 'string') await limite('ia', acteur.compte);
+      return jeux.remplacerImageProposee(acteur, cle, p[2], corps);
+    }
+    if (p.length === 4 && p[3] === 'echelle' && m === 'PUT') return jeux.calibrerProposee(acteur, cle, p[2], await lireCorps());
+    throw echec(404, 'route', 'Adresse inconnue.');
   }
   if (p[1] === 'images' && p.length === 2 && m === 'POST') return jeux.deposerImage(acteur, cle, await lireCorps(TAILLE_MAX_CORPS_IMAGE_JEU));
   if (p[1] === 'maj' && p.length === 2 && m === 'PUT') return jeux.reglerMaj(acteur, cle, await lireCorps());

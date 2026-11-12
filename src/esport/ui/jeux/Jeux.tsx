@@ -30,6 +30,7 @@ import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, 
 import { EditeurProfil, libelleChemin, libelleRaison } from './EditeurProfil';
 import { trJc } from '../../i18n/jeuxCartes';
 import { ImportCartes } from './DetailsJeu';
+import { CartesProposees, type ApiCartesProposees } from './CartesProposees';
 import { ReglagesEcriture } from '../ecriture/ReglagesEcriture';
 
 type Onglet = 'profils' | 'maj' | 'ia' | 'admin';
@@ -236,6 +237,18 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
+  // Maps proposées (wiki The Finals, valorant-api.com) : appels liés à ce jeu.
+  const apiProposees = useMemo<ApiCartesProposees>(
+    () => ({
+      liste: () => api.cartesProposees(cle),
+      preparer: () => api.preparerCartes(cle),
+      valider: corps => api.validerCartes(cle, corps),
+      rejeter: cartes => api.rejeterCartes(cle, cartes),
+      remplacerImage: (carte, corps) => api.remplacerImageProposee(cle, carte, corps),
+      calibrer: (carte, corps) => api.calibrerProposee(cle, carte, corps),
+    }),
+    [api, cle],
+  );
   if (!profil) return erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-jeu-fiche" /> : <SqueletteCartes theme={theme} n={2} large={large} />;
 
   const editeur = (
@@ -288,6 +301,12 @@ function FicheJeu({ theme, api, cle, large, iaDisponible, onRetour, onPropositio
         {profil.statut === 'archive' ? <Badge theme={theme} texte={trJeux('jeux.archive_aide')} /> : null}
         <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-jeu-fiche" />
       </Carte>
+      {profil.modeleStrat === 'valorant' || profil.modeleStrat === 'thefinals' ? (
+        <Carte theme={theme} testID="esport-jeu-cartes-proposees">
+          <TitreCarte theme={theme} titre={trJc('prop.titre')} />
+          <CartesProposees theme={theme} modele={profil.modeleStrat} api={apiProposees} onApplique={() => void charger().then(() => oublierProfilsTeams())} />
+        </Carte>
+      ) : null}
       <Carte theme={theme} testID="esport-jeu-images">
         <TitreCarte theme={theme} titre={trJc('import.titre')} />
         <ImportCartes theme={theme} profil={profil} importer={corps => api.importer(cle, corps)} onFini={() => void charger().then(() => oublierProfilsTeams())} />
