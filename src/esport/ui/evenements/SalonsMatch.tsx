@@ -12,7 +12,7 @@ import { Avis, BoutonHub, Champ, Interrupteur } from '../../../hub/admin/ui/comm
 import type { ThemeHub } from '../../../hub/themes';
 import { formaterDate } from '../../i18n';
 import { trEv, type CleEv } from '../../i18n/evenements';
-import type { FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
+import type { EtatSalonsMatch, FicheEvenement, MessageHistorique, ReglagesSalonsMatch, SalonMatch, VueSalonsMatch, apiEvenements, EquipeSalonMatch, LangueSalons } from '../../evenements/api';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, TitreCarte, attenue, texte, type Ton } from '../design';
 import { CibleSurlignee } from '../notifications/Cible';
@@ -31,6 +31,45 @@ const libelleErreur = (c: string) => {
   const t = trEv(cle as CleEv);
   return t === cle ? c : t;
 };
+const sommeIgnores = (e: EtatSalonsMatch) => (e.ignores ? e.ignores.termine + e.ignores.equipes + e.ignores.delai + e.ignores.ferme : 0) + (e.echecs ?? 0) + e.attente;
+/** Avis de « Synchroniser maintenant » : ce que le passage a vu, pas seulement « synchronisé ». */
+const resumeSynchro = (e: EtatSalonsMatch | null) => {
+  if (!e?.lus) return e?.arret ? trEv(`sm.arret.${e.arret}` as CleEv) : trEv('sm.synchro_ok');
+  return trEv('sm.synchro_bilan', { lus: String(e.lus.matchs + e.lus.lobbies), crees: String(e.crees), suivis: String(e.suivis ?? 0), ignores: String(sommeIgnores(e)) });
+};
+const detail = (d: NonNullable<EtatSalonsMatch['details']>[number], avance: number) => {
+  if (d.raison === 'equipes') return trEv('sm.detail.equipes', { n: String(d.n ?? 0) });
+  if (d.raison === 'delai') return trEv('sm.detail.delai', { avance: String(avance), le: date(d.prevu ?? null) });
+  if (d.raison === 'ferme') return trEv('sm.detail.ferme', { statut: trEv(`sm.statut.${d.statut ?? 'supprime'}` as CleEv) });
+  if (d.raison === 'echec') return trEv('sm.detail.echec', { code: d.code ? ` (${d.code})` : '' });
+  return trEv(`sm.detail.${d.raison}` as CleEv);
+};
+
+/** Diagnostic du dernier passage : lu sur le site, ignorés avec leur raison (match par match). */
+function DiagnosticPassage({ theme, etat: e, avance = 0 }: { theme: ThemeHub; etat: EtatSalonsMatch; avance?: number }) {
+  if (e.arret) return <Text style={attenue(theme, 13)} testID="esport-ev-sm-arret">{trEv(`sm.arret.${e.arret}` as CleEv)}</Text>;
+  if (!e.lus) return null;
+  const ig = e.ignores ?? { termine: 0, equipes: 0, delai: 0, ferme: 0 };
+  const liste = [
+    ig.termine ? trEv('sm.ignore.termine', { n: String(ig.termine) }) : '',
+    ig.equipes ? trEv('sm.ignore.equipes', { n: String(ig.equipes) }) : '',
+    ig.delai ? trEv('sm.ignore.delai', { n: String(ig.delai) }) : '',
+    ig.ferme ? trEv('sm.ignore.ferme', { n: String(ig.ferme) }) : '',
+    e.echecs ? trEv('sm.ignore.echecs', { n: String(e.echecs) }) : '',
+  ].filter(Boolean);
+  return (
+    <View style={{ gap: ESP.xxs }} testID="esport-ev-sm-diagnostic">
+      <Text style={attenue(theme, 13)} testID="esport-ev-sm-lus">{trEv('sm.lus', { matchs: String(e.lus.matchs), lobbies: String(e.lus.lobbies), suivis: String(e.suivis ?? 0) })}</Text>
+      {liste.length ? <Text style={attenue(theme, 13)} testID="esport-ev-sm-ignores">{trEv('sm.ignores', { liste: liste.join(', ') })}</Text> : null}
+      {(e.details ?? []).map(d => (
+        <Text key={`${d.cle}-${d.raison}`} style={attenue(theme, 13)} testID={`esport-ev-sm-detail-${d.cle}`}>
+          {`${d.titre} : ${detail(d, avance)}`}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const nomsStaff = (staff: Array<{ nom: string; present: boolean }>) => staff.map(x => `${x.nom}${x.present ? '' : ` (${trEv('sm.staff_absent')})`}`).join(', ');
 const nomsEquipes = (equipes: EquipeSalonMatch[]) => equipes.map(e => `${e.tag ? `[${e.tag}] ` : ''}${e.nom}${e.role ? '' : ` (${trEv('sm.sans_role')})`}`).join(' - ');
 
@@ -108,8 +147,9 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
       <View style={styles.ligne}>
         <BoutonHub theme={theme} variante="plein" titre={trEv('sm.enregistrer')} onPress={enregistrer} desactive={enCours === 'enregistrer'} testID="esport-ev-sm-enregistrer" />
         {v.lie ? <BoutonHub theme={theme} titre={trEv('sm.synchro')} onPress={() => void agir('synchro', async () => {
-                    recevoir(await api.synchroniserSalonsMatch(id));
-                    return trEv('sm.synchro_ok');
+                    const x = await api.synchroniserSalonsMatch(id);
+                    recevoir(x);
+                    return resumeSynchro(x.etat);
                   })} desactive={enCours === 'synchro'} testID="esport-ev-sm-synchro" /> : null}
       </View>
       {e ? (
@@ -118,6 +158,7 @@ export function SalonsMatch({ theme, api, fiche }: { theme: ThemeHub; api: Api; 
           {e.attente ? ` ${trEv('sm.attente', { n: String(e.attente) })}` : ''}
         </Text>
       ) : null}
+      {e ? <DiagnosticPassage theme={theme} etat={e} avance={v.reglages.avanceH} /> : null}
       {e?.erreur ? <Avis theme={theme} genre="alerte" texte={trEv('sm.erreur', { erreur: libelleErreur(e.erreur) })} testID="esport-ev-sm-erreur-etat" /> : null}
 
       {/* Salons */}

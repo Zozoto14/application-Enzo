@@ -57,7 +57,14 @@ terminé en gardant son **historique dans l'app**.
 - **Quand** : toutes les 5 minutes (cron) et, tant que l'événement est **en cours** (statut, ou dates du jour),
   **chaque minute** par le processus qui tient la Gateway Discord (tickets, bienvenue ou salons vocaux activés) ;
   « Synchroniser maintenant » à la demande. Les matchs sont lus sur le site par le pont signé, en **lecture seule**.
-- **Création** : match avec au moins deux équipes connues, pas encore terminé. Accès : `@everyone` sans accès ; le
+- **Création** : match avec au moins deux équipes connues, pas encore terminé (« terminé » = statut `finished` **et** un
+  résultat : vainqueur ou score pour un 1v1, au moins un placement ou un abandon pour un lobby ; un lobby marqué terminé
+  sans aucun résultat, ancien comportement du bouton « Enregistrer » du site, est traité comme à jouer). Équipes du
+  site non reliées à l'événement : listées dans l'embed (« pas de rôle Discord »), sans accès, le salon est créé quand
+  même. **Diagnostic** sous « Dernier passage » (et avis de « Synchroniser maintenant ») : matchs 1v1 et lobbies lus
+  sur le site, salons déjà suivis, matchs sans salon par raison (terminé, moins de 2 équipes, hors délai de création
+  anticipée, salon supprimé, refus Discord, attente, catégorie pleine) avec le détail match par match (20 au plus),
+  ou la raison d'un passage qui n'a rien lu (désactivé, non lié, événement terminé). Accès : `@everyone` sans accès ; le
   **rôle Discord de chaque équipe** du match (voir, écrire, historique, fichiers) ; le **rôle staff** de l'événement et
   les **rôles staff supplémentaires** (en plus : gérer les messages) ; le **staff assigné** au match sur le site (accès
   par membre, mêmes droits que le staff) ; le bot. Message d'accueil : mention des rôles des équipes et des

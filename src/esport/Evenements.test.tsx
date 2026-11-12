@@ -394,6 +394,14 @@ function fauxClient(
       salonsMatch.reglages = { ...salonsMatch.reglages, ...(corps as object) };
       return salonsMatch;
     }
+    if (chemin === '/evenements/ev1/salons-match/synchro' && methode === 'POST') {
+      salonsMatch.etat = {
+        le: '2026-11-12T21:09:00.000Z', crees: 1, majs: 0, resultats: 0, annules: 0, supprimes: 0, attente: 0, limite: false, erreur: null, arret: null,
+        lus: { matchs: 0, lobbies: 3 }, suivis: 0, ignores: { termine: 1, equipes: 1, delai: 0, ferme: 0 }, echecs: 0,
+        details: [{ cle: 'l:b', titre: 'Lobby B · Round 1', raison: 'termine' }, { cle: 'l:c', titre: 'Lobby C · Round 1', raison: 'equipes', n: 1 }],
+      };
+      return salonsMatch;
+    }
     if (chemin === '/evenements/ev1/salons-match/creer' && methode === 'POST') {
       salonsMatch.matchs = [];
       salonsMatch.salons = [...salonsMatch.salons, { ...salonsMatch.salons[0], id: 'sm2', cle: (corps as { cle: string }).cle, titre: 'Lobby 1 · Round 1', statut: 'ouvert', historique: false }];
@@ -778,6 +786,18 @@ test('salons de match : réglages (activé, catégorie, délai, rappels, langue)
   expect(await screen.findByText('Réglages des salons de match enregistrés.')).toBeTruthy();
   expect(appels.find(a => a.chemin === '/evenements/ev1/salons-match' && a.methode === 'PUT')!.corps).toEqual({ actif: true, categorieId: '700000000000000060', modeleNom: '{phase}-{equipes}', delaiSuppressionMin: 45, rappels: false, langue: 'fr_en', avanceH: 0, retentionJours: 0, ancreId: null });
   expect(screen.getByTestId('esport-ev-sm-dernier')).toBeTruthy();
+});
+
+test('salons de match : « Synchroniser maintenant » dit ce qu’il a lu sur le site et pourquoi un match n’a pas de salon', async () => {
+  const { client } = fauxClient(ficheDe());
+  await render(<PageEvenements theme={theme} client={client} large evenementInitial="ev1" />);
+  expect(await screen.findByTestId('esport-ev-salons-match')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-ev-sm-synchro'));
+  expect(await screen.findByText('Synchronisation faite : 3 match(s) ou lobby(s) lu(s) sur le site, 1 salon(s) créé(s), 0 déjà suivi(s), 2 sans salon (détail ci-dessous).')).toBeTruthy();
+  expect(screen.getByTestId('esport-ev-sm-lus').props.children).toBe('Lu sur le site : 0 match(s) 1v1 et 3 lobby(s) ; 0 salon(s) déjà suivi(s).');
+  expect(screen.getByTestId('esport-ev-sm-ignores').props.children).toBe('Sans salon : 1 terminé(s) sur le site, 1 avec moins de 2 équipes.');
+  expect(screen.getByTestId('esport-ev-sm-detail-l:b').props.children).toBe('Lobby B · Round 1 : terminé sur le site (résultat saisi)');
+  expect(screen.getByTestId('esport-ev-sm-detail-l:c').props.children).toBe('Lobby C · Round 1 : 1 équipe(s) dans le match, 2 au moins');
 });
 
 test('salons de match : liste (statut, équipe sans rôle, suppression programmée), créer, supprimer maintenant, historique', async () => {

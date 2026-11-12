@@ -10,7 +10,7 @@
  * Synchronisation (`synchroniser(evenementId)`) : le cron (toutes les 5 min) et le processus meneur de la Gateway
  * (toutes les 60 s tant que l'événement est en cours, `tacheRapide`) lisent les matchs (1v1) et lobbies (N équipes) du
  * tournoi lié par le pont signé (lecture seule), puis :
- *  - nouveau match (au moins deux équipes, pas terminé) → salon texte PRIVÉ dans la catégorie : @everyone sans accès ;
+ *  - nouveau match (au moins deux équipes, pas terminé : statut « finished » ET un résultat saisi) → salon texte PRIVÉ dans la catégorie : @everyone sans accès ;
  *    rôle Discord de chaque équipe du match (voir, écrire, historique, fichiers) ; rôle staff de l'événement et rôles
  *    staff supplémentaires (en plus : gérer les messages) ; le bot. Message d'accueil (embed : match, phase, horaire
  *    `<t:…:F>` et relatif, équipes avec TAG, joueurs mentionnés, capitaines) et mention des rôles et capitaines ;
@@ -24,6 +24,8 @@
  *  - « Placer sous le salon » (réglage facultatif) → salons créés dans la catégorie du salon repère et rangés juste sous
  *    lui par horaire (un PATCH des positions) ; repère supprimé : catégorie choisie, staff averti une fois ;
  *  - suppression due → historique enregistré dans l'app (messages, auteurs, pièces jointes en liens), salon supprimé.
+ * Bilan de chaque passage (« Dernier passage » dans l'app) : matchs et lobbies lus, salons suivis, matchs sans salon par
+ * raison avec le détail (20 au plus), ou la raison d'un arrêt (désactivé, non lié, événement terminé).
  * Idempotent : une ligne par match (clé unique), un bail par événement (un seul processus à la fois), un salon créé mais
  * pas encore noté (processus arrêté net) est retrouvé par son sujet (`esport-hq:match:<clé>`) au lieu d'être recréé.
  * Borné : 5 créations et 40 actions Discord par passage, arrêt au premier refus pour limite de débit (429).
@@ -289,7 +291,8 @@ export async function lireMatchsSite(site, tournoiId) {
   const matchs = [];
   for (const m of m1) {
     const ids = [m.team_a_id, m.team_b_id].filter(Boolean);
-    const fini = m.status === 'finished';
+    // Terminé = statut « finished » ET un résultat (vainqueur ou score) : un statut sans résultat n'est pas un match joué.
+    const fini = m.status === 'finished' && Boolean(m.winner_id || m.score_a != null || m.score_b != null);
     matchs.push({
       cle: `m:${m.id}`,
       genre: 'match',
@@ -301,7 +304,7 @@ export async function lireMatchsSite(site, tournoiId) {
       phase: m.stage_id ? (nomsPhases.get(m.stage_id) ?? '') : '',
       label: null,
       equipes: ids,
-      statut: ['pending', 'live', 'finished'].includes(m.status) ? m.status : 'pending',
+      statut: fini ? 'finished' : ['pending', 'live'].includes(m.status) ? m.status : 'pending',
       prevu: m.scheduled_at ? new Date(m.scheduled_at).toISOString() : null,
       stream: typeof m.stream_url === 'string' && /^https:\/\//.test(m.stream_url) ? m.stream_url : null,
       staff: staffDe('match_id', m.id),
@@ -310,7 +313,9 @@ export async function lireMatchsSite(site, tournoiId) {
   }
   for (const l of lobbies) {
     const es = entrees.filter(e => e.lobby_id === l.id).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    const fini = l.status === 'finished';
+    // Terminé = statut « finished » ET au moins un placement ou un abandon saisi : « Enregistrer » sur le site sans
+    // aucun résultat marquait le lobby terminé (corrigé côté site le 12/11/2026) ; un tel lobby n'a pas été joué.
+    const fini = l.status === 'finished' && es.some(e => e.placement != null || e.dnf);
     matchs.push({
       cle: `l:${l.id}`,
       genre: 'lobby',
@@ -322,7 +327,7 @@ export async function lireMatchsSite(site, tournoiId) {
       phase: '',
       label: l.label ?? null,
       equipes: es.map(e => e.team_id),
-      statut: ['pending', 'live', 'finished'].includes(l.status) ? l.status : 'pending',
+      statut: fini ? 'finished' : ['pending', 'live'].includes(l.status) ? l.status : 'pending',
       prevu: l.scheduled_at ? new Date(l.scheduled_at).toISOString() : null,
       stream: typeof l.stream_url === 'string' && /^https:\/\//.test(l.stream_url) ? l.stream_url : null,
       staff: staffDe('lobby_id', l.id),
@@ -771,7 +776,8 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     const evt = await base.premier('SELECT * FROM club_evenements WHERE id = ?', [evenementId]);
     if (!evt) return null;
     const reglages = lireReglages(evt.salons_match);
-    const bilan = { le: iso(t0()), crees: 0, majs: 0, resultats: 0, annules: 0, supprimes: 0, attente: 0, limite: false, erreur: null };
+    // Diagnostic (affiché sous « Dernier passage ») : ce qui a été lu sur le site, ce qui a été ignoré et pourquoi.
+    const bilan = { le: iso(t0()), crees: 0, majs: 0, resultats: 0, annules: 0, supprimes: 0, attente: 0, limite: false, erreur: null, arret: null, lus: null, suivis: 0, ignores: { termine: 0, equipes: 0, delai: 0, ferme: 0 }, echecs: 0, details: [] };
     const compteur = { n: 0, limite: false };
     const d = await ctxDiscord();
     if (d.erreur) {
@@ -782,6 +788,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
     // Suppressions dues d'abord (même si les salons de match ont été désactivés depuis).
     bilan.supprimes += await suppressionsDues(evenementId, compteur);
     if ((!reglages.actif && !forcer) || !evt.site_tournoi_id || ['termine', 'annule'].includes(evt.statut)) {
+      bilan.arret = !evt.site_tournoi_id ? 'non-lie' : ['termine', 'annule'].includes(evt.statut) ? 'evenement-termine' : 'inactif';
       bilan.limite = compteur.limite;
       return bilan;
     }
@@ -796,6 +803,10 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       bilan.erreur = `site : ${String(e?.message ?? e).slice(0, 200)}`;
       return bilan;
     }
+    bilan.lus = { matchs: lu.matchs.filter(m => m.genre === 'match').length, lobbies: lu.matchs.filter(m => m.genre === 'lobby').length };
+    const noter = (m, raison, extra = {}) => {
+      if (bilan.details.length < 20) bilan.details.push({ cle: m.cle, titre: titreDe(m, langues(mode)[0]), raison, ...extra });
+    };
     const app = await equipesApp(evenementId);
     const lignes = new Map((await lignesDe(evenementId)).map(l => [l.site_match_id, l]));
     const vus = new Set();
@@ -850,6 +861,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       vus.add(m.cle);
       if (compteur.limite || compteur.n >= LIMITES_SALONS.actionsParPassage) {
         bilan.attente++;
+        noter(m, 'attente');
         continue;
       }
       if (forcer && forcer !== m.cle) {
@@ -863,18 +875,45 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       if (ligne && ['ouvert', 'termine'].includes(ligne.statut) && ligne.salon_id) {
         const avant = ligne.empreinte;
         const avantR = ligne.resultat_empreinte;
+        bilan.suivis++;
         await suivre({ evt, reglages, ligne, m, equipes, d, mode, compteur });
         if (avant !== empreinteMatch(m)) bilan.majs++;
         if (m.resultat && avantR !== empreinteResultat(m)) bilan.resultats++;
         continue;
       }
-      if (ligne && ligne.statut !== 'creation') continue; // supprimé, annulé : jamais recréé automatiquement
+      if (ligne && ligne.statut !== 'creation') {
+        // Supprimé, annulé : jamais recréé automatiquement (« Créer maintenant » le permet).
+        if (m.resultat) bilan.ignores.termine++;
+        else {
+          bilan.ignores.ferme++;
+          noter(m, 'ferme', { statut: ligne.statut });
+        }
+        continue;
+      }
       const manuel = forcer === m.cle;
       const avance = reglages.avanceH > 0 && m.prevu && m.statut !== 'live' ? Date.parse(m.prevu) - t0() <= reglages.avanceH * 3_600_000 : true;
-      if (!manuel && (m.resultat || m.equipes.length < 2 || !avance)) continue;
+      if (!manuel) {
+        if (m.resultat) {
+          // Terminé sur le site (résultat saisi) avant d'avoir eu un salon.
+          bilan.ignores.termine++;
+          if (!ligne) noter(m, 'termine');
+          continue;
+        }
+        if (m.equipes.length < 2) {
+          bilan.ignores.equipes++;
+          noter(m, 'equipes', { n: m.equipes.length });
+          continue;
+        }
+        if (!avance) {
+          bilan.ignores.delai++;
+          noter(m, 'delai', { prevu: m.prevu });
+          continue;
+        }
+      }
       if (manuel && !m.equipes.length) continue;
       if (creations >= LIMITES_SALONS.creationsParPassage) {
         bilan.attente++;
+        noter(m, 'attente');
         continue;
       }
       const salons = await lireSalons();
@@ -882,6 +921,7 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         bilan.erreur = 'categorie-pleine';
         await alerter(evt, 'categorie-pleine', { match: m.cle, parMatch: false });
         bilan.attente++;
+        noter(m, 'categorie');
         continue;
       }
       if (!ligne) {
@@ -892,6 +932,15 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
       }
       creations++;
       if (await creerSalon({ evt, reglages, ligne, m, equipes, d, mode, compteur, salonsServeur: salons, parentId })) bilan.crees++;
+      else if (compteur.limite) {
+        bilan.attente++;
+        noter(m, 'attente');
+      } else {
+        // Création refusée par Discord : code gardé sur la ligne (permission, hiérarchie…).
+        bilan.echecs++;
+        const apres = await base.premier('SELECT erreur FROM club_salons_match WHERE id = ?', [ligne.id]);
+        noter(m, 'echec', { code: apres?.erreur ?? null });
+      }
     }
     if (ancre && !compteur.limite) bilan.places = await placerSousAncre(evenementId, ancre, salonsServeur ?? [], d, compteur);
     if (reglages.ancreId) await signalerAncre(evt, reglages, !ancre, mode, compteur);

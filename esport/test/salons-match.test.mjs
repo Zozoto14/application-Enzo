@@ -312,6 +312,68 @@ test('résultat → posté, suppression après le délai avec historique ; match
   assert.equal((await lig(`l:${L1}`)).statut, 'supprime');
 });
 
+test('lobby de phase de groupes « terminé » sans aucun résultat (bouton Enregistrer du site) : salon créé ; diagnostic du passage', async () => {
+  const k = await monter();
+  await k.api(k.sm, undefined, { methode: 'PUT', corps: { actif: false, categorieId: CAT } });
+  // Données réelles (bug du 12/11/2026, « The Nuke End ») : phase de groupes à 1 lobby, aucun match 1v1, « Lobby A »
+  // marqué « finished » par « Enregistrer » sans placement (scores « - », 0 point), horaire à définir ; l'équipe « Test »
+  // ajoutée sur le site après le lien (pas d'équipe de l'événement, donc aucun rôle Discord).
+  const LA = '55555555-5555-4555-8555-00000000000a';
+  const LB = '55555555-5555-4555-8555-00000000000b';
+  const LC = '55555555-5555-4555-8555-00000000000c';
+  const t = k.site.tables;
+  t.tournament_stages = [{ id: '66666666-6666-4666-8666-000000000001', tournament_id: T1, kind: 'groups', name: 'Phase de groupes', sort_order: 0 }];
+  t.tournament_matches = [];
+  t.tournament_teams.push({ id: ED, tournament_id: T1, name: 'Test', tag: null });
+  t.tournament_lobbies = [
+    { id: LA, tournament_id: T1, round: 1, position: 1, label: 'Lobby A', status: 'finished', scheduled_at: null, stream_url: null },
+    // Vrai résultat saisi : ignoré (terminé) ; une seule équipe : ignoré (moins de deux équipes).
+    { id: LB, tournament_id: T1, round: 1, position: 2, label: 'Lobby B', status: 'finished', scheduled_at: null, stream_url: null },
+    { id: LC, tournament_id: T1, round: 1, position: 3, label: 'Lobby C', status: 'pending', scheduled_at: null, stream_url: null },
+  ];
+  t.tournament_lobby_entries = [
+    { id: 'e1', lobby_id: LA, team_id: EA, placement: null, points: 0, dnf: false, sort_order: 0 },
+    { id: 'e2', lobby_id: LA, team_id: ED, placement: null, points: 0, dnf: false, sort_order: 1 },
+    { id: 'e3', lobby_id: LB, team_id: EB, placement: 1, points: 12, dnf: false, sort_order: 0 },
+    { id: 'e4', lobby_id: LB, team_id: EC, placement: 2, points: 8, dnf: false, sort_order: 1 },
+    { id: 'e5', lobby_id: LC, team_id: EB, placement: null, points: 0, dnf: false, sort_order: 0 },
+  ];
+  const v = await activer(k);
+  const ls = await lignes(k);
+  assert.deepEqual(ls.map(l => l.site_match_id), [`l:${LA}`], 'seul le lobby A a son salon');
+  const salon = k.discord.etat.salons.get(ls[0].salon_id);
+  assert.equal(salon.name, 'r1-alp-test');
+  // Équipe sans rôle : listée dans l'embed (pas d'accès), l'autre a accès.
+  assert.ok(salon.permission_overwrites.some(o => o.id === k.roles.ALP && o.allow === DROITS_EQUIPE));
+  const [accueil] = messagesDe(k, ls[0].salon_id);
+  assert.match(accueil.embeds[0].title, /Lobby A · Round 1/);
+  assert.match(accueil.embeds[0].description, /à venir/);
+  assert.ok(accueil.embeds[0].fields.some(f => f.name === 'Test' && /pas de rôle Discord/.test(f.value)));
+  // Diagnostic : lu sur le site, ignorés avec leur raison.
+  const e = v.etat;
+  assert.deepEqual(e.lus, { matchs: 0, lobbies: 3 });
+  assert.equal(e.crees, 1);
+  assert.deepEqual(e.ignores, { termine: 1, equipes: 1, delai: 0, ferme: 0 });
+  assert.deepEqual(e.details.map(d => [d.titre, d.raison]), [['Lobby B · Round 1', 'termine'], ['Lobby C · Round 1', 'equipes']]);
+  assert.equal(e.details[1].n, 1);
+  assert.equal(e.arret, null);
+  // Passage suivant : le salon est suivi, rien de plus.
+  const v2 = await synchro(k);
+  assert.equal(v2.etat.suivis, 1);
+  assert.equal(salonsCrees(k).length, 1);
+  // Création anticipée : hors délai signalé.
+  t.tournament_lobby_entries.push({ id: 'e6', lobby_id: LC, team_id: EC, placement: null, points: 0, dnf: false, sort_order: 1 });
+  t.tournament_lobbies[2].scheduled_at = '2026-10-25T12:00:00.000Z';
+  const v3 = (await k.api(k.sm, undefined, { methode: 'PUT', corps: { avanceH: 2 } })).corps;
+  assert.equal(v3.etat.ignores.delai, 1);
+  assert.ok(v3.etat.details.some(d => d.raison === 'delai' && d.prevu === '2026-10-25T12:00:00.000Z'));
+  // Désactivé : le passage dit pourquoi il n'a rien fait.
+  const v4 = (await k.api(k.sm, undefined, { methode: 'PUT', corps: { actif: false } })).corps;
+  const v5 = await synchro(k);
+  assert.ok(v4);
+  assert.equal(v5.etat.arret, 'inactif');
+});
+
 test('site injoignable : rien n’est considéré comme supprimé', async () => {
   const k = await monter();
   await activer(k);

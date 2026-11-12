@@ -329,7 +329,27 @@ export interface VueSalonsMatch {
   salonsTexte: Array<{ id: string; nom: string; type: 'texte' | 'categorie'; parent: string | null; position: number }>;
   salons: SalonMatch[];
   matchs: MatchSiteSansSalon[];
-  etat: { le: string; crees: number; majs: number; resultats: number; annules: number; supprimes: number; attente: number; limite: boolean; erreur: string | null } | null;
+  etat: EtatSalonsMatch | null;
+}
+/** Raison pour laquelle un match du site n'a pas eu de salon au dernier passage. */
+export type RaisonIgnore = 'termine' | 'equipes' | 'delai' | 'ferme' | 'attente' | 'categorie' | 'echec';
+/** Bilan du dernier passage (absent des passages d'avant le 12/11/2026 pour les champs facultatifs). */
+export interface EtatSalonsMatch {
+  le: string;
+  crees: number;
+  majs: number;
+  resultats: number;
+  annules: number;
+  supprimes: number;
+  attente: number;
+  limite: boolean;
+  erreur: string | null;
+  arret?: 'inactif' | 'non-lie' | 'evenement-termine' | null;
+  lus?: { matchs: number; lobbies: number } | null;
+  suivis?: number;
+  ignores?: { termine: number; equipes: number; delai: number; ferme: number };
+  echecs?: number;
+  details?: Array<{ cle: string; titre: string; raison: RaisonIgnore; n?: number; prevu?: string | null; statut?: string; code?: string | null }>;
 }
 export interface MessageHistorique {
   id: string;
