@@ -21,6 +21,30 @@ export function echapper(texte) {
 }
 
 const imageDistante = url => (typeof url === 'string' && url.startsWith('https://media.valorant-api.com/') ? url : null);
+
+const cdnRiot = url => (typeof url === 'string' && /^https:\/\/media\.valorant-api\.com\/[A-Za-z0-9/_.-]{1,200}$/.test(url) ? url : null);
+
+/**
+ * Page publique : un pion ou une capacité posé sans icône (strat dessinée avant l'import des portraits) reprend
+ * l'adresse du CDN officiel gardée dans le profil du jeu (`personnages[].source.url`, `officielles[].url`). Les
+ * images du stockage du serveur (liens signés, qui expirent) n'entrent jamais dans la page. Rend un nouveau document.
+ */
+export function completerIcones(doc, donneesJeu) {
+  const persos = new Map((donneesJeu?.personnages ?? []).map(p => [p.cle, p]));
+  if (!persos.size) return doc;
+  const touches = { Grenade: 'C', Ability1: 'Q', Ability2: 'E', Ultimate: 'X' };
+  const icone = o => {
+    const p = persos.get(o.agent);
+    if (!p) return null;
+    if (o.type === 'agent') return cdnRiot(p.source?.url);
+    const off = (p.officielles ?? []).find(c => c.slot === o.capacite || c.touche === touches[o.capacite] || c.touche === o.capacite);
+    return cdnRiot(off?.url);
+  };
+  return {
+    ...doc,
+    etapes: doc.etapes.map(e => ({ ...e, objets: e.objets.map(o => ((o.type === 'agent' || o.type === 'capacite') && !imageDistante(o.icone) && icone(o) ? { ...o, icone: icone(o) } : o)) })),
+  };
+}
 export const initiales = nom =>
   String(nom ?? '?')
     .split(/[\s/_-]+/)

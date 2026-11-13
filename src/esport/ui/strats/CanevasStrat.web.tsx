@@ -28,14 +28,15 @@
  * milieu d'un mur courbable, points d'un mur tracé, direction et portée d'un
  * cône, regard d'un pion. Maj aimante l'angle à 15°. Souris, doigt et stylet.
  * Pions : portrait de l'agent (rond, anneau à la couleur du joueur, nom du
- * joueur dessous), initiales tant que les images ne sont pas importées ;
- * capacités : icône de la capacité au point de pose.
+ * joueur dessous) : image importée, sinon CDN officiel, sinon initiales ; fantôme du portrait sous le pointeur
+ * pendant la pose ; capacités : icône de la capacité au point de pose.
  */
 
 import Konva from 'konva';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, RegularPolygon, Stage, Text as KText, Wedge } from 'react-konva';
-import { initiales, type AgentAsset, type CacheImages, type CapaciteAsset, type CarteAsset } from '../../strats/assets';
+import { initiales, sourcesIcone, type AgentAsset, type CacheImages, type CapaciteAsset, type CarteAsset } from '../../strats/assets';
+import { useImageJeu as useImage } from './imagesCanevas.web';
 import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type ChampsObjet, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
 import { aimanter, cadreImage, centre, dansPolygone, decalerTrace, etatLecture, longueurMax, primitiveZone, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
 import { avecChamps, debuterVisee, estGlisse, poigneesObjet, poseCapacite, posePion, poseVision, suivreVisee, tirerPoigneeDe, type PoigneeObjet, type Visee } from '../../strats/pose';
@@ -99,43 +100,25 @@ export interface PropsCanevas {
 
 Konva.hitOnDragEnabled = true;
 
-/** Image d'un asset (blob local) ; undefined tant qu'elle n'est pas chargée, ou si elle ne charge pas (repli). */
-function useImage(url: string | null | undefined, images: CacheImages): HTMLImageElement | undefined {
-  const [img, setImg] = useState<HTMLImageElement | undefined>();
-  useEffect(() => {
-    let vivant = true;
-    setImg(undefined);
-    void images.obtenir(url ?? null).then(src => {
-      if (!src || !vivant) return;
-      const i = new window.Image();
-      i.onload = () => vivant && setImg(i);
-      i.src = src;
-    });
-    return () => {
-      vivant = false;
-    };
-  }, [url, images]);
-  return img;
-}
-
 /**
  * Jeton rond : portrait (ou icône) DÉCOUPÉ en cercle sur un fond sombre, anneau à la couleur du joueur ;
- * initiales sur la couleur du joueur tant que l'image n'est pas chargée (repli).
+ * initiales sur la couleur du joueur tant que l'image n'est pas chargée (repli). `icone` : sources essayées dans
+ * l'ordre (image importée, puis CDN officiel). L'image porte le nom `image-jeu` (export PNG : masquée si elle
+ * empêchait l'export, les initiales restent).
  */
-function Jeton({ rayon, couleur, nom, icone, images, surbrillance, anneau = 3 }: { rayon: number; couleur: string; nom: string; icone: string | null; images: CacheImages; surbrillance: boolean; anneau?: number }) {
+function Jeton({ rayon, couleur, nom, icone, images, surbrillance, anneau = 3 }: { rayon: number; couleur: string; nom: string; icone: string | ReadonlyArray<string> | null; images: CacheImages; surbrillance: boolean; anneau?: number }) {
   const img = useImage(icone, images);
   return (
     <>
       {surbrillance ? <Circle radius={rayon + anneau + 6} stroke="#fde047" strokeWidth={3} dash={[6, 4]} listening={false} /> : null}
       <Circle radius={rayon + anneau} fill={couleur} stroke={surbrillance ? '#ffffff' : '#0b0f17'} strokeWidth={surbrillance ? 2.5 : 1.5} shadowColor="#000000" shadowBlur={surbrillance ? 14 : 5} shadowOpacity={0.6} />
+      <KText text={initiales(nom)} fontSize={rayon * 0.9} fontStyle="bold" fill="#ffffff" width={rayon * 2} x={-rayon} y={-rayon * 0.45} align="center" listening={false} />
       {img ? (
-        <Group clipFunc={ctx => ctx.arc(0, 0, rayon, 0, Math.PI * 2, false)} listening={false}>
+        <Group name="image-jeu" clipFunc={ctx => ctx.arc(0, 0, rayon, 0, Math.PI * 2, false)} listening={false}>
           <Circle radius={rayon} fill="#111827" />
           <KImage image={img} x={-rayon} y={-rayon} width={rayon * 2} height={rayon * 2} />
         </Group>
-      ) : (
-        <KText text={initiales(nom)} fontSize={rayon * 0.9} fontStyle="bold" fill="#ffffff" width={rayon * 2} x={-rayon} y={-rayon * 0.45} align="center" listening={false} />
-      )}
+      ) : null}
     </>
   );
 }
@@ -258,8 +241,8 @@ interface PropsObjet {
   lecture?: EtatLecture;
   /** Position imposée (pion qui suit son trajet pendant la lecture). */
   position?: { x: number; y: number };
-  /** Icône à jour (portrait importé, icône de la capacité) ; repli : celle du document. */
-  icone?: string | null;
+  /** Sources de l'icône (portrait importé, puis CDN du profil, puis celle du document). */
+  icone?: ReadonlyArray<string>;
   /** Nom court du joueur, sous son pion. */
   etiquette?: string;
   onFin(o: ObjetStrat, node: Konva.Node): void;
@@ -285,7 +268,7 @@ function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe
         <Group {...commun} x={p.x} y={p.y}>
           {typeof o.angle === 'number' ? <Wedge radius={44} angle={46} rotation={o.angle - 23} fill={o.couleur} opacity={0.5} listening={false} /> : null}
           <Group rotation={-rotation}>
-            <Jeton rayon={20} couleur={o.couleur} nom={o.nom} icone={icone ?? o.icone} images={images} surbrillance={surbrillance} />
+            <Jeton rayon={20} couleur={o.couleur} nom={o.nom} icone={icone ?? sourcesIcone(o)} images={images} surbrillance={surbrillance} />
             {etiquette ? <Etiquette x={0} y={34} texte={etiquette} taille={12} largeur={110} /> : null}
             {niveau ? <Etiquette x={20} y={-20} texte={niveau} taille={14} /> : null}
           </Group>
@@ -298,7 +281,7 @@ function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe
         <Group {...commun} x={o.x} y={o.y}>
           {z ? <FormeZone p={primitiveZone(o.x, o.y, z, echelle)} couleur={o.couleur} ox={o.x} oy={o.y} /> : null}
           <Group rotation={-rotation}>
-            <Jeton rayon={12} anneau={2.5} couleur={o.couleur} nom={o.nom} icone={icone ?? o.icone} images={images} surbrillance={surbrillance} />
+            <Jeton rayon={12} anneau={2.5} couleur={o.couleur} nom={o.nom} icone={icone ?? sourcesIcone(o)} images={images} surbrillance={surbrillance} />
             {typeof o.ordre === 'number' ? (
               <>
                 <Circle x={14} y={-14} radius={9} fill="#0b0f17" stroke="#ffffff" strokeWidth={1.5} listening={false} />
@@ -428,7 +411,19 @@ export default function CanevasStrat(p: PropsCanevas) {
     st.scale({ x: 1, y: 1 });
     st.position({ x: 0, y: 0 });
     try {
-      return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
+      try {
+        return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
+      } catch (e) {
+        // Image d'une autre origine qui « contamine » le canevas : export avec les initiales à sa place, jamais d'échec.
+        const masquees = st.find('.image-jeu').filter(n => n.visible());
+        if (!masquees.length) throw e;
+        masquees.forEach(n => n.visible(false));
+        try {
+          return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
+        } finally {
+          masquees.forEach(n => n.visible(true));
+        }
+      }
     } finally {
       st.scale({ x: avant.echelle, y: avant.echelle });
       st.position({ x: avant.x, y: avant.y });
@@ -561,8 +556,8 @@ export default function CanevasStrat(p: PropsCanevas) {
       if (ev?.evt) setMaj(Boolean(ev.evt.shiftKey));
       return;
     }
-    // Aperçu de la capacité sous le pointeur, à sa taille réelle, avant de la poser.
-    if (outil === 'capacite' && editable && p.capacite && !pincement.current) {
+    // Aperçu sous le pointeur avant la pose : capacité à sa taille réelle, portrait de l'agent armé.
+    if (((outil === 'capacite' && p.capacite) || (outil === 'agent' && p.agent)) && editable && !pincement.current) {
       const pt = position();
       if (pt) setFantome(pt);
     }
@@ -713,7 +708,7 @@ export default function CanevasStrat(p: PropsCanevas) {
     }
   }
   const nomJoueur = (j: number | null | undefined) => (typeof j === 'number' && doc.joueurs[j] ? doc.joueurs[j].nom.slice(0, 14) : undefined);
-  const iconeAJour = (o: ObjetStrat) => (o.type === 'agent' ? agentDe(o.agent)?.icone : o.type === 'capacite' ? capaciteDe(o.agent, o.capacite)?.icone : undefined);
+  const iconeAJour = (o: ObjetStrat) => (o.type === 'agent' ? sourcesIcone(agentDe(o.agent), o.icone) : o.type === 'capacite' ? sourcesIcone(capaciteDe(o.agent, o.capacite), o.icone) : undefined);
   const rendreObjet = (brut: ObjetStrat) => {
     const o = apercu?.id === brut.id ? avecChamps(brut, apercu.champs) : brut;
     return (
@@ -829,7 +824,7 @@ export default function CanevasStrat(p: PropsCanevas) {
             </Tourne>
           </Layer>
         ))}
-        {(fantome && outil === 'capacite' && p.capacite) || visee ? (
+        {(fantome && ((outil === 'capacite' && p.capacite) || (outil === 'agent' && p.agent))) || visee ? (
           <Layer listening={false}>
             <Tourne rotation={rotation}>
               {(() => {
@@ -861,11 +856,24 @@ export default function CanevasStrat(p: PropsCanevas) {
                   return (
                     <Group opacity={0.8}>
                       {tige}
-                      <Circle x={o.x} y={o.y} radius={20} fill={c} opacity={0.5} stroke="#ffffff" strokeWidth={1.5} />
+                      {outil === 'agent' && p.agent ? (
+                        <Group x={o.x} y={o.y} rotation={-rotation}>
+                          <Jeton rayon={20} couleur={c} nom={p.agent.nom} icone={sourcesIcone(p.agent)} images={images} surbrillance={false} />
+                        </Group>
+                      ) : (
+                        <Circle x={o.x} y={o.y} radius={20} fill={c} opacity={0.5} stroke="#ffffff" strokeWidth={1.5} />
+                      )}
                     </Group>
                   );
                 }
                 if (!fantome) return null;
+                // Fantôme du pion : portrait de l'agent armé sous le pointeur (même image que le pion posé).
+                if (outil === 'agent' && p.agent)
+                  return (
+                    <Group x={fantome.x} y={fantome.y} rotation={-rotation} opacity={0.6} name="fantome-agent">
+                      <Jeton rayon={20} couleur={c} nom={p.agent.nom} icone={sourcesIcone(p.agent)} images={images} surbrillance={false} />
+                    </Group>
+                  );
                 const z = zonePourPose(fantome);
                 return (
                   <Group opacity={0.55}>

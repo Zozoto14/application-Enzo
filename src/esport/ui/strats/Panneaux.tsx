@@ -12,7 +12,8 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { AgentAsset, CapaciteAsset } from '../../strats/assets';
+import { sourcesIcone, type AgentAsset, type CapaciteAsset } from '../../strats/assets';
+import { IconeAsset } from './Barres';
 import { ETAPES_MAX, ordreUtilitaires, type Action, type ChampsObjet, type DocumentStrat, type ObjetStrat, type Zone } from '../../strats/document';
 import { definitionPour, type GenreMarqueur } from '../../strats/modeles';
 import { trSt } from '../../i18n/strats2';
@@ -254,6 +255,7 @@ export function PanneauJoueurs({ theme, doc, agents, joueur, onJoueur, faire, mo
                 <Text style={{ color: theme.texte, fontSize: 12 }}>{i + 1}</Text>
               </View>
             </Bouton>
+            {j.agent ? <IconeAsset theme={theme} url={sourcesIcone(agents.find(a => a.cle === j.agent))} nom={agents.find(a => a.cle === j.agent)?.nom ?? j.agent} taille={26} testID={`esport-joueur-portrait-${i}`} /> : null}
             {modifiable ? (
               <>
                 <Champ theme={theme} libelle={trSt('joueurs.nom')} valeur={j.nom} onChanger={nom => faire({ type: 'joueur', index: i, champs: { nom: nom.slice(0, 24) } })} maxLength={24} style={{ flex: 1, minWidth: 110 }} testID={`esport-joueur-nom-${i}`} />

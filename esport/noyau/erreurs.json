@@ -14,6 +14,7 @@
   "valorant-api.com ne donne aucune map exploitable.": "valorant-api.com gives no usable map.",
   "valorant-api.com ne donne aucun agent exploitable.": "valorant-api.com gives no usable agent.",
   "Import des agents : profil Valorant seulement.": "Agent import: Valorant profile only.",
+  "Import interrompu (durée bornée) : repris au prochain passage.": "Import stopped (time limit): resumed on the next run.",
   "Import automatique : Valorant et The Finals seulement (déposez les images à la main).": "Automatic import: Valorant and The Finals only (upload images manually).",
   "Fichier distant trop volumineux.": "Remote file too large.",
   "Adresse refusée (https vers un site public autorisé seulement).": "Address refused (https to an allowed public site only).",

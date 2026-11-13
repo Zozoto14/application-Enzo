@@ -25,6 +25,7 @@ import { ErreurEsport, base64url, depuisBase64url, echec, egal, iso, jsonOu, nou
 import { pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT, documentVide, validerDocument } from './document.mjs';
 import { joueursDuModele, modeleDuJeu } from './modeles.mjs';
+import { completerIcones } from './svg.mjs';
 
 export const MODULE_STRATS = 'strat_editor';
 export const VERSIONS_GARDEES = 30;
@@ -548,8 +549,15 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
       notes: s.notes,
       tags: jsonOu(s.tags, []),
       majLe: s.maj_le,
-      donnees: validerDocument(JSON.parse(s.donnees), { modele: s.modele }),
+      donnees: completerIcones(validerDocument(JSON.parse(s.donnees), { modele: s.modele }), await donneesJeuDe(s.jeu)),
     };
+  }
+
+  /** Données du profil de jeu d'une strat (icônes du CDN officiel pour la page publique) ; null si illisible. */
+  async function donneesJeuDe(cle) {
+    if (!cle) return null;
+    const j = await base.premier('SELECT donnees FROM jeux WHERE cle = ?', [cle]).catch(() => null);
+    return j ? jsonOu(j.donnees, null) : null;
   }
 
   return { liste, detail, creer, enregistrer, modifier, dupliquer, supprimer, supprimerLot, corbeille, restaurer, versions, version, partages, creerPartage, revoquerPartage, lirePartage, lienMiniature, peut, exiger, visible };

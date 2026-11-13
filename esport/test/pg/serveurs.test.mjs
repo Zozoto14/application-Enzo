@@ -194,7 +194,7 @@ test('o2switch : vidéo envoyée en morceaux de 8 Mio par HTTP (corps de requêt
     assert.equal(trop.status, 413);
     assert.equal((await api(esport.url, '/sante')).statut, 200);
     // Cron : la tâche de ménage des envois passe.
-    const rapport = await executerCron(base, configEsport(relais.url, dossier, { medias: configMedias({}) }));
+    const rapport = await executerCron(base, configEsport(relais.url, dossier, { medias: configMedias({}) }), { fetchImportJeux: async () => { throw new Error('réseau interdit en test'); } });
     assert.deepEqual(rapport.filter(r => !r.ok), []);
     assert.ok(rapport.some(r => r.tache === 'envois inachevés'));
   } finally {

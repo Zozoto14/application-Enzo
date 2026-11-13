@@ -82,9 +82,23 @@ droite l'inspecteur, les joueurs, l'ordre des utilitaires et les calques.
 - un appui sur un objet existant avec un outil de pose le **sélectionne** (et le déplace) au lieu d'en poser un autre.
 
 Images : pions = **portrait** de l'agent découpé en rond, anneau à la couleur du joueur, nom du joueur dessous ;
-capacités posées = **icône** de la capacité au point de pose ; initiales tant que les portraits ne sont pas importés
-(« Importer agents et capacités », Administration › Jeux). Le document d'une strat ne garde que l'adresse CDN Riot
-(`iconeDoc`) ; l'affichage prend l'image importée dans le stockage du serveur (lien signé du profil).
+capacités posées = **icône** de la capacité au point de pose. **Aucune action manuelle** : le serveur importe les
+portraits tout seul (premier affichage du profil par l'éditeur, puis le cron ; voir profils-jeu.md), et en attendant
+l'éditeur prend l'adresse du CDN officiel. Ordre des sources (`sourcesIcone`, src/esport/strats/assets.ts) :
+1. image **importée** dans le stockage du serveur (lien signé du profil) ;
+2. adresse du **CDN officiel** gardée dans le profil ou le document (`https://media.valorant-api.com/…` seulement,
+   en https ; tout autre hôte est écarté) ;
+3. **initiales**.
+Une image qui ne charge pas (réseau, lien expiré, décodage) passe à la source suivante. Même ordre pour les pions du
+canevas, la barre d'agents, la barre des capacités, les pastilles des joueurs (panneau Joueurs) et la lecture seule ;
+l'export PNG reste toujours possible (images lues par `fetch` puis converties en `blob:` ; si une image venait malgré
+tout « contaminer » le canevas, elle est masquée pour l'export et ses initiales restent). Pendant la pose (agent armé,
+pointeur sur la map), le portrait suit le pointeur (fantôme) ; le pion posé l'affiche aussitôt (image déjà décodée).
+Le message « Portraits indisponibles » n'apparaît que si l'image importée ET le CDN ont échoué pour tous les agents
+affichés. The Finals (pas de portraits officiels) : initiales, sans message. Le document d'une strat ne garde que
+l'adresse CDN Riot (`iconeDoc`) ; la page publique de partage (CSP `img-src https://media.valorant-api.com data:`)
+complète un pion posé sans icône avec l'adresse CDN gardée dans le profil, jamais un lien signé. Le site statique ne
+pose pas de CSP (bureau/public/_headers) : rien à ouvrir.
 
 - Outils : sélection, main, pion, capacité, flèche (trajet du joueur, animé), ligne, forme, texte, marqueur,
   cône de vision, gomme ; inspecteur (dimensions en mètres, ordre, minutage, étage, équipe adverse, étiquette).
@@ -119,8 +133,9 @@ Suppr · Ctrl+S · Ctrl+D dupliquer l'étape · [ et ] étapes · flèches : dé
 3. **Calibrer** ce qui reste approximatif (The Finals : échelle par défaut « à vérifier ») avec deux points.
 4. Tracer les **callouts** et poser les **repères** (sites A/B/C, spawns ; cashouts et coffres pour The Finals ;
    étages).
-5. **Importer agents et capacités** (Valorant, fiche du jeu) : portraits, icônes et noms officiels des capacités,
-   icônes des rôles, rangés dans le stockage du serveur (voir profils-jeu.md).
+5. Agents et capacités (Valorant) : importés **automatiquement** par le serveur (portraits, icônes et noms officiels
+   des capacités, icônes des rôles, rangés dans son stockage) ; le bouton **Importer agents et capacités** (fiche du
+   jeu) reste pour forcer un import (voir profils-jeu.md).
 6. **Vérifier** les capacités pré-remplies (« Pré-remplir les capacités », « Compléter avec le modèle The
    Finals »), décocher « à vérifier » une fois confirmées.
 
@@ -138,5 +153,9 @@ des murs, mur tracé, Maj 15°), `src/esport/StratsBarres.test.tsx` (barre d'age
 filtre par rôle, camp ; barre des capacités ; étapes ; « Supprimer tout » ; import des agents),
 `src/esport/StratsEditeurPanneaux.test.tsx` (panneaux de l'éditeur, Jeux précis), `esport/test/import-agents.test.mjs`
 (import serveur des agents, mur tracé et double dans le document et la page de partage),
+`esport/test/import-agents-auto.test.mjs` (import automatique : premier affichage en tâche de fond et single-flight,
+cron une fois par jour, réimport après 7 jours, portrait déposé à la main gardé, page publique ; SQLite et PostgreSQL),
+`src/esport/StratsPortraits.test.tsx` (pion posé avec la photo, fantôme, repli CDN puis initiales),
+`src/esport/strats/assets.test.ts` (ordre des sources, repli sur erreur, liste d'hôtes),
 `scripts/e2e-esport-strats.mjs` (navigateur : mur posé en cliquant-glissant et poignées tirées à la souris, poignée
 de regard tirée au doigt sur iPad).

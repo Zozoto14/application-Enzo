@@ -61,6 +61,14 @@ const PROGRESSION_INTERVALLE_MS = 10_000;
 /** Un brouillon « en cours » sans nouvelle depuis 15 min (processus arrêté) ne bloque plus un nouveau brouillon du même jeu. */
 const EN_COURS_MUET_MS = 15 * 60_000;
 
+/** Import automatique des agents (Valorant) : réimport après 7 jours (nouveaux agents), essais espacés, durée bornée. */
+export const IMPORT_AGENTS_FRAICHEUR_MS = 7 * 86_400_000;
+export const IMPORT_AGENTS_ESSAI_CRON_MS = 86_400_000;
+export const IMPORT_AGENTS_ESSAI_DEMANDE_MS = 3_600_000;
+export const IMPORT_AGENTS_BUDGET_MS = 90_000;
+/** Auteur des écritures automatiques (versions du profil, images) : aucun compte. */
+const SYSTEME = Object.freeze({ compte: null });
+
 /** Premier jour du mois (UTC) de l'instant `t`, en ISO. */
 export const debutMois = t => {
   const d = new Date(t);
@@ -103,7 +111,8 @@ export async function aPermissionJeux(base, acteur) {
  * { connecteur (creerConnecteurLocal), disponible(), raison, info: { modele, nomModele, moteur, threads,
  * contexte, delaiMs, benchmark }, etat() (en marche, dernière vitesse…), lancerTravailleur() }.
  */
-export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) => globalThis.fetch(...a), maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS }) {
+export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) => globalThis.fetch(...a), maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console, attenteTestMs = ia.attenteTestMs ?? ATTENTE_TEST_MS, importAuto = true }) {
+  let dernierImportEnFond = null;
   const images = servicesImagesJeux({ base, stockage, cleSession, maintenant });
   const config = ia.config ?? null;
   // Moteurs d'API : principal (IA_API_*) et secondaire (IA_API2_*, porté par la config du principal).
@@ -213,7 +222,10 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     const j = await base.premier('SELECT * FROM jeux WHERE cle = ?', [ctx.team.jeu]);
     if (!j) return { cle: ctx.team.jeu, nom: ctx.team.jeu, couleur: '#8b8b9a', icone: null, base: ctx.team.jeu === 'valorant' ? 'valorant' : null, modeleStrat: modeleDuJeu(null, ctx.team.jeu), statut: 'actif', version: 0, donnees: validerDonnees({}).donnees, images: {} };
     const donnees = donneesDe(j);
-    return { ...entetePublic(j), donnees, images: await images.liens(j.cle, donnees, acteur.compte, origine) };
+    // Éditeur de strats d'une team Valorant : portraits pas encore importés → import automatique en tâche de fond.
+    const enFond = await declencherImportAgents(j).catch(() => null);
+    if (enFond) dernierImportEnFond = enFond.promesse;
+    return { ...entetePublic(j), donnees, images: await images.liens(j.cle, donnees, acteur.compte, origine), ...(enFond ? { importAgents: 'en-cours' } : {}) };
   }
 
   /** Télécharge une image (bornée, vérifiée) et la dépose si elle a changé ; rend `{ fichier, empreinte, statut }`. */
@@ -329,6 +341,16 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
   async function importerAgents(acteur, cle, corps = {}) {
     await exigerGestion(acteur);
     const j = await ligneJeu(cle);
+    const r = await importerAgentsDans(acteur, j, { versionAttendue: corps?.version, remplacer: corps?.remplacer === true, motif: 'import-agents' });
+    await noterImportAgents(j.cle, { reussi: true, auto: false });
+    return { ...r, jeu: await detail(acteur, cle) };
+  }
+
+  /**
+   * Cœur de l'import des agents (manuel ou automatique) : rend `{ rapport, inchange }`. `fin` : instant au-delà
+   * duquel plus aucune image n'est téléchargée (import automatique borné ; le reste au passage suivant).
+   */
+  async function importerAgentsDans(acteur, j, { versionAttendue, remplacer = false, motif, fin = Infinity }) {
     if (modeleDuJeu(j.modele_strat, j.cle) !== 'valorant') throw echec(400, 'import-modele', 'Import des agents : profil Valorant seulement.');
     const { octets } = await telechargerBorne(fetchImport, URL_AGENTS_VALORANT, { hotes: HOTES_VALORANT, max: TAILLE_MAX_JSON_IMPORT, types: ['application/json'] });
     let json;
@@ -341,9 +363,11 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     if (agents.length === 0) throw echec(502, 'import-vide', 'valorant-api.com ne donne aucun agent exploitable.');
     const d = structuredClone(donneesDe(j));
     const t = new Date(maintenant()).toISOString();
-    const remplacer = corps?.remplacer === true;
     const rapport = [];
-    const image = (url, ancien, nom) => importerImage(acteur, j, url, ancien, { hotes: HOTES_VALORANT, nom });
+    const image = (url, ancien, nom) => {
+      if (maintenant() > fin) throw echec(503, 'import-delai', 'Import interrompu (durée bornée) : repris au prochain passage.');
+      return importerImage(acteur, j, url, ancien, { hotes: HOTES_VALORANT, nom });
+    };
     // Rôles : classe ajoutée si absente, icône importée une fois.
     const rolesFaits = new Set();
     for (const a of agents) {
@@ -400,8 +424,129 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
       }
       rapport.push(ligne);
     }
-    const r = await ecrireVersion(acteur, j, { donnees: validerDonnees(d).donnees, versionAttendue: corps?.version, motif: 'import-agents' });
-    return { rapport, inchange: Boolean(r.inchange), jeu: await detail(acteur, cle) };
+    const r = await ecrireVersion(acteur, j, { donnees: validerDonnees(d).donnees, versionAttendue, motif });
+    return { rapport, inchange: Boolean(r.inchange) };
+  }
+
+  // -------------------------------------------------------------- Import automatique des agents (Valorant)
+
+  /**
+   * Sans aucune action du Fondateur, les portraits et icônes des agents arrivent dans le stockage du serveur
+   * (même import que le bouton, mêmes règles : un portrait déposé à la main n'est jamais remplacé) :
+   *  - au premier `GET /teams/:id/jeu` d'un profil Valorant sans rien d'importé (éditeur de strats), en tâche de
+   *    fond, après la réponse (`declencherImportAgents`) ; au plus un essai par heure en cas d'échec ;
+   *  - par le cron Esport (`importsAgentsAuto`) : profil sans portrait importé, ou dernier import de plus de 7 jours
+   *    (nouveaux agents) ; au plus un essai par jour et par profil, durée bornée, erreurs consignées.
+   * Un seul import à la fois par profil : dans le processus (promesse partagée) et entre processus (l'essai est
+   * « réservé » dans `ia_reglages`, ligne `agents-auto:<jeu>`, par une écriture conditionnelle).
+   */
+  const importsAgentsEnCours = new Map();
+  const cleEtatAgents = cle => `agents-auto:${cle}`;
+
+  async function etatImportAgents(cle) {
+    const l = await base.premier('SELECT valeur, maj_le FROM ia_reglages WHERE cle = ?', [cleEtatAgents(cle)]);
+    return l ? { ...jsonOu(l.valeur, {}), essai: l.maj_le } : null;
+  }
+
+  /** Note le résultat d'un import (manuel : `essai` inchangé si la ligne existe ; automatique : essai déjà réservé). */
+  async function noterImportAgents(cle, { reussi, auto, erreur = null, rapport = null }) {
+    const t = iso(maintenant());
+    const avant = (await etatImportAgents(cle)) ?? {};
+    const valeur = {
+      reussi: reussi ? t : (avant.reussi ?? null),
+      ...(reussi ? {} : { erreur }),
+      ...(rapport ? { agents: rapport.length, portraits: rapport.filter(l => l.portrait === 'importee').length } : {}),
+      auto,
+    };
+    await base.executer('INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES (?, ?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur', [cleEtatAgents(cle), JSON.stringify(valeur), t]);
+  }
+
+  /** Réserve l'essai (aucun essai depuis `intervalle`) : vrai si CE processus doit importer. */
+  async function reserverEssaiAgents(cle, intervalle) {
+    const t = maintenant();
+    const r = await base.executer(
+      'INSERT INTO ia_reglages (cle, valeur, maj_le) VALUES (?, ?, ?) ON CONFLICT (cle) DO UPDATE SET maj_le = excluded.maj_le WHERE ia_reglages.maj_le <= ?',
+      [cleEtatAgents(cle), '{}', iso(t), iso(t - intervalle)],
+    );
+    return Number(r?.changements ?? 0) > 0;
+  }
+
+  /** Ce que le profil a déjà : portraits importés (avec leur source), date du dernier import réussi. */
+  function bilanAgents(d, etat) {
+    const importes = d.personnages.filter(p => p.fichier && p.source);
+    const dates = [etat?.reussi, ...importes.map(p => p.source?.le)].filter(x => typeof x === 'string').sort();
+    return { importes: importes.length, dernier: dates.length ? dates[dates.length - 1] : null };
+  }
+
+  /** L'import automatique est-il dû ? `declenchement` : « demande » (premier affichage) ou « cron ». */
+  function importAgentsDu(j, etat, declenchement, t = maintenant()) {
+    if (modeleDuJeu(j.modele_strat, j.cle) !== 'valorant') return false;
+    const { importes, dernier } = bilanAgents(donneesDe(j), etat);
+    if (declenchement === 'demande') return importes === 0 && !etat?.reussi && !(etat?.essai && t - Date.parse(etat.essai) < IMPORT_AGENTS_ESSAI_DEMANDE_MS);
+    if (etat?.essai && t - Date.parse(etat.essai) < IMPORT_AGENTS_ESSAI_CRON_MS) return false;
+    return importes === 0 || !dernier || t - Date.parse(dernier) >= IMPORT_AGENTS_FRAICHEUR_MS;
+  }
+
+  /** Lance (ou rejoint) l'import automatique d'un profil ; rend `{ statut, rapport?, erreur? }`, ne lève jamais. */
+  function importerAgentsAuto(cle, { intervalle, journaliser }) {
+    if (importsAgentsEnCours.has(cle)) return importsAgentsEnCours.get(cle);
+    const p = (async () => {
+      try {
+        if (!stockage) return { statut: 'stockage-absent' };
+        if (!(await reserverEssaiAgents(cle, intervalle))) return { statut: 'deja-essaye' };
+        const j = await ligneJeu(cle);
+        try {
+          const r = await importerAgentsDans(SYSTEME, j, { motif: 'import-agents-auto', fin: maintenant() + IMPORT_AGENTS_BUDGET_MS });
+          await noterImportAgents(cle, { reussi: true, auto: true, rapport: r.rapport });
+          return { statut: 'importe', rapport: r.rapport, inchange: r.inchange };
+        } catch (e) {
+          const erreur = String(e?.code ?? e?.message ?? e).slice(0, 120);
+          await noterImportAgents(cle, { reussi: false, auto: true, erreur }).catch(() => undefined);
+          if (journaliser || !e?.code) journal.warn?.(`[esport] import automatique des agents (${cle}) : ${erreur}`);
+          return { statut: 'echec', erreur };
+        }
+      } catch (e) {
+        journal.warn?.(`[esport] import automatique des agents (${cle}) : ${String(e?.message ?? e).slice(0, 120)}`);
+        return { statut: 'echec', erreur: String(e?.code ?? 'erreur') };
+      } finally {
+        importsAgentsEnCours.delete(cle);
+      }
+    })();
+    importsAgentsEnCours.set(cle, p);
+    return p;
+  }
+
+  /**
+   * Premier affichage (`GET /teams/:id/jeu`) d'un profil Valorant sans rien d'importé : import lancé en tâche de
+   * fond (la réponse n'attend pas). Rend `{ promesse }` (l'import, jamais attendu ici), ou null s'il n'est pas dû.
+   */
+  async function declencherImportAgents(j) {
+    if (!importAuto || !stockage || modeleDuJeu(j.modele_strat, j.cle) !== 'valorant') return null;
+    if (importsAgentsEnCours.has(j.cle)) return { promesse: importsAgentsEnCours.get(j.cle) };
+    if (!importAgentsDu(j, await etatImportAgents(j.cle), 'demande')) return null;
+    return { promesse: importerAgentsAuto(j.cle, { intervalle: IMPORT_AGENTS_ESSAI_DEMANDE_MS, journaliser: false }) };
+  }
+
+  /**
+   * Cron Esport : profils Valorant dont l'import est dû (voir `importAgentsDu`), `limite` par passage, le plus
+   * ancien d'abord. Rend `{ n, echecs, profils }` ; ne lève pas pour un profil en échec (réessayé le lendemain).
+   */
+  async function importsAgentsAuto({ limite = 1 } = {}) {
+    if (!stockage) return { n: 0, echecs: 0, raison: 'stockage-absent', profils: [] };
+    const t = maintenant();
+    const dus = [];
+    for (const j of await base.tous('SELECT * FROM jeux ORDER BY cle', [])) {
+      if (modeleDuJeu(j.modele_strat, j.cle) !== 'valorant') continue;
+      const etat = await etatImportAgents(j.cle);
+      if (importAgentsDu(j, etat, 'cron', t)) dus.push({ j, depuis: etat?.essai ?? '' });
+    }
+    dus.sort((a, b) => a.depuis.localeCompare(b.depuis));
+    const profils = [];
+    for (const { j } of dus.slice(0, limite)) {
+      const r = await importerAgentsAuto(j.cle, { intervalle: IMPORT_AGENTS_ESSAI_CRON_MS, journaliser: true });
+      profils.push({ jeu: j.cle, statut: r.statut, ...(r.erreur ? { erreur: r.erreur } : {}) });
+    }
+    return { n: profils.filter(p => p.statut === 'importe').length, echecs: profils.filter(p => p.statut === 'echec').length, profils };
   }
 
   /** `POST /jeux/:cle/images` : dépôt d'une image (fond d'une map), à citer ensuite dans le profil (`cartes[].fichier`). */
@@ -1494,6 +1639,9 @@ export function servicesJeux({ base, stockage, cleSession, fetchImport = (...a) 
     deposerImage,
     importerCartes,
     importerAgents,
+    importsAgentsAuto,
+    /** Tests : dernier import lancé en tâche de fond (à attendre). */
+    importEnFond: () => dernierImportEnFond,
     cartesProposees: proposees.liste,
     preparerCartes: proposees.preparer,
     validerCartes: proposees.valider,

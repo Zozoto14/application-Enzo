@@ -15,6 +15,8 @@
  *     leurs capacités, en français) ;
  *  4. cache local périmé ;
  *  5. repli générique intégré (noms seulement : formes et initiales).
+ * Images d'un agent ou d'une capacité (`sourcesIcone`) : image importée par le serveur (lien signé), puis
+ * CDN officiel (https://media.valorant-api.com seulement), puis initiales ; la suivante si l'une ne charge pas.
  * Autres jeux : les modules lisent le profil du jeu de la team (src/esport/jeux/profil.ts,
  * `assetsDepuisProfil`) ; pour Valorant, les maps et agents du profil reprennent les images Riot d'ici.
  */
@@ -318,7 +320,46 @@ export function initiales(nom: string): string {
 export interface CacheImages {
   /** Adresse affichable (blob: local) de l'image, ou null (repli : formes et initiales). */
   obtenir(url: string | null): Promise<string | null>;
+  /**
+   * Première source qui charge, dans l'ordre (`sourcesImage`) : `{ url, src }` (adresse d'origine et blob: local),
+   * ou null si toutes échouent (repli : initiales).
+   */
+  premiere?(urls: ReadonlyArray<string>): Promise<{ url: string; src: string } | null>;
 }
+
+// ------------------------------------------------------------------ Sources d'une image (portraits, icônes)
+
+/** Seul hôte d'images tiers accepté : le CDN de valorant-api.com, en https. */
+export const HOTE_CDN_RIOT = 'media.valorant-api.com';
+
+/** Adresse du CDN Riot (https://media.valorant-api.com/…, rien d'autre). */
+export const estCdnRiot = (v: unknown): v is string => https(v) !== null;
+
+/** Lien signé d'une image du stockage du serveur Esport (`/jeux/images/:id?…&sig=…`, relatif ou absolu). */
+export function estLienServeur(v: unknown): v is string {
+  if (typeof v !== 'string' || v.length > 2000 || /["'<>\s\\]/.test(v)) return false;
+  const m = /^(?:https?:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?)?((?:\/[A-Za-z0-9._~-]+)*\/jeux\/images\/[A-Za-z0-9_-]+)\?(.*)$/.exec(v);
+  return Boolean(m && /(?:^|&)sig=[^&]+/.test(m[2]));
+}
+
+/**
+ * Sources d'une image du jeu, dans l'ordre où l'éditeur les essaie : image IMPORTÉE dans le stockage du serveur
+ * (lien signé) ou du dossier d'assets local, puis adresse du CDN officiel gardée dans le profil ou le document
+ * (https://media.valorant-api.com seulement), puis rien (initiales). Toute autre adresse est écartée ; doublons
+ * retirés, ordre des arguments gardé.
+ */
+export function sourcesImage(...candidats: Array<string | null | undefined | ReadonlyArray<string | null | undefined>>): string[] {
+  const sortie: string[] = [];
+  for (const c of candidats.flat()) {
+    if (typeof c !== 'string' || sortie.includes(c)) continue;
+    if (estLienServeur(c) || relatif(c) || estCdnRiot(c)) sortie.push(c);
+  }
+  return sortie;
+}
+
+/** Sources du portrait d'un agent ou de l'icône d'une capacité : image importée (`icone`), puis CDN (`iconeDoc`). */
+export const sourcesIcone = (a: { icone?: string | null; iconeDoc?: string | null } | null | undefined, ...secours: Array<string | null | undefined>): string[] =>
+  sourcesImage(a?.icone, a?.iconeDoc, ...secours);
 
 type ReponseImage = { ok: boolean; blob(): Promise<Blob>; clone?(): ReponseImage };
 type CacheStorageMin = { open(nom: string): Promise<{ match(url: string): Promise<ReponseImage | undefined>; put(url: string, r: unknown): Promise<void> }> };
@@ -354,11 +395,19 @@ export function creerCacheImages({
       return null;
     }
   }
+  const obtenir = (url: string | null): Promise<string | null> => {
+    if (!url) return Promise.resolve(null);
+    if (!memoire.has(url)) memoire.set(url, charger(url));
+    return memoire.get(url) as Promise<string | null>;
+  };
   return {
-    obtenir(url) {
-      if (!url) return Promise.resolve(null);
-      if (!memoire.has(url)) memoire.set(url, charger(url));
-      return memoire.get(url) as Promise<string | null>;
+    obtenir,
+    async premiere(urls) {
+      for (const url of urls) {
+        const src = await obtenir(url);
+        if (src) return { url, src };
+      }
+      return null;
     },
   };
 }

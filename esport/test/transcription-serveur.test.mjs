@@ -491,7 +491,7 @@ test('cron : lance le processus détaché (nice 19) seulement s’il y a du trav
     // Moteur pas installé : rien n'est lancé.
     assert.equal((await lancerTravailleur({ base: b.base, config: { transcriptionServeur: { ...SERVEUR, disponible: false } }, spawn })).lance, false);
     // Branché dans le cron du serveur (rapport).
-    const rapport = await executerCron(b.base, { ...config, cleSession: 'x'.repeat(40) }, { maintenant: () => b.horloge.t, stockage: b.stockage, lancer: async () => ({ lance: true, raison: 'lancé', n: 1 }) });
+    const rapport = await executerCron(b.base, { ...config, cleSession: 'x'.repeat(40) }, { maintenant: () => b.horloge.t, stockage: b.stockage, fetchImportJeux: async () => { throw new Error('réseau interdit en test'); }, lancer: async () => ({ lance: true, raison: 'lancé', n: 1 }) });
     assert.ok(rapport.some(x => x.tache === 'transcription serveur' && x.ok));
   } finally {
     nettoyer();

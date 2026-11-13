@@ -12,15 +12,31 @@
 import React, { useState } from 'react';
 import { Image, Pressable, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import { initiales, type AgentAsset, type CapaciteAsset } from '../../strats/assets';
+import { initiales, sourcesIcone, type AgentAsset, type CapaciteAsset } from '../../strats/assets';
+import { useSourceImage } from './imagesJeu';
 import { trSt, type CleSt } from '../../i18n/strats2';
 import { Glyphe } from '../../../ui/icones';
 
-/** Portrait ou icône d'un asset du jeu, rond ; initiales sur fond neutre si l'image manque ou ne charge pas. */
-export function IconeAsset({ theme, url, nom, couleur, taille = 30, testID }: { theme: ThemeHub; url: string | null | undefined; nom: string; couleur?: string; taille?: number; testID?: string }) {
-  const [echec, setEchec] = useState(false);
-  if (url && !echec)
-    return <Image testID={testID ? `${testID}-image` : undefined} source={{ uri: url }} onError={() => setEchec(true)} style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur ?? '#111827' }} accessibilityLabel={nom} />;
+/**
+ * Portrait ou icône d'un asset du jeu, rond. `url` : une adresse ou les sources dans l'ordre (`sourcesIcone` :
+ * image importée, puis CDN officiel) ; la suivante si l'une ne charge pas ; initiales sur fond neutre à la fin.
+ */
+export function IconeAsset({ theme, url, nom, couleur, taille = 30, testID, onEchec }: { theme: ThemeHub; url: string | ReadonlyArray<string> | null | undefined; nom: string; couleur?: string; taille?: number; testID?: string; onEchec?(): void }) {
+  const source = useSourceImage(url);
+  if (source.url)
+    return (
+      <Image
+        key={source.url}
+        testID={testID ? `${testID}-image` : undefined}
+        source={{ uri: source.url }}
+        onError={() => {
+          source.suivante();
+          if (typeof url === 'string' || !url || source.url === url[url.length - 1]) onEchec?.();
+        }}
+        style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur ?? '#111827' }}
+        accessibilityLabel={nom}
+      />
+    );
   return (
     <View testID={testID ? `${testID}-initiales` : undefined} style={{ width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur ?? teinteTransparente(theme.attenue, 0.4), alignItems: 'center', justifyContent: 'center' }}>
       <Text style={{ color: '#ffffff', fontSize: taille * 0.38, fontWeight: '800' }}>{initiales(nom)}</Text>
@@ -89,7 +105,9 @@ export function BarreAgents({
 }) {
   const roles = ROLES_AGENTS.filter(r => agents.some(a => a.roleCle === r));
   const visibles = agentsDuRole(agents, role);
-  const sansImages = agents.length > 0 && agents.every(a => !a.icone);
+  // Message seulement quand l'image importée ET le CDN officiel ont échoué pour tous les agents affichés.
+  const [echecs, setEchecs] = useState<ReadonlySet<string>>(() => new Set());
+  const sansImages = visibles.length > 0 && visibles.some(a => echecs.has(a.cle)) && visibles.every(a => echecs.has(a.cle) || sourcesIcone(a).length === 0);
   const puce = (actif: boolean, texte: string, onPress: () => void, testID: string, couleur?: string) => (
     <Pressable
       key={testID}
@@ -119,7 +137,7 @@ export function BarreAgents({
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
         {visibles.map(a => (
           <Pastille key={a.cle} theme={theme} actif={agentCle === a.cle} couleur={camp === 'ennemi' ? COULEUR_ENNEMI : undefined} onPress={() => onAgent(a)} libelle={trSt('agents.choisir', { nom: a.nom })} testID={`esport-agent-${a.cle}`}>
-            <IconeAsset theme={theme} url={a.icone} nom={a.nom} taille={34} testID={`esport-agent-${a.cle}-portrait`} />
+            <IconeAsset theme={theme} url={sourcesIcone(a)} nom={a.nom} taille={34} testID={`esport-agent-${a.cle}-portrait`} onEchec={() => setEchecs(e => new Set(e).add(a.cle))} />
           </Pastille>
         ))}
       </View>
@@ -144,11 +162,11 @@ export const capacitesOrdonnees = (agent: AgentAsset): CapaciteAsset[] =>
 export function BarreCapacites({ theme, agent, capaciteCle, armee, onCapacite }: { theme: ThemeHub; agent: AgentAsset; capaciteCle: string | undefined; armee: boolean; onCapacite(c: CapaciteAsset): void }) {
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }} testID="esport-barre-capacites" accessibilityLabel={trSt('capacites.barre', { nom: agent.nom })}>
-      <IconeAsset theme={theme} url={agent.icone} nom={agent.nom} taille={36} />
+      <IconeAsset theme={theme} url={sourcesIcone(agent)} nom={agent.nom} taille={36} />
       {capacitesOrdonnees(agent).map(c => (
         <Pastille key={c.cle} theme={theme} actif={armee && capaciteCle === c.cle} onPress={() => onCapacite(c)} libelle={trSt('capacites.armer', { nom: c.nom, touche: c.touche })} testID={`esport-capacite-${c.cle}`}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170, paddingVertical: 2 }}>
-            <IconeAsset theme={theme} url={c.icone} nom={c.nom} taille={28} couleur="#1f2937" testID={`esport-capacite-${c.cle}-icone`} />
+            <IconeAsset theme={theme} url={sourcesIcone(c)} nom={c.nom} taille={28} couleur="#1f2937" testID={`esport-capacite-${c.cle}-icone`} />
             <View style={{ minWidth: 0 }}>
               <Text style={{ color: theme.texte, fontSize: 12, fontWeight: '800' }}>{c.touche}</Text>
               <Text style={{ color: theme.attenue, fontSize: 10, maxWidth: 110 }} numberOfLines={1}>

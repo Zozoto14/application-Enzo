@@ -19,13 +19,13 @@ const theme = themeHub('nuit');
 
 const agent = (cle: string, roleCle: string, icone: string | null, capacites: AgentAsset['capacites'] = []): AgentAsset => ({ cle, nom: cle[0].toUpperCase() + cle.slice(1), role: roleCle, roleCle, icone, capacites });
 const AGENTS: AgentAsset[] = [
-  agent('jett', 'duelliste', 'https://exemple.test/jett.png'),
-  agent('sova', 'initiateur', 'https://exemple.test/sova.png'),
-  agent('viper', 'controleur', 'https://exemple.test/viper.png', [
-    { cle: 'Ultimate', nom: 'Viper’s Pit', icone: 'https://exemple.test/x.png', touche: 'X' },
-    { cle: 'Ability2', nom: 'Toxic Screen', icone: 'https://exemple.test/e.png', touche: 'E' },
+  agent('jett', 'duelliste', 'https://media.valorant-api.com/agents/t/jett.png'),
+  agent('sova', 'initiateur', 'https://media.valorant-api.com/agents/t/sova.png'),
+  agent('viper', 'controleur', 'https://media.valorant-api.com/agents/t/viper.png', [
+    { cle: 'Ultimate', nom: 'Viper’s Pit', icone: 'https://media.valorant-api.com/agents/t/x.png', touche: 'X' },
+    { cle: 'Ability2', nom: 'Toxic Screen', icone: 'https://media.valorant-api.com/agents/t/e.png', touche: 'E' },
     { cle: 'Grenade', nom: 'Snake Bite', icone: null, touche: 'C' },
-    { cle: 'Ability1', nom: 'Poison Cloud', icone: 'https://exemple.test/q.png', touche: 'Q' },
+    { cle: 'Ability1', nom: 'Poison Cloud', icone: 'https://media.valorant-api.com/agents/t/q.png', touche: 'Q' },
   ]),
   agent('killjoy', 'sentinelle', null),
 ];
@@ -48,9 +48,29 @@ describe('barre d’agents', () => {
     expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
   });
 
-  it('sans aucun portrait importé : message vers « Importer agents et capacités »', async () => {
-    await render(<BarreAgents theme={theme} agents={AGENTS.map(a => ({ ...a, icone: null }))} agentCle={undefined} onAgent={jest.fn()} role={null} onRole={jest.fn()} camp="allie" onCamp={jest.fn()} />);
+  it('image importée en échec : le CDN officiel ensuite, puis les initiales ; message seulement si les deux échouent', async () => {
+    const signe = (c: string) => `https://esport.test/jeux/images/${c}?c=x&exp=1&sig=s`;
+    const agents: AgentAsset[] = [
+      { ...agent('jett', 'duelliste', signe('jett')), iconeDoc: 'https://media.valorant-api.com/agents/j/displayicon.png' },
+      { ...agent('sova', 'initiateur', signe('sova')), iconeDoc: 'https://ailleurs.example/sova.png' },
+    ];
+    await render(<BarreAgents theme={theme} agents={agents} agentCle={undefined} onAgent={jest.fn()} role={null} onRole={jest.fn()} camp="allie" onCamp={jest.fn()} />);
+    expect(screen.getByTestId('esport-agent-jett-portrait-image').props.source).toEqual({ uri: signe('jett') });
+    await fireEvent(screen.getByTestId('esport-agent-jett-portrait-image'), 'error');
+    expect(screen.getByTestId('esport-agent-jett-portrait-image').props.source).toEqual({ uri: 'https://media.valorant-api.com/agents/j/displayicon.png' });
+    // Hôte hors liste : jamais essayé (initiales directement après l'échec du lien signé).
+    await fireEvent(screen.getByTestId('esport-agent-sova-portrait-image'), 'error');
+    expect(screen.getByTestId('esport-agent-sova-portrait-initiales')).toBeTruthy();
+    expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
+    await fireEvent(screen.getByTestId('esport-agent-jett-portrait-image'), 'error');
+    expect(screen.getByTestId('esport-agent-jett-portrait-initiales')).toBeTruthy();
     expect(screen.getByTestId('esport-agents-sans-images')).toBeTruthy();
+  });
+
+  it('aucune source (The Finals : pas de portraits officiels) : initiales, sans message', async () => {
+    await render(<BarreAgents theme={theme} agents={AGENTS.map(a => ({ ...a, icone: null }))} agentCle={undefined} onAgent={jest.fn()} role={null} onRole={jest.fn()} camp="allie" onCamp={jest.fn()} />);
+    expect(screen.getByTestId('esport-agent-jett-portrait-initiales')).toBeTruthy();
+    expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
   });
 
   it('filtre par rôle (Duellistes, Initiateurs, Contrôleurs, Sentinelles), retour à « Tous »', async () => {

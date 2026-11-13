@@ -35,7 +35,7 @@ import { sourceGitDepot } from './devblog-source.mjs';
 import { servicesCycleTickets } from '../noyau/tickets/cycle.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
-export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale, devblogSource } = {}) {
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale, devblogSource, fetchImportJeux } = {}) {
   const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
   const rapport = await tachesPlanifiees(base, {
     cle: config.cleDiscord || config.cleSession,
@@ -107,6 +107,17 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     rapport.push({ tache: 'profils de jeu (IA)', ok: true, n: r.n, ...(etat ? { etat } : {}) });
   } catch (e) {
     rapport.push({ tache: 'profils de jeu (IA)', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
+  }
+  // Portraits des agents (Valorant) : import automatique depuis valorant-api.com dans le stockage du serveur, sans
+  // action du Fondateur (profil sans portrait importé, ou dernier import de plus de 7 jours) ; au plus un profil par
+  // passage et un essai par jour et par profil, durée bornée (90 s). Un échec est consigné et réessayé le lendemain,
+  // sans bloquer les autres tâches.
+  try {
+    const jeux = servicesJeux({ base, stockage: fichiers, cleSession: config.cleSession, ...(fetchImportJeux ? { fetchImport: fetchImportJeux } : {}), ...(maintenant ? { maintenant } : {}), socle: {} });
+    const r = await jeux.importsAgentsAuto({ limite: 1 });
+    rapport.push({ tache: 'portraits des agents', ok: true, n: r.n, ...(r.echecs ? { etat: `échec : ${r.profils.map(p => `${p.jeu} (${p.erreur})`).join(', ')}` } : r.raison ? { etat: r.raison } : {}) });
+  } catch (e) {
+    rapport.push({ tache: 'portraits des agents', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
   }
   // Devblog automatique (désactivé par défaut) : au plus un par jour, à l'heure des réglages ; rédigé par l'IA à partir
   // des mises à jour déployées (historique git du dépôt), puis publié (app + Discord) ou laissé en brouillon.

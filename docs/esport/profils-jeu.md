@@ -67,6 +67,21 @@ Un agent absent du profil est ajouté (actif, avec son rôle). Les **caractéris
 « à vérifier ») ne sont **jamais** touchées : l'éditeur rapproche capacités officielles et caractéristiques par la
 touche. Idempotent (empreintes) ; un portrait déposé à la main n'est remplacé qu'avec la case « Remplacer aussi… ».
 Une nouvelle **version** du profil est écrite (motif `import-agents`) : l'historique permet de revenir en arrière.
+
+**Import automatique** (aucun clic nécessaire ; le bouton reste pour forcer un import) : même import, mêmes règles
+(un portrait déposé à la main n'est jamais remplacé, pas de `remplacer`), version écrite sans auteur (motif
+`import-agents-auto`) :
+- au **premier affichage** du profil par l'éditeur de strats (`GET /teams/:id/jeu`) d'un profil au modèle `valorant`
+  sans aucun portrait importé : lancé en tâche de fond, la réponse n'attend pas (elle porte `importAgents: "en-cours"` ;
+  l'app relit le profil à l'ouverture suivante et affiche d'ici là le CDN officiel) ; un seul import pour des requêtes
+  simultanées ; après un échec, pas de nouvel essai avant une heure ;
+- par le **cron Esport** (esport/serveur/cron.mjs, tâche « portraits des agents ») : profil sans portrait importé, ou
+  dernier import (manuel ou automatique) de plus de **7 jours** (nouveaux agents) ; au plus un profil par passage et
+  **un essai par jour et par profil**, téléchargements arrêtés après 90 s (repris au passage suivant) ; une erreur est
+  consignée (journal du cron, rapport) et réessayée le lendemain, sans bloquer les autres tâches.
+Un seul import à la fois par profil, aussi entre l'app et le cron : l'essai est réservé par une écriture
+conditionnelle dans `ia_reglages` (ligne `agents-auto:<jeu>` : date du dernier essai, du dernier import réussi,
+dernière erreur). Sans stockage branché : rien.
 Ces champs sont propres au club (jamais envoyés à l'IA ni proposés par elle). Vérifié sur l'API réelle (2026-11) :
 30 agents jouables, rôles Controller / Duelist / Initiator / Sentinel, icônes de capacités en PNG sur
 `media.valorant-api.com`.

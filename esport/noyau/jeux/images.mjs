@@ -82,7 +82,7 @@ export function servicesImagesJeux({ base, stockage, cleSession, maintenant = ()
     try {
       await base.executer(
         'INSERT INTO jeu_images (id, jeu_cle, cle_stockage, type_mime, taille, largeur, hauteur, nom_original, empreinte, depose_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, cleJeu, cle, type, octets.length, largeur, hauteur, nom, empreinte, acteur.compte, iso(maintenant())],
+        [id, cleJeu, cle, type, octets.length, largeur, hauteur, nom, empreinte, acteur?.compte ?? '', iso(maintenant())],
       );
     } catch (e) {
       await stockage.supprimer(cle).catch(() => undefined);

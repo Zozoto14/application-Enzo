@@ -14,7 +14,11 @@ import {
   cleDe,
   creerCacheImages,
   depuisApi,
+  estCdnRiot,
+  estLienServeur,
   initiales,
+  sourcesIcone,
+  sourcesImage,
   type FetchAssets,
 } from './assets';
 
@@ -182,5 +186,48 @@ describe('cache des images', () => {
       creerUrl: () => 'blob:depuis-cache',
     });
     expect(await cache.obtenir(`${CDN}/b.png`)).toBe('blob:depuis-cache');
+  });
+});
+
+describe('sources d’une image (portrait, icône) : importée, puis CDN officiel, puis initiales', () => {
+  const SIGNE = 'https://esport.appdashboard.fr/api/esport/jeux/images/0f8fad5b-d9cb-469f-a165-70867728950e?c=a&exp=9&sig=Zx_1';
+  const CDN_P = `${CDN}/agents/v/displayicon.png`;
+
+  it('ordre : lien signé du stockage du serveur, puis CDN du profil, puis CDN du document ; doublons retirés', () => {
+    expect(sourcesIcone({ icone: SIGNE, iconeDoc: CDN_P }, `${CDN}/agents/v/autre.png`)).toEqual([SIGNE, CDN_P, `${CDN}/agents/v/autre.png`]);
+    expect(sourcesIcone({ icone: CDN_P, iconeDoc: CDN_P })).toEqual([CDN_P]);
+    expect(sourcesIcone({ icone: null, iconeDoc: null }, null)).toEqual([]);
+    expect(sourcesIcone(undefined, CDN_P)).toEqual([CDN_P]);
+    expect(sourcesImage('/jeux/images/p1?sig=a', 'esport-assets/agents/omen.png')).toEqual(['/jeux/images/p1?sig=a', 'esport-assets/agents/omen.png']);
+  });
+
+  it('liste d’hôtes : seul https://media.valorant-api.com est accepté hors du serveur ; lien signé obligatoire', () => {
+    expect(estCdnRiot(CDN_P)).toBe(true);
+    for (const refuse of ['http://media.valorant-api.com/a.png', 'https://media.valorant-api.com.evil.example/a.png', 'https://evil.example/https://media.valorant-api.com/a.png', 'https://valorant-api.com/a.png', 'javascript:alert(1)', 'data:image/png;base64,AAAA']) {
+      expect(estCdnRiot(refuse)).toBe(false);
+      expect(sourcesImage(refuse)).toEqual([]);
+    }
+    expect(estLienServeur(SIGNE)).toBe(true);
+    expect(estLienServeur('/jeux/images/abc?c=1&sig=x')).toBe(true);
+    expect(estLienServeur('https://esport.test/jeux/images/abc?c=1')).toBe(false);
+    expect(estLienServeur('https://esport.test/jeux/images/abc?sig=x"onerror="x')).toBe(false);
+    expect(estLienServeur('https://esport.test/autre/abc?sig=x')).toBe(false);
+  });
+
+  it('chargement : la source suivante si une image ne charge pas, null si toutes échouent (initiales)', async () => {
+    const essais: string[] = [];
+    const cache = creerCacheImages({
+      fetch: async url => {
+        essais.push(url);
+        if (url.includes('sig=')) return { ok: false, blob: async () => ({}) as Blob };
+        if (url.includes('panne')) throw new TypeError('hors ligne');
+        return { ok: true, blob: async () => ({}) as Blob };
+      },
+      creerUrl: () => 'blob:cdn',
+    });
+    expect(await cache.premiere?.([SIGNE, CDN_P])).toEqual({ url: CDN_P, src: 'blob:cdn' });
+    expect(essais).toEqual([SIGNE, CDN_P]);
+    expect(await cache.premiere?.([SIGNE, `${CDN}/panne.png`])).toBeNull();
+    expect(await cache.premiere?.([])).toBeNull();
   });
 });

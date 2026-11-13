@@ -157,7 +157,12 @@ export function profilDeTeam(client: ClientEsport, teamId: string): Promise<Prof
   if (!p) {
     p = Promise.resolve()
       .then(() => apiJeux(client).pourTeam(teamId))
-      .then(r => (lisible(r) ? r : null))
+      .then(r => {
+        // Portraits en cours d'import automatique par le serveur : le profil sera relu à la prochaine ouverture (d'ici là,
+        // les portraits du CDN officiel s'affichent).
+        if (lisible(r) && (r as { importAgents?: string }).importAgents === 'en-cours') setTimeout(() => profilsTeams.get(cle) === p && profilsTeams.delete(cle), 30_000);
+        return lisible(r) ? r : null;
+      })
       .catch(() => {
         // Échec (réseau, serveur ancien) : pas gardé, la prochaine ouverture redemande.
         profilsTeams.delete(cle);
