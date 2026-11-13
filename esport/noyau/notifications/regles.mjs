@@ -138,6 +138,8 @@ export const REGLES = Object.freeze({
   'strat.share_created': { categorie: 'jeu', acces: 'team:strats.share', lien: TEAM('module:strat_editor') },
   'strat.share_revoked': { categorie: 'jeu', acces: 'team:strats.share', lien: TEAM('module:strat_editor') },
   'playbook.*': { categorie: 'jeu', acces: 'team:playbook.view', lien: TEAM('module:playbook') },
+  // Lineups (migration 0082) : contenu tactique, visible de ceux qui voient les lineups de la team.
+  'lineup.*': { categorie: 'jeu', acces: 'team:lineups.voir', lien: TEAM('module:lineups') },
   'review.*': { categorie: 'jeu', acces: 'team:video_review.view', lien: TEAM('module:video_review') },
   'review.reaction_changed': AUCUN,
   'review.marker_updated': AUCUN,
@@ -278,7 +280,7 @@ export function categoriePerso(type) {
   if (t.startsWith('tournoi') || t.startsWith('match')) return /resultat/.test(t) ? 'resultats' : 'competition';
   if (t.startsWith('resultat')) return 'resultats';
   if (/^(evenement|event|convocation|presence|rappel|planning|seance)/.test(t)) return 'planning';
-  if (/^(review|ressource|strat|playbook|scouting)/.test(t)) return 'jeu';
+  if (/^(review|ressource|strat|playbook|scouting|lineup)/.test(t)) return 'jeu';
   if (t.startsWith('discord')) return 'discord';
   return 'systeme';
 }

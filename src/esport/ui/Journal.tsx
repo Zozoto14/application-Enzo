@@ -29,6 +29,7 @@ export const ACTIONS_PAR_MODULE: Record<string, readonly string[]> = {
   scouting: ['opponent'],
   strat_editor: ['strat'],
   playbook: ['playbook'],
+  lineups: ['lineup'],
 };
 
 type Periode = 'tout' | '7' | '30' | '90' | 'dates';

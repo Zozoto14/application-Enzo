@@ -64,6 +64,9 @@ export const USAGES = {
     autoriser: async (base, ctx) =>
       ctx.permissions.has('resources.view') && Number((await base.premier('SELECT propositions FROM ressource_reglages WHERE team_id = ?', [ctx.team.id]))?.propositions ?? 0) === 1,
   },
+  // Lineups (migration 0082) : images et vidéo courte d'un lineup ; proposer (lineups.proposer) ou gérer. Plafond propre
+  // à l'usage (une vidéo de lineup est courte) ; l'image est bornée à son rattachement (lineups/service.mjs).
+  lineup: { module: 'lineups', permission: 'lineups.proposer', dossier: 'lineups', plafond: 200 * Mio, autoriser: async (base, ctx) => ctx.permissions.has('lineups.gerer') },
   // Section CM (migration 0023) : pièces jointes et clips, pour le club (sans team) ou une team. Le contexte
   // (droits sur la portée) est fourni par la section CM (`brancherContexte`) ; les fichiers vont dans `cm_fichiers`.
   cm: { module: null, permission: null, dossier: 'cm', externe: true },
@@ -80,6 +83,8 @@ export const NATURES = {
   reunion: { nature: 'resume', permission: 'meeting_summaries.write_summary' },
   strat: { nature: 'miniature', permission: null },
   ressource_fichier: { nature: 'ressource', permission: 'resources.manage' },
+  // Images et vidéo d'un lineup : retirées depuis la fiche du lineup (jamais ici : la fiche garderait un média vide).
+  lineup_media: { nature: 'lineup', permission: null },
 };
 
 /**
@@ -234,7 +239,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     const ctx = await contexteEnvoi(acteur, teamId, usage);
     const taille = Number(corps?.taille);
     if (!Number.isSafeInteger(taille) || taille <= 0) throw echec(400, 'taille', 'Taille du fichier invalide.');
-    const plafond = Math.min(config.plafond, ctx.plafond ?? config.plafond);
+    const plafond = Math.min(config.plafond, ctx.plafond ?? USAGES[usage]?.plafond ?? config.plafond);
     if (taille > plafond) {
       const e = echec(413, 'fichier-trop-gros', `Fichier trop gros : ${Math.floor(plafond / Mio)} Mo au plus.`);
       e.details = { plafond };
@@ -244,7 +249,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     if (ctx.avantEnvoi) await ctx.avantEnvoi(taille);
     const ouverts = await base.premier("SELECT COUNT(*) AS n FROM envois WHERE compte_id = ? AND statut = 'en_cours'", [acteur.compte]);
     if (Number(ouverts?.n ?? 0) >= ENVOIS_OUVERTS_MAX) throw echec(429, 'trop-d-envois', 'Trop d’envois en cours : terminez-en ou annulez-en un.');
-    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier', cm: 'fichier', drive: 'fichier' }[usage]);
+    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier', cm: 'fichier', drive: 'fichier', lineup: 'media' }[usage]);
     const typeAnnonce = texteNettoye(corps?.type, 100);
     const tailleMorceau = config.tailleMorceau;
     const morceaux = Math.ceil(taille / tailleMorceau);
@@ -313,6 +318,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
       if (!analyse || !FORMATS_PERMIS[usage].includes(analyse.format)) {
         await oublier(e);
         if (usage === 'drive') throw echec(415, 'format-fichier', 'Type de fichier refusé : images, vidéos, audio, PDF, polices, archives, PSD ou texte (jamais de page web ni de programme).');
+        if (usage === 'lineup') throw echec(415, 'format-fichier', 'Fichier non reconnu : image (PNG, JPEG, WebP, GIF) ou vidéo courte (MP4, MOV, WebM).');
         if (usage === 'ressource' || usage === 'cm') throw echec(415, 'format-fichier', 'Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).');
         throw echec(415, 'format-video', usage === 'review' ? 'Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).' : 'Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).');
       }
@@ -468,8 +474,9 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     const reunions = new Map((await lignesParIds(base, 'SELECT id, titre FROM reunions WHERE team_id = ? AND id', lignes.filter(f => f.entite_type.startsWith('reunion')).map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const strats = new Map((await lignesParIds(base, 'SELECT id, titre FROM strats WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'strat').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const ressources = new Map((await lignesParIds(base, 'SELECT id, titre FROM ressources WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'ressource_fichier').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
+    const lineups = new Map((await lignesParIds(base, 'SELECT id, titre FROM lineups WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'lineup_media').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const noms = await pseudosDe(base, lignes.map(f => f.depose_par));
-    const titre = f => (f.entite_type === 'review_video' ? reviews.get(f.entite_id) : f.entite_type === 'strat' ? strats.get(f.entite_id) : f.entite_type === 'ressource_fichier' ? ressources.get(f.entite_id) : reunions.get(f.entite_id)) ?? null;
+    const titre = f => (f.entite_type === 'review_video' ? reviews.get(f.entite_id) : f.entite_type === 'strat' ? strats.get(f.entite_id) : f.entite_type === 'ressource_fichier' ? ressources.get(f.entite_id) : f.entite_type === 'lineup_media' ? lineups.get(f.entite_id) : reunions.get(f.entite_id)) ?? null;
     const fichiers = lignes.map(f => ({
       ...fichierPublic(f),
       nature: NATURES[f.entite_type]?.nature ?? 'autre',

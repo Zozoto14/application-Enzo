@@ -30,6 +30,7 @@ import { publierProgrammes } from './devblog/auto.mjs';
 import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
 import { purgerCorbeilleDrive, verifierAlerteDrive } from './cm/drive/service.mjs';
 import { purgerCorbeilleStrats } from './strats/service.mjs';
+import { purgerCorbeilleLineups } from './lineups/service.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
 import { rappelsReunions } from './cm/reunions/rappels.mjs';
 import { traiterMpReunions } from './cm/reunions/mp.mjs';
@@ -109,6 +110,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['corbeille du Drive', () => purgerCorbeilleDrive(base, stockage, { maintenant: maintenant() })],
     // Strats : corbeille de plus de 30 jours effacée (strats, miniatures, entrées du playbook retirées).
     ['corbeille des strats', () => purgerCorbeilleStrats(base, stockage, { maintenant: maintenant() })],
+    // Lineups : corbeille de plus de 30 jours effacée (lineups, images et vidéos, favoris, liens avec les strats).
+    ['corbeille des lineups', () => purgerCorbeilleLineups(base, stockage, { maintenant: maintenant() })],
     ['espace du Drive', () => verifierAlerteDrive(base, { quota: drive?.quota, maintenant: maintenant() })],
     ['transcriptions externes', transcrire],
   ];

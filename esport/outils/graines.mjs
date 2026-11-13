@@ -23,6 +23,7 @@ import { servicesEsport } from '../noyau/service.mjs';
 import { semerPlanning } from './graines-planning.mjs';
 import { semerReview } from './graines-review.mjs';
 import { semerStrats, semerTheFinals } from './graines-strats.mjs';
+import { semerLineups, semerLineupsFinals } from './graines-lineups.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -107,8 +108,11 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await o.modifierTache(zed, team.id, faite.id, { statut: 'fait' });
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
   await semerReview(base, team.id, { maintenant, noyau: s });
-  await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
-  await semerTheFinals(base, { maintenant, noyau: s, stockage });
+  const stratIds = await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
+  const teamFinals = await semerTheFinals(base, { maintenant, noyau: s, stockage });
+  // Lineups et placements (migration 0082) : Valorant et The Finals.
+  await semerLineups(base, team.id, { maintenant, noyau: s, stockage, stratIds });
+  await semerLineupsFinals(base, teamFinals, { maintenant, noyau: s, stockage });
   await semerCompetition(base, team.id, { maintenant, noyau: s });
   // DATA › Ressources de l'espace CM : un lien et un fichier (migration 0051).
   await semerRessources(base, { maintenant, stockage });

@@ -90,7 +90,7 @@ l'ordre des profils (`local` → `local` ; `api` → `api,api2` ; `local-api` �
 Décision du Fondateur (30 octobre 2026) : « Non, ce n'est pas OK que ça envoie mes réunions à NVIDIA. »
 
 Le **contenu des réunions** (audio, transcription brute, texte relu, résumés, PDF), les **notes du staff / suivi des
-joueurs** et les **strats** ne sont **jamais envoyés à un service externe** par défaut. La règle est dans le
+joueurs** et les **strats, lineups et plans de match** (contenu tactique) ne sont **jamais envoyés à un service externe** par défaut. La règle est dans le
 connecteur lui-même (`esport/noyau/ia/confidentialite.mjs`, appliquée par `creerRepartiteurIa`) :
 
 | Tâche confidentielle | Noms acceptés par `discuterPour` | Moteurs |
@@ -99,10 +99,10 @@ connecteur lui-même (`esport/noyau/ia/confidentialite.mjs`, appliquée par `cre
 | `correction` | `correction`, `relecture`, `correction-transcription` | IA locale seulement |
 | `resumes` | `resume`, `resumes`, `reunion`, `reunions`, `pre-resume` | IA locale seulement |
 | `suivi` | `suivi`, `suivi-joueurs`, `notes-staff`, `notes` | IA locale seulement |
-| `strats` | `strats`, `strat`, `playbook` | IA locale seulement |
+| `strats` | `strats`, `strat`, `playbook`, `lineups`, `lineup`, `placements`, `plans-match`, `plan-match`, `plan-de-match`, `plans_match` | IA locale seulement |
 
 Par prudence, **tout nom de tâche qui contient** « transcri », « reunion », « résum », « meeting », « suivi », « staff »,
-« strat », « playbook », « correction » ou « relecture » est aussi traité comme confidentiel.
+« strat », « playbook », « lineup », « plan de match » (`plan-match`, `plans_match`…), « correction » ou « relecture » est aussi traité comme confidentiel.
 
 - Pour ces tâches, `discuterPour` n'essaie **que l'IA locale**, **indépendamment** de `IA_ORDRE`, `IA_ORDRE_LEGER`, de
   l'ordre choisi dans l'Administration IA, et même si l'appelant impose `cible: 'api2'` ou `moteurs: ['api']`.
@@ -303,7 +303,7 @@ le jeton maître du Fondateur ; le relais, lui, n'a pas d'IA).
 
 - **Seul le texte du champ** part, jamais la conversation du ticket, le titre de la carte ni aucun autre contexte.
 - **Jamais sur un champ confidentiel** : notes, transcriptions et résumés de réunion (y compris les réunions CM), notes
-  du staff et suivi des joueurs, strats et playbook, **notes internes des tickets**, journal. Le bouton n'y est pas, et
+  du staff et suivi des joueurs, strats, playbook, **lineups et plans de match**, **notes internes des tickets**, journal. Le bouton n'y est pas, et
   le serveur refuse de toute façon (`403 ecriture-confidentielle`) : il n'accepte que la liste fermée `CHAMPS_ECRITURE`
   de `esport/noyau/ia/ecriture.mjs` (un champ inconnu : `400 ecriture-champ`).
 - **Réponses aux tickets : permises, par décision explicite du Fondateur** (elles sont publiques pour l'auteur du ticket ;

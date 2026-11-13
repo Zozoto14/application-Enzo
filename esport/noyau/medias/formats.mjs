@@ -53,6 +53,8 @@ export const FORMATS_PERMIS = {
   review: ['mp4', 'mov', 'webm', 'mkv'],
   reunion: ['mp4', 'mov', 'webm', 'mkv', 'm4a', 'mp3', 'aac', 'wav', 'ogg', 'flac'],
   ressource: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
+  // Lineups : captures d'écran et vidéo courte (jamais de MKV : illisible sur iPhone, ni d'autre type).
+  lineup: ['png', 'jpeg', 'gif', 'webp', 'mp4', 'mov', 'webm'],
   // Section CM : visuels, vidéos (clips), PDF et archives.
   cm: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
   // Drive CM : tous les types courants (images, vidéos, audio, PDF, polices, archives, fichiers de création, texte).

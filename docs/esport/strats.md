@@ -141,7 +141,8 @@ Suppr · Ctrl+S · Ctrl+D dupliquer l'étape · [ et ] étapes · flèches : dé
 
 ## API
 
-Inchangée ([strats-playbook.md](strats-playbook.md)) ; les strats portent `modele`. Profils de jeu : `modeleStrat`,
+Inchangée ([strats-playbook.md](strats-playbook.md)) ; les strats portent `modele`. Lineups liés à une strat
+(lecture, pour l'éditeur) : `GET /teams/:t/strats/:id/lineups`, voir [lineups.md](lineups.md). Profils de jeu : `modeleStrat`,
 `images` (liens signés), `POST /jeux/:cle/images`, voir [profils-jeu.md](profils-jeu.md).
 
 ## Tests

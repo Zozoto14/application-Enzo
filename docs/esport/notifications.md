@@ -55,7 +55,7 @@ Deux sources, unifiées en une liste triée par date :
 Catégories : `planning` (planning, scrims, convocations, présences), `competition` (matchs et tournois),
 `resultats`, `cm` (posts, validations, clips, dépôts, suggestions, visuels, réseaux), `drive`, `sponsors`,
 `membres` (membres, rôles, invitations, comptes, trombinoscope, badges, rôles CM et du club), `discord`, `reunions`
-(dépôts, résumés, transcriptions), `objectifs` (objectifs et tâches), `jeu` (strats, playbook, review, scouting,
+(dépôts, résumés, transcriptions), `objectifs` (objectifs et tâches), `jeu` (strats, playbook, lineups, review, scouting,
 ressources, notes du staff), `devblog`, `systeme` (profils de jeu, IA).
 
 Filtres (`GET /notifications/centre`) : `categories` (liste séparée par des virgules), `team`, `auteur`, `du` / `au`
@@ -206,6 +206,7 @@ ticket et de nouveau message (ticket et message), MP de réunion CM (la réunion
 | `tache`, `objectif` | `task.*`, `goal.*`, `tache-assignee`, `tache-echeance` | Team › Objectifs et tâches : la tâche mise en avant |
 | `reunion` | `meeting.*` (sauf suppression), `resume-depose`, `resume-publie`, `transcription-*` | Team › Résumés de réunion : le dépôt ouvert |
 | `strat`, `playbook` | `strat.*`, `playbook.*`, `playbook-valide` | Team › Strats (la strat ouverte) / Playbook |
+| `lineup` | `lineup.*`, `lineup-propose`, `lineup-valide` | Team › Lineups (la fiche du lineup) |
 | `review` | `review.created`, `.updated`, `.marker_added`, `.comment_added`, `review-nouvelle`, `review-commentaire` | Team › Review vidéo : la review ouverte |
 | `ressource` | `resource.*` (sauf suppression), `ressource-*` | Team › Ressources : la ressource ouverte |
 | `adversaire` | `opponent.*` (sauf suppression) | Team › Scouting : la fiche de l'adversaire |

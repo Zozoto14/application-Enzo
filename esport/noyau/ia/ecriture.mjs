@@ -11,7 +11,7 @@
  *  - lancé UNIQUEMENT par un clic (ou le raccourci clavier) : jamais automatique ;
  *  - SEUL le texte du champ part (jamais la conversation du ticket ni d'autre contexte) ;
  *  - champs permis : liste fermée `CHAMPS_ECRITURE` ; un champ confidentiel (notes de réunion, transcriptions, résumés,
- *    notes du staff, strats, notes internes des tickets, journal…) est REFUSÉ (403), un champ inconnu aussi (400) ;
+ *    notes du staff, strats, lineups, plans de match, notes internes des tickets, journal…) est REFUSÉ (403), un champ inconnu aussi (400) ;
  *  - tâches du répartiteur : « ecriture » (corriger, reformuler) et « traduction », toutes deux LÉGÈRES (modèle et effort
  *    légers ; Claude : effort low, jamais de température) et NON confidentielles ; chaque appel à une API compte dans le
  *    plafond mensuel du moteur (Administration IA) ;
@@ -55,7 +55,7 @@ export const CHAMPS_ECRITURE = {
 };
 
 /** Champs confidentiels connus : refus explicite (403), en plus de tout nom qui ressemble à une donnée confidentielle. */
-export const CHAMPS_CONFIDENTIELS = ['tickets.note', 'reunions', 'cm.reunions', 'transcription', 'resumes', 'suivi', 'notes-staff', 'strats', 'playbook', 'journal'];
+export const CHAMPS_CONFIDENTIELS = ['tickets.note', 'reunions', 'cm.reunions', 'transcription', 'resumes', 'suivi', 'notes-staff', 'strats', 'playbook', 'lineups', 'plans-match', 'journal'];
 
 /** Groupes qui peuvent se servir de l'assistant (le Fondateur : toujours). */
 export const GROUPES_ECRITURE = {

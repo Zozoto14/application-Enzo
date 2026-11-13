@@ -1012,7 +1012,27 @@
   "Discord a refusé la suppression du salon (permission « Gérer les salons »).": "Discord refused to delete the channel (“Manage Channels” permission).",
   "Salon repère invalide.": "Invalid anchor channel.",
   "Clé du pont absente sur cet hébergement.": "Bridge key missing on this host.",
-  "Avis trop volumineux.": "Notification too large."
+  "Avis trop volumineux.": "Notification too large.",
+  "Lien vidéo invalide : https://… sans espace (500 caractères au plus).": "Invalid video link: https://… with no space (500 characters at most).",
+  "Lineup introuvable.": "Lineup not found.",
+  "Side : attaque, défense, ou un mode du jeu.": "Side: attack, defence, or a game mode.",
+  "Posture : debout, saut, course ou accroupi.": "Stance: standing, jumping, running or crouching.",
+  "Difficulté : 1, 2 ou 3.": "Difficulty: 1, 2 or 3.",
+  "Statut : propose ou valide.": "Status: propose or valide.",
+  "Rôle du média : position, visee, resultat, autre ou video.": "Media role: position, visee, resultat, autre or video.",
+  "Ce fichier n’est pas une vidéo reconnue (MP4, MOV ou WebM).": "This file is not a recognised video (MP4, MOV or WebM).",
+  "Vidéo trop volumineuse : 200 Mo au plus (un lineup se montre en quelques secondes).": "Video too large: 200 MB at most (a lineup is shown in a few seconds).",
+  "Ce lineup a déjà une vidéo : retirez-la d’abord.": "This lineup already has a video: remove it first.",
+  "Ce fichier n’est pas une image reconnue (PNG, JPEG, WebP ou GIF).": "This file is not a recognised image (PNG, JPEG, WebP or GIF).",
+  "Image trop volumineuse : 12 Mo au plus.": "Image too large: 12 MB at most.",
+  "Média introuvable.": "Media not found.",
+  "Rôle d’une image : position, visee, resultat ou autre.": "Image role: position, visee, resultat or autre.",
+  "Position illisible.": "Unreadable position.",
+  "Étape : de 1 à 20, ou vide.": "Step: from 1 to 20, or empty.",
+  "Lineup introuvable dans la corbeille.": "Lineup not found in the bin.",
+  "Fichier non reconnu : image (PNG, JPEG, WebP, GIF) ou vidéo courte (MP4, MOV, WebM).": "Unrecognised file: image (PNG, JPEG, WebP, GIF) or short video (MP4, MOV, WebM).",
+  "Point hors de la map.": "Point outside the map.",
+  "Filtre statut inconnu.": "Unknown status filter."
  },
  "motifs": [
   [
@@ -1546,6 +1566,10 @@
   [
    "^Avis du site refusé \\((.+)\\)\\.$",
    "Website notification refused ($1)."
+  ],
+  [
+   "^(\\d+) images au plus par lineup\\.$",
+   "$1 images at most per lineup."
   ]
  ]
 }

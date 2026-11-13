@@ -32,6 +32,8 @@ import { tr } from '../../i18n';
 import { trSs, trnSs } from '../../i18n/stratsSuppr';
 import { BoutonPoubelle, ConfirmationSuppression, CorbeilleStrats, ToastAnnuler } from './Suppression';
 import { useTempsReel } from '../../tempsReel/hooks';
+import { LineupsLies } from '../lineups/LineupsLies';
+import { trLu } from '../../i18n/lineups';
 
 /** Seules les images du CDN Riot entrent dans un document (une image déposée se lit dans le profil, lien signé). */
 const imageDocument = (url: string | null): string | null => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
@@ -52,6 +54,9 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const [recherche, setRecherche] = useState('');
   const [creation, setCreation] = useState(false);
   const [partage, setPartage] = useState<string | undefined>();
+  // Bloc « Lineups liés » d'une strat (module Lineups activé et ouvert au rôle).
+  const [lineupsDe, setLineupsDe] = useState<string | undefined>();
+  const voitLineups = detail.modules.some(m => m.cle === 'lineups' && m.active) && detail.moi.permissions.includes('lineups.voir');
   const [aSupprimer, setASupprimer] = useState<string | undefined>();
   // Sélection multiple (undefined : hors mode sélection), confirmation du lot, corbeille, toast « Annuler ».
   const [selection, setSelection] = useState<Set<string> | undefined>();
@@ -293,6 +298,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
                       }),
                   },
                   s.moi.partager && { titre: partage === s.id ? tr('strats.strats.masquer_le_partage') : tr('strats.strats.partage_et_lien'), testID: `esport-strat-lien-${s.id}`, onPress: () => setPartage(partage === s.id ? undefined : s.id) },
+                  voitLineups && { titre: lineupsDe === s.id ? trLu('lies.masquer') : trLu('lies.menu'), testID: `esport-strat-lineups-menu-${s.id}`, onPress: () => setLineupsDe(lineupsDe === s.id ? undefined : s.id) },
                 ]}
               />
             </View>
@@ -316,6 +322,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
               />
             ) : null}
             {partage === s.id ? <Partages theme={theme} api={api} teamId={teamId} strat={s} /> : null}
+            {lineupsDe === s.id && voitLineups ? <LineupsLies theme={theme} client={client} teamId={teamId} strat={s} assets={assets} onOuvrirLineups={() => onAller('module:lineups')} /> : null}
           </Panneau>
         ))}
       </Grille>

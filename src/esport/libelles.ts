@@ -65,6 +65,7 @@ import { formaterDate, formaterNombre, tr, trn } from './i18n';
 import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 import { phraseJournalReview, phraseNotificationReview } from './review/libelles';
 import { phraseJournalStrats, phraseNotificationStrats } from './strats/libelles';
+import { phraseJournalLineups, phraseNotificationLineups } from './lineups/libelles';
 import { phraseJournalRessources, phraseNotificationRessources } from './ressources/libelles';
 import { phraseJournalCompetition, phraseNotificationCompetition } from './competition/libelles';
 import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
@@ -235,7 +236,7 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'event.reminder_h1':
       return tr('jr.event_reminder', { delai: e.action === 'event.reminder_d1' ? 'J-1' : 'H-1', titre: texte(m.titre) });
     default:
-      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? phraseJournalStrats(e.action, qui, m) ?? phraseJournalRessources(e.action, qui, m) ?? phraseJournalCompetition(e.action, qui, m) ?? phraseJournalCm(e.action, qui, m) ?? `${qui} : ${e.action}`;
+      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? phraseJournalStrats(e.action, qui, m) ?? phraseJournalLineups(e.action, qui, m) ?? phraseJournalRessources(e.action, qui, m) ?? phraseJournalCompetition(e.action, qui, m) ?? phraseJournalCm(e.action, qui, m) ?? `${qui} : ${e.action}`;
   }
 }
 
@@ -258,6 +259,7 @@ export function filtresJournal(): ReadonlyArray<readonly [string, string]> {
     ['opponent', tr('cat.groupe.scouting')],
     ['strat', tr('cat.groupe.strat_editor')],
     ['playbook', tr('cat.groupe.playbook')],
+    ['lineup', tr('cat.groupe.lineups')],
     ['player_note', tr('cat.groupe.player_notes')],
     ['resource', tr('cat.groupe.resources')],
     ['tournoi', tr('cat.groupe.tournois')],
@@ -330,7 +332,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
         echeance: typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : '',
       });
     default:
-      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationSponsors(n.type, c, id => nom(noms, id)) ?? phraseNotificationTickets(n.type, c) ?? phraseAlerte(n.type, c) ?? `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationLineups(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationSponsors(n.type, c, id => nom(noms, id)) ?? phraseNotificationTickets(n.type, c) ?? phraseAlerte(n.type, c) ?? `${team} : ${n.type}`;
   }
 }
 

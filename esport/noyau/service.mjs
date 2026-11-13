@@ -33,6 +33,7 @@ import { lireDessin } from './review/dessin.mjs';
 import { effacementUsage } from './usage/collecte.mjs';
 import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
 import { effacementCompetition } from './competition/rgpd.mjs';
+import { effacementLineups, exportLineups } from './lineups/rgpd.mjs';
 import { effacementCm, exportCm } from './cm/rgpd.mjs';
 import { effacementSponsors, exportSponsors } from './sponsors/rgpd.mjs';
 import { effacementReseaux, exportReseaux } from './reseaux/rgpd.mjs';
@@ -223,7 +224,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     jeu: t.jeu,
     // « jeu » (team de jeu) ou « cm » (Team CM, migration 0068 : pas de profil de jeu, modules de jeu coupés).
     genre: t.genre === 'cm' ? 'cm' : 'jeu',
-    ...(jeux ? { jeuNom: jeux.get(t.jeu)?.nom ?? (t.genre === 'cm' ? 'Communication' : t.jeu), jeuCouleur: jeux.get(t.jeu)?.couleur ?? null } : {}),
+    ...(jeux ? { jeuNom: jeux.get(t.jeu)?.nom ?? (t.genre === 'cm' ? 'Communication' : t.jeu), jeuCouleur: jeux.get(t.jeu)?.couleur ?? null, jeuModele: jeux.get(t.jeu)?.modele ?? null } : {}),
     description: t.description,
     logoUrl: t.logo_url ?? null,
     fuseau: t.fuseau,
@@ -961,6 +962,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       })),
       resultatsSaisis: (await q('SELECT team_id, COUNT(*) AS n FROM resultats WHERE saisi_par = ? GROUP BY team_id')).map(x => ({ team: team(x.team_id), resultats: Number(x.n) })),
       tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
+      // Lineups (migration 0082) : ceux qu'il a proposés, ses favoris.
+      ...(await exportLineups(base, compte)),
       // Section CM (migration 0023) : rôles CM, cartes créées ou assignées, commentaires, clips proposés, fichiers déposés.
       ...(await exportCm(base, compte)),
       // Rôles du club (migration 0033).
@@ -1071,6 +1074,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE ia_propositions SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
       { sql: 'UPDATE jeu_cartes_proposees SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
       ...effacementCompetition(compte),
+      // Lineups (migration 0082) : favoris effacés ; ce qu'il a proposé reste pour la team, sans auteur.
+      ...effacementLineups(compte),
       // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
       ...(await effacementCm(base, compte)),
       // Sponsors (migration 0024) : plus responsable de rien ; ce qu'il a écrit reste, sans auteur.

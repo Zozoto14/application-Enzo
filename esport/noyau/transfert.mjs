@@ -61,6 +61,11 @@ export const TABLES = [
   ['strat_versions', 'id'],
   ['strat_partages', 'id'],
   ['playbook_entrees', 'id'],
+  // Lineups (migration 0082) : lineups, médias (octets dans `fichiers` et le stockage), favoris, liens avec les strats.
+  ['lineups', 'id'],
+  ['lineup_medias', 'id'],
+  ['lineup_favoris', 'lineup_id, compte_id'],
+  ['strat_lineups', 'strat_id, lineup_id'],
   // Migration 0009 : demandes de compte.
   ['demandes_compte', 'id'],
   // Bot Discord (migration 0011) : identifiants Discord publics, empreintes des codes.

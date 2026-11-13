@@ -95,9 +95,9 @@ export async function jeuValidePourTeam(base, cle, { actuel } = {}) {
   return j.cle;
 }
 
-/** Noms et couleurs des jeux (affichage des teams). */
+/** Noms, couleurs et modèles de strat des jeux (affichage des teams ; le modèle règle des libellés : « Lineups et placements »…). */
 export async function nomsDesJeux(base) {
-  return new Map((await base.tous('SELECT cle, nom, couleur FROM jeux', [])).map(j => [j.cle, { nom: j.nom, couleur: j.couleur }]));
+  return new Map((await base.tous('SELECT cle, nom, couleur, modele_strat FROM jeux', [])).map(j => [j.cle, { nom: j.nom, couleur: j.couleur, modele: j.modele_strat ?? null }]));
 }
 
 /** Le compte a-t-il la permission globale `jeux.gerer` (Fondateur : toujours) ? */

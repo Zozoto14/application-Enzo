@@ -91,7 +91,7 @@ async function controler(page, nom, [largeur, hauteur]) {
 
 const GROUPES = {
   accueil: 'accueil', 'module-planning': 'agenda', 'module-availability': 'agenda', 'module-attendance': 'agenda',
-  'module-strat_editor': 'jeu', 'module-playbook': 'jeu', 'module-resources': 'jeu', 'module-video_review': 'jeu', 'module-scouting': 'jeu',
+  'module-strat_editor': 'jeu', 'module-playbook': 'jeu', 'module-lineups': 'jeu', 'module-resources': 'jeu', 'module-video_review': 'jeu', 'module-scouting': 'jeu',
   'module-tournois': 'competition', 'module-resultats': 'competition',
   'module-meeting_summaries': 'equipe', 'module-goals_tasks': 'equipe', 'module-player_notes': 'equipe', 'module-cm': 'equipe', membres: 'equipe',
   parametres: 'reglages', 'module-discord': 'reglages', journal: 'reglages',
@@ -249,6 +249,33 @@ async function parcourir(page, taille) {
         await page.getByTestId('esport-formulaire-debut-bulle-fermer').first().click();
       }
       if (await present(page, 'esport-planning-volet-fermer', 1500)) await page.getByTestId('esport-planning-volet-fermer').first().click();
+    }
+    // Lineups : filtres ouverts, vue par map (pin touché : fiche à côté ou dessous), fiche complète, formulaire.
+    if (id === 'module-lineups' && (await present(page, 'esport-lineups-vue-carte', 1500))) {
+      if (!(await present(page, 'esport-lineups-filtres', 400))) await page.getByTestId('esport-lineups-filtres-ouvrir').first().click();
+      await controler(page, 'team-lineups-filtres', taille);
+      await page.getByTestId('esport-lineups-vue-carte').first().click();
+      if (await present(page, 'esport-lineups-carte', 3000)) {
+        await controler(page, 'team-lineups-carte', taille);
+        const pin = page.locator('[data-testid^="esport-lineups-carte-pin-"]:not([data-testid*="+"])').first();
+        if (await pin.count()) {
+          await pin.click();
+          await controler(page, 'team-lineups-carte-pin', taille);
+          if (await present(page, 'esport-lineup-ouvrir', 1500)) {
+            await page.getByTestId('esport-lineup-ouvrir').first().click();
+            await controler(page, 'team-lineups-fiche', taille);
+            if (await present(page, 'esport-lineup-modifier', 1000)) {
+              await page.getByTestId('esport-lineup-modifier').first().click();
+              if (await present(page, 'esport-lineup-form-annuler', 3000)) {
+                await controler(page, 'team-lineups-formulaire', taille);
+                await page.getByTestId('esport-lineup-form-annuler').first().click();
+              }
+            }
+            if (await present(page, 'esport-lineup-retour', 1500)) await page.getByTestId('esport-lineup-retour').first().click();
+          }
+        }
+      }
+      if (await present(page, 'esport-lineups-vue-grille', 1500)) await page.getByTestId('esport-lineups-vue-grille').first().click();
     }
     // Disponibilités : aussi le mode « Planning différent chaque semaine » (choix de la semaine, bandeau, actions).
     if (id === 'module-availability' && (await present(page, 'esport-dispos-mode-semaine', 1500))) {

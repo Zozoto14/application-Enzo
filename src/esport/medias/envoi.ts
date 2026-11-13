@@ -22,7 +22,7 @@ import { ajouter, nouvelEtat, sha256Hex, terminer, type EtatSha256 } from './sha
  * Section de l'URL d'envoi ; « cm » : section CM, `teamId` est alors la portée (« club » ou une team) ;
  * « drive » : Drive de la section CM (même portée, formats étendus, quota).
  */
-export type SectionEnvoi = 'review' | 'resumes' | 'ressources' | 'cm' | 'drive';
+export type SectionEnvoi = 'review' | 'resumes' | 'ressources' | 'lineups' | 'cm' | 'drive';
 
 /** Un fichier de l'appareil, lu par tranches (jamais en entier). */
 export interface FichierLocal {
@@ -36,7 +36,7 @@ export interface FichierLocal {
 
 export interface EtatEnvoi {
   id: string;
-  usage: 'review' | 'reunion' | 'ressource' | 'cm' | 'drive';
+  usage: 'review' | 'reunion' | 'ressource' | 'lineup' | 'cm' | 'drive';
   nom: string;
   taille: number;
   tailleMorceau: number;

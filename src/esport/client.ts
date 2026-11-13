@@ -88,6 +88,8 @@ export interface Team {
   /** Nom et couleur du profil de jeu (serveurs avec profils de jeu). */
   jeuNom?: string;
   jeuCouleur?: string | null;
+  /** Modèle de strat du jeu de la team (valorant, thefinals, generique) : règle des libellés (« Lineups et placements »). */
+  jeuModele?: string | null;
   description: string;
   logoUrl: string | null;
   fuseau: string;

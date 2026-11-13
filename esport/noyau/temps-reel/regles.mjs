@@ -30,6 +30,7 @@ export const LECTURE_MODULE = Object.freeze({
   scouting: 'scouting.view',
   strat_editor: 'strats.view',
   playbook: 'playbook.view',
+  lineups: 'lineups.voir',
   player_notes: 'player_notes.view',
   resources: 'resources.view',
   tournois: 'tournois.voir',
@@ -91,6 +92,8 @@ const IGNORES = [
   // (pastille « Nouveau », migration 0048).
   /^\/cm\/(?:tableaux\/[^/]+\/tout-vu|cartes\/[^/]+\/suivre|liens\/[^/]+\/vu)$/,
   /^\/cm\/reseaux\/import\/apercu$/,
+  // Favori d'un lineup : personnel (migration 0082).
+  /^\/teams\/[^/]+\/lineups\/[^/]+\/favori$/,
   // Tickets : « lu » et préférences sont personnels ; RGPD et aperçus ne changent rien chez les autres.
   /^\/tickets\/(?:[^/]+\/lu|preferences|rgpd\/[a-z]+|config\/panneaux\/[^/]+\/apercu)$/,
 ];
@@ -111,6 +114,7 @@ const COLLECTIONS_TEAM = {
   resumes: { module: 'meeting_summaries', cle: 'resume', sonde: true },
   strats: { module: 'strat_editor', cle: 'strat', sonde: true },
   playbook: { module: 'playbook', cle: 'playbook' },
+  lineups: { module: 'lineups', cle: 'lineup', sonde: true },
   review: { module: 'video_review', cle: 'review', sonde: true },
   scouting: { module: 'scouting', cle: 'adversaire', sonde: true, sous: 'adversaires' },
   suivi: { module: 'player_notes', cle: 'suivi', sonde: true },
@@ -236,6 +240,7 @@ const MODULES_EVENEMENTS = [
   [/^opponent\./, ['scouting']],
   [/^strat\./, ['strat_editor']],
   [/^playbook\./, ['playbook']],
+  [/^lineup\./, ['lineups']],
   [/^player_note\./, ['player_notes']],
   [/^(?:resource|resource_category|resources)\./, ['resources']],
   [/^tournoi\./, ['tournois']],

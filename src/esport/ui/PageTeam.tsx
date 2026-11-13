@@ -3,7 +3,7 @@
  *
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
- *  - Jeu : Strats, Playbook, Ressources, Review vidéo, Scouting ;
+ *  - Jeu : Strats, Playbook, Lineups, Ressources, Review vidéo, Scouting ;
  *  - Compétition : Tournois, Résultats (sur petite largeur : rangés dans Agenda,
  *    la barre basse reste à cinq sections) ;
  *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
@@ -51,6 +51,7 @@ import { MaFicheTrombi } from './differe';
 import { apiTrombi } from '../trombi/api';
 import { trTb } from '../i18n/trombi';
 import { ZoneEcriture } from './ecriture/ZoneEcriture';
+import { trLu } from '../i18n/lineups';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
@@ -74,7 +75,7 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
       return tr('assistant.jeu');
     }, glyphe: 'viseur', get description() {
       return tr('pageTeam.jeu_strats_playbook_review');
-    }, sections: ['module:strat_editor', 'module:playbook', 'module:resources', 'module:video_review', 'module:scouting'] },
+    }, sections: ['module:strat_editor', 'module:playbook', 'module:lineups', 'module:resources', 'module:video_review', 'module:scouting'] },
   { id: 'competition', get libelle() {
       return tr('pageTeam.competition');
     }, glyphe: 'trophee', get description() {
@@ -109,6 +110,9 @@ const COURTS: Record<string, string> = {
   get 'module:player_notes'() {
       return tr('suivi.court');
     },
+  get 'module:lineups'() {
+      return trLu('titre');
+    },
 };
 
 /** Sections de la section « Compétition » repliées dans « Agenda » sur petite largeur (la barre basse ne porte que cinq sections). */
@@ -129,7 +133,9 @@ export function entreesBarre(detail: DetailTeam): Array<{ id: SectionTeam; libel
     if (!actifs.has(m.cle) || m.cle === 'activity_log') continue;
     const livre = Boolean(ECRANS_MODULES[m.cle]);
     if (livre && !moduleAccessible(m.cle, detail.moi.permissions)) continue;
-    entrees.push({ id: `module:${m.cle}`, libelle: nomModule(m.cle), bientot: !livre && !MODULES_DISPONIBLES.has(m.cle) });
+    // The Finals : l'onglet Lineups s'appelle « Lineups et placements » (gadgets, défenses de cashout).
+    const libelle = m.cle === 'lineups' && detail.team.jeuModele === 'thefinals' ? trLu('titre.thefinals') : nomModule(m.cle);
+    entrees.push({ id: `module:${m.cle}`, libelle, bientot: !livre && !MODULES_DISPONIBLES.has(m.cle) });
   }
   if (peut('members.view') || peut('members.invite') || peut('roles.manage')) entrees.push({ id: 'membres', libelle: tr('membresRoles.membres_et_roles') });
   if (actifs.has('activity_log') && peut('activity_log.view')) entrees.push({ id: 'journal', libelle: tr('journal.journal') });
@@ -300,7 +306,9 @@ export function PageTeam({
         prefixe="esport-onglet"
         testID="esport-sous-onglets"
         actif={active}
-        pleineLargeur={!large}
+        // Téléphone : au-delà de cinq sous-onglets (section Jeu), la rangée défile et les libellés restent entiers.
+        pleineLargeur={!large && groupe.entrees.length <= 5}
+        defilant={!large && groupe.entrees.length > 5}
         onChoisir={id => aller(id as SectionTeam)}
         entrees={groupe.entrees.map(e => ({ id: e.id, libelle: large ? e.libelle : e.court, description: e.libelle, bientot: e.bientot }))}
       />
