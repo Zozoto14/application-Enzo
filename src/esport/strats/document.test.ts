@@ -258,7 +258,7 @@ describe('vue', () => {
     // Point écran (100, 50) → point document identique avant et après.
     const doc = (vue: typeof v, p: { x: number; y: number }) => ({ x: (p.x - vue.x) / vue.echelle, y: (p.y - vue.y) / vue.echelle });
     expect(doc(v, { x: 100, y: 50 })).toEqual(doc({ echelle: 1, x: 0, y: 0 }, { x: 100, y: 50 }));
-    expect(zoomer(v, 100, { x: 0, y: 0 }).echelle).toBe(6);
+    expect(zoomer(v, 100, { x: 0, y: 0 }).echelle).toBe(8);
     expect(zoomer(v, 0.001, { x: 0, y: 0 }).echelle).toBe(0.5);
   });
 });

@@ -46,6 +46,8 @@ export interface CapaciteAsset {
   iconeDoc?: string | null;
   /** Description officielle (import valorant-api.com). */
   description?: string;
+  /** Accent propre à la capacité (#rrggbb, profil de jeu) quand il diffère de celui de l'agent. */
+  couleur?: string | null;
 }
 export interface AgentAsset {
   cle: string;
@@ -60,6 +62,8 @@ export interface AgentAsset {
   capacites: CapaciteAsset[];
   /** Profil de jeu : personnage encore jouable (absent : oui). */
   actif?: boolean;
+  /** Accent de l'agent (#rrggbb : profil de jeu, sinon pré-rempli « à vérifier ») : couleur de ses capacités au choix de la strat. */
+  couleur?: string | null;
 }
 export interface CarteAsset {
   cle: string;

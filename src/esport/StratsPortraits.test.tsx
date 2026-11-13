@@ -17,13 +17,23 @@ const pointeur = { x: 300, y: 320 };
 jest.mock('konva', () => ({ __esModule: true, default: {} }));
 jest.mock('react-konva', () => {
   const R = jest.requireActual<typeof React>('react');
-  const noeud = { getRelativePointerPosition: () => pointeur, hasName: () => false, findAncestor: () => null, id: () => '', find: () => [] };
-  const forme = (nom: string) =>
-    R.forwardRef<unknown, { children?: React.ReactNode }>(function Forme({ children, ...props }, ref) {
-      R.useImperativeHandle(ref, () => noeud);
-      return R.createElement(`konva-${nom}`, props, children);
-    });
-  return Object.fromEntries(['Arrow', 'Circle', 'Ellipse', 'Group', 'Image', 'Layer', 'Line', 'Rect', 'RegularPolygon', 'Stage', 'Text', 'Wedge'].map(n => [n, forme(n)]));
+  // Nœud Konva simulé : les méthodes connues du test, toute autre appelée sans effet (mise à l'échelle des jetons, etc.).
+  const connues: Record<string, unknown> = { getRelativePointerPosition: () => pointeur, getPointerPosition: () => pointeur, hasName: () => false, findAncestor: () => null, id: () => '', find: () => [], findOne: () => null, visible: () => true };
+  const noeud: unknown = new Proxy(connues, { get: (cible, cle) => (cle in cible ? cible[cle as string] : () => undefined) });
+  const formes = new Map<string, unknown>();
+  const forme = (nom: string) => {
+    if (!formes.has(nom))
+      formes.set(
+        nom,
+        R.forwardRef<unknown, { children?: React.ReactNode }>(function Forme({ children, ...props }, ref) {
+          R.useImperativeHandle(ref, () => noeud);
+          return R.createElement(`konva-${nom}`, props, children);
+        }),
+      );
+    return formes.get(nom);
+  };
+  // Toute forme de react-konva (Circle, Group, Label, Arc…) devient un élément `konva-<Nom>`.
+  return new Proxy({ __esModule: true }, { get: (cible, cle) => (cle in cible ? (cible as Record<string | symbol, unknown>)[cle] : typeof cle === 'string' ? forme(cle) : undefined), has: () => true });
 });
 
 /** Décodage d'image simulé : chargée au tour suivant, en échec si l'adresse contient « casse ». */
@@ -77,6 +87,8 @@ function Editeur({ images, agent = VIPER, initial }: { images: CacheImages; agen
       epaisseur={5}
       vue={{ echelle: 1, x: 0, y: 0 }}
       onVue={() => undefined}
+      selection={[]}
+      usage="deplacement"
       onSelection={() => undefined}
       onAction={(a: Action) => setDoc(d => appliquer(d, a))}
       images={images}
@@ -115,6 +127,8 @@ describe('pion posé : photo de l’agent', () => {
     const ev = { target: { hasName: () => false, findAncestor: () => null }, evt: { isPrimary: true, shiftKey: false } };
     // Agent armé, pointeur sur la map : le portrait suit le pointeur.
     await act(async () => scene().props.onPointerMove(ev));
+    // Le fantôme suit le pointeur au rythme de l'affichage (une image) ; puis le portrait se décode.
+    await act(() => new Promise<void>(ok => requestAnimationFrame(() => ok())));
     await attendreImages();
     expect(imagesSous(r, 'fantome-agent')).toEqual([`blob:${SIGNE}`]);
     // Pose (appui + relâché au même endroit) : le pion posé montre la photo dès son premier rendu.

@@ -1,15 +1,16 @@
 /**
- * Éditeur de strats : barre d'agents (portraits importés, repli en initiales, filtre par rôle, camp allié /
- * ennemi), barre de capacités (C, Q, E, X avec icônes, un clic arme la pose), barre des étapes (1 à N, lecture,
- * curseur, « Supprimer tout / l'étape »), grille d'outils ; assets des agents depuis le profil de jeu (portraits
- * et icônes IMPORTÉS par le serveur, adresse CDN gardée pour le document) ; « Importer agents et capacités ».
+ * Briques des barres de l'atelier de strats : portrait d'un agent ou icône d'une capacité (`IconeAsset` : image
+ * importée, puis CDN officiel, puis initiales), rôles des agents, ordre des capacités (C, Q, E, X), curseur de
+ * temps ; « Supprimer tout » ; assets des agents depuis le profil de jeu (portraits et icônes IMPORTÉS par le
+ * serveur, adresse CDN gardée pour le document) ; « Importer agents et capacités ». Le dock, le rail d'outils et la
+ * frise des étapes sont testés dans StratsAtelier.test.tsx.
  */
 
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
-import type { AgentAsset } from './strats/assets';
-import { BarreAgents, BarreCapacites, BarreEtapes, GrilleOutils, agentsDuRole, capacitesOrdonnees, type Camp } from './ui/strats/Barres';
+import { sourcesIcone, type AgentAsset } from './strats/assets';
+import { Curseur, IconeAsset, ROLES_AGENTS, agentsDuRole, capacitesOrdonnees } from './ui/strats/Barres';
 import { ImportAgents } from './ui/jeux/DetailsJeu';
 import { assetsDepuisProfil, capacitesOfficielles, donneesVides } from './jeux/profil';
 import { appliquer, documentVide, type ObjetStrat } from './strats/document';
@@ -30,110 +31,67 @@ const AGENTS: AgentAsset[] = [
   agent('killjoy', 'sentinelle', null),
 ];
 
-function Agents({ initial = 'allie' as Camp, onAgent = jest.fn() }) {
-  const [role, setRole] = React.useState<string | null>(null);
-  const [camp, setCamp] = React.useState<Camp>(initial);
-  return <BarreAgents theme={theme} agents={AGENTS} agentCle="jett" onAgent={onAgent} role={role} onRole={setRole} camp={camp} onCamp={setCamp} />;
-}
-
-describe('barre d’agents', () => {
-  it('portraits importés, initiales en repli (image absente ou en échec)', async () => {
-    await render(<Agents />);
-    expect(screen.getByTestId('esport-agent-jett-portrait-image')).toBeTruthy();
-    expect(screen.getByTestId('esport-agent-killjoy-portrait-initiales')).toBeTruthy();
+describe('portrait d’un agent, icône d’une capacité', () => {
+  it('image quand elle existe, initiales en repli (image absente ou en échec)', async () => {
+    await render(
+      <>
+        <IconeAsset theme={theme} url={sourcesIcone(AGENTS[0])} nom="Jett" testID="p-jett" />
+        <IconeAsset theme={theme} url={sourcesIcone(AGENTS[1])} nom="Sova" testID="p-sova" />
+        <IconeAsset theme={theme} url={sourcesIcone(AGENTS[3])} nom="Killjoy" testID="p-killjoy" />
+      </>,
+    );
+    expect(screen.getByTestId('p-jett-image')).toBeTruthy();
+    expect(screen.getByTestId('p-killjoy-initiales')).toBeTruthy();
     expect(screen.getByText('K')).toBeTruthy();
-    // Une image qui ne charge pas : repli en initiales.
-    await fireEvent(screen.getByTestId('esport-agent-sova-portrait-image'), 'error');
-    expect(screen.getByTestId('esport-agent-sova-portrait-initiales')).toBeTruthy();
-    expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
+    await fireEvent(screen.getByTestId('p-sova-image'), 'error');
+    expect(screen.getByTestId('p-sova-initiales')).toBeTruthy();
   });
 
-  it('image importée en échec : le CDN officiel ensuite, puis les initiales ; message seulement si les deux échouent', async () => {
+  it('image importée en échec : le CDN officiel ensuite, puis les initiales ; `onEchec` quand tout a échoué', async () => {
     const signe = (c: string) => `https://esport.test/jeux/images/${c}?c=x&exp=1&sig=s`;
-    const agents: AgentAsset[] = [
-      { ...agent('jett', 'duelliste', signe('jett')), iconeDoc: 'https://media.valorant-api.com/agents/j/displayicon.png' },
-      { ...agent('sova', 'initiateur', signe('sova')), iconeDoc: 'https://ailleurs.example/sova.png' },
-    ];
-    await render(<BarreAgents theme={theme} agents={agents} agentCle={undefined} onAgent={jest.fn()} role={null} onRole={jest.fn()} camp="allie" onCamp={jest.fn()} />);
-    expect(screen.getByTestId('esport-agent-jett-portrait-image').props.source).toEqual({ uri: signe('jett') });
-    await fireEvent(screen.getByTestId('esport-agent-jett-portrait-image'), 'error');
-    expect(screen.getByTestId('esport-agent-jett-portrait-image').props.source).toEqual({ uri: 'https://media.valorant-api.com/agents/j/displayicon.png' });
+    const jett = { ...agent('jett', 'duelliste', signe('jett')), iconeDoc: 'https://media.valorant-api.com/agents/j/displayicon.png' };
+    const sova = { ...agent('sova', 'initiateur', signe('sova')), iconeDoc: 'https://ailleurs.example/sova.png' };
+    const onEchec = jest.fn();
+    await render(
+      <>
+        <IconeAsset theme={theme} url={sourcesIcone(jett)} nom="Jett" testID="p-jett" onEchec={() => onEchec('jett')} />
+        <IconeAsset theme={theme} url={sourcesIcone(sova)} nom="Sova" testID="p-sova" onEchec={() => onEchec('sova')} />
+      </>,
+    );
+    expect(screen.getByTestId('p-jett-image').props.source).toEqual({ uri: signe('jett') });
+    await fireEvent(screen.getByTestId('p-jett-image'), 'error');
+    expect(screen.getByTestId('p-jett-image').props.source).toEqual({ uri: 'https://media.valorant-api.com/agents/j/displayicon.png' });
+    expect(onEchec).not.toHaveBeenCalled();
     // Hôte hors liste : jamais essayé (initiales directement après l'échec du lien signé).
-    await fireEvent(screen.getByTestId('esport-agent-sova-portrait-image'), 'error');
-    expect(screen.getByTestId('esport-agent-sova-portrait-initiales')).toBeTruthy();
-    expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
-    await fireEvent(screen.getByTestId('esport-agent-jett-portrait-image'), 'error');
-    expect(screen.getByTestId('esport-agent-jett-portrait-initiales')).toBeTruthy();
-    expect(screen.getByTestId('esport-agents-sans-images')).toBeTruthy();
+    await fireEvent(screen.getByTestId('p-sova-image'), 'error');
+    expect(screen.getByTestId('p-sova-initiales')).toBeTruthy();
+    expect(onEchec).toHaveBeenCalledWith('sova');
+    await fireEvent(screen.getByTestId('p-jett-image'), 'error');
+    expect(screen.getByTestId('p-jett-initiales')).toBeTruthy();
+    expect(onEchec).toHaveBeenCalledWith('jett');
   });
+});
 
-  it('aucune source (The Finals : pas de portraits officiels) : initiales, sans message', async () => {
-    await render(<BarreAgents theme={theme} agents={AGENTS.map(a => ({ ...a, icone: null }))} agentCle={undefined} onAgent={jest.fn()} role={null} onRole={jest.fn()} camp="allie" onCamp={jest.fn()} />);
-    expect(screen.getByTestId('esport-agent-jett-portrait-initiales')).toBeTruthy();
-    expect(screen.queryByTestId('esport-agents-sans-images')).toBeNull();
-  });
-
-  it('filtre par rôle (Duellistes, Initiateurs, Contrôleurs, Sentinelles), retour à « Tous »', async () => {
-    await render(<Agents />);
-    expect(screen.getAllByTestId(/^esport-agent-[a-z]+$/)).toHaveLength(4);
-    await fireEvent.press(screen.getByTestId('esport-agents-role-controleur'));
-    expect(screen.getAllByTestId(/^esport-agent-[a-z]+$/).map(e => e.props.testID)).toEqual(['esport-agent-viper']);
-    await fireEvent.press(screen.getByTestId('esport-agents-role-controleur'));
-    expect(screen.getAllByTestId(/^esport-agent-[a-z]+$/)).toHaveLength(4);
-    await fireEvent.press(screen.getByTestId('esport-agents-role-sentinelle'));
-    await fireEvent.press(screen.getByTestId('esport-agents-role-tous'));
-    expect(screen.getAllByTestId(/^esport-agent-[a-z]+$/)).toHaveLength(4);
+describe('rôles, ordre des capacités, curseur de temps', () => {
+  it('agents d’un rôle (Duellistes, Initiateurs, Contrôleurs, Sentinelles) ; null : tous', () => {
+    expect(ROLES_AGENTS).toEqual(['duelliste', 'initiateur', 'controleur', 'sentinelle']);
     expect(agentsDuRole(AGENTS, 'initiateur').map(a => a.cle)).toEqual(['sova']);
+    expect(agentsDuRole(AGENTS, null)).toHaveLength(4);
   });
 
-  it('camp allié / ennemi, choix d’un agent', async () => {
-    const onAgent = jest.fn();
-    await render(<Agents onAgent={onAgent} />);
-    expect(screen.getByTestId('esport-agents-camp-allie').props.accessibilityState.selected).toBe(true);
-    await fireEvent.press(screen.getByTestId('esport-agents-camp-ennemi'));
-    expect(screen.getByTestId('esport-agents-camp-ennemi').props.accessibilityState.selected).toBe(true);
-    await fireEvent.press(screen.getByTestId('esport-agent-viper'));
-    expect(onAgent).toHaveBeenCalledWith(expect.objectContaining({ cle: 'viper' }));
+  it('capacités dans l’ordre du jeu : C, Q, E, X', () => {
+    expect(capacitesOrdonnees(AGENTS[2]).map(c => c.touche)).toEqual(['C', 'Q', 'E', 'X']);
   });
-});
 
-describe('barre de capacités', () => {
-  it('C, Q, E, X dans l’ordre du jeu, icônes (initiales sans icône) ; un clic arme la pose', async () => {
-    const onCapacite = jest.fn();
-    const viper = AGENTS[2];
-    expect(capacitesOrdonnees(viper).map(c => c.touche)).toEqual(['C', 'Q', 'E', 'X']);
-    const { rerender } = await render(<BarreCapacites theme={theme} agent={viper} capaciteCle={undefined} armee={false} onCapacite={onCapacite} />);
-    expect(screen.getAllByTestId(/^esport-capacite-[A-Za-z0-9]+$/).map(e => e.props.testID)).toEqual(['esport-capacite-Grenade', 'esport-capacite-Ability1', 'esport-capacite-Ability2', 'esport-capacite-Ultimate']);
-    expect(screen.getByTestId('esport-capacite-Ability2-icone-image')).toBeTruthy();
-    expect(screen.getByTestId('esport-capacite-Grenade-icone-initiales')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('esport-capacite-Ability2'));
-    expect(onCapacite).toHaveBeenCalledWith(expect.objectContaining({ cle: 'Ability2', nom: 'Toxic Screen' }));
-    await rerender(<BarreCapacites theme={theme} agent={viper} capaciteCle="Ability2" armee onCapacite={onCapacite} />);
-    expect(screen.getByTestId('esport-capacite-Ability2').props.accessibilityState.selected).toBe(true);
-  });
-});
-
-describe('barre des étapes et grille d’outils', () => {
-  it('étapes 1 à N, ajout, lecture, curseur ; supprimer tout ou l’étape', async () => {
-    const f = { onEtape: jest.fn(), onAjouter: jest.fn(), onLire: jest.fn(), onPause: jest.fn(), onTemps: jest.fn(), onSupprimerTout: jest.fn(), onSupprimerEtape: jest.fn() };
-    await render(<BarreEtapes theme={theme} n={3} etape={1} peutAjouter duree={5} temps={undefined} enLecture={false} modifiable {...f} />);
-    expect(screen.getByTestId('esport-etape-num-1').props.accessibilityState.selected).toBe(true);
-    await fireEvent.press(screen.getByTestId('esport-etape-num-2'));
-    expect(f.onEtape).toHaveBeenCalledWith(2);
-    await fireEvent.press(screen.getByTestId('esport-etape-num-ajouter'));
-    await fireEvent.press(screen.getByTestId('esport-barre-lecture'));
-    expect(f.onAjouter).toHaveBeenCalled();
-    expect(f.onLire).toHaveBeenCalled();
-    const curseur = screen.getByTestId('esport-barre-curseur');
+  it('curseur : toucher la piste, ou l’ajuster au clavier (accessibilité)', async () => {
+    const onChanger = jest.fn();
+    await render(<Curseur theme={theme} valeur={0} max={5} onChanger={onChanger} libelle="Temps" testID="curseur" />);
+    const curseur = screen.getByTestId('curseur');
     await fireEvent(curseur, 'layout', { nativeEvent: { layout: { width: 200, height: 28, x: 0, y: 0 } } });
     await fireEvent(curseur, 'responderGrant', { nativeEvent: { locationX: 100 } });
-    expect(f.onTemps).toHaveBeenLastCalledWith(2.5);
+    expect(onChanger).toHaveBeenLastCalledWith(2.5);
     await fireEvent(curseur, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
-    expect(f.onTemps).toHaveBeenLastCalledWith(0.5);
-    await fireEvent.press(screen.getByTestId('esport-supprimer-tout'));
-    await fireEvent.press(screen.getByTestId('esport-supprimer-etape'));
-    expect(f.onSupprimerTout).toHaveBeenCalled();
-    expect(f.onSupprimerEtape).toHaveBeenCalled();
+    expect(onChanger).toHaveBeenLastCalledWith(0.5);
   });
 
   it('« Supprimer tout » vide toutes les étapes (calques verrouillés gardés), annulable par l’historique', () => {
@@ -147,14 +105,6 @@ describe('barre des étapes et grille d’outils', () => {
     const vide = appliquer(d, { type: 'viderTout' });
     expect(vide.etapes.map(e => e.objets.map(o => o.id))).toEqual([[], ['t']]);
     expect(appliquer(vide, { type: 'viderTout' })).toBe(vide);
-  });
-
-  it('outils en grille, icônes monochromes, choix', async () => {
-    const onOutil = jest.fn();
-    await render(<GrilleOutils theme={theme} outils={[{ id: 'selection', icone: 'selection', libelle: 'Sélection', raccourci: 'V' }, { id: 'gomme', icone: 'gomme', libelle: 'Gomme', raccourci: 'E' }]} actif="selection" onOutil={onOutil} />);
-    expect(screen.getByLabelText('Gomme (E)')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('esport-outil-gomme'));
-    expect(onOutil).toHaveBeenCalledWith('gomme');
   });
 });
 

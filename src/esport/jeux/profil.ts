@@ -15,7 +15,7 @@ import type { ClientEsport } from '../client';
 import { SLOTS, cleRole, type AgentAsset, type Assets, type CapaciteAsset, type CarteAsset } from '../strats/assets';
 import { modeleDuJeu } from '../strats/modeles';
 import { apiJeux, type CapaciteJeu, type CapaciteOfficielle, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
-import { capacitesPrereplies } from './modeles';
+import { capacitesPrereplies, modeleTheFinals } from './modeles';
 
 /** « 5v5 », « 3v3v3v3 » ; au-delà de 4 équipes « 20 × 3 ». */
 export function libelleFormat(f: Pick<FormatJeu, 'equipes' | 'joueursParEquipe'>): string {
@@ -78,7 +78,10 @@ export function assetsDepuisProfil(profil: ProfilJeu, riot?: Assets, maintenant 
     };
   });
   const lien = (f: string | undefined): string | null => (f ? (profil.images?.[f]?.url ?? null) : null);
-  const agents: AgentAsset[] = d.personnages.map(p => {
+  // The Finals sans classes dans le profil : celles du modèle pré-rempli de l'app (« à vérifier »), pour que l'atelier
+  // de strats propose Light, Medium et Heavy avec leurs spécialisations et gadgets sans attendre « Compléter ».
+  const personnages = d.personnages.length === 0 && modele === 'thefinals' ? modeleTheFinals([]).personnages : d.personnages;
+  const agents: AgentAsset[] = personnages.map(p => {
     const r = valorant ? riot?.agents.find(x => x.cle === p.cle) : undefined;
     // Caractéristiques des capacités : celles du profil, sinon les données pré-remplies du modèle (« à vérifier »).
     const donnees = p.capacites?.length ? p.capacites : capacitesPrereplies(modele, p);

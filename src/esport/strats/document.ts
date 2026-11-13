@@ -27,6 +27,7 @@ export const COULEURS_JOUEURS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a
 export const COULEURS_LIBRES = ['#ffffff', '#f97316', '#06b6d4', '#ec4899', '#111827'];
 
 export type Side = 'attaque' | 'defense';
+export type ModeCouleurs = 'joueur' | 'agent';
 export type TypeStrat = 'default' | 'execute' | 'eco' | 'pistol' | 'retake' | 'other';
 export type Calque = 'fond' | 'callouts' | 'utilitaires' | 'vision' | 'marqueurs' | 'dessins' | 'texte';
 export const CALQUES: readonly Calque[] = ['fond', 'callouts', 'utilitaires', 'vision', 'marqueurs', 'dessins', 'texte'];
@@ -65,6 +66,8 @@ interface Base {
   id: string;
   /** Étage (The Finals, maps à niveaux). */
   niveau?: number | null;
+  /** Objet verrouillé : ni déplacé, ni modifié, ni supprimé tant qu'il n'est pas déverrouillé. */
+  verrou?: boolean;
 }
 export interface ObjetAgent extends Base {
   type: 'agent';
@@ -93,7 +96,12 @@ export interface ObjetCapacite extends Base {
   ordre?: number | null;
   /** Moment du lancer dans l'étape (secondes). */
   t?: number | null;
+  /** Variante « creuse » (smoke one-way, zone dont on ne tient que le bord). */
+  creux?: boolean;
 }
+/** Usage d'un tracé : déplacement (plein, effilé), rotation (tirets), regard (pointillé fin). */
+export type UsageTrace = 'deplacement' | 'rotation' | 'regard';
+export const USAGES_TRACE: readonly UsageTrace[] = ['deplacement', 'rotation', 'regard'];
 export interface ObjetTrace extends Base {
   type: 'fleche' | 'ligne';
   points: number[];
@@ -104,6 +112,8 @@ export interface ObjetTrace extends Base {
   joueur?: number | null;
   t0?: number | null;
   t1?: number | null;
+  /** Usage (style du trait) ; absent : déduit (trajet d'un joueur = déplacement, tirets = rotation). */
+  usage?: UsageTrace | null;
 }
 export interface ObjetForme extends Base {
   type: 'forme';
@@ -175,6 +185,8 @@ export interface DocumentStrat {
   carte: Carte;
   side: Side;
   economie?: Economie | null;
+  /** Couleur des capacités : celle du joueur (défaut) ou l'accent de l'agent (profil de jeu). */
+  couleurs?: ModeCouleurs;
   joueurs: JoueurStrat[];
   calques: Record<Calque, { visible: boolean; verrou: boolean }>;
   etapes: Etape[];
@@ -236,7 +248,19 @@ export type Action =
   | { type: 'vider'; etape: number }
   /** Vider TOUTES les étapes (objets des calques verrouillés gardés). */
   | { type: 'viderTout' }
-  | { type: 'ajouterEtape'; apres: number; phase?: string | null }
+  /** `reprise` : la nouvelle étape reprend les pions de l'étape `apres`, à leur DERNIÈRE position (fin de leurs trajets). */
+  | { type: 'ajouterEtape'; apres: number; phase?: string | null; reprise?: boolean }
+  /** Plusieurs objets à la fois (sélection multiple) : une seule entrée dans l'historique. */
+  | { type: 'supprimerLot'; etape: number; ids: readonly string[] }
+  | { type: 'deplacerLot'; etape: number; ids: readonly string[]; dx: number; dy: number }
+  | { type: 'decaler'; etape: number; deplacements: ReadonlyArray<{ id: string; dx: number; dy: number }> }
+  | { type: 'modifierLot'; etape: number; ids: readonly string[]; champs: ChampsObjet }
+  | { type: 'verrouiller'; etape: number; ids: readonly string[]; verrou: boolean }
+  /** Premier plan / arrière-plan (ordre de dessin dans le calque). */
+  | { type: 'ordonner'; etape: number; ids: readonly string[]; vers: 'avant' | 'arriere' }
+  /** Copie des objets vers une autre étape (nouveaux identifiants, même place). */
+  | { type: 'copierVers'; de: number; vers: number; ids: readonly string[] }
+  | { type: 'couleurs'; couleurs: ModeCouleurs }
   | { type: 'dupliquerEtape'; etape: number }
   | { type: 'supprimerEtape'; etape: number }
   | { type: 'deplacerEtape'; de: number; vers: number }
@@ -261,6 +285,37 @@ function majEtape(d: DocumentStrat, i: number, f: (e: Etape) => Etape): Document
   const etapes = d.etapes.slice();
   etapes[i] = f(etapes[i]);
   return { ...d, etapes };
+}
+
+/** Objet qui ne bouge pas : calque verrouillé, ou objet verrouillé. */
+const fige = (d: DocumentStrat, o: ObjetStrat): boolean => d.calques[calqueDe(o)].verrou || Boolean(o.verrou);
+
+/**
+ * Position FINALE des pions d'une étape : le premier pion de chaque joueur est au bout de son dernier trajet
+ * (flèche du joueur, par arrivée la plus tardive) ; les autres pions (ennemis, doublons) ne bougent pas.
+ * Sert à la reprise d'une nouvelle étape, au « fantôme » de l'étape précédente et à la lecture enchaînée.
+ */
+export function pionsFinaux(e: Etape): ObjetAgent[] {
+  const duree = e.duree ?? DUREE_ETAPE_DEFAUT;
+  const arrivee = new Map<number, { x: number; y: number; t: number; dx: number; dy: number }>();
+  for (const o of e.objets) {
+    if ((o.type !== 'fleche' && o.type !== 'ligne') || typeof o.joueur !== 'number' || o.points.length < 4) continue;
+    const n = o.points.length;
+    const t = o.t1 ?? duree;
+    const avant = arrivee.get(o.joueur);
+    if (!avant || t >= avant.t) arrivee.set(o.joueur, { x: o.points[n - 2], y: o.points[n - 1], t, dx: o.points[n - 2] - o.points[n - 4], dy: o.points[n - 1] - o.points[n - 3] });
+  }
+  const vus = new Set<number>();
+  const sortie: ObjetAgent[] = [];
+  for (const o of e.objets) {
+    if (o.type !== 'agent') continue;
+    const fin = typeof o.joueur === 'number' && !vus.has(o.joueur) ? arrivee.get(o.joueur) : undefined;
+    if (typeof o.joueur === 'number') vus.add(o.joueur);
+    if (!fin) sortie.push(o);
+    // Le pion regarde dans le sens de son arrivée (s'il avait un regard).
+    else sortie.push({ ...o, x: arrondi(fin.x), y: arrondi(fin.y), ...(typeof o.angle === 'number' && (fin.dx !== 0 || fin.dy !== 0) ? { angle: Math.round((Math.atan2(fin.dy, fin.dx) * 180) / Math.PI) } : {}) });
+  }
+  return sortie;
 }
 
 function deplacerObjet(o: ObjetStrat, dx: number, dy: number): ObjetStrat {
@@ -292,7 +347,9 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
         .map(o => {
           const id = idUnique(pris);
           pris.add(id);
-          return deplacerObjet({ ...o, id }, a.decalage ?? 0, a.decalage ?? 0);
+          // Une copie n'est jamais verrouillée (on la déplace aussitôt).
+          const { verrou: _v, ...copie } = o;
+          return deplacerObjet({ ...copie, id } as ObjetStrat, a.decalage ?? 0, a.decalage ?? 0);
         });
       if (nouveaux.length === 0) return d;
       return majEtape(d, a.etape, x => ({ ...x, objets: [...x.objets, ...nouveaux] }));
@@ -302,7 +359,7 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
     case 'supprimer': {
       const e = d.etapes[a.etape];
       const o = e?.objets.find(x => x.id === a.id);
-      if (!e || !o || d.calques[calqueDe(o)].verrou) return d;
+      if (!e || !o || d.calques[calqueDe(o)].verrou || o.verrou) return d;
       if (a.type === 'supprimer') return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.filter(y => y.id !== a.id) }));
       if (a.type === 'deplacer' && a.dx === 0 && a.dy === 0) return d;
       const nouveau = a.type === 'deplacer' ? deplacerObjet(o, a.dx, a.dy) : ({ ...o, ...a.champs, id: o.id, type: o.type } as ObjetStrat);
@@ -312,18 +369,89 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
     case 'vider': {
       const e = d.etapes[a.etape];
       if (!e || e.objets.length === 0) return d;
-      return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.filter(o => d.calques[calqueDe(o)].verrou) }));
+      return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.filter(o => fige(d, o)) }));
     }
     case 'viderTout': {
-      if (d.etapes.every(e => e.objets.every(o => d.calques[calqueDe(o)].verrou))) return d;
-      return { ...d, etapes: d.etapes.map(e => ({ ...e, objets: e.objets.filter(o => d.calques[calqueDe(o)].verrou) })) };
+      if (d.etapes.every(e => e.objets.every(o => fige(d, o)))) return d;
+      return { ...d, etapes: d.etapes.map(e => ({ ...e, objets: e.objets.filter(o => fige(d, o)) })) };
     }
+    case 'supprimerLot': {
+      const e = d.etapes[a.etape];
+      const ids = new Set(a.ids);
+      if (!e || !e.objets.some(o => ids.has(o.id) && !fige(d, o))) return d;
+      return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.filter(o => !ids.has(o.id) || fige(d, o)) }));
+    }
+    case 'deplacerLot':
+      return appliquer(d, { type: 'decaler', etape: a.etape, deplacements: a.ids.map(id => ({ id, dx: a.dx, dy: a.dy })) });
+    case 'decaler': {
+      const e = d.etapes[a.etape];
+      const par = new Map(a.deplacements.filter(x => x.dx !== 0 || x.dy !== 0).map(x => [x.id, x]));
+      if (!e || !e.objets.some(o => par.has(o.id) && !fige(d, o))) return d;
+      return majEtape(d, a.etape, x => ({ ...x, objets: x.objets.map(o => (par.has(o.id) && !fige(d, o) ? deplacerObjet(o, (par.get(o.id) as { dx: number }).dx, (par.get(o.id) as { dy: number }).dy) : o)) }));
+    }
+    case 'modifierLot': {
+      const e = d.etapes[a.etape];
+      const ids = new Set(a.ids);
+      if (!e) return d;
+      let change = false;
+      const objets = e.objets.map(o => {
+        if (!ids.has(o.id) || fige(d, o)) return o;
+        const nouveau = { ...o, ...a.champs, id: o.id, type: o.type } as ObjetStrat;
+        if (JSON.stringify(nouveau) === JSON.stringify(o)) return o;
+        change = true;
+        return nouveau;
+      });
+      return change ? majEtape(d, a.etape, x => ({ ...x, objets })) : d;
+    }
+    case 'verrouiller': {
+      const e = d.etapes[a.etape];
+      const ids = new Set(a.ids);
+      if (!e || !e.objets.some(o => ids.has(o.id) && Boolean(o.verrou) !== a.verrou)) return d;
+      return majEtape(d, a.etape, x => ({
+        ...x,
+        objets: x.objets.map(o => {
+          if (!ids.has(o.id) || Boolean(o.verrou) === a.verrou) return o;
+          const { verrou: _v, ...reste } = o;
+          return (a.verrou ? { ...reste, verrou: true } : reste) as ObjetStrat;
+        }),
+      }));
+    }
+    case 'ordonner': {
+      const e = d.etapes[a.etape];
+      const ids = new Set(a.ids);
+      if (!e) return d;
+      const choisis = e.objets.filter(o => ids.has(o.id));
+      const autres = e.objets.filter(o => !ids.has(o.id));
+      if (choisis.length === 0 || autres.length === 0) return d;
+      const objets = a.vers === 'avant' ? [...autres, ...choisis] : [...choisis, ...autres];
+      if (objets.every((o, i) => o === e.objets[i])) return d;
+      return majEtape(d, a.etape, x => ({ ...x, objets }));
+    }
+    case 'copierVers': {
+      const source = d.etapes[a.de];
+      const cible = d.etapes[a.vers];
+      const ids = new Set(a.ids);
+      if (!source || !cible || a.de === a.vers) return d;
+      const objets = source.objets.filter(o => ids.has(o.id));
+      return objets.length ? appliquer(d, { type: 'coller', etape: a.vers, objets, decalage: 0 }) : d;
+    }
+    case 'couleurs':
+      return (d.couleurs ?? 'joueur') === a.couleurs ? d : { ...d, couleurs: a.couleurs };
     case 'ajouterEtape': {
       if (d.etapes.length >= ETAPES_MAX) return d;
       const id = idUnique(d.etapes.map(e => e.id), 'e');
       const etapes = d.etapes.slice();
       const phase = a.phase !== undefined ? a.phase : (d.etapes[a.apres]?.phase ?? null);
-      etapes.splice(borne(a.apres + 1, 0, etapes.length), 0, { id, titre: tr('strats.document.etape', { v: d.etapes.length + 1 }), note: '', phase, duree: DUREE_ETAPE_DEFAUT, objets: [] });
+      // Reprise : les pions de l'étape précédente, là où leurs trajets les ont menés (nouveaux identifiants).
+      const pris = new Set(idsObjets(d));
+      const objets = a.reprise && d.etapes[a.apres]
+        ? pionsFinaux(d.etapes[a.apres]).map(o => {
+            const nouvelId = idUnique(pris);
+            pris.add(nouvelId);
+            return { ...o, id: nouvelId };
+          })
+        : [];
+      etapes.splice(borne(a.apres + 1, 0, etapes.length), 0, { id, titre: tr('strats.document.etape', { v: d.etapes.length + 1 }), note: '', phase, duree: DUREE_ETAPE_DEFAUT, objets });
       return { ...d, etapes };
     }
     case 'dupliquerEtape': {
@@ -546,6 +674,7 @@ export function lireDocument(source: string | unknown, modele?: ModeleStrat): Do
     carte: { cle: carte.cle, nom: carte.nom ?? carte.cle, image: carte.image ?? null, echelle: carte.echelle ?? null },
     side: d.side === 'defense' ? 'defense' : 'attaque',
     economie: (d.economie as Economie | null | undefined) ?? null,
+    ...(d.couleurs === 'agent' ? { couleurs: 'agent' as const } : {}),
     joueurs: Array.isArray(d.joueurs) && d.joueurs.length > 0 ? (d.joueurs as JoueurStrat[]) : documentVide(carte, 'attaque', jeu, m).joueurs,
     calques,
     etapes: (d.etapes as Etape[]).map(e => ({ ...e, phase: e.phase ?? null, duree: e.duree ?? DUREE_ETAPE_DEFAUT })),
@@ -615,7 +744,7 @@ export interface Vue {
 }
 export const VUE_INITIALE: Vue = { echelle: 1, x: 0, y: 0 };
 export const ECHELLE_MIN = 0.5;
-export const ECHELLE_MAX = 6;
+export const ECHELLE_MAX = 8;
 
 /**
  * Zoom autour d'un point de l'écran (molette, pincement, boutons) : le point

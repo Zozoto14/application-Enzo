@@ -6,7 +6,7 @@
  */
 
 import type { CapaciteJeu } from '../jeux/api';
-import type { Etape, ObjetStrat, Zone } from './document';
+import { pionsFinaux, type Etape, type ObjetAgent, type ObjetStrat, type Zone } from './document';
 import { echelleEffective } from './modeles';
 
 const rad = (a: number) => (a * Math.PI) / 180;
@@ -435,17 +435,85 @@ export interface EtatLecture {
   progression: Map<string, number>;
   /** Position des joueurs qui suivent un trajet minuté (pion déplacé le long de la flèche). */
   positions: Map<number, { x: number; y: number }>;
+  /** Position imposée de chaque pion animé (trajet suivi, ou glissement depuis l'étape précédente), par identifiant. */
+  pions: Map<string, { x: number; y: number }>;
+  /** Vie de chaque capacité visible : déploiement (0 à 1), durée restante (1 à 0 ; null : durée inconnue), opacité (fondu de fin). */
+  capacites: Map<string, VieCapacite>;
+}
+
+export interface VieCapacite {
+  deploiement: number;
+  reste: number | null;
+  opacite: number;
+}
+
+export interface OptionsLecture {
+  /** Étape précédente : les pions glissent de leur position finale là-bas à leur place ici (lecture enchaînée). */
+  precedente?: Etape;
+  /** Durée réelle d'une capacité (secondes, caractéristiques du profil de jeu) ; absente : elle reste jusqu'à la fin. */
+  dureeCapacite?(o: ObjetStrat): number | undefined;
+  /** Durées des animations (secondes). */
+  deploiement?: number;
+  fondu?: number;
+  transition?: number;
+}
+
+const adouci = (f: number) => (f <= 0 ? 0 : f >= 1 ? 1 : f * f * (3 - 2 * f));
+
+/**
+ * Appariement des pions de deux étapes : par joueur (premier pion de chaque joueur), sinon par agent et rang
+ * (pions ennemis). Rend, pour chaque pion de `etape`, sa position finale dans `precedente` (s'il y était).
+ */
+export function departsDepuis(precedente: Etape, etape: Etape): Map<string, { x: number; y: number }> {
+  const cle = (o: ObjetAgent, rang: Map<string, number>) => {
+    const base = typeof o.joueur === 'number' ? `j${o.joueur}` : `a${o.agent}`;
+    const n = rang.get(base) ?? 0;
+    rang.set(base, n + 1);
+    return `${base}#${n}`;
+  };
+  const avant = new Map<string, { x: number; y: number }>();
+  const rangAvant = new Map<string, number>();
+  for (const o of pionsFinaux(precedente)) avant.set(cle(o, rangAvant), { x: o.x, y: o.y });
+  const sortie = new Map<string, { x: number; y: number }>();
+  const rang = new Map<string, number>();
+  for (const o of etape.objets) {
+    if (o.type !== 'agent') continue;
+    const p = avant.get(cle(o, rang));
+    if (p && (Math.abs(p.x - o.x) > 0.5 || Math.abs(p.y - o.y) > 0.5)) sortie.set(o.id, p);
+  }
+  return sortie;
+}
+
+/** Position interpolée (0 à 1, adoucie) entre deux points. */
+export function interpoler(a: { x: number; y: number }, b: { x: number; y: number }, f: number): { x: number; y: number } {
+  const k = adouci(f);
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
 }
 
 /** État d'une étape à l'instant `t` (secondes) de la lecture animée. */
-export function etatLecture(e: Etape, t: number): EtatLecture {
+export function etatLecture(e: Etape, t: number, options: OptionsLecture = {}): EtatLecture {
   const duree = e.duree ?? 5;
   const visibles = new Set<string>();
   const progression = new Map<string, number>();
   const positions = new Map<number, { x: number; y: number }>();
+  const pions = new Map<string, { x: number; y: number }>();
+  const capacites = new Map<string, VieCapacite>();
+  const tDeploiement = options.deploiement ?? 0.35;
+  const tFondu = options.fondu ?? 0.5;
   for (const o of e.objets) {
     const debut = momentObjet(o, e);
     if (t < debut) continue;
+    if (o.type === 'capacite') {
+      const vie = options.dureeCapacite?.(o);
+      const age = t - debut;
+      // Expirée (durée réelle écoulée, fondu terminé) : elle disparaît.
+      if (vie !== undefined && age >= vie + tFondu) continue;
+      capacites.set(o.id, {
+        deploiement: tDeploiement > 0 ? Math.min(1, age / tDeploiement) : 1,
+        reste: vie !== undefined && vie > 0 ? Math.max(0, 1 - age / vie) : null,
+        opacite: vie !== undefined && age > vie ? Math.max(0, 1 - (age - vie) / Math.max(0.01, tFondu)) : 1,
+      });
+    }
     visibles.add(o.id);
     if (o.type === 'fleche' || o.type === 'ligne') {
       const t0 = o.t0 ?? 0;
@@ -455,7 +523,24 @@ export function etatLecture(e: Etape, t: number): EtatLecture {
       if (typeof o.joueur === 'number') positions.set(o.joueur, pointSurTrace(o.points, f));
     }
   }
-  return { visibles, progression, positions };
+  // Glissement depuis l'étape précédente (début de l'étape), puis trajet suivi par le premier pion de chaque joueur.
+  const tTransition = Math.min(options.transition ?? 0.8, duree * 0.4);
+  if (options.precedente && t < tTransition) {
+    const cible = new Map(e.objets.filter((o): o is ObjetAgent => o.type === 'agent').map(o => [o.id, o]));
+    for (const [id, depart] of departsDepuis(options.precedente, e)) {
+      const o = cible.get(id);
+      if (o) pions.set(id, interpoler(depart, o, t / tTransition));
+    }
+  }
+  const suivis = new Set<number>();
+  for (const o of e.objets) {
+    if (o.type !== 'agent' || typeof o.joueur !== 'number' || suivis.has(o.joueur)) continue;
+    suivis.add(o.joueur);
+    const p = positions.get(o.joueur);
+    // Le trajet prend la main dès qu'il a commencé (le pion part de là où le glissement l'a amené).
+    if (p && (!pions.has(o.id) || (progression.size > 0 && t >= tTransition))) pions.set(o.id, p);
+  }
+  return { visibles, progression, positions, pions, capacites };
 }
 
 /** Portion d'un tracé parcourue (pour dessiner une flèche qui s'allonge). */
@@ -474,4 +559,174 @@ export function tracePartiel(points: readonly number[], f: number): number[] {
   }
   if (sortie.length < 4) sortie.push(points[0], points[1]);
   return sortie;
+}
+
+// ------------------------------------------------------------------ Cadrage de la vue
+
+export interface Marges {
+  haut: number;
+  droite: number;
+  bas: number;
+  gauche: number;
+}
+export const SANS_MARGE: Marges = { haut: 0, droite: 0, bas: 0, gauche: 0 };
+
+/**
+ * Cadrage du repère (carré de 1000) dans un canevas `largeur` × `hauteur` dont les bords sont occupés par
+ * l'interface (`marges`) : échelle de base (pixels par unité, zoom 1) et décalage qui montrent TOUTE la map,
+ * centrée dans la zone libre. `retrait` : air laissé autour (px).
+ */
+export function cadrage(largeur: number, hauteur: number, marges: Marges = SANS_MARGE, retrait = 12): { base: number; dx: number; dy: number } {
+  const l = Math.max(40, largeur - marges.gauche - marges.droite - retrait * 2);
+  const h = Math.max(40, hauteur - marges.haut - marges.bas - retrait * 2);
+  const cote = Math.min(l, h);
+  const base = cote / 1000;
+  return { base, dx: marges.gauche + retrait + (l - cote) / 2, dy: marges.haut + retrait + (h - cote) / 2 };
+}
+
+// ------------------------------------------------------------------ Sélection multiple, alignement
+
+export interface Boite {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** Point d'ancrage d'un objet (centre d'un pion, origine d'une capacité, milieu d'un tracé ou d'une forme). */
+export function ancre(o: ObjetStrat): { x: number; y: number } {
+  if ('points' in o) {
+    const b = boiteObjet(o);
+    return { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
+  }
+  if (o.type === 'forme') return { x: o.x + o.l / 2, y: o.y + o.h / 2 };
+  return { x: o.x, y: o.y };
+}
+
+/** Boîte englobante d'un objet (unités du repère) : son corps, sans la zone d'une capacité (on vise son icône). */
+export function boiteObjet(o: ObjetStrat): Boite {
+  if ('points' in o) {
+    let [x1, y1, x2, y2] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = 0; i + 1 < o.points.length; i += 2) {
+      x1 = Math.min(x1, o.points[i]);
+      x2 = Math.max(x2, o.points[i]);
+      y1 = Math.min(y1, o.points[i + 1]);
+      y2 = Math.max(y2, o.points[i + 1]);
+    }
+    return { x1, y1, x2, y2 };
+  }
+  if (o.type === 'forme') return { x1: o.x, y1: o.y, x2: o.x + o.l, y2: o.y + o.h };
+  if (o.type === 'texte') return { x1: o.x, y1: o.y, x2: o.x + Math.max(o.taille, o.texte.length * o.taille * 0.55), y2: o.y + o.taille };
+  const r = o.type === 'agent' ? 22 : o.type === 'capacite' ? 14 : o.type === 'marqueur' ? 16 : 8;
+  return { x1: o.x - r, y1: o.y - r, x2: o.x + r, y2: o.y + r };
+}
+
+/** Rectangle normalisé depuis deux coins quelconques. */
+export const rectangle = (a: { x: number; y: number }, b: { x: number; y: number }): Boite => ({ x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) });
+
+/** Objets touchés par un rectangle de sélection (leur boîte le croise). */
+export function objetsDansRectangle(objets: readonly ObjetStrat[], r: Boite): string[] {
+  return objets.filter(o => {
+    const b = boiteObjet(o);
+    return b.x1 <= r.x2 && b.x2 >= r.x1 && b.y1 <= r.y2 && b.y2 >= r.y1;
+  }).map(o => o.id);
+}
+
+export type Alignement = 'gauche' | 'centre' | 'droite' | 'haut' | 'milieu' | 'bas';
+
+/** Déplacements qui alignent des objets (par leur ancre) sur le bord ou le centre de leur groupe. */
+export function aligner(objets: readonly ObjetStrat[], mode: Alignement): Array<{ id: string; dx: number; dy: number }> {
+  if (objets.length < 2) return [];
+  const pts = objets.map(o => ({ id: o.id, ...ancre(o) }));
+  const xs = pts.map(p => p.x);
+  const ys = pts.map(p => p.y);
+  const cible =
+    mode === 'gauche' ? Math.min(...xs) : mode === 'droite' ? Math.max(...xs) : mode === 'centre' ? (Math.min(...xs) + Math.max(...xs)) / 2 : mode === 'haut' ? Math.min(...ys) : mode === 'bas' ? Math.max(...ys) : (Math.min(...ys) + Math.max(...ys)) / 2;
+  const horizontal = mode === 'gauche' || mode === 'droite' || mode === 'centre';
+  return pts.map(p => ({ id: p.id, dx: horizontal ? arrondi(cible - p.x) : 0, dy: horizontal ? 0 : arrondi(cible - p.y) })).filter(d => d.dx !== 0 || d.dy !== 0);
+}
+
+/** Déplacements qui répartissent des objets à intervalles égaux entre les deux extrêmes (au moins trois objets). */
+export function repartir(objets: readonly ObjetStrat[], axe: 'horizontal' | 'vertical'): Array<{ id: string; dx: number; dy: number }> {
+  if (objets.length < 3) return [];
+  const v = (p: { x: number; y: number }) => (axe === 'horizontal' ? p.x : p.y);
+  const pts = objets.map(o => ({ id: o.id, ...ancre(o) })).sort((a, b) => v(a) - v(b));
+  const debut = v(pts[0]);
+  const pas = (v(pts[pts.length - 1]) - debut) / (pts.length - 1);
+  return pts
+    .map((p, i) => ({ id: p.id, dx: axe === 'horizontal' ? arrondi(debut + pas * i - p.x) : 0, dy: axe === 'vertical' ? arrondi(debut + pas * i - p.y) : 0 }))
+    .filter(d => d.dx !== 0 || d.dy !== 0);
+}
+
+// ------------------------------------------------------------------ Tracés dessinés (flèches effilées, jalons)
+
+/** Lissage de Chaikin (`passes` passes) : les coins s'arrondissent, les extrémités restent en place. */
+export function lisserTrace(points: readonly number[], passes = 2): number[] {
+  let pts = [...points];
+  for (let p = 0; p < passes && pts.length >= 6; p++) {
+    const n = pts.length / 2;
+    const sortie = [pts[0], pts[1]];
+    for (let i = 0; i < n - 1; i++) {
+      const [ax, ay, bx, by] = [pts[i * 2], pts[i * 2 + 1], pts[i * 2 + 2], pts[i * 2 + 3]];
+      if (i > 0) sortie.push(ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25);
+      if (i < n - 2) sortie.push(ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75);
+    }
+    sortie.push(pts[pts.length - 2], pts[pts.length - 1]);
+    pts = sortie;
+  }
+  return pts;
+}
+
+/**
+ * Contour fermé d'un ruban qui suit le tracé : large de `debut` au départ, de `fin` à l'arrivée (flèche de
+ * déplacement effilée). Rend les points du polygone (aller par la gauche, retour par la droite).
+ */
+export function rubanEffile(points: readonly number[], debut: number, fin: number): number[] {
+  const n = points.length / 2;
+  if (n < 2) return [];
+  const c = cumul(points);
+  const total = c[c.length - 1] || 1;
+  const gauche: number[] = [];
+  const droite: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1);
+    const b = Math.min(n - 1, i + 1);
+    const dx = points[b * 2] - points[a * 2];
+    const dy = points[b * 2 + 1] - points[a * 2 + 1];
+    const l = Math.hypot(dx, dy) || 1;
+    const demi = (debut + (fin - debut) * (c[i] / total)) / 2;
+    gauche.push(points[i * 2] - (dy / l) * demi, points[i * 2 + 1] + (dx / l) * demi);
+    droite.push(points[i * 2] + (dy / l) * demi, points[i * 2 + 1] - (dx / l) * demi);
+  }
+  const retour: number[] = [];
+  for (let i = n - 1; i >= 0; i--) retour.push(droite[i * 2], droite[i * 2 + 1]);
+  return [...gauche, ...retour].map(arrondi);
+}
+
+/** Jalons réguliers le long d'un tracé (tous les `pas`, hors des `marge` premières et dernières unités) : position et sens (degrés). */
+export function jalons(points: readonly number[], pas: number, marge = 0): Array<{ x: number; y: number; angle: number }> {
+  const c = cumul(points);
+  const total = c[c.length - 1];
+  const sortie: Array<{ x: number; y: number; angle: number }> = [];
+  if (pas <= 0 || total <= marge * 2) return sortie;
+  for (let d = marge + pas / 2; d < total - marge; d += pas) {
+    let i = 1;
+    while (i < c.length - 1 && c[i] < d) i++;
+    const t = (d - c[i - 1]) / (c[i] - c[i - 1] || 1);
+    const [ax, ay, bx, by] = [points[(i - 1) * 2], points[(i - 1) * 2 + 1], points[i * 2], points[i * 2 + 1]];
+    sortie.push({ x: arrondi(ax + (bx - ax) * t), y: arrondi(ay + (by - ay) * t), angle: deg(Math.atan2(by - ay, bx - ax)) });
+    if (sortie.length >= 60) break;
+  }
+  return sortie;
+}
+
+/** Sens (degrés) de la fin d'un tracé : orientation de la pointe d'une flèche. */
+export function sensFinal(points: readonly number[]): number {
+  const n = points.length;
+  for (let i = n - 4; i >= 0; i -= 2) {
+    const dx = points[n - 2] - points[i];
+    const dy = points[n - 1] - points[i + 1];
+    if (Math.hypot(dx, dy) > 0.5) return deg(Math.atan2(dy, dx));
+  }
+  return 0;
 }

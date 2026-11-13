@@ -1,7 +1,6 @@
 /**
  * Panneaux de l'éditeur de strats (React Native : site, app PC, et testables sans canevas) :
- *  - `Chronologie` : étapes en frise (phase, durée), étape courante (titre, phase, durée, note),
- *    lecture animée (lire, pause, précédent, suivant) ;
+ *  - couleurs et libellés des phases d'une étape (frise et tiroir de l'atelier) ;
  *  - `ListeUtilitaires` : ordre de lancer des utilitaires de l'étape (monter, descendre, minutage) ;
  *  - `PanneauJoueurs` : les joueurs du modèle (nom, couleur, agent ou classe, rôle) ;
  *  - `Inspecteur` : propriétés de l'objet choisi (dimensions en mètres, ordre, minutage, étage…) ;
@@ -10,14 +9,15 @@
 
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { sourcesIcone, type AgentAsset, type CapaciteAsset } from '../../strats/assets';
 import { IconeAsset } from './Barres';
-import { ETAPES_MAX, ordreUtilitaires, type Action, type ChampsObjet, type DocumentStrat, type ObjetStrat, type Zone } from '../../strats/document';
+import { USAGES_TRACE, ordreUtilitaires, type Action, type ChampsObjet, type DocumentStrat, type ObjetStrat, type Zone } from '../../strats/document';
+import { usageTrace } from '../../strats/plateau';
+import { trAt, type CleAt } from '../../i18n/atelier';
 import { definitionPour, type GenreMarqueur } from '../../strats/modeles';
 import { trSt } from '../../i18n/strats2';
-import { ChampNote } from '../ChampNote';
 import { Choix, Intertitre, Panneau, styles } from '../commun';
 import { Glyphe } from '../../../ui/icones';
 
@@ -47,6 +47,16 @@ const nombre = (v: string): number | null => {
 };
 const texteNombre = (n: number | null | undefined): string => (typeof n === 'number' ? String(n) : '');
 
+/** Panneau encadré (page), ou simple pile sans cadre (tiroir de l'atelier : `cadre={false}`). */
+function Cadre({ theme, cadre = true, testID, children }: { theme: ThemeHub; cadre?: boolean; testID: string; children: React.ReactNode }) {
+  if (cadre) return <Panneau theme={theme} testID={testID}>{children}</Panneau>;
+  return (
+    <View style={{ gap: 10 }} testID={testID}>
+      {children}
+    </View>
+  );
+}
+
 /** Petit bouton carré (icône ou symbole). */
 function Bouton({ theme, libelle, onPress, desactive, children, testID, actif }: { theme: ThemeHub; libelle: string; onPress(): void; desactive?: boolean; children: React.ReactNode; testID: string; actif?: boolean }) {
   return (
@@ -74,146 +84,16 @@ function Bouton({ theme, libelle, onPress, desactive, children, testID, actif }:
   );
 }
 
-// ------------------------------------------------------------------ Chronologie
-
-export interface PropsChronologie {
-  theme: ThemeHub;
-  doc: DocumentStrat;
-  etape: number;
-  onEtape(i: number): void;
-  faire(a: Action): void;
-  modifiable: boolean;
-  /** Lecture animée : temps courant (s) dans l'étape, ou undefined (édition). */
-  temps?: number;
-  enLecture: boolean;
-  onLire(): void;
-  onPause(): void;
-  onArreter(): void;
-}
-
-export function Chronologie({ theme, doc, etape, onEtape, faire, modifiable, temps, enLecture, onLire, onPause, onArreter }: PropsChronologie) {
-  const e = doc.etapes[etape];
-  const phases = definitionPour(doc.modele, doc.mode).phases;
-  const total = doc.etapes.reduce((n, x) => n + (x.duree ?? 5), 0);
-  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
-  return (
-    <Panneau theme={theme} testID="esport-chronologie">
-      <View style={[styles.ligne, { gap: 6 }]}>
-        <Bouton theme={theme} libelle={trSt('lecture.precedente')} onPress={() => onEtape(Math.max(0, etape - 1))} desactive={etape === 0} testID="esport-etape-precedente">
-          <Glyphe valeur="precedent" style={{ color: theme.texte, fontSize: 16 }} />
-        </Bouton>
-        {enLecture ? (
-          <Bouton theme={theme} libelle={trSt('lecture.pause')} onPress={onPause} testID="esport-lecture-pause" actif>
-            <Glyphe valeur="pause" style={{ color: theme.texte, fontSize: 16 }} />
-          </Bouton>
-        ) : (
-          <Bouton theme={theme} libelle={trSt('lecture.lire')} onPress={onLire} testID="esport-lecture-lire">
-            <Glyphe valeur="lecture" style={{ color: theme.texte, fontSize: 16 }} />
-          </Bouton>
-        )}
-        <Bouton theme={theme} libelle={trSt('lecture.suivante')} onPress={() => onEtape(Math.min(doc.etapes.length - 1, etape + 1))} desactive={etape >= doc.etapes.length - 1} testID="esport-etape-suivante">
-          <Glyphe valeur="suivant" style={{ color: theme.texte, fontSize: 16 }} />
-        </Bouton>
-        {temps !== undefined ? (
-          <Bouton theme={theme} libelle={trSt('lecture.arreter')} onPress={onArreter} testID="esport-lecture-arreter">
-            <Text style={{ color: theme.texte, fontSize: 14 }}>■</Text>
-          </Bouton>
-        ) : null}
-        <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }} testID="esport-etape-position">
-          {trSt('etape.position', { n: etape + 1, total: doc.etapes.length })}
-        </Text>
-        <Text style={attenue} testID="esport-lecture-temps">
-          {temps !== undefined ? trSt('lecture.temps', { t: temps.toFixed(1), d: e?.duree ?? 5 }) : trSt('lecture.total', { s: total })}
-        </Text>
-      </View>
-      {temps !== undefined && e ? (
-        <View style={{ height: 6, borderRadius: 3, backgroundColor: teinteTransparente(theme.attenue, 0.3), overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: e.duree ?? 5, now: temps }}>
-          <View style={{ width: `${Math.min(100, (temps / (e.duree ?? 5)) * 100)}%`, height: 6, backgroundColor: theme.accent }} />
-        </View>
-      ) : null}
-      <View style={[styles.ligne, { gap: 4 }]} accessibilityRole="tablist" accessibilityLabel={trSt('etape.etapes')}>
-        {doc.etapes.map((x, i) => (
-          <Pressable
-            key={x.id}
-            testID={`esport-etape-puce-${i}`}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: i === etape }}
-            accessibilityLabel={`${i + 1}. ${x.titre}${x.phase ? ` (${libellePhase(x.phase)})` : ''}`}
-            onPress={() => onEtape(i)}
-            style={{
-              minHeight: 40,
-              paddingHorizontal: 10,
-              justifyContent: 'center',
-              borderRadius: 8,
-              borderWidth: i === etape ? 2 : 1,
-              borderColor: i === etape ? theme.accent : theme.ligne,
-              borderLeftWidth: 5,
-              borderLeftColor: couleurPhase(x.phase),
-              backgroundColor: i === etape ? teinteTransparente(theme.accent, 0.15) : theme.surface,
-              maxWidth: 200,
-            }}>
-            <Text style={{ color: theme.texte, fontSize: 12, fontWeight: i === etape ? '700' : '500', ...police(theme.policeTexte) }} numberOfLines={1}>
-              {`${i + 1}. ${x.titre}`}
-            </Text>
-            <Text style={{ color: theme.attenue, fontSize: 11, ...police(theme.policeTexte) }} numberOfLines={1}>
-              {[x.phase ? libellePhase(x.phase) : '', trSt('etape.secondes', { s: x.duree ?? 5 })].filter(Boolean).join(' · ')}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      {modifiable && e ? (
-        <>
-          <View style={[styles.ligne, { gap: 6 }]}>
-            <BoutonHub theme={theme} titre={trSt('etape.ajouter')} desactive={doc.etapes.length >= ETAPES_MAX} onPress={() => (faire({ type: 'ajouterEtape', apres: etape }), onEtape(etape + 1))} testID="esport-etape-ajouter" />
-            <BoutonHub theme={theme} titre={trSt('etape.dupliquer')} desactive={doc.etapes.length >= ETAPES_MAX} onPress={() => (faire({ type: 'dupliquerEtape', etape }), onEtape(etape + 1))} testID="esport-etape-dupliquer" />
-            <BoutonHub theme={theme} titre="←" libelle={trSt('etape.avancer')} desactive={etape === 0} onPress={() => (faire({ type: 'deplacerEtape', de: etape, vers: etape - 1 }), onEtape(etape - 1))} testID="esport-etape-gauche" />
-            <BoutonHub theme={theme} titre="→" libelle={trSt('etape.reculer')} desactive={etape >= doc.etapes.length - 1} onPress={() => (faire({ type: 'deplacerEtape', de: etape, vers: etape + 1 }), onEtape(etape + 1))} testID="esport-etape-droite" />
-            <BoutonHub theme={theme} titre={trSt('etape.supprimer')} variante="danger" desactive={doc.etapes.length <= 1} onPress={() => (faire({ type: 'supprimerEtape', etape }), onEtape(Math.max(0, etape - 1)))} testID="esport-etape-supprimer" />
-          </View>
-          <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-            <Champ theme={theme} libelle={trSt('etape.titre')} valeur={e.titre} onChanger={titre => faire({ type: 'titreEtape', etape, titre })} maxLength={60} style={{ flex: 1, minWidth: 160 }} testID="esport-etape-titre" />
-            <Champ
-              theme={theme}
-              libelle={trSt('etape.duree')}
-              valeur={texteNombre(e.duree ?? 5)}
-              onChanger={v => {
-                const n = nombre(v);
-                if (n !== null) faire({ type: 'dureeEtape', etape, duree: n });
-              }}
-              clavier="number-pad"
-              maxLength={5}
-              style={{ width: 110 }}
-              testID="esport-etape-duree"
-            />
-          </View>
-          <Choix
-            theme={theme}
-            libelle={trSt('etape.phase')}
-            valeur={e.phase ?? ''}
-            options={[{ id: '', nom: trSt('etape.sans_phase') }, ...phases.map(ph => ({ id: ph, nom: libellePhase(ph), couleur: couleurPhase(ph) }))]}
-            onChoisir={v => faire({ type: 'phaseEtape', etape, phase: v || null })}
-            repliable={false}
-            testID="esport-etape-phase"
-          />
-          <ChampNote theme={theme} libelle={trSt('etape.note')} valeur={e.note} onChanger={note => faire({ type: 'noteEtape', etape, note })} maxLength={2000} testID="esport-etape-note" />
-        </>
-      ) : e?.note ? (
-        <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{e.note}</Text>
-      ) : null}
-    </Panneau>
-  );
-}
-
 // ------------------------------------------------------------------ Ordre des utilitaires
 
-export function ListeUtilitaires({ theme, doc, etape, faire, modifiable, onChoisir }: { theme: ThemeHub; doc: DocumentStrat; etape: number; faire(a: Action): void; modifiable: boolean; onChoisir(id: string): void }) {
+export function ListeUtilitaires({ theme, doc, etape, faire, modifiable, onChoisir, cadre }: { theme: ThemeHub; doc: DocumentStrat; etape: number; faire(a: Action): void; modifiable: boolean; onChoisir(id: string): void; cadre?: boolean }) {
   const e = doc.etapes[etape];
   if (!e) return null;
   const liste = ordreUtilitaires(e);
   const renumeroter = (ids: string[]) => ids.forEach((id, i) => faire({ type: 'modifier', etape, id, champs: { ordre: i + 1 } }));
   return (
-    <Panneau theme={theme} testID="esport-utilitaires">
-      <Intertitre theme={theme}>{trSt('utilitaires.titre')}</Intertitre>
+    <Cadre theme={theme} cadre={cadre} testID="esport-utilitaires">
+      {cadre === false ? null : <Intertitre theme={theme}>{trSt('utilitaires.titre')}</Intertitre>}
       {liste.length === 0 ? <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{trSt('utilitaires.vide')}</Text> : null}
       {liste.map((c, i) => (
         <View key={c.id} style={[styles.ligne, { gap: 6, flexWrap: 'nowrap' }]} testID={`esport-utilitaire-${c.id}`}>
@@ -236,16 +116,16 @@ export function ListeUtilitaires({ theme, doc, etape, faire, modifiable, onChois
           ) : null}
         </View>
       ))}
-    </Panneau>
+    </Cadre>
   );
 }
 
 // ------------------------------------------------------------------ Joueurs
 
-export function PanneauJoueurs({ theme, doc, agents, joueur, onJoueur, faire, modifiable, libelleAgent }: { theme: ThemeHub; doc: DocumentStrat; agents: AgentAsset[]; joueur: number | null; onJoueur(i: number): void; faire(a: Action): void; modifiable: boolean; libelleAgent: string }) {
+export function PanneauJoueurs({ theme, doc, agents, joueur, onJoueur, faire, modifiable, libelleAgent, cadre }: { theme: ThemeHub; doc: DocumentStrat; agents: AgentAsset[]; joueur: number | null; onJoueur(i: number): void; faire(a: Action): void; modifiable: boolean; libelleAgent: string; cadre?: boolean }) {
   return (
-    <Panneau theme={theme} testID="esport-joueurs">
-      <Intertitre theme={theme}>{trSt('joueurs.titre', { n: doc.joueurs.length })}</Intertitre>
+    <Cadre theme={theme} cadre={cadre} testID="esport-joueurs">
+      {cadre === false ? null : <Intertitre theme={theme}>{trSt('joueurs.titre', { n: doc.joueurs.length })}</Intertitre>}
       {doc.joueurs.map((j, i) => (
         <View key={i} style={{ gap: 6, borderLeftWidth: 4, borderLeftColor: j.couleur, paddingLeft: 8, opacity: joueur === i ? 1 : 0.92 }} testID={`esport-joueur-ligne-${i}`}>
           <View style={[styles.ligne, { gap: 6 }]}>
@@ -280,7 +160,7 @@ export function PanneauJoueurs({ theme, doc, agents, joueur, onJoueur, faire, mo
           ) : null}
         </View>
       ))}
-    </Panneau>
+    </Cadre>
   );
 }
 
@@ -349,15 +229,17 @@ export interface PropsInspecteur {
   onFermer(): void;
   onSupprimer(): void;
   onDupliquer(): void;
+  /** Sans cadre (tiroir de l'atelier). */
+  cadre?: boolean;
 }
 
-export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres, onFermer, onSupprimer, onDupliquer }: PropsInspecteur) {
+export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres, onFermer, onSupprimer, onDupliquer, cadre }: PropsInspecteur) {
   const champs = (c: ChampsObjet) => faire({ type: 'modifier', etape, id: o.id, champs: c });
   const zone = (z: Partial<Zone>) => o.type === 'capacite' && o.zone && champs({ zone: { ...o.zone, ...z } as Zone });
   const def = definitionPour(doc.modele, doc.mode);
   const optionsJoueurs = [{ id: '', nom: trSt('joueurs.aucun') }, ...doc.joueurs.map((j, i) => ({ id: String(i), nom: `${i + 1}. ${j.nom}`, couleur: j.couleur }))];
   return (
-    <Panneau theme={theme} testID="esport-inspecteur">
+    <Cadre theme={theme} cadre={cadre} testID="esport-inspecteur">
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Intertitre theme={theme}>{trSt(`objet.${o.type}` as Parameters<typeof trSt>[0])}</Intertitre>
         <BoutonHub theme={theme} titre="✕" libelle={trSt('inspecteur.fermer')} onPress={onFermer} testID="esport-inspecteur-fermer" />
@@ -370,6 +252,7 @@ export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres
             <ChampNombre theme={theme} libelle={trSt('inspecteur.minutage')} valeur={o.t} onChanger={n => champs({ t: n === null ? null : Math.max(0, Math.min(600, n)) })} testID="esport-inspecteur-t" largeur={90} />
           </View>
           {o.zone?.forme === 'cercle' ? <ChampNombre theme={theme} libelle={trSt('inspecteur.rayon')} valeur={o.zone.rayon} onChanger={n => n !== null && zone({ rayon: Math.max(0.2, Math.min(100, n)) })} testID="esport-inspecteur-rayon" /> : null}
+          {o.zone?.forme === 'cercle' ? <Case theme={theme} coche={Boolean(o.creux)} libelle={trAt('inspecteur.creux')} onChanger={v => champs({ creux: v })} testID="esport-inspecteur-creux" /> : null}
           {o.zone && (o.zone.forme === 'mur' || o.zone.forme === 'ligne' || o.zone.forme === 'rect') ? (
             <View style={[styles.ligne, { gap: 6 }]}>
               <ChampNombre theme={theme} libelle={trSt('inspecteur.longueur')} valeur={o.zone.longueur} onChanger={n => n !== null && zone({ longueur: Math.max(0.5, Math.min(200, n)) })} testID="esport-inspecteur-longueur" />
@@ -397,6 +280,7 @@ export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres
       ) : null}
       {o.type === 'fleche' || o.type === 'ligne' ? (
         <>
+          <Choix theme={theme} libelle={trAt('options.usage')} valeur={usageTrace(o)} options={USAGES_TRACE.map(u => ({ id: u, nom: trAt(`usage.${u}` as CleAt) }))} onChoisir={u => champs({ usage: u, tirets: u === 'rotation' })} repliable={false} testID="esport-inspecteur-usage" />
           <Choix theme={theme} libelle={trSt('inspecteur.trajet_de')} valeur={o.joueur === null || o.joueur === undefined ? '' : String(o.joueur)} options={optionsJoueurs} onChoisir={v => champs(v === '' ? { joueur: null } : { joueur: Number(v), couleur: doc.joueurs[Number(v)]?.couleur ?? o.couleur })} repliable={false} testID="esport-inspecteur-joueur" />
           <View style={[styles.ligne, { gap: 6 }]}>
             <ChampNombre theme={theme} libelle={trSt('inspecteur.depart')} valeur={o.t0} onChanger={n => champs({ t0: n === null ? null : Math.max(0, Math.min(600, n)) })} testID="esport-inspecteur-t0" largeur={90} />
@@ -429,6 +313,6 @@ export function Inspecteur({ theme, doc, etape, objet: o, faire, niveaux, genres
         <BoutonHub theme={theme} titre={trSt('inspecteur.dupliquer')} onPress={onDupliquer} testID="esport-inspecteur-dupliquer" />
         <BoutonHub theme={theme} titre={trSt('inspecteur.supprimer')} variante="danger" onPress={onSupprimer} testID="esport-editeur-effacer" />
       </View>
-    </Panneau>
+    </Cadre>
   );
 }

@@ -186,6 +186,7 @@ export function PageTeam({
   compteurTickets,
   onChangerTeam,
   onOuvrirCm,
+  onAdminJeux,
   pseudo,
   contexte,
 }: {
@@ -210,6 +211,8 @@ export function PageTeam({
   onChangerTeam?(id: string, section: SectionTeam): void;
   /** Le compte a accès à l'espace CM du club (mêmes conditions que la tuile « CM du club ») : le sélecteur le propose en tête. */
   onOuvrirCm?(): void;
+  /** Ouvrir Administration › Jeux (depuis l'éditeur de strats : map non calibrée) ; absent : pas d'accès. */
+  onAdminJeux?(): void;
   pseudo?: string;
   /** Contexte du hub (comptes du hub à ajouter à la team depuis « Membres et rôles »). */
   contexte?: ContexteHub;
@@ -288,7 +291,7 @@ export function PageTeam({
   else if (active === 'module:goals_tasks') contenu = <SectionObjectifs theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} />;
   else if (active.startsWith('module:') && ECRANS_MODULES[active.slice('module:'.length)]) {
     const Ecran = ECRANS_MODULES[active.slice('module:'.length)];
-    contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} reviewId={brouillon.reviewId} onExporter={onExporter} />;
+    contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} reviewId={brouillon.reviewId} onExporter={onExporter} onAdminJeux={onAdminJeux} />;
   } else if (active.startsWith('module:')) {
     const cle = active.slice('module:'.length);
     const module = CATALOGUE.modules.find(m => m.cle === cle);

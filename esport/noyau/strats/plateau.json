@@ -1,0 +1,68 @@
+{
+  "_": "Jetons de design du plateau de strats : UNE source pour le canevas de l'éditeur (Konva), la page de partage (SVG du serveur), l'export PNG / PDF et les miniatures. Couleurs en #rrggbb, tailles en unités du repère (carré de 1000) sauf mention « px ».",
+  "police": "Manrope, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+  "encre": "#f8fafc",
+  "halo": "#05070c",
+  "cote": "#fde68a",
+  "selection": "#ffffff",
+  "ennemi": "#ef4444",
+  "puce": "#0b1220",
+  "typo": { "xs": 11, "s": 13, "m": 16, "l": 20, "xl": 26 },
+  "trait": { "fin": 1.5, "normal": 2.5, "fort": 4 },
+  "pion": { "rayon": 21, "anneau": 4, "ecranMinPx": 19, "ecranMaxPx": 34, "regard": 46, "ouvertureRegard": 50 },
+  "capacite": { "puceRayon": 12.5, "ecranMinPx": 12, "ecranMaxPx": 19, "remplissage": 0.3, "bord": 0.92, "ultimeBord": 3.5 },
+  "marqueur": { "rayon": 15 },
+  "etiquette": { "seuilZoomPx": 0.62, "opaciteSousObjet": 0.28, "espacement": 1.2 },
+  "animation": { "deploiement": 0.35, "fondu": 0.5, "transition": 0.8, "bascule": 0.38, "pulsation": 1.6 },
+  "themes": {
+    "tactique": {
+      "fond": "#080c14",
+      "sol": "#1b2536",
+      "solHaut": "#24314a",
+      "contour": "#8fa3c8",
+      "ombre": "#02040a",
+      "vignette": 0.55,
+      "detail": 0.14,
+      "etiquette": "#cbd5e1",
+      "zone": 0.16,
+      "grille": "#ffffff"
+    },
+    "clair": {
+      "fond": "#dfe5ee",
+      "sol": "#f7f9fc",
+      "solHaut": "#ffffff",
+      "contour": "#334155",
+      "ombre": "#64748b",
+      "vignette": 0.18,
+      "detail": 0.1,
+      "etiquette": "#f8fafc",
+      "zone": 0.2,
+      "grille": "#0f172a"
+    },
+    "contraste": {
+      "fond": "#000000",
+      "sol": "#12161f",
+      "solHaut": "#161b26",
+      "contour": "#ffffff",
+      "ombre": "#000000",
+      "vignette": 0,
+      "detail": 0,
+      "etiquette": "#fde047",
+      "zone": 0.26,
+      "grille": "#ffffff"
+    },
+    "origine": {
+      "fond": "#0b0f17",
+      "sol": "#000000",
+      "solHaut": "#000000",
+      "contour": "#000000",
+      "ombre": "#000000",
+      "vignette": 0.3,
+      "detail": 1,
+      "etiquette": "#e5e7eb",
+      "zone": 0.12,
+      "grille": "#ffffff"
+    }
+  },
+  "reperes": { "site": "#f59e0b", "plant": "#f59e0b", "cashout": "#22c55e", "coffre": "#22c55e", "spawn": "#94a3b8", "autre": "#94a3b8" }
+}

@@ -403,6 +403,7 @@ export function Esport(props: PropsRacineApp) {
         compteurTickets={nonLusTickets}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         onOuvrirCm={cm ? () => setVue({ v: 'cm' }) : undefined}
+        onAdminJeux={droitsAdmin.jeux ? () => setVue({ v: 'administration', sous: 'jeux' }) : undefined}
         pseudo={etat.moi.profil.pseudo}
         contexte={contexte}
       />

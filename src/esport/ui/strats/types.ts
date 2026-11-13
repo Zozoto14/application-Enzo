@@ -19,4 +19,6 @@ export interface PropsEditeur {
   onSupprimee(strat: { id: string; titre: string }): void;
   /** Temps réel : prévenir quand quelqu'un d'autre enregistre la strat ouverte (absent : sans temps réel). */
   client?: ClientEsport;
+  /** Ouvrir Administration › Jeux (calibrer la map) ; absent : ce compte n'y a pas accès. */
+  onAdminJeux?(): void;
 }

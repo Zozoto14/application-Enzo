@@ -36,6 +36,8 @@ export const TYPES_STRAT = ['default', 'execute', 'eco', 'pistol', 'retake', 'ot
 export const CALQUES = ['fond', 'callouts', 'utilitaires', 'vision', 'marqueurs', 'dessins', 'texte'];
 export const TYPES_OBJETS = ['agent', 'capacite', 'fleche', 'ligne', 'forme', 'texte', 'marqueur', 'vision'];
 export const FORMES_ZONE = ['cercle', 'mur', 'cone', 'trajet', 'ligne', 'rect'];
+export const USAGES_TRACE = ['deplacement', 'rotation', 'regard'];
+export const MODES_COULEURS = ['joueur', 'agent'];
 export const GENRES_MARQUEUR = ['objectif', 'ennemi', 'danger', 'destruction-mur', 'destruction-sol', 'spawn', 'plant', 'defuse', 'info', 'rotation', 'tiers', 'cashout', 'coffre'];
 /** Couleurs par défaut des joueurs (lisibles sur la minimap, en clair comme en sombre). */
 export const COULEURS_JOUEURS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#84cc16', '#f43f5e'];
@@ -150,6 +152,8 @@ function objetValide(v, nbJoueurs) {
   if (!objet(v) || !TYPES_OBJETS.includes(v.type)) throw invalide('type d’objet inconnu');
   if (typeof v.id !== 'string' || !MOTIF_ID.test(v.id)) throw invalide('identifiant d’objet');
   const commun = { id: v.id, type: v.type };
+  // Champs facultatifs (absents quand ils sont faux) : objet verrouillé, variante creuse, usage d'un tracé.
+  const verrou = v.verrou === true ? { verrou: true } : {};
   switch (v.type) {
     case 'agent':
       return {
@@ -163,6 +167,7 @@ function objetValide(v, nbJoueurs) {
         couleur: couleur(v.couleur),
         angle: facultatif(v.angle, 'angle', -360, 360),
         niveau: niveau(v.niveau),
+        ...verrou,
       };
     case 'capacite':
       return {
@@ -179,6 +184,8 @@ function objetValide(v, nbJoueurs) {
         ordre: entierFacultatif(v.ordre, 'ordre', 1, 99),
         t: facultatif(v.t, 'minutage', 0, 600),
         niveau: niveau(v.niveau),
+        ...(v.creux === true ? { creux: true } : {}),
+        ...verrou,
       };
     case 'fleche':
     case 'ligne':
@@ -192,6 +199,8 @@ function objetValide(v, nbJoueurs) {
         t0: facultatif(v.t0, 'minutage', 0, 600),
         t1: facultatif(v.t1, 'minutage', 0, 600),
         niveau: niveau(v.niveau),
+        ...(USAGES_TRACE.includes(v.usage) ? { usage: v.usage } : {}),
+        ...verrou,
       };
     case 'forme':
       if (!['rect', 'ellipse'].includes(v.forme)) throw invalide('forme');
@@ -205,6 +214,7 @@ function objetValide(v, nbJoueurs) {
         couleur: couleur(v.couleur),
         remplie: v.remplie === true,
         niveau: niveau(v.niveau),
+        ...verrou,
       };
     case 'marqueur':
       if (!GENRES_MARQUEUR.includes(v.genre)) throw invalide('genre de marqueur');
@@ -217,6 +227,7 @@ function objetValide(v, nbJoueurs) {
         couleur: couleur(v.couleur),
         equipe: entierFacultatif(v.equipe, 'équipe', 0, 9),
         niveau: niveau(v.niveau),
+        ...verrou,
       };
     case 'vision':
       return {
@@ -229,11 +240,12 @@ function objetValide(v, nbJoueurs) {
         joueur: joueur(v.joueur, nbJoueurs),
         couleur: couleur(v.couleur),
         niveau: niveau(v.niveau),
+        ...verrou,
       };
     default: {
       const texte = texteLong(v.texte, 200);
       if (!texte) throw invalide('texte vide');
-      return { ...commun, x: nombre(v.x, 'x'), y: nombre(v.y, 'y'), texte, couleur: couleur(v.couleur), taille: nombre(v.taille ?? 24, 'taille', 8, 96), niveau: niveau(v.niveau) };
+      return { ...commun, x: nombre(v.x, 'x'), y: nombre(v.y, 'y'), texte, couleur: couleur(v.couleur), taille: nombre(v.taille ?? 24, 'taille', 8, 96), niveau: niveau(v.niveau), ...verrou };
     }
   }
 }
@@ -399,7 +411,9 @@ export function validerDocument(brut, options = {}) {
       }),
     };
   });
-  return { format: FORMAT_STRAT, version: VERSION_DOCUMENT, jeu, modele, ...(mode ? { mode } : {}), carte, side: v.side, economie, joueurs, calques, etapes };
+  // Couleur des capacités : celle du joueur (défaut, non écrite) ou l'accent de l'agent.
+  const couleurs = v.couleurs === 'agent' ? { couleurs: 'agent' } : {};
+  return { format: FORMAT_STRAT, version: VERSION_DOCUMENT, jeu, modele, ...(mode ? { mode } : {}), carte, side: v.side, economie, ...couleurs, joueurs, calques, etapes };
 }
 
 /** Document vide d'une nouvelle strat (`joueurs` : nombre de joueurs, celui du modèle par défaut). */

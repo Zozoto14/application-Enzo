@@ -1,362 +1,46 @@
 /**
- * Canevas 2D de l'éditeur de strats (Konva, via react-konva). Chargé à la
- * demande (import dynamique depuis Editeur.web.tsx) : Konva n'entre dans le
- * paquet du site qu'à l'ouverture de l'éditeur.
+ * Canevas 2D de l'éditeur de strats (Konva, via react-konva). Chargé à la demande (import dynamique depuis
+ * Editeur.web.tsx) : Konva n'entre dans le paquet du site qu'à l'ouverture de l'éditeur.
  *
- * Repère du document : carré de 1000 ; la scène applique l'échelle
- * (taille affichée / 1000 × zoom) et le déplacement de la vue. Calques Konva
- * = calques de la strat : fond (image de la map, cadrée sans déformation),
- * callouts (zones nommées et repères du profil de jeu), vision, utilitaires
- * (agents, capacités À L'ÉCHELLE de la map calibrée), marqueurs, dessins,
- * texte, puis les poignées de la sélection. Un calque masqué n'est pas
- * dessiné ; un calque verrouillé n'écoute plus le pointeur.
+ * Le canevas remplit la place qu'on lui donne (`largeur` × `hauteur`) ; le repère du document (carré de 1000)
+ * y est CADRÉ dans la zone laissée libre par l'interface (`marges`) : toute la map visible et centrée à
+ * l'ouverture (src/esport/strats/geometrie.ts, `cadrage`), puis zoom et déplacement de la vue par-dessus.
  *
- * « Retourner la map » (180°) tourne tout le contenu autour du centre ; les
- * pions et les textes restent à l'endroit. Lecture animée (`temps`) : les
- * utilitaires apparaissent à leur minutage, les trajets des joueurs
- * s'allongent et les pions les suivent.
+ * Trois calques Konva seulement (mémoire d'un iPad) : le fond (plateau thémé : src/esport/cartes/rendu.web.ts,
+ * callouts et repères du profil, grille de l'aimantation), les objets (calques de la strat, fantôme de l'étape
+ * précédente), le dessus (aperçus des gestes, rectangle de sélection, poignées, étiquettes, laser, présences).
  *
- * Tactile (iPad dans le navigateur) : un doigt dessine ou déplace, deux
- * doigts zooment et déplacent la vue (pincement) ; `touch-action: none`
- * empêche le navigateur de faire défiler la page sous le canevas.
+ * Gestes : poser en cliquant-glissant (src/esport/strats/pose.ts), grandes poignées de la sélection (26 px à
+ * l'écran, prise de 48 px), sélection multiple (rectangle avec l'outil Sélection, Maj + clic), déplacement de
+ * groupe, menu contextuel (clic droit, appui long), zoom AU POINTEUR (molette, pincement), déplacement de la
+ * vue (outil Main, Espace + glisser, molette pressée, deux doigts), double-clic sur le vide = map entière.
  *
- * Gestes (src/esport/strats/pose.ts) : poser une capacité, un cône de vision
- * ou un pion en CLIQUANT-GLISSANT (appui = origine, glisser = direction et
- * longueur, bornée à la longueur réelle de la capacité ; un mur courbable suit
- * le chemin parcouru) ; la sélection montre de GRANDES poignées (26 px à
- * l'écran quel que soit le zoom, zone de prise de 48 px) : extrémités d'un mur,
- * milieu d'un mur courbable, points d'un mur tracé, direction et portée d'un
- * cône, regard d'un pion. Maj aimante l'angle à 15°. Souris, doigt et stylet.
- * Pions : portrait de l'agent (rond, anneau à la couleur du joueur, nom du
- * joueur dessous) : image importée, sinon CDN officiel, sinon initiales ; fantôme du portrait sous le pointeur
- * pendant la pose ; capacités : icône de la capacité au point de pose.
+ * Performance : objets mémoïsés (src/esport/ui/strats/canevas/dessins.web.tsx), tailles à l'écran appliquées
+ * sans re-rendu, vue et aperçus limités à une mise à jour par image (requestAnimationFrame).
  */
 
 import Konva from 'konva';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, RegularPolygon, Stage, Text as KText, Wedge } from 'react-konva';
-import { initiales, sourcesIcone, type AgentAsset, type CacheImages, type CapaciteAsset, type CarteAsset } from '../../strats/assets';
-import { useImageJeu as useImage } from './imagesCanevas.web';
-import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type ChampsObjet, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
-import { aimanter, cadreImage, centre, dansPolygone, decalerTrace, etatLecture, longueurMax, primitiveZone, tracePartiel, zoneDepuisCapacite, type EtatLecture, type Primitive } from '../../strats/geometrie';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, Stage, Wedge } from 'react-konva';
+import { rendreCarte } from '../../cartes/rendu.web';
+import { sourcesIcone, type AgentAsset, type CapaciteAsset } from '../../strats/assets';
+import { VUE_INITIALE, calqueDe, couleurJoueur, idUnique, pionsFinaux, zoneParDefaut, zoomer, type ChampsObjet, type ObjetStrat, type Vue, type Zone } from '../../strats/document';
+import { SANS_MARGE, aimanter, cadrage, cadreImage, centre, dansPolygone, departsDepuis, dimensionFixe, etatLecture, longueurMax, objetsDansRectangle, rectangle, zoneDepuisCapacite } from '../../strats/geometrie';
+import { echelleEffective } from '../../strats/modeles';
+import { PLATEAU, alpha, couleurAffichee, etiquettesVisibles, facteurEcran, melanger, opaciteEtiquette, segmentsMur, styleCapacite, themeCarte } from '../../strats/plateau';
 import { avecChamps, debuterVisee, estGlisse, poigneesObjet, poseCapacite, posePion, poseVision, suivreVisee, tirerPoigneeDe, type PoigneeObjet, type Visee } from '../../strats/pose';
-import { COULEURS_EQUIPES, echelleEffective, type GenreMarqueur } from '../../strats/modeles';
 import { tr } from '../../i18n';
+import { FormeCapacite, Halo, Objet, cote, tailleReelle, useImage } from './canevas/dessins.web';
+import type { Outil, PropsCanevas } from './canevas/types';
 
-export type Outil = 'selection' | 'main' | 'agent' | 'capacite' | 'fleche' | 'ligne' | 'forme' | 'texte' | 'marqueur' | 'vision' | 'gomme';
+export { cote } from './canevas/dessins.web';
 
-export interface ExportCanevas {
-  /** PNG de l'étape affichée (1000 × 1000 × `ratio`), en data URL. */
-  png(ratio?: number): string;
-  /** Miniature JPEG (320 px) pour la grille. */
-  miniature(): string;
-}
-
-export interface PropsCanevas {
-  doc: DocumentStrat;
-  /** Map du profil (image déposée ou minimap, échelle, callouts, repères). */
-  carte?: CarteAsset;
-  /** Image de fond (repli : celle du document). */
-  fond: string | null;
-  etape: number;
-  taille: number;
-  outil: Outil;
-  couleur: string;
-  joueur: number | null;
-  agent?: AgentAsset;
-  capacite?: CapaciteAsset;
-  /** Agents du jeu (portraits et icônes à jour, caractéristiques des capacités posées). */
-  agents?: AgentAsset[];
-  /** Forme de la zone posée : « auto » = celle des caractéristiques de la capacité. */
-  formeZone: FormeZone | 'aucune' | 'auto';
-  formeDessin: 'rect' | 'ellipse';
-  texte: string;
-  tirets: boolean;
-  epaisseur: number;
-  /** Flèche = trajet du joueur courant (minuté sur la durée de l'étape). */
-  trajetJoueur?: boolean;
-  marqueur?: { genre: GenreMarqueur; equipe: number | null; etiquette: string };
-  vision?: { ouverture: number; portee: number };
-  /** Étage courant (The Finals) : les objets posés le reçoivent, ceux des autres étages sont estompés. */
-  niveau?: number | null;
-  /** Aimantation sur une grille (unités ; 0 : aucune). */
-  aimant?: number;
-  rotation?: 0 | 180;
-  /** Lecture animée : temps (s) dans l'étape ; absent : édition. */
-  temps?: number;
-  /** Prochain numéro d'ordre des utilitaires. */
-  ordreSuivant?: number;
-  selection?: string;
-  onSelection(id: string | undefined): void;
-  /** Callout (zone nommée du profil) sous le pointeur. */
-  onCallout?(nom: string | undefined): void;
-  vue: Vue;
-  onVue(v: Vue): void;
-  onAction(a: Action): void;
-  images: CacheImages;
-  onPret?(e: ExportCanevas): void;
-  testID?: string;
-}
+export type { Depot, ExportCanevas, MenuCanevas, Outil, PropsCanevas } from './canevas/types';
 
 Konva.hitOnDragEnabled = true;
 
-/**
- * Jeton rond : portrait (ou icône) DÉCOUPÉ en cercle sur un fond sombre, anneau à la couleur du joueur ;
- * initiales sur la couleur du joueur tant que l'image n'est pas chargée (repli). `icone` : sources essayées dans
- * l'ordre (image importée, puis CDN officiel). L'image porte le nom `image-jeu` (export PNG : masquée si elle
- * empêchait l'export, les initiales restent).
- */
-function Jeton({ rayon, couleur, nom, icone, images, surbrillance, anneau = 3 }: { rayon: number; couleur: string; nom: string; icone: string | ReadonlyArray<string> | null; images: CacheImages; surbrillance: boolean; anneau?: number }) {
-  const img = useImage(icone, images);
-  return (
-    <>
-      {surbrillance ? <Circle radius={rayon + anneau + 6} stroke="#fde047" strokeWidth={3} dash={[6, 4]} listening={false} /> : null}
-      <Circle radius={rayon + anneau} fill={couleur} stroke={surbrillance ? '#ffffff' : '#0b0f17'} strokeWidth={surbrillance ? 2.5 : 1.5} shadowColor="#000000" shadowBlur={surbrillance ? 14 : 5} shadowOpacity={0.6} />
-      <KText text={initiales(nom)} fontSize={rayon * 0.9} fontStyle="bold" fill="#ffffff" width={rayon * 2} x={-rayon} y={-rayon * 0.45} align="center" listening={false} />
-      {img ? (
-        <Group name="image-jeu" clipFunc={ctx => ctx.arc(0, 0, rayon, 0, Math.PI * 2, false)} listening={false}>
-          <Circle radius={rayon} fill="#111827" />
-          <KImage image={img} x={-rayon} y={-rayon} width={rayon * 2} height={rayon * 2} />
-        </Group>
-      ) : null}
-    </>
-  );
-}
-
-/** Texte centré qui reste à l'endroit quand la map est retournée. */
-function Etiquette({ x, y, texte, taille, couleur = '#ffffff', rotation = 0, largeur = 220 }: { x: number; y: number; texte: string; taille: number; couleur?: string; rotation?: number; largeur?: number }) {
-  return (
-    <KText
-      x={x}
-      y={y}
-      text={texte}
-      fontSize={taille}
-      fontStyle="bold"
-      fill={couleur}
-      stroke="#000000"
-      strokeWidth={Math.max(0.6, taille / 30)}
-      fillAfterStrokeEnabled
-      width={largeur}
-      offsetX={largeur / 2}
-      offsetY={taille / 2}
-      align="center"
-      rotation={rotation}
-      listening={false}
-    />
-  );
-}
-
-/** Dessin d'une zone de capacité (primitive à l'échelle), relative au point de pose. */
-function FormeZone({ p, couleur, ox, oy }: { p: Primitive; couleur: string; ox: number; oy: number }) {
-  switch (p.type) {
-    case 'cercle':
-      return <Circle x={p.x - ox} y={p.y - oy} radius={p.r} fill={couleur} opacity={0.35} stroke={couleur} strokeWidth={2} />;
-    case 'secteur':
-      return p.ouverture >= 359 ? (
-        <Circle x={p.x - ox} y={p.y - oy} radius={p.r} fill={couleur} opacity={0.25} stroke={couleur} strokeWidth={2} />
-      ) : (
-        <Wedge x={p.x - ox} y={p.y - oy} radius={p.r} angle={p.ouverture} rotation={p.angle - p.ouverture / 2} fill={couleur} opacity={0.3} stroke={couleur} strokeWidth={2} />
-      );
-    case 'trait':
-      if (p.double !== undefined) {
-        const gap = p.double;
-        const pts = p.points.map((n, i) => n - (i % 2 === 0 ? ox : oy));
-        const ligne = (q: number[]) => <Line points={q} stroke={couleur} strokeWidth={p.epaisseur} lineCap="round" lineJoin="round" tension={p.courbe ? 0.5 : 0} opacity={0.9} hitStrokeWidth={Math.max(20, gap)} />;
-        return (
-          <>
-            <Line points={pts} stroke={couleur} strokeWidth={gap} opacity={0.12} lineCap="round" tension={p.courbe ? 0.5 : 0} />
-            {ligne(decalerTrace(pts, gap / 2))}
-            {ligne(decalerTrace(pts, -gap / 2))}
-          </>
-        );
-      }
-      return (
-        <Line
-          points={p.points.map((n, i) => n - (i % 2 === 0 ? ox : oy))}
-          stroke={couleur}
-          strokeWidth={p.epaisseur}
-          lineCap="round"
-          tension={p.courbe ? 0.5 : 0}
-          dash={p.tirets ? [10, 7] : undefined}
-          opacity={0.85}
-          hitStrokeWidth={Math.max(20, p.epaisseur)}
-        />
-      );
-    case 'rect':
-      return <Rect x={p.x - ox} y={p.y - oy} width={p.longueur} height={p.largeur} offsetY={p.largeur / 2} rotation={p.angle} fill={couleur} opacity={0.3} stroke={couleur} strokeWidth={2} />;
-    case 'trajet':
-      return (
-        <>
-          <Arrow points={p.points.map((n, i) => n - (i % 2 === 0 ? ox : oy))} stroke={couleur} fill={couleur} strokeWidth={3} dash={[10, 7]} pointerLength={12} pointerWidth={12} opacity={0.9} />
-          {p.r > 0 ? <Circle x={p.points[2] - ox} y={p.points[3] - oy} radius={p.r} fill={couleur} opacity={0.12} stroke={couleur} strokeWidth={2} dash={[6, 6]} /> : null}
-        </>
-      );
-  }
-}
-
-/** Forme d'un marqueur selon son genre (losange, croix, triangle, carré…), couleur de l'équipe adverse le cas échéant. */
-function Marqueur({ genre, couleur }: { genre: GenreMarqueur; couleur: string }) {
-  const contour = { stroke: '#0b0f17', strokeWidth: 2.5 };
-  switch (genre) {
-    case 'ennemi':
-      return (
-        <>
-          <Circle radius={15} fill={couleur} {...contour} />
-          <Line points={[-7, -7, 7, 7]} stroke="#ffffff" strokeWidth={3} />
-          <Line points={[7, -7, -7, 7]} stroke="#ffffff" strokeWidth={3} />
-        </>
-      );
-    case 'danger':
-    case 'tiers':
-      return <RegularPolygon sides={3} radius={17} fill={couleur} {...contour} />;
-    case 'destruction-mur':
-    case 'destruction-sol':
-      return (
-        <>
-          <Rect x={-14} y={-14} width={28} height={28} fill="#111827" stroke={couleur} strokeWidth={3} dash={genre === 'destruction-sol' ? [5, 4] : undefined} />
-          <Line points={[-9, -9, 9, 9]} stroke={couleur} strokeWidth={4} />
-          <Line points={[9, -9, -9, 9]} stroke={couleur} strokeWidth={4} />
-        </>
-      );
-    case 'cashout':
-    case 'coffre':
-    case 'objectif':
-    case 'plant':
-      return <Rect x={-14} y={-14} width={28} height={28} rotation={45} fill={couleur} {...contour} />;
-    case 'spawn':
-      return <RegularPolygon sides={6} radius={16} fill={couleur} {...contour} />;
-    default:
-      return <Circle radius={12} fill={couleur} {...contour} />;
-  }
-}
-
-interface PropsObjet {
-  o: ObjetStrat;
-  images: CacheImages;
-  surbrillance: boolean;
-  deplacable: boolean;
-  echelle: number | null | undefined;
-  rotation: number;
-  estompe: boolean;
-  lecture?: EtatLecture;
-  /** Position imposée (pion qui suit son trajet pendant la lecture). */
-  position?: { x: number; y: number };
-  /** Sources de l'icône (portrait importé, puis CDN du profil, puis celle du document). */
-  icone?: ReadonlyArray<string>;
-  /** Nom court du joueur, sous son pion. */
-  etiquette?: string;
-  onFin(o: ObjetStrat, node: Konva.Node): void;
-}
-
-function Objet({ o, images, surbrillance, deplacable, echelle, rotation, estompe, lecture, position, icone, etiquette, onFin }: PropsObjet) {
-  const commun = {
-    id: o.id,
-    name: 'objet',
-    draggable: deplacable,
-    opacity: estompe ? 0.3 : 1,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
-      e.cancelBubble = true;
-      onFin(o, e.target);
-    },
-  };
-  const ombre = surbrillance ? { shadowColor: '#ffffff', shadowBlur: 12, shadowOpacity: 0.9 } : {};
-  const niveau = typeof o.niveau === 'number' ? `${o.niveau}` : '';
-  switch (o.type) {
-    case 'agent': {
-      const p = position ?? { x: o.x, y: o.y };
-      return (
-        <Group {...commun} x={p.x} y={p.y}>
-          {typeof o.angle === 'number' ? <Wedge radius={44} angle={46} rotation={o.angle - 23} fill={o.couleur} opacity={0.5} listening={false} /> : null}
-          <Group rotation={-rotation}>
-            <Jeton rayon={20} couleur={o.couleur} nom={o.nom} icone={icone ?? sourcesIcone(o)} images={images} surbrillance={surbrillance} />
-            {etiquette ? <Etiquette x={0} y={34} texte={etiquette} taille={12} largeur={110} /> : null}
-            {niveau ? <Etiquette x={20} y={-20} texte={niveau} taille={14} /> : null}
-          </Group>
-        </Group>
-      );
-    }
-    case 'capacite': {
-      const z = o.zone;
-      return (
-        <Group {...commun} x={o.x} y={o.y}>
-          {z ? <FormeZone p={primitiveZone(o.x, o.y, z, echelle)} couleur={o.couleur} ox={o.x} oy={o.y} /> : null}
-          <Group rotation={-rotation}>
-            <Jeton rayon={12} anneau={2.5} couleur={o.couleur} nom={o.nom} icone={icone ?? sourcesIcone(o)} images={images} surbrillance={surbrillance} />
-            {typeof o.ordre === 'number' ? (
-              <>
-                <Circle x={14} y={-14} radius={9} fill="#0b0f17" stroke="#ffffff" strokeWidth={1.5} listening={false} />
-                <KText x={5} y={-20} width={18} text={String(o.ordre)} fontSize={12} fontStyle="bold" fill="#ffffff" align="center" listening={false} />
-              </>
-            ) : null}
-            {niveau ? <Etiquette x={-16} y={-18} texte={niveau} taille={12} /> : null}
-          </Group>
-        </Group>
-      );
-    }
-    case 'vision':
-      return (
-        <Group {...commun} x={o.x} y={o.y}>
-          <Wedge
-            radius={o.portee * echelleEffective(echelle)}
-            angle={o.ouverture}
-            rotation={o.angle - o.ouverture / 2}
-            fill={o.couleur}
-            opacity={0.16}
-            stroke={o.couleur}
-            strokeWidth={surbrillance ? 3 : 1.5}
-            dash={[8, 6]}
-          />
-          <Circle radius={5} fill={o.couleur} />
-        </Group>
-      );
-    case 'marqueur': {
-      const couleur = o.genre === 'ennemi' && typeof o.equipe === 'number' && o.equipe > 0 ? COULEURS_EQUIPES[(o.equipe - 1) % COULEURS_EQUIPES.length] : o.couleur;
-      return (
-        <Group {...commun} {...ombre} x={o.x} y={o.y}>
-          <Group rotation={-rotation}>
-            <Marqueur genre={o.genre} couleur={couleur} />
-            {o.genre === 'ennemi' && o.equipe ? <KText x={-6} y={-30} text={`E${o.equipe}`} fontSize={12} fontStyle="bold" fill="#ffffff" listening={false} /> : null}
-            {o.etiquette ? <Etiquette x={0} y={30} texte={o.etiquette} taille={16} /> : null}
-            {niveau ? <Etiquette x={18} y={-18} texte={niveau} taille={12} /> : null}
-          </Group>
-        </Group>
-      );
-    }
-    case 'fleche':
-    case 'ligne': {
-      const f = lecture?.progression.get(o.id);
-      const pts = f === undefined ? o.points : tracePartiel(o.points, f);
-      const props = { ...commun, ...ombre, x: 0, y: 0, points: pts, stroke: o.couleur, strokeWidth: o.epaisseur, lineCap: 'round' as const, lineJoin: 'round' as const, tension: pts.length > 4 ? 0.35 : 0, dash: o.tirets ? [14, 10] : undefined, hitStrokeWidth: 24 };
-      return o.type === 'fleche' ? <Arrow {...props} fill={o.couleur} pointerLength={16} pointerWidth={16} /> : <Line {...props} />;
-    }
-    case 'forme':
-      return o.forme === 'rect' ? (
-        <Rect {...commun} {...ombre} x={o.x} y={o.y} width={o.l} height={o.h} stroke={o.couleur} strokeWidth={3} fill={o.remplie ? o.couleur : undefined} opacity={(o.remplie ? 0.45 : 1) * (estompe ? 0.3 : 1)} />
-      ) : (
-        <Ellipse {...commun} {...ombre} x={o.x + o.l / 2} y={o.y + o.h / 2} radiusX={o.l / 2} radiusY={o.h / 2} stroke={o.couleur} strokeWidth={3} fill={o.remplie ? o.couleur : undefined} opacity={(o.remplie ? 0.45 : 1) * (estompe ? 0.3 : 1)} />
-      );
-    case 'texte':
-      return <KText {...commun} {...ombre} x={o.x} y={o.y} text={o.texte} fontSize={o.taille} fontStyle="bold" fill={o.couleur} stroke="#000000" strokeWidth={0.8} fillAfterStrokeEnabled rotation={-rotation} />;
-  }
-}
-
-/** Cote lisible d'une zone (mètres, degrés) : « r 4.1 m », « 18 m · 30° »… */
-export function cote(z: Zone): string {
-  const a = (n: number) => `${Math.round(((n % 360) + 360) % 360)}°`;
-  switch (z.forme) {
-    case 'cercle':
-      return `r ${z.rayon} m`;
-    case 'cone':
-      return `${z.portee} m · ${z.ouverture}° · ${a(z.angle)}`;
-    case 'mur':
-      return `${z.longueur} m · ${a(z.angle)}${z.courbure ? ` · ${Math.round(z.courbure * 100)} %` : ''}`;
-    case 'ligne':
-    case 'rect':
-      return `${z.longueur} m · ${a(z.angle)}`;
-    case 'trajet':
-      return z.rayon ? `r ${z.rayon} m` : '';
-  }
-}
+const T = PLATEAU;
+const adouci = (f: number) => (f <= 0 ? 0 : f >= 1 ? 1 : f * f * (3 - 2 * f));
 
 /** Contenu tourné autour du centre du repère (map retournée). Composant stable : les nœuds ne sont pas recréés. */
 const Tourne = React.forwardRef<Konva.Group, { rotation: number; children: React.ReactNode }>(function Tourne({ rotation, children }, ref) {
@@ -374,91 +58,214 @@ export const RAYON_POIGNEE_PX = 13;
 export const PRISE_POIGNEE_PX = 24;
 /** En deçà (px à l'écran), un appui n'est pas un glisser : pose simple. */
 const SEUIL_GLISSER_PX = 8;
+const APPUI_LONG_MS = 550;
+const DUREE_LASER_MS = 900;
 /** Outils de pose : un appui sur un objet existant le SÉLECTIONNE (et le déplace) au lieu de poser. */
 const OUTILS_POSE: ReadonlyArray<Outil> = ['agent', 'capacite', 'marqueur', 'vision', 'texte'];
+const CALQUES_OBJETS = ['vision', 'utilitaires', 'marqueurs', 'dessins', 'texte'] as const;
+/** Icône d'un document : seule une adresse du CDN Riot y est acceptée (un lien signé expire). */
+const iconeDocument = (url: string | null | undefined) => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
+const iconeDoc = (a: { icone: string | null; iconeDoc?: string | null } | undefined) => iconeDocument(a?.iconeDoc) ?? iconeDocument(a?.icone);
+const VIDE: readonly string[] = [];
+/**
+ * Sources d'une image du jeu (image importée, puis CDN officiel, puis celle du document), en liste STABLE : la même
+ * référence pour les mêmes adresses, pour que les objets mémoïsés ne se redessinent pas à chaque rendu.
+ */
+const listesSources = new Map<string, ReadonlyArray<string>>();
+function sourcesStables(a: { icone?: string | null; iconeDoc?: string | null } | null | undefined, ...secours: Array<string | null | undefined>): ReadonlyArray<string> {
+  const liste = sourcesIcone(a, ...secours);
+  const cle = liste.join('\n');
+  const connue = listesSources.get(cle);
+  if (connue) return connue;
+  if (listesSources.size > 800) listesSources.clear();
+  listesSources.set(cle, liste);
+  return liste;
+}
+const origineDe = (o: ObjetStrat) => ('points' in o ? { x: 0, y: 0 } : o.type === 'forme' && o.forme === 'ellipse' ? { x: o.x + o.l / 2, y: o.y + o.h / 2 } : { x: o.x, y: o.y });
 
 export default function CanevasStrat(p: PropsCanevas) {
-  const { doc, etape, taille, outil, vue, onVue, onAction, images, carte } = p;
-  const rotation = p.rotation ?? 0;
+  const { doc, etape, outil, vue, onAction, images, carte } = p;
+  const R = useRef(p);
+  R.current = p;
+  const largeur = Math.max(40, Math.round(p.largeur ?? p.taille ?? 600));
+  const hauteur = Math.max(40, Math.round(p.hauteur ?? p.taille ?? 600));
+  const marges = p.marges ?? SANS_MARGE;
+  const cadre0 = useMemo(() => cadrage(largeur, hauteur, marges, p.taille ? 0 : 12), [largeur, hauteur, marges, p.taille]);
+  const cadreRef = useRef(cadre0);
+  cadreRef.current = cadre0;
+  const selection = p.selection ?? VIDE;
   const scene = useRef<Konva.Stage>(null);
   const repere = useRef<Konva.Group>(null);
+  const dessus = useRef<Konva.Layer>(null);
   const [brouillon, setBrouillon] = useState<Brouillon | undefined>();
   const [fantome, setFantome] = useState<{ x: number; y: number } | undefined>();
   const [apercu, setApercu] = useState<{ id: string; champs: ChampsObjet } | undefined>();
   const [visee, setVisee] = useState<Visee | undefined>();
+  const [cadreSel, setCadreSel] = useState<{ a: { x: number; y: number }; b: { x: number; y: number }; ajout: boolean } | undefined>();
+  const [survol, setSurvol] = useState<string | undefined>();
   const [maj, setMaj] = useState(false);
+  const [trainee, setTrainee] = useState<Array<{ x: number; y: number; t: number }>>([]);
+  const [enPan, setEnPan] = useState(false);
   const pincement = useRef<{ distance: number; centre: { x: number; y: number } } | undefined>(undefined);
+  const pan = useRef<{ x: number; y: number; vue: Vue } | undefined>(undefined);
+  const appuiLong = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const menuOuvert = useRef(false);
+  const glisse = useRef<{ origines: Map<string, { x: number; y: number }>; noeuds: Map<string, Konva.Node> } | undefined>(undefined);
+  const theme = themeCarte(p.themeCarte);
   const fondImg = useImage(carte?.minimap ?? p.fond, images);
   const e = doc.etapes[etape];
-  const base = taille / 1000;
   const echelle = carte?.echelle ?? doc.carte.echelle;
-  const lecture = useMemo(() => (p.temps !== undefined && e ? etatLecture(e, p.temps) : undefined), [p.temps, e]);
-  const cadre = cadreImage(fondImg && carte?.largeurImage ? carte.largeurImage : fondImg?.naturalWidth, fondImg && carte?.hauteurImage ? carte.hauteurImage : fondImg?.naturalHeight);
-  const editable = p.temps === undefined;
+  const pxParUnite = cadre0.base * vue.echelle;
   /** Unités du document par pixel d'écran (poignées et seuils de taille constante quel que soit le zoom). */
-  const parPixel = 1 / Math.max(0.01, base * vue.echelle);
+  const parPixel = 1 / Math.max(0.01, pxParUnite);
+  const editable = p.temps === undefined && !p.lectureSeule;
   const agentDe = (cle: string) => p.agents?.find(a => a.cle === cle) ?? (p.agent?.cle === cle ? p.agent : undefined);
   const capaciteDe = (agent: string, cle: string) => agentDe(agent)?.capacites.find(c => c.cle === cle);
-  /** Icône d'un document : seule une adresse du CDN Riot y est acceptée (un lien signé expire). */
-  const iconeDocument = (url: string | null | undefined) => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
-  const iconeDoc = (a: { icone: string | null; iconeDoc?: string | null } | undefined) => iconeDocument(a?.iconeDoc) ?? iconeDocument(a?.icone);
+  const donneesDe = (o: ObjetStrat | undefined) => (o?.type === 'capacite' ? capaciteDe(o.agent, o.capacite)?.donnees : undefined);
 
-  // Export : la vue est remise à plat (1000 × 1000) le temps du rendu, puis rétablie.
-  const exporter = useCallback((options: { pixelRatio: number; mimeType?: string; quality?: number }) => {
-    const st = scene.current;
-    if (!st) throw new Error(tr('strats.canevasStrat.canevas_pas_pret'));
-    const avant = { echelle: st.scaleX(), x: st.x(), y: st.y() };
-    st.scale({ x: 1, y: 1 });
-    st.position({ x: 0, y: 0 });
+  // ---------------------------------------------------------------- Map thémée
+  const rendu = useMemo(() => {
+    if (!fondImg) return undefined;
     try {
-      try {
-        return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
-      } catch (e) {
-        // Image d'une autre origine qui « contamine » le canevas : export avec les initiales à sa place, jamais d'échec.
-        const masquees = st.find('.image-jeu').filter(n => n.visible());
-        if (!masquees.length) throw e;
-        masquees.forEach(n => n.visible(false));
-        try {
-          return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
-        } finally {
-          masquees.forEach(n => n.visible(true));
+      return rendreCarte(fondImg, { theme: p.themeCarte ?? 'tactique', attenuation: p.attenuation ?? 0, largeurImage: carte?.largeurImage, hauteurImage: carte?.hauteurImage });
+    } catch {
+      return undefined;
+    }
+  }, [fondImg, p.themeCarte, p.attenuation, carte?.largeurImage, carte?.hauteurImage]);
+  const cadreBrut = cadreImage(fondImg && carte?.largeurImage ? carte.largeurImage : fondImg?.naturalWidth, fondImg && carte?.hauteurImage ? carte.hauteurImage : fondImg?.naturalHeight);
+
+  // ---------------------------------------------------------------- Bascule attaque / défense animée
+  const cible = p.rotation ?? 0;
+  const [rotation, setRotation] = useState<number>(cible);
+  const rotationRef = useRef(rotation);
+  rotationRef.current = rotation;
+  useEffect(() => {
+    if (rotationRef.current === cible) return undefined;
+    if (R.current.mouvementReduit || typeof requestAnimationFrame !== 'function') {
+      setRotation(cible);
+      return undefined;
+    }
+    const depart = rotationRef.current;
+    const t0 = performance.now();
+    let id = 0;
+    const pas = (t: number) => {
+      const f = Math.min(1, (t - t0) / (T.animation.bascule * 1000));
+      setRotation(f >= 1 ? cible : depart + (cible - depart) * adouci(f));
+      if (f < 1) id = requestAnimationFrame(pas);
+    };
+    id = requestAnimationFrame(pas);
+    return () => cancelAnimationFrame(id);
+  }, [cible]);
+
+  // ---------------------------------------------------------------- Tailles à l'écran (sans re-rendu)
+  const appliquerEchelles = useCallback((px: number): boolean => {
+    const st = scene.current;
+    if (!st) return false;
+    const regles: Array<[string, number]> = [
+      ['.jeton-pion', facteurEcran(T.pion.rayon + T.pion.anneau, px, T.pion.ecranMinPx, T.pion.ecranMaxPx)],
+      ['.jeton-puce', facteurEcran(T.capacite.puceRayon + 2, px, T.capacite.ecranMinPx, T.capacite.ecranMaxPx)],
+      ['.jeton-texte', facteurEcran(T.typo.s, px, 10, 15)],
+    ];
+    let change = false;
+    for (const [nom, k] of regles) {
+      for (const n of st.find(nom)) {
+        if (Math.abs(n.scaleX() - k) > 0.002) {
+          n.scale({ x: k, y: k });
+          change = true;
         }
       }
-    } finally {
-      st.scale({ x: avant.echelle, y: avant.echelle });
-      st.position({ x: avant.x, y: avant.y });
-      st.batchDraw();
     }
+    return change;
   }, []);
-  const { onPret } = p;
-  useEffect(() => {
-    onPret?.({ png: (ratio = 1) => exporter({ pixelRatio: ratio }), miniature: () => exporter({ pixelRatio: 0.32, mimeType: 'image/jpeg', quality: 0.75 }) });
-  }, [onPret, exporter]);
+  useLayoutEffect(() => {
+    if (appliquerEchelles(pxParUnite)) scene.current?.batchDraw();
+  });
+
+  // ---------------------------------------------------------------- Export (synchrone : aucun clignotement)
+  const exporter = useCallback(
+    (options: { pixelRatio: number; mimeType?: string; quality?: number }) => {
+      const st = scene.current;
+      if (!st) throw new Error(tr('strats.canevasStrat.canevas_pas_pret'));
+      const avant = { echelle: st.scaleX(), x: st.x(), y: st.y() };
+      const caches: Konva.Node[] = [];
+      const montres: Konva.Node[] = [];
+      for (const n of [...st.find('.selection'), ...st.find('.hors-export')]) {
+        if (n.visible()) {
+          n.visible(false);
+          caches.push(n);
+        }
+      }
+      for (const n of st.find('.callout-etiquette')) {
+        if (!n.visible()) {
+          n.visible(true);
+          montres.push(n);
+        }
+      }
+      const dessusVisible = dessus.current?.visible() ?? false;
+      dessus.current?.visible(false);
+      st.scale({ x: 1, y: 1 });
+      st.position({ x: 0, y: 0 });
+      appliquerEchelles(1);
+      try {
+        try {
+          return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
+        } catch (erreur) {
+          // Image d'une autre origine qui « contamine » le canevas : export avec les initiales à sa place, jamais d'échec.
+          const masquees = st.find('.image-jeu').filter(n => n.visible());
+          if (!masquees.length) throw erreur;
+          masquees.forEach(n => n.visible(false));
+          try {
+            return st.toDataURL({ x: 0, y: 0, width: 1000, height: 1000, ...options });
+          } finally {
+            masquees.forEach(n => n.visible(true));
+          }
+        }
+      } finally {
+        st.scale({ x: avant.echelle, y: avant.echelle });
+        st.position({ x: avant.x, y: avant.y });
+        for (const n of caches) n.visible(true);
+        for (const n of montres) n.visible(false);
+        dessus.current?.visible(dessusVisible);
+        appliquerEchelles(avant.echelle);
+        st.batchDraw();
+      }
+    },
+    [appliquerEchelles],
+  );
 
   /** Point du pointeur dans le repère du document (map retournée comprise), aimanté au besoin. */
   const position = (aimante = true) => {
     const pt = repere.current?.getRelativePointerPosition();
     if (!pt) return undefined;
-    const a = aimante ? (p.aimant ?? 0) : 0;
+    const a = aimante ? (R.current.aimant ?? 0) : 0;
     return { x: Math.round(aimanter(pt.x, a) * 10) / 10, y: Math.round(aimanter(pt.y, a) * 10) / 10 };
   };
-  const objetSous = (cible: Konva.Node): string | undefined => {
-    const groupe = cible.hasName('objet') ? cible : cible.findAncestor('.objet', true);
+  const versDocument = useCallback((clientX: number, clientY: number) => {
+    const st = scene.current;
+    const boite = st?.container().getBoundingClientRect();
+    if (!st || !boite || clientX < boite.left || clientX > boite.right || clientY < boite.top || clientY > boite.bottom) return undefined;
+    st.setPointersPositions({ clientX, clientY });
+    const pt = repere.current?.getRelativePointerPosition();
+    return pt ? { x: Math.round(pt.x * 10) / 10, y: Math.round(pt.y * 10) / 10 } : undefined;
+  }, []);
+
+  const objetSous = (noeud: Konva.Node): string | undefined => {
+    const groupe = noeud.hasName('objet') ? noeud : noeud.findAncestor('.objet', true);
     return groupe?.id() || undefined;
   };
-  const verrou = (o: ObjetStrat) => doc.calques[calqueDe(o)].verrou;
+  const fige = (o: ObjetStrat) => doc.calques[calqueDe(o)].verrou || Boolean(o.verrou);
   const niveau = p.niveau ?? null;
-  const avecNiveau = <T extends ObjetStrat>(o: T): T => (niveau !== null ? { ...o, niveau } : o);
+  const avecNiveau = <X extends ObjetStrat>(o: X): X => (niveau !== null ? { ...o, niveau } : o);
   /** Pion du joueur courant dans l'étape (origine d'un lancer, direction d'un cône). */
-  const pionJoueur = (j: number | null) => (j === null ? undefined : e?.objets.find(o => o.type === 'agent' && o.joueur === j) as { x: number; y: number } | undefined);
+  const pionJoueur = (j: number | null) => (j === null ? undefined : (e?.objets.find(o => o.type === 'agent' && o.joueur === j) as { x: number; y: number } | undefined));
 
   /** Zone d'une capacité posée en `pt` : à sa taille réelle, orientée depuis le pion du joueur (un trajet part du pion). */
-  function zoneDeBase(): Zone | null {
-    return p.formeZone === 'auto' ? zoneDepuisCapacite(p.capacite?.donnees) : zoneParDefaut(p.formeZone);
+  function zoneDeBase(capacite: CapaciteAsset | undefined = p.capacite): Zone | null {
+    return p.formeZone === 'auto' ? zoneDepuisCapacite(capacite?.donnees) : zoneParDefaut(p.formeZone);
   }
-  function zonePourPose(pt: { x: number; y: number }): Zone | null {
-    let zone = zoneDeBase();
-    const pion = pionJoueur(p.joueur);
+  function zonePourPose(pt: { x: number; y: number }, capacite: CapaciteAsset | undefined = p.capacite, joueur: number | null = p.joueur): Zone | null {
+    let zone = zoneDeBase(capacite);
+    const pion = pionJoueur(joueur);
     if (zone && pion && Math.hypot(pt.x - pion.x, pt.y - pion.y) > 4) {
       const angle = Math.round(((Math.atan2(pt.y - pion.y, pt.x - pion.x) * 180) / Math.PI) * 10) / 10;
       if (zone.forme === 'trajet') zone = { ...zone, dx: Math.round((pion.x - pt.x) * 10) / 10, dy: Math.round((pion.y - pt.y) * 10) / 10 };
@@ -466,31 +273,106 @@ export default function CanevasStrat(p: PropsCanevas) {
       else if (zone.forme === 'mur') zone = { ...zone, angle: angle + 90 };
     }
     // Bornée à la longueur réelle de la capacité.
-    const max = longueurMax(p.capacite?.donnees);
+    const max = longueurMax(capacite?.donnees);
     if (zone && max !== undefined) {
       if (zone.forme === 'cone' && zone.portee > max) zone = { ...zone, portee: max };
       if ((zone.forme === 'mur' || zone.forme === 'ligne' || zone.forme === 'rect') && zone.longueur > max) zone = { ...zone, longueur: max };
     }
     return zone;
   }
+  const idsDocument = () => doc.etapes.flatMap(x => x.objets.map(o => o.id));
+
+  /** Sélection d'un objet touché : Maj ajoute ou retire ; sinon lui seul (un objet déjà choisi garde son groupe). */
+  function selectionner(id: string, ajout: boolean) {
+    if (ajout) p.onSelection(selection.includes(id) ? selection.filter(x => x !== id) : [...selection, id]);
+    else if (!selection.includes(id)) p.onSelection([id]);
+  }
+
+  // ---------------------------------------------------------------- Vue : une mise à jour par image
+  const vueRef = useRef(vue);
+  const rafVue = useRef(0);
+  if (!rafVue.current) vueRef.current = vue;
+  const planifierVue = useCallback((v: Vue) => {
+    vueRef.current = v;
+    if (rafVue.current) return;
+    rafVue.current = requestAnimationFrame(() => {
+      rafVue.current = 0;
+      R.current.onVue(vueRef.current);
+    });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(rafVue.current), []);
+
+  function debuterPan(ev: PointerEvent) {
+    pan.current = { x: ev.clientX, y: ev.clientY, vue: vueRef.current };
+    setEnPan(true);
+    const bouge = (m: PointerEvent) => {
+      const d = pan.current;
+      if (!d || pincement.current) return;
+      planifierVue({ ...d.vue, x: d.vue.x + m.clientX - d.x, y: d.vue.y + m.clientY - d.y });
+    };
+    const fin = () => {
+      pan.current = undefined;
+      setEnPan(false);
+      window.removeEventListener('pointermove', bouge);
+      window.removeEventListener('pointerup', fin);
+      window.removeEventListener('pointercancel', fin);
+    };
+    window.addEventListener('pointermove', bouge);
+    window.addEventListener('pointerup', fin);
+    window.addEventListener('pointercancel', fin);
+  }
+
+  function annulerAppuiLong() {
+    if (appuiLong.current) clearTimeout(appuiLong.current);
+    appuiLong.current = undefined;
+  }
 
   function auPointeurBas(ev: Konva.KonvaEventObject<PointerEvent>) {
-    if (!editable || pincement.current || (ev.evt && ev.evt.isPrimary === false)) return;
+    const natif = ev.evt as PointerEvent | undefined;
+    menuOuvert.current = false;
+    if (pincement.current || (natif && natif.isPrimary === false)) return;
+    if (p.laser) {
+      const pt = position(false);
+      if (pt) setTrainee([{ ...pt, t: performance.now() }]);
+      return;
+    }
+    if (natif && (natif.button === 1 || p.panTemporaire || outil === 'main' || !editable)) {
+      debuterPan(natif);
+      return;
+    }
+    if (!editable || (natif && natif.button === 2)) return;
     if (ev.target.hasName('poignee')) return;
     const pt = position();
     if (!pt || !e) return;
     const touche = objetSous(ev.target);
-    setMaj(Boolean(ev.evt?.shiftKey));
+    const ajout = Boolean(natif?.shiftKey);
+    setMaj(ajout);
+    // Appui long au doigt sur un objet : menu contextuel.
+    if (touche && natif && natif.pointerType !== 'mouse' && p.onMenu) {
+      const depart = { x: natif.clientX, y: natif.clientY };
+      annulerAppuiLong();
+      appuiLong.current = setTimeout(() => {
+        appuiLong.current = undefined;
+        menuOuvert.current = true;
+        scene.current?.find('.objet').forEach(n => n.isDragging() && n.stopDrag());
+        const ids = R.current.selection?.includes(touche) ? [...(R.current.selection ?? [])] : [touche];
+        R.current.onSelection(ids);
+        R.current.onMenu?.({ x: depart.x, y: depart.y, ids, point: pt });
+      }, APPUI_LONG_MS);
+    }
     // Outil de pose sur un objet existant : on le sélectionne (ses poignées apparaissent, on peut le déplacer).
     if (touche && OUTILS_POSE.includes(outil)) {
-      p.onSelection(touche);
+      selectionner(touche, ajout);
       return;
     }
     const ajouter = (objet: ObjetStrat) => onAction({ type: 'ajouter', etape, objet: avecNiveau(objet) });
-    const ids = () => doc.etapes.flatMap(x => x.objets.map(o => o.id));
     switch (outil) {
       case 'selection':
-        p.onSelection(touche);
+        if (touche) selectionner(touche, ajout);
+        else {
+          const brut = position(false) ?? pt;
+          setCadreSel({ a: brut, b: brut, ajout });
+        }
         return;
       case 'gomme':
         if (touche) onAction({ type: 'supprimer', etape, id: touche });
@@ -505,10 +387,18 @@ export default function CanevasStrat(p: PropsCanevas) {
         setFantome(undefined);
         return;
       case 'marqueur':
-        if (p.marqueur) ajouter({ id: idUnique(ids()), type: 'marqueur', x: pt.x, y: pt.y, genre: p.marqueur.genre, etiquette: p.marqueur.etiquette.trim().slice(0, 40), couleur: p.couleur, equipe: p.marqueur.equipe });
+        if (p.marqueur) {
+          const id = idUnique(idsDocument());
+          ajouter({ id, type: 'marqueur', x: pt.x, y: pt.y, genre: p.marqueur.genre, etiquette: p.marqueur.etiquette.trim().slice(0, 40), couleur: p.couleur, equipe: p.marqueur.equipe });
+          p.onSelection([id]);
+        }
         return;
       case 'texte':
-        if (p.texte.trim()) ajouter({ id: idUnique(ids()), type: 'texte', x: pt.x, y: pt.y, texte: p.texte.trim().slice(0, 200), couleur: p.couleur, taille: 26 });
+        if (p.texte.trim()) {
+          const id = idUnique(idsDocument());
+          ajouter({ id, type: 'texte', x: pt.x, y: pt.y, texte: p.texte.trim().slice(0, 200), couleur: p.couleur, taille: T.typo.xl });
+          p.onSelection([id]);
+        }
         return;
       case 'fleche':
       case 'ligne':
@@ -522,84 +412,148 @@ export default function CanevasStrat(p: PropsCanevas) {
     }
   }
 
-  /** Fin d'un cliquer-glisser de pose (ou simple appui : pose orientée depuis le pion du joueur, comme avant). */
-  function finVisee(v: Visee, aimant: boolean) {
-    setVisee(undefined);
-    if (!e) return;
-    const ids = doc.etapes.flatMap(x => x.objets.map(o => o.id));
-    const couleur = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
-    const glisse = estGlisse(v, SEUIL_GLISSER_PX * parPixel);
-    const id = idUnique(ids);
-    if (outil === 'agent' && p.agent) {
-      const pose = glisse ? posePion(v, aimant) : { x: v.origine.x, y: v.origine.y };
-      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'agent', ...pose, agent: p.agent.cle, nom: p.agent.nom, icone: iconeDoc(p.agent), joueur: p.joueur, couleur }) });
-      p.onSelection(id);
-    } else if (outil === 'capacite' && p.agent && p.capacite) {
-      const pose = glisse ? poseCapacite(v, zoneDeBase(), echelle, p.capacite.donnees, aimant) : { x: v.origine.x, y: v.origine.y, zone: zonePourPose(v.origine) };
-      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'capacite', x: pose.x, y: pose.y, agent: p.agent.cle, capacite: p.capacite.cle, nom: p.capacite.nom, icone: iconeDoc(p.capacite), joueur: p.joueur, couleur, zone: pose.zone, ordre: p.ordreSuivant ?? null }) });
-      p.onSelection(id);
-    } else if (outil === 'vision') {
-      const pion = pionJoueur(p.joueur);
-      const pose = glisse
-        ? poseVision(v, echelle, aimant)
-        : { x: v.origine.x, y: v.origine.y, angle: pion ? Math.round((Math.atan2(v.origine.y - pion.y, v.origine.x - pion.x) * 180) / Math.PI) : -90, portee: p.vision?.portee ?? 30 };
-      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'vision', ...pose, ouverture: p.vision?.ouverture ?? 90, joueur: p.joueur, couleur }) });
-      p.onSelection(id);
-    }
+  /** Pose d'un pion, d'une capacité ou d'un cône de vision (geste terminé, ou dépôt depuis le dock). */
+  function poser(ctx: { outil: Outil; agent?: AgentAsset; capacite?: CapaciteAsset; joueur: number | null; couleur: string }, v: Visee, aimant: boolean): boolean {
+    if (!e) return false;
+    const couleur = ctx.joueur !== null ? couleurJoueur(doc, ctx.joueur) : ctx.couleur;
+    const glisseV = estGlisse(v, SEUIL_GLISSER_PX * parPixel);
+    const id = idUnique(idsDocument());
+    if (ctx.outil === 'agent' && ctx.agent) {
+      const pose = glisseV ? posePion(v, aimant) : { x: v.origine.x, y: v.origine.y };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'agent', ...pose, agent: ctx.agent.cle, nom: ctx.agent.nom, icone: iconeDoc(ctx.agent), joueur: ctx.joueur, couleur }) });
+    } else if (ctx.outil === 'capacite' && ctx.agent && ctx.capacite) {
+      const pose = glisseV ? poseCapacite(v, zoneDeBase(ctx.capacite), echelle, ctx.capacite.donnees, aimant) : { x: v.origine.x, y: v.origine.y, zone: zonePourPose(v.origine, ctx.capacite, ctx.joueur) };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'capacite', x: pose.x, y: pose.y, agent: ctx.agent.cle, capacite: ctx.capacite.cle, nom: ctx.capacite.nom, icone: iconeDoc(ctx.capacite), joueur: ctx.joueur, couleur, zone: pose.zone, ordre: p.ordreSuivant ?? null }) });
+    } else if (ctx.outil === 'vision') {
+      const pion = pionJoueur(ctx.joueur);
+      const pose = glisseV ? poseVision(v, echelle, aimant) : { x: v.origine.x, y: v.origine.y, angle: pion ? Math.round((Math.atan2(v.origine.y - pion.y, v.origine.x - pion.x) * 180) / Math.PI) : -90, portee: p.vision?.portee ?? 30 };
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'vision', ...pose, ouverture: p.vision?.ouverture ?? 90, joueur: ctx.joueur, couleur }) });
+    } else return false;
+    p.onSelection([id]);
+    return true;
   }
+  const poserRef = useRef(poser);
+  poserRef.current = poser;
 
+  const { onPret } = p;
+  useEffect(() => {
+    onPret?.({
+      png: (ratio = 1) => exporter({ pixelRatio: ratio }),
+      miniature: () => exporter({ pixelRatio: 0.32, mimeType: 'image/jpeg', quality: 0.78 }),
+      versDocument,
+      deposer: (clientX, clientY, quoi) => {
+        const pt = versDocument(clientX, clientY);
+        if (!pt) return false;
+        const a = R.current.aimant ?? 0;
+        const origine = { x: aimanter(pt.x, a), y: aimanter(pt.y, a) };
+        return poserRef.current({ outil: quoi.type === 'agent' ? 'agent' : 'capacite', agent: quoi.agent, capacite: quoi.type === 'capacite' ? quoi.capacite : undefined, joueur: quoi.joueur, couleur: quoi.couleur }, debuterVisee(origine), false);
+      },
+    });
+  }, [onPret, exporter, versDocument]);
+
+  // ---------------------------------------------------------------- Pointeur : aperçus limités à une image
+  const rafSurvol = useRef(0);
   const calloutSous = useRef<string | undefined>(undefined);
+  useEffect(() => () => cancelAnimationFrame(rafSurvol.current), []);
+
   function auPointeurBouge(ev?: Konva.KonvaEventObject<PointerEvent>) {
-    if (visee && !pincement.current) {
+    const natif = ev?.evt as PointerEvent | undefined;
+    if (appuiLong.current && natif) annulerAppuiLong();
+    if (pan.current || pincement.current) return;
+    if (p.laser) {
+      if (p.laser === 'libre' || trainee.length) {
+        const pt = position(false);
+        if (pt) setTrainee(t0 => [...t0.slice(-80), { ...pt, t: performance.now() }]);
+      }
+      return;
+    }
+    if (visee) {
       const pt = position();
       if (pt) setVisee(suivreVisee(visee, pt, 4 * parPixel));
-      if (ev?.evt) setMaj(Boolean(ev.evt.shiftKey));
+      if (natif) setMaj(Boolean(natif.shiftKey));
       return;
     }
-    // Aperçu sous le pointeur avant la pose : capacité à sa taille réelle, portrait de l'agent armé.
-    if (((outil === 'capacite' && p.capacite) || (outil === 'agent' && p.agent)) && editable && !pincement.current) {
-      const pt = position();
-      if (pt) setFantome(pt);
-    }
-    if (p.onCallout && carte?.zones?.length) {
+    if (cadreSel) {
       const pt = position(false);
-      const z = pt ? carte.zones.find(x => dansPolygone(pt.x, pt.y, x.points)) : undefined;
-      if (z?.nom !== calloutSous.current) {
-        calloutSous.current = z?.nom;
-        p.onCallout(z?.nom);
-      }
-    }
-    if (!brouillon || pincement.current) return;
-    const pt = position(brouillon.type === 'forme');
-    if (!pt) return;
-    if (brouillon.type === 'forme') {
-      setBrouillon({ ...brouillon, l: pt.x - brouillon.x, h: pt.y - brouillon.y });
+      if (pt) setCadreSel({ ...cadreSel, b: pt });
       return;
     }
-    const pts = brouillon.points;
-    const n = pts.length;
-    const [px, py] = [pts[n - 4], pts[n - 3]];
-    // Tracé à main levée : un point de plus tous les 18 (32 points au plus), sinon le dernier suit le pointeur.
-    if (Math.hypot(pt.x - px, pt.y - py) > 18 && n < 64) setBrouillon({ type: 'trace', points: [...pts.slice(0, n - 2), pt.x, pt.y, pt.x, pt.y] });
-    else setBrouillon({ type: 'trace', points: [...pts.slice(0, n - 2), pt.x, pt.y] });
+    if (brouillon) {
+      const pt = position(brouillon.type === 'forme');
+      if (!pt) return;
+      if (brouillon.type === 'forme') {
+        setBrouillon({ ...brouillon, l: pt.x - brouillon.x, h: pt.y - brouillon.y });
+        return;
+      }
+      const pts = brouillon.points;
+      const n = pts.length;
+      const [px, py] = [pts[n - 4], pts[n - 3]];
+      // Tracé à main levée : un point de plus tous les 18 (32 points au plus), sinon le dernier suit le pointeur.
+      if (Math.hypot(pt.x - px, pt.y - py) > 18 && n < 64) setBrouillon({ type: 'trace', points: [...pts.slice(0, n - 2), pt.x, pt.y, pt.x, pt.y] });
+      else setBrouillon({ type: 'trace', points: [...pts.slice(0, n - 2), pt.x, pt.y] });
+      return;
+    }
+    // Survol : aperçu de ce que l'on va poser, callout sous le pointeur, présence. Une fois par image.
+    if (rafSurvol.current) return;
+    rafSurvol.current = requestAnimationFrame(() => {
+      rafSurvol.current = 0;
+      const q = R.current;
+      const libre = q.temps === undefined && !q.lectureSeule;
+      if (libre && (q.outil === 'capacite' || q.outil === 'agent') && (q.outil === 'agent' ? q.agent : q.capacite)) {
+        const pt = position();
+        if (pt) setFantome(pt);
+      }
+      const brut = position(false);
+      if (q.onCallout && q.carte?.zones?.length) {
+        const z = brut ? q.carte.zones.find(x => dansPolygone(brut.x, brut.y, x.points)) : undefined;
+        if (z?.nom !== calloutSous.current) {
+          calloutSous.current = z?.nom;
+          q.onCallout(z?.nom);
+        }
+      }
+    });
   }
 
   function auPointeurHaut(ev?: Konva.KonvaEventObject<PointerEvent>) {
+    annulerAppuiLong();
+    if (menuOuvert.current) {
+      // L'appui long a ouvert le menu : le relâché ne pose rien.
+      setVisee(undefined);
+      setBrouillon(undefined);
+      setCadreSel(undefined);
+      return;
+    }
     if (visee) {
       const pt = pincement.current ? undefined : position();
-      finVisee(pt ? suivreVisee(visee, pt, 4 * parPixel) : visee, ev?.evt ? Boolean(ev.evt.shiftKey) : maj);
+      const v = pt ? suivreVisee(visee, pt, 4 * parPixel) : visee;
+      setVisee(undefined);
+      poser({ outil, agent: p.agent, capacite: p.capacite, joueur: p.joueur, couleur: p.couleur }, v, ev?.evt ? Boolean(ev.evt.shiftKey) : maj);
+      return;
+    }
+    if (cadreSel) {
+      setCadreSel(undefined);
+      const r = rectangle(cadreSel.a, cadreSel.b);
+      if (r.x2 - r.x1 < 4 * parPixel && r.y2 - r.y1 < 4 * parPixel) {
+        // Simple clic sur le vide : la sélection tombe.
+        if (!cadreSel.ajout && selection.length) p.onSelection([]);
+        return;
+      }
+      const dedans = objetsDansRectangle((e?.objets ?? []).filter(o => doc.calques[calqueDe(o)].visible && !doc.calques[calqueDe(o)].verrou), r);
+      p.onSelection(cadreSel.ajout ? [...new Set([...selection, ...dedans])] : dedans);
       return;
     }
     if (!brouillon) return;
     setBrouillon(undefined);
-    const ids = doc.etapes.flatMap(x => x.objets.map(o => o.id));
+    const ids = idsDocument();
     if (brouillon.type === 'forme') {
       const x = Math.min(brouillon.x, brouillon.x + brouillon.l);
       const y = Math.min(brouillon.y, brouillon.y + brouillon.h);
       const l = Math.abs(brouillon.l);
       const h = Math.abs(brouillon.h);
       if (l < 6 || h < 6) return;
-      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id: idUnique(ids), type: 'forme', forme: p.formeDessin, x, y, l, h, couleur: p.couleur, remplie: false }) });
+      const id = idUnique(ids);
+      onAction({ type: 'ajouter', etape, objet: avecNiveau({ id, type: 'forme', forme: p.formeDessin, x, y, l, h, couleur: p.couleur, remplie: false }) });
+      p.onSelection([id]);
       return;
     }
     // Points en double (dernier point fixe) retirés ; un tracé trop court est ignoré.
@@ -622,56 +576,135 @@ export default function CanevasStrat(p: PropsCanevas) {
         couleur: trajet ? couleurJoueur(doc, p.joueur) : p.couleur,
         epaisseur: p.epaisseur,
         tirets: p.tirets,
+        ...(p.usage && p.usage !== (p.tirets ? 'rotation' : 'deplacement') ? { usage: p.usage } : {}),
         ...(trajet ? { joueur: p.joueur, t0: 0, t1: e?.duree ?? 5 } : {}),
       }),
     });
   }
 
-  function finDeplacement(o: ObjetStrat, node: Konva.Node) {
-    const origine = 'points' in o ? { x: 0, y: 0 } : o.type === 'forme' && o.forme === 'ellipse' ? { x: o.x + o.l / 2, y: o.y + o.h / 2 } : { x: o.x, y: o.y };
-    const a = p.aimant ?? 0;
+  // ---------------------------------------------------------------- Déplacement (seul ou en groupe)
+  const debutDeplacement = useCallback((o: ObjetStrat, ev: Konva.KonvaEventObject<DragEvent>) => {
+    const q = R.current;
+    if (appuiLong.current) clearTimeout(appuiLong.current);
+    appuiLong.current = undefined;
+    const couche = ev.target.getLayer();
+    const ids = q.selection?.includes(o.id) ? q.selection : [o.id];
+    const origines = new Map<string, { x: number; y: number }>();
+    const noeuds = new Map<string, Konva.Node>();
+    for (const id of ids) {
+      const n = id === o.id ? ev.target : couche?.findOne(`#${id}`);
+      const obj = q.doc.etapes[q.etape]?.objets.find(x => x.id === id);
+      if (!n || !obj || (id !== o.id && (q.doc.calques[calqueDe(obj)].verrou || obj.verrou))) continue;
+      origines.set(id, origineDe(obj));
+      noeuds.set(id, n);
+    }
+    glisse.current = { origines, noeuds };
+    q.onOccupe?.(true);
+  }, []);
+  const deplacementEnCours = useCallback((o: ObjetStrat, ev: Konva.KonvaEventObject<DragEvent>) => {
+    const g = glisse.current;
+    const o0 = g?.origines.get(o.id);
+    if (!g || !o0 || g.noeuds.size < 2) return;
+    const dx = ev.target.x() - o0.x;
+    const dy = ev.target.y() - o0.y;
+    for (const [id, n] of g.noeuds) {
+      if (id === o.id) continue;
+      const base = g.origines.get(id) as { x: number; y: number };
+      n.position({ x: base.x + dx, y: base.y + dy });
+    }
+  }, []);
+  const finDeplacement = useCallback((o: ObjetStrat, ev: Konva.KonvaEventObject<DragEvent>) => {
+    const q = R.current;
+    const node = ev.target;
+    const g = glisse.current;
+    glisse.current = undefined;
+    q.onOccupe?.(false);
+    const origine = origineDe(o);
+    const a = q.aimant ?? 0;
     const dx = 'points' in o ? node.x() : aimanter(node.x(), a) - origine.x;
     const dy = 'points' in o ? node.y() : aimanter(node.y(), a) - origine.y;
-    // Le nœud revient à sa place : c'est le document (et donc l'historique) qui le déplace.
+    // Les nœuds reviennent à leur place : c'est le document (et donc l'historique) qui les déplace.
     node.position(origine);
-    onAction({ type: 'deplacer', etape, id: o.id, dx: Math.round(dx * 10) / 10, dy: Math.round(dy * 10) / 10 });
-  }
+    if (g) for (const [id, n] of g.noeuds) n.position(g.origines.get(id) as { x: number; y: number });
+    if (menuOuvert.current) return;
+    const ids = g ? [...g.noeuds.keys()] : [o.id];
+    const d = { dx: Math.round(dx * 10) / 10, dy: Math.round(dy * 10) / 10 };
+    if (ids.length > 1) q.onAction({ type: 'deplacerLot', etape: q.etape, ids, ...d });
+    else q.onAction({ type: 'deplacer', etape: q.etape, id: o.id, ...d });
+  }, []);
+  const surSurvol = useCallback((id: string | undefined) => setSurvol(id), []);
 
   function molette(ev: Konva.KonvaEventObject<WheelEvent>) {
     ev.evt.preventDefault();
     const pt = scene.current?.getPointerPosition();
     if (!pt) return;
-    onVue(zoomer(vue, ev.evt.deltaY < 0 ? 1.12 : 1 / 1.12, pt));
+    const c = cadreRef.current;
+    // Pavé tactile : le pincement arrive en molette avec Ctrl, en petits pas.
+    const facteur = ev.evt.ctrlKey ? Math.exp(-ev.evt.deltaY / 120) : ev.evt.deltaY < 0 ? 1.12 : 1 / 1.12;
+    planifierVue(zoomer(vueRef.current, facteur, { x: pt.x - c.dx, y: pt.y - c.dy }));
   }
 
   function toucheBouge(ev: Konva.KonvaEventObject<TouchEvent>) {
     const t = ev.evt.touches;
     if (t.length !== 2) return;
     ev.evt.preventDefault();
+    annulerAppuiLong();
     const rect = scene.current?.container().getBoundingClientRect();
     if (!rect) return;
-    const a = { x: t[0].clientX - rect.left, y: t[0].clientY - rect.top };
-    const b = { x: t[1].clientX - rect.left, y: t[1].clientY - rect.top };
+    const c0 = cadreRef.current;
+    const a = { x: t[0].clientX - rect.left - c0.dx, y: t[0].clientY - rect.top - c0.dy };
+    const b = { x: t[1].clientX - rect.left - c0.dx, y: t[1].clientY - rect.top - c0.dy };
     const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const distance = Math.hypot(a.x - b.x, a.y - b.y);
     const avant = pincement.current;
     pincement.current = { distance, centre: c };
+    pan.current = undefined;
     setBrouillon(undefined);
+    setVisee(undefined);
+    setCadreSel(undefined);
     if (!avant || avant.distance === 0) return;
-    const v = zoomer(vue, distance / avant.distance, c);
-    onVue({ ...v, x: v.x + c.x - avant.centre.x, y: v.y + c.y - avant.centre.y });
+    const v = zoomer(vueRef.current, distance / avant.distance, c);
+    planifierVue({ ...v, x: v.x + c.x - avant.centre.x, y: v.y + c.y - avant.centre.y });
   }
 
-  // ---------------------------------------------------------------- Poignées de la sélection
+  function menuContextuel(ev: Konva.KonvaEventObject<PointerEvent>) {
+    ev.evt.preventDefault();
+    if (!p.onMenu || !editable) return;
+    // Une poignée appartient à l'objet choisi : le menu est le sien.
+    const id = ev.target.hasName('poignee') ? selection[0] : objetSous(ev.target);
+    let ids: string[] = [];
+    if (id) {
+      ids = selection.includes(id) ? [...selection] : [id];
+      if (!selection.includes(id)) p.onSelection(ids);
+    }
+    setVisee(undefined);
+    setBrouillon(undefined);
+    p.onMenu({ x: ev.evt.clientX, y: ev.evt.clientY, ids, point: position(false) });
+  }
+
+  // ---------------------------------------------------------------- Laser : la traînée s'efface toute seule
+  useEffect(() => {
+    if (!trainee.length) return undefined;
+    const id = requestAnimationFrame(() => {
+      const limite = performance.now() - DUREE_LASER_MS;
+      setTrainee(t0 => (t0.length && t0[0].t < limite ? t0.filter(x => x.t >= limite) : t0.length ? [...t0] : t0));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [trainee]);
+  useEffect(() => {
+    if (!p.laser) setTrainee([]);
+  }, [p.laser]);
+
+  // ---------------------------------------------------------------- Poignées de la sélection (un seul objet)
   //
   // Visibles avec TOUT outil d'édition (pas seulement la sélection) : on pose un mur avec l'outil Capacité, on
-  // l'oriente aussitôt. Taille constante à l'écran (RAYON_POIGNEE_PX), zone de prise large (PRISE_POIGNEE_PX) ;
-  // calque au-dessus de tout, seul à écouter le pointeur sur la poignée.
+  // l'oriente aussitôt. Taille constante à l'écran (RAYON_POIGNEE_PX), zone de prise large (PRISE_POIGNEE_PX).
 
-  const choisiBrut = editable && outil !== 'main' ? e?.objets.find(o => o.id === p.selection) : undefined;
+  const choisiBrut = editable && outil !== 'main' && selection.length === 1 ? e?.objets.find(o => o.id === selection[0]) : undefined;
   const choisi = choisiBrut && apercu?.id === choisiBrut.id ? avecChamps(choisiBrut, apercu.champs) : choisiBrut;
-  const donneesDe = (o: ObjetStrat | undefined) => (o?.type === 'capacite' ? capaciteDe(o.agent, o.capacite)?.donnees : undefined);
-  const mesPoignees: PoigneeObjet[] = choisi && !verrou(choisi) ? poigneesObjet(choisi, echelle) : [];
+  // Un rayon fixé par les caractéristiques de la capacité (smoke, molly) ne se règle pas : pas de poignée sur sa puce.
+  const rayonFixe = choisiBrut?.type === 'capacite' && choisiBrut.zone?.forme === 'cercle' && dimensionFixe(donneesDe(choisiBrut));
+  const mesPoignees: PoigneeObjet[] = choisi && !fige(choisi) && !rayonFixe ? poigneesObjet(choisi, echelle) : [];
   const maxChoisi = longueurMax(donneesDe(choisiBrut));
 
   function poigneeBouge(cle: PoigneeObjet['cle'], ev: Konva.KonvaEventObject<DragEvent>) {
@@ -687,245 +720,405 @@ export default function CanevasStrat(p: PropsCanevas) {
   }
   function poigneeFin(cle: PoigneeObjet['cle'], ev: Konva.KonvaEventObject<DragEvent>) {
     ev.cancelBubble = true;
+    p.onOccupe?.(false);
     if (!choisiBrut) return;
     const champs = apercu?.id === choisiBrut.id ? apercu.champs : tirerPoigneeDe(choisiBrut, cle, { x: ev.target.x(), y: ev.target.y() }, echelle, donneesDe(choisiBrut));
     setApercu(undefined);
     if (champs) onAction({ type: 'modifier', etape, id: choisiBrut.id, champs });
   }
 
-  // ---------------------------------------------------------------- Rendu
+  // ---------------------------------------------------------------- Lecture, objets
+  const precedente = etape > 0 ? doc.etapes[etape - 1] : undefined;
+  const lecture = useMemo(() => {
+    if (p.temps === undefined || !e) return undefined;
+    const q = R.current;
+    const duree = (o: ObjetStrat) => (o.type === 'capacite' ? (q.agents?.find(a => a.cle === o.agent) ?? (q.agent?.cle === o.agent ? q.agent : undefined))?.capacites.find(c => c.cle === o.capacite)?.donnees?.duree : undefined);
+    return etatLecture(e, p.temps, {
+      precedente: p.enchaine ? precedente : undefined,
+      dureeCapacite: duree,
+      deploiement: p.mouvementReduit ? 0 : T.animation.deploiement,
+      fondu: p.mouvementReduit ? 0 : T.animation.fondu,
+      transition: p.mouvementReduit ? 0 : T.animation.transition,
+    });
+  }, [p.temps, e, precedente, p.enchaine, p.mouvementReduit]);
 
   const visible = doc.calques;
-  const objetsDe = (c: 'utilitaires' | 'vision' | 'marqueurs' | 'dessins' | 'texte') => (e?.objets ?? []).filter(o => calqueDe(o) === c && (!lecture || lecture.visibles.has(o.id)));
-  const deplacable = (o: ObjetStrat) => editable && (outil === 'selection' || OUTILS_POSE.includes(outil)) && !verrou(o);
-  const estompe = (o: ObjetStrat) => niveau !== null && typeof o.niveau === 'number' && o.niveau !== niveau;
-  // Pendant la lecture, le premier pion de chaque joueur suit son trajet.
-  const pionsSuivis = new Map<string, { x: number; y: number }>();
-  if (lecture) {
-    for (const [j, pos] of lecture.positions) {
-      const pion = e?.objets.find(o => o.type === 'agent' && o.joueur === j);
-      if (pion) pionsSuivis.set(pion.id, pos);
-    }
-  }
+  const deplacable = (o: ObjetStrat) => editable && (outil === 'selection' || OUTILS_POSE.includes(outil)) && !fige(o);
   const nomJoueur = (j: number | null | undefined) => (typeof j === 'number' && doc.joueurs[j] ? doc.joueurs[j].nom.slice(0, 14) : undefined);
-  const iconeAJour = (o: ObjetStrat) => (o.type === 'agent' ? sourcesIcone(agentDe(o.agent), o.icone) : o.type === 'capacite' ? sourcesIcone(capaciteDe(o.agent, o.capacite), o.icone) : undefined);
-  const rendreObjet = (brut: ObjetStrat) => {
+  const dureeEtape = e?.duree ?? 5;
+  const sel = useMemo(() => new Set(selection), [selection]);
+
+  const rendreObjet = (brut: ObjetStrat, options: { fantome?: boolean } = {}) => {
     const o = apercu?.id === brut.id ? avecChamps(brut, apercu.champs) : brut;
+    const agent = o.type === 'agent' || o.type === 'capacite' ? agentDe(o.agent) : undefined;
+    const cap = o.type === 'capacite' ? agent?.capacites.find(c => c.cle === o.capacite) : undefined;
+    const style = o.type === 'capacite' ? styleCapacite(o.zone, cap?.donnees, o.nom) : undefined;
+    const couleur = o.type === 'capacite' ? couleurAffichee(o.couleur, doc.couleurs, cap?.couleur ?? agent?.couleur) : 'couleur' in o ? o.couleur : '#ffffff';
+    const joueurObjet = 'joueur' in o ? o.joueur : undefined;
+    let opacite = 1;
+    if (niveau !== null && typeof o.niveau === 'number' && o.niveau !== niveau) opacite = 0.3;
+    if (p.surligne !== null && p.surligne !== undefined && joueurObjet !== p.surligne) opacite = Math.min(opacite, 0.16);
+    if (options.fantome) opacite = 0.3;
+    const anime = style && lecture && !p.mouvementReduit && (style.genre === 'zone' || style.genre === 'recon');
     return (
-    <Objet
-      key={o.id}
-      o={o}
-      icone={iconeAJour(o)}
-      etiquette={o.type === 'agent' ? nomJoueur(o.joueur) : undefined}
-      images={images}
-      surbrillance={p.selection === o.id}
-      deplacable={deplacable(o)}
-      echelle={echelle}
-      rotation={rotation}
-      estompe={estompe(o)}
-      lecture={lecture}
-      position={pionsSuivis.get(o.id)}
-      onFin={finDeplacement}
-    />
+      <Objet
+        key={options.fantome ? `f-${o.id}` : o.id}
+        o={o}
+        couleur={couleur}
+        icone={o.type === 'agent' ? sourcesStables(agent, o.icone) : o.type === 'capacite' ? sourcesStables(cap, o.icone) : undefined}
+        etiquette={o.type === 'agent' && p.noms !== false ? nomJoueur(o.joueur) : undefined}
+        images={images}
+        selectionne={!options.fantome && sel.has(o.id)}
+        deplacable={!options.fantome && deplacable(o)}
+        echelle={echelle}
+        rotation={rotation}
+        opacite={opacite}
+        genre={style?.genre ?? 'icone'}
+        ultime={style?.ultime ?? false}
+        chaud={style?.chaud ?? false}
+        segments={segmentsMur(cap?.donnees)}
+        duree={dureeEtape}
+        progression={options.fantome ? undefined : lecture?.progression.get(o.id)}
+        position={options.fantome ? undefined : lecture?.pions.get(o.id)}
+        vie={options.fantome ? undefined : lecture?.capacites.get(o.id)}
+        temps={anime ? p.temps : undefined}
+        fantome={options.fantome}
+        onDebut={debutDeplacement}
+        onBouge={deplacementEnCours}
+        onFin={finDeplacement}
+        onSurvol={surSurvol}
+      />
     );
   };
+  const objetsDe = (c: (typeof CALQUES_OBJETS)[number]) => (e?.objets ?? []).filter(o => calqueDe(o) === c && (!lecture || lecture.visibles.has(o.id)));
+
+  // Fantôme de l'étape précédente : pions à leur dernière position, utilitaires, et le chemin jusqu'ici.
+  const fantomes = p.fantome && precedente && editable ? [...pionsFinaux(precedente), ...precedente.objets.filter(o => o.type === 'capacite')] : [];
+  const liens = p.fantome && precedente && e && editable ? [...departsDepuis(precedente, e)].map(([id, depart]) => ({ id, depart, arrivee: e.objets.find(o => o.id === id) as { x: number; y: number } })) : [];
+
+  // ---------------------------------------------------------------- Ligne d'état : cote du geste en cours
+  const info = (() => {
+    const max = (m: number | undefined) => (m !== undefined ? ` (max ${m} m)` : '');
+    if (visee && outil === 'capacite' && p.capacite) {
+      const glisseV = estGlisse(visee, SEUIL_GLISSER_PX * parPixel);
+      const pose = glisseV ? poseCapacite(visee, zoneDeBase(), echelle, p.capacite.donnees, maj) : { zone: zonePourPose(visee.origine) };
+      return pose.zone ? `${p.capacite.nom} · ${cote(pose.zone)}${max(longueurMax(p.capacite.donnees))}` : p.capacite.nom;
+    }
+    if (visee && outil === 'vision' && estGlisse(visee, SEUIL_GLISSER_PX * parPixel)) {
+      const v = poseVision(visee, echelle, maj);
+      return `${v.portee} m · ${Math.round(((v.angle % 360) + 360) % 360)}°`;
+    }
+    if (choisi?.type === 'capacite' && choisi.zone) return `${choisi.nom} · ${cote(choisi.zone)}${max(maxChoisi)}`;
+    if (choisi?.type === 'vision') return `${choisi.portee} m · ${choisi.ouverture}° · ${Math.round(((choisi.angle % 360) + 360) % 360)}°`;
+    if (brouillon?.type === 'trace') {
+      let l = 0;
+      for (let i = 2; i + 1 < brouillon.points.length; i += 2) l += Math.hypot(brouillon.points[i] - brouillon.points[i - 2], brouillon.points[i + 1] - brouillon.points[i - 1]);
+      return `${Math.round((l / echelleEffective(echelle)) * 10) / 10} m`;
+    }
+    if (brouillon?.type === 'forme') return `${Math.abs(Math.round((brouillon.l / echelleEffective(echelle)) * 10) / 10)} × ${Math.abs(Math.round((brouillon.h / echelleEffective(echelle)) * 10) / 10)} m`;
+    return undefined;
+  })();
+  const { onInfo } = p;
+  useEffect(() => {
+    onInfo?.(info);
+  }, [info, onInfo]);
+
+  // ---------------------------------------------------------------- Rendu
+  const etiquettes = etiquettesVisibles(pxParUnite);
+  const couleurPose = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
+  const survole = survol && !visee && !brouillon ? e?.objets.find(o => o.id === survol) : undefined;
+  const etiquetteDe = (o: ObjetStrat | undefined) => {
+    if (!o || o.type !== 'capacite') return undefined;
+    const duree = donneesDe(o)?.duree;
+    return [o.nom, o.zone ? tailleReelle(o.zone) : '', duree !== undefined ? `${duree} s` : ''].filter(Boolean).join(' · ');
+  };
+  const curseur = enPan ? 'grabbing' : p.panTemporaire || outil === 'main' || (!editable && !p.laser) ? 'grab' : p.laser ? 'crosshair' : outil === 'selection' ? 'default' : 'crosshair';
+  const pionApercu = (x: number, y: number) =>
+    p.agent ? (
+      <Group x={x} y={y} name="fantome-agent">
+        <Objet o={{ id: 'apercu', type: 'agent', x: 0, y: 0, agent: p.agent.cle, nom: p.agent.nom, icone: iconeDoc(p.agent), joueur: p.joueur, couleur: couleurPose }} couleur={couleurPose} icone={sourcesStables(p.agent)} images={images} selectionne={false} deplacable={false} echelle={echelle} rotation={rotation} opacite={1} genre="icone" ultime={false} chaud={false} segments={1} duree={5} fantome />
+      </Group>
+    ) : null;
 
   return (
     <div
-      style={{ touchAction: 'none', width: taille, height: taille, borderRadius: 10, overflow: 'hidden', cursor: outil === 'main' ? 'grab' : outil === 'selection' ? 'default' : 'crosshair' }}
-      data-testid={p.testID ?? 'esport-canevas'}>
+      style={{ touchAction: 'none', width: largeur, height: hauteur, borderRadius: p.taille ? 10 : 0, overflow: 'hidden', cursor: curseur, background: melanger(theme.fond, '#000000', theme.vignette) }}
+      onMouseDown={ev => {
+        // Molette pressée : déplacement de la vue, pas le défilement automatique du navigateur.
+        if (ev.button === 1) ev.preventDefault();
+      }}
+      data-testid={p.testID ?? 'esport-canevas'}
+      data-outil={outil}
+      data-zoom={Math.round(vue.echelle * 100)}
+      data-cadre={`${Math.round(pxParUnite * 10000) / 10000},${Math.round((cadre0.dx + vue.x) * 10) / 10},${Math.round((cadre0.dy + vue.y) * 10) / 10}`}>
       <Stage
         ref={scene}
-        width={taille}
-        height={taille}
-        scaleX={base * vue.echelle}
-        scaleY={base * vue.echelle}
-        x={vue.x}
-        y={vue.y}
-        draggable={outil === 'main'}
-        onDragEnd={ev => {
-          if (ev.target === scene.current) onVue({ ...vue, x: ev.target.x(), y: ev.target.y() });
-        }}
+        width={largeur}
+        height={hauteur}
+        scaleX={pxParUnite}
+        scaleY={pxParUnite}
+        x={cadre0.dx + vue.x}
+        y={cadre0.dy + vue.y}
         onPointerDown={auPointeurBas}
         onPointerMove={auPointeurBouge}
         onPointerUp={auPointeurHaut}
         onPointerLeave={() => {
           setFantome(undefined);
+          setSurvol(undefined);
           auPointeurHaut();
+        }}
+        onContextMenu={menuContextuel}
+        onDblClick={ev => {
+          if (!objetSous(ev.target) && !ev.target.hasName('poignee')) p.onVue(VUE_INITIALE);
+        }}
+        onDblTap={ev => {
+          if (!objetSous(ev.target) && !ev.target.hasName('poignee')) p.onVue(VUE_INITIALE);
         }}
         onWheel={molette}
         onTouchMove={toucheBouge}
         onTouchEnd={() => {
           pincement.current = undefined;
         }}>
-        <Layer listening={false} visible={visible.fond.visible}>
-          <Rect width={1000} height={1000} fill="#1f2937" />
+        <Layer listening={false}>
+          <Rect x={-4000} y={-4000} width={9000} height={9000} fill={theme.fond} />
           <Tourne ref={repere} rotation={rotation}>
-            {!fondImg ? <KText text={doc.carte.nom} fontSize={72} fill="#374151" width={1000} y={460} align="center" /> : null}
-            {fondImg ? <KImage image={fondImg} x={cadre.x} y={cadre.y} width={cadre.l} height={cadre.h} /> : null}
+            {visible.fond.visible ? (
+              rendu ? (
+                <KImage image={rendu.canevas} x={0} y={0} width={1000} height={1000} />
+              ) : fondImg ? (
+                <KImage image={fondImg} x={cadreBrut.x} y={cadreBrut.y} width={cadreBrut.l} height={cadreBrut.h} />
+              ) : (
+                <>
+                  <Rect x={40} y={40} width={920} height={920} cornerRadius={28} fill={theme.sol} stroke={alpha(theme.contour, 0.5)} strokeWidth={2} dash={[10, 10]} />
+                  <Halo x={500} y={500} texte={doc.carte.nom} taille={64} couleur={alpha(theme.etiquette, 0.5)} largeur={900} capitales />
+                </>
+              )
+            ) : null}
             {p.aimant && editable ? (
-              <Group opacity={0.12}>
+              <Group opacity={0.1} name="hors-export">
                 {Array.from({ length: Math.floor(1000 / Math.max(10, p.aimant * 5)) }, (_, i) => (i + 1) * Math.max(10, p.aimant ?? 10) * 5).map(v => (
                   <React.Fragment key={v}>
-                    <Line points={[v, 0, v, 1000]} stroke="#ffffff" strokeWidth={1} />
-                    <Line points={[0, v, 1000, v]} stroke="#ffffff" strokeWidth={1} />
+                    <Line points={[v, 0, v, 1000]} stroke={theme.grille} strokeWidth={1} />
+                    <Line points={[0, v, 1000, v]} stroke={theme.grille} strokeWidth={1} />
                   </React.Fragment>
                 ))}
               </Group>
             ) : null}
           </Tourne>
-        </Layer>
-        <Layer listening={false} visible={visible.callouts.visible}>
+          {theme.vignette > 0 ? (
+            <Rect
+              x={-4000}
+              y={-4000}
+              width={9000}
+              height={9000}
+              fillRadialGradientStartPoint={{ x: 4500, y: 4500 }}
+              fillRadialGradientEndPoint={{ x: 4500, y: 4500 }}
+              fillRadialGradientStartRadius={400}
+              fillRadialGradientEndRadius={1150}
+              fillRadialGradientColorStops={[0, 'rgba(0,0,0,0)', 1, alpha('#000000', theme.vignette)]}
+            />
+          ) : null}
           <Tourne rotation={rotation}>
-            {(carte?.zones ?? []).map(z => {
-              const c = centre(z.points);
-              return (
-                <Group key={z.cle}>
-                  <Line points={z.points} closed fill={z.couleur ?? '#ffffff'} opacity={0.08} stroke={z.couleur ?? '#ffffff'} strokeWidth={1.5} />
-                  <Etiquette x={c.x} y={c.y} texte={z.nom} taille={18} couleur={z.couleur ?? '#e5e7eb'} rotation={-rotation} />
-                </Group>
-              );
-            })}
-            {(carte?.reperes ?? []).map(r => (
-              <Group key={r.cle} x={r.x} y={r.y} opacity={niveau !== null && typeof r.niveau === 'number' && r.niveau !== niveau ? 0.35 : 1}>
-                {r.type === 'callout' ? (
-                  <>
-                    <Circle radius={3} fill="#e5e7eb" opacity={0.8} />
-                    <Etiquette x={0} y={-12} texte={r.nom} taille={13} couleur="#e5e7eb" rotation={-rotation} />
-                  </>
-                ) : (
-                  <>
-                    <Rect x={-10} y={-10} width={20} height={20} rotation={45} fill={r.type === 'site' || r.type === 'plant' ? '#f59e0b' : r.type === 'cashout' || r.type === 'coffre' ? '#22c55e' : '#94a3b8'} stroke="#0b0f17" strokeWidth={2} />
-                    <Etiquette x={0} y={26} texte={r.nom} taille={16} rotation={-rotation} />
-                  </>
-                )}
+            {visible.callouts.visible ? (
+              <>
+                {(carte?.zones ?? []).map(z => {
+                  const c = centre(z.points);
+                  const cz = z.couleur ?? theme.etiquette;
+                  return (
+                    <Group key={z.cle}>
+                      <Line points={z.points} closed fill={alpha(cz, theme.zone)} stroke={alpha(cz, 0.55)} strokeWidth={1.3} lineJoin="round" perfectDrawEnabled={false} />
+                      <Group x={c.x} y={c.y} name="callout-etiquette" visible={etiquettes} opacity={opaciteEtiquette(c.x, c.y, e?.objets ?? [])}>
+                        <Group name="jeton-texte" rotation={-rotation}>
+                          <Halo texte={z.nom} taille={T.typo.s} couleur={z.couleur ? melanger(z.couleur, '#ffffff', 0.55) : theme.etiquette} capitales />
+                        </Group>
+                      </Group>
+                    </Group>
+                  );
+                })}
+                {(carte?.reperes ?? []).map(r => {
+                  const estompe = niveau !== null && typeof r.niveau === 'number' && r.niveau !== niveau ? 0.35 : 1;
+                  const reperes = T.reperes as Record<string, string>;
+                  const cr = reperes[r.type] ?? (r.type.startsWith('spawn') ? reperes.spawn : reperes.autre);
+                  const nom = r.nom.trim();
+                  const court = /^[A-Za-z0-9]{1,2}$/.test(nom);
+                  const lettre = (court ? nom : (/\b([A-Za-z0-9])$/.exec(nom)?.[1] ?? nom[0] ?? '?')).toUpperCase();
+                  if (r.type === 'callout') {
+                    return (
+                      <Group key={r.cle} x={r.x} y={r.y} opacity={estompe * opaciteEtiquette(r.x, r.y, e?.objets ?? [])} name="callout-etiquette" visible={etiquettes}>
+                        <Circle radius={2.5} fill={theme.etiquette} opacity={0.8} />
+                        <Group name="jeton-texte" rotation={-rotation} y={-11}>
+                          <Halo texte={nom} taille={T.typo.xs} couleur={theme.etiquette} capitales />
+                        </Group>
+                      </Group>
+                    );
+                  }
+                  const site = r.type === 'site' || r.type === 'plant';
+                  return (
+                    <Group key={r.cle} x={r.x} y={r.y} opacity={estompe}>
+                      {site ? (
+                        <Circle radius={38} fill={alpha(cr, 0.13)} stroke={alpha(cr, 0.75)} strokeWidth={1.6} dash={[5, 6]} perfectDrawEnabled={false} />
+                      ) : (
+                        <Rect x={-13} y={-13} width={26} height={26} cornerRadius={r.type.startsWith('spawn') ? 13 : 6} fill={alpha(cr, 0.9)} stroke={T.halo} strokeWidth={1.8} perfectDrawEnabled={false} />
+                      )}
+                      <Group rotation={-rotation}>
+                        <Halo texte={r.type === 'cashout' ? '$' : lettre} taille={site ? 30 : 15} couleur={site ? melanger(cr, '#ffffff', 0.35) : '#ffffff'} largeur={90} opacite={site ? opaciteEtiquette(r.x, r.y, e?.objets ?? []) : 1} />
+                        {!court ? (
+                          <Group y={site ? 50 : 26} name="callout-etiquette" visible={etiquettes}>
+                            <Group name="jeton-texte">
+                              <Halo texte={nom} taille={T.typo.xs} couleur={theme.etiquette} capitales />
+                            </Group>
+                          </Group>
+                        ) : null}
+                      </Group>
+                    </Group>
+                  );
+                })}
+              </>
+            ) : null}
+          </Tourne>
+        </Layer>
+        <Layer listening={editable}>
+          <Tourne rotation={rotation}>
+            {fantomes.length ? (
+              <Group listening={false} name="hors-export">
+                {liens.map(l => (
+                  <Line key={l.id} points={[l.depart.x, l.depart.y, l.arrivee.x, l.arrivee.y]} stroke="#ffffff" strokeWidth={1.6} dash={[3, 6]} opacity={0.5} lineCap="round" />
+                ))}
+                {fantomes.map(o => rendreObjet(o, { fantome: true }))}
+              </Group>
+            ) : null}
+            {CALQUES_OBJETS.map(c => (
+              <Group key={c} visible={visible[c].visible} listening={!visible[c].verrou}>
+                {objetsDe(c).map(o => rendreObjet(o))}
               </Group>
             ))}
           </Tourne>
         </Layer>
-        {(['vision', 'utilitaires', 'marqueurs', 'dessins', 'texte'] as const).map(c => (
-          <Layer key={c} visible={visible[c].visible} listening={!visible[c].verrou && editable}>
-            <Tourne rotation={rotation}>
-              {objetsDe(c).map(rendreObjet)}
-              {c === 'dessins' && brouillon?.type === 'trace' ? (
-                outil === 'fleche' ? (
-                  <Arrow points={brouillon.points} stroke={p.couleur} fill={p.couleur} strokeWidth={p.epaisseur} tension={0.35} pointerLength={16} pointerWidth={16} dash={p.tirets ? [14, 10] : undefined} listening={false} />
-                ) : (
-                  <Line points={brouillon.points} stroke={p.couleur} strokeWidth={p.epaisseur} tension={0.35} dash={p.tirets ? [14, 10] : undefined} listening={false} />
-                )
-              ) : null}
-              {c === 'dessins' && brouillon?.type === 'forme' ? (
-                p.formeDessin === 'rect' ? (
-                  <Rect x={brouillon.x} y={brouillon.y} width={brouillon.l} height={brouillon.h} stroke={p.couleur} strokeWidth={3} dash={[8, 6]} listening={false} />
-                ) : (
-                  <Ellipse x={brouillon.x + brouillon.l / 2} y={brouillon.y + brouillon.h / 2} radiusX={Math.abs(brouillon.l / 2)} radiusY={Math.abs(brouillon.h / 2)} stroke={p.couleur} strokeWidth={3} dash={[8, 6]} listening={false} />
-                )
-              ) : null}
-            </Tourne>
-          </Layer>
-        ))}
-        {(fantome && ((outil === 'capacite' && p.capacite) || (outil === 'agent' && p.agent))) || visee ? (
-          <Layer listening={false}>
-            <Tourne rotation={rotation}>
-              {(() => {
-                const c = p.joueur !== null ? couleurJoueur(doc, p.joueur) : p.couleur;
-                if (visee) {
-                  const glisse = estGlisse(visee, SEUIL_GLISSER_PX * parPixel);
-                  const o = visee.origine;
-                  const tige = glisse ? <Arrow points={[o.x, o.y, visee.pointeur.x, visee.pointeur.y]} stroke="#ffffff" fill="#ffffff" strokeWidth={2 * parPixel} dash={[8 * parPixel, 6 * parPixel]} pointerLength={10 * parPixel} pointerWidth={10 * parPixel} opacity={0.8} /> : null;
-                  if (outil === 'capacite' && p.capacite) {
-                    const pose = glisse ? poseCapacite(visee, zoneDeBase(), echelle, p.capacite.donnees, maj) : { x: o.x, y: o.y, zone: zonePourPose(o) };
-                    return (
-                      <Group opacity={0.7}>
-                        {pose.zone ? <FormeZone p={primitiveZone(pose.x, pose.y, pose.zone, echelle)} couleur={c} ox={0} oy={0} /> : null}
-                        {tige}
-                        <Circle x={pose.x} y={pose.y} radius={6 * parPixel} fill={c} stroke="#ffffff" strokeWidth={1.5 * parPixel} />
-                        {pose.zone ? <Etiquette x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={cote(pose.zone)} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} /> : null}
-                      </Group>
-                    );
-                  }
-                  if (outil === 'vision' && glisse) {
-                    const v = poseVision(visee, echelle, maj);
-                    return (
-                      <Group opacity={0.7}>
-                        <Wedge x={v.x} y={v.y} radius={v.portee * echelleEffective(echelle)} angle={p.vision?.ouverture ?? 90} rotation={v.angle - (p.vision?.ouverture ?? 90) / 2} fill={c} opacity={0.25} stroke={c} strokeWidth={2} dash={[8, 6]} />
-                        <Etiquette x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={`${v.portee} m · ${Math.round(((v.angle % 360) + 360) % 360)}°`} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} />
-                      </Group>
-                    );
-                  }
+        <Layer ref={dessus}>
+          <Tourne rotation={rotation}>
+            {brouillon?.type === 'trace' ? (
+              outil === 'fleche' ? (
+                <Arrow points={brouillon.points} stroke={p.couleur} fill={p.couleur} strokeWidth={p.epaisseur} tension={0.35} pointerLength={16} pointerWidth={16} dash={p.tirets ? [14, 10] : undefined} lineCap="round" listening={false} />
+              ) : (
+                <Line points={brouillon.points} stroke={p.couleur} strokeWidth={p.epaisseur} tension={0.35} dash={p.tirets ? [14, 10] : undefined} lineCap="round" listening={false} />
+              )
+            ) : null}
+            {brouillon?.type === 'forme' ? (
+              p.formeDessin === 'rect' ? (
+                <Rect x={brouillon.x} y={brouillon.y} width={brouillon.l} height={brouillon.h} stroke={p.couleur} strokeWidth={3} dash={[8, 6]} listening={false} />
+              ) : (
+                <Ellipse x={brouillon.x + brouillon.l / 2} y={brouillon.y + brouillon.h / 2} radiusX={Math.abs(brouillon.l / 2)} radiusY={Math.abs(brouillon.h / 2)} stroke={p.couleur} strokeWidth={3} dash={[8, 6]} listening={false} />
+              )
+            ) : null}
+            {cadreSel ? (
+              <Rect
+                x={Math.min(cadreSel.a.x, cadreSel.b.x)}
+                y={Math.min(cadreSel.a.y, cadreSel.b.y)}
+                width={Math.abs(cadreSel.b.x - cadreSel.a.x)}
+                height={Math.abs(cadreSel.b.y - cadreSel.a.y)}
+                fill="rgba(255,255,255,0.08)"
+                stroke="#ffffff"
+                strokeWidth={1.5 * parPixel}
+                dash={[6 * parPixel, 4 * parPixel]}
+                listening={false}
+              />
+            ) : null}
+            {(() => {
+              // Aperçu de ce que l'on pose : capacité à sa taille réelle, pion avec son PORTRAIT.
+              if (visee) {
+                const glisseV = estGlisse(visee, SEUIL_GLISSER_PX * parPixel);
+                const o = visee.origine;
+                const tige = glisseV ? <Arrow points={[o.x, o.y, visee.pointeur.x, visee.pointeur.y]} stroke="#ffffff" fill="#ffffff" strokeWidth={2 * parPixel} dash={[8 * parPixel, 6 * parPixel]} pointerLength={10 * parPixel} pointerWidth={10 * parPixel} opacity={0.8} listening={false} /> : null;
+                if (outil === 'capacite' && p.capacite) {
+                  const pose = glisseV ? poseCapacite(visee, zoneDeBase(), echelle, p.capacite.donnees, maj) : { x: o.x, y: o.y, zone: zonePourPose(o) };
+                  const st = styleCapacite(pose.zone, p.capacite.donnees, p.capacite.nom);
                   return (
-                    <Group opacity={0.8}>
-                      {tige}
-                      {outil === 'agent' && p.agent ? (
-                        <Group x={o.x} y={o.y} rotation={-rotation}>
-                          <Jeton rayon={20} couleur={c} nom={p.agent.nom} icone={sourcesIcone(p.agent)} images={images} surbrillance={false} />
+                    <Group opacity={0.75} listening={false}>
+                      {pose.zone ? (
+                        <Group x={pose.x} y={pose.y}>
+                          <FormeCapacite id="apercu" zone={pose.zone} x={pose.x} y={pose.y} genre={st.genre} couleur={couleurPose} ultime={st.ultime} chaud={st.chaud} creux={false} segments={segmentsMur(p.capacite.donnees)} echelle={echelle} d={1} />
                         </Group>
-                      ) : (
-                        <Circle x={o.x} y={o.y} radius={20} fill={c} opacity={0.5} stroke="#ffffff" strokeWidth={1.5} />
-                      )}
+                      ) : null}
+                      {tige}
+                      <Circle x={pose.x} y={pose.y} radius={6 * parPixel} fill={couleurPose} stroke="#ffffff" strokeWidth={1.5 * parPixel} />
+                      {pose.zone ? <Halo x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={cote(pose.zone)} taille={15 * parPixel} couleur={T.cote} rotation={-rotation} /> : null}
                     </Group>
                   );
                 }
-                if (!fantome) return null;
-                // Fantôme du pion : portrait de l'agent armé sous le pointeur (même image que le pion posé).
-                if (outil === 'agent' && p.agent)
+                if (outil === 'vision' && glisseV) {
+                  const v = poseVision(visee, echelle, maj);
                   return (
-                    <Group x={fantome.x} y={fantome.y} rotation={-rotation} opacity={0.6} name="fantome-agent">
-                      <Jeton rayon={20} couleur={c} nom={p.agent.nom} icone={sourcesIcone(p.agent)} images={images} surbrillance={false} />
+                    <Group opacity={0.75} listening={false}>
+                      <Wedge x={v.x} y={v.y} radius={v.portee * echelleEffective(echelle)} angle={p.vision?.ouverture ?? 90} rotation={v.angle - (p.vision?.ouverture ?? 90) / 2} fill={alpha(couleurPose, 0.25)} stroke={couleurPose} strokeWidth={2} dash={[8, 6]} />
+                      <Halo x={visee.pointeur.x} y={visee.pointeur.y - 26 * parPixel} texte={`${v.portee} m · ${Math.round(((v.angle % 360) + 360) % 360)}°`} taille={15 * parPixel} couleur={T.cote} rotation={-rotation} />
                     </Group>
                   );
-                const z = zonePourPose(fantome);
+                }
                 return (
-                  <Group opacity={0.55}>
-                    {z ? <FormeZone p={primitiveZone(fantome.x, fantome.y, z, echelle)} couleur={c} ox={0} oy={0} /> : null}
-                    <Circle x={fantome.x} y={fantome.y} radius={5} fill={c} stroke="#ffffff" strokeWidth={1.5} />
-                    {z ? <Etiquette x={fantome.x} y={fantome.y - 30} texte={cote(z)} taille={16} rotation={-rotation} /> : null}
+                  <Group opacity={0.85} listening={false}>
+                    {tige}
+                    {outil === 'agent' ? pionApercu(o.x, o.y) : null}
                   </Group>
                 );
-              })()}
-            </Tourne>
-          </Layer>
-        ) : null}
-        {choisi?.type === 'capacite' && choisi.zone ? (
-          <Layer listening={false}>
-            <Tourne rotation={rotation}>
-              <Etiquette
-                x={(mesPoignees.find(h => h.cle === 'fin') ?? mesPoignees[mesPoignees.length - 1] ?? choisi).x}
-                y={(mesPoignees.find(h => h.cle === 'fin') ?? mesPoignees[mesPoignees.length - 1] ?? choisi).y + 30 * parPixel} texte={`${cote(choisi.zone)}${maxChoisi !== undefined ? ` (max ${maxChoisi} m)` : ''}`} taille={15 * parPixel} couleur="#fde68a" rotation={-rotation} largeur={320 * parPixel} />
-            </Tourne>
-          </Layer>
-        ) : null}
-        {choisi && mesPoignees.length ? (
-          <Layer testID="esport-canevas-poignees">
-            <Tourne rotation={rotation}>
-              {(() => {
-                // Repères du geste : tige de l'origine à la poignée de direction, cercle de la longueur réelle.
-                const fin = mesPoignees.find(h => h.cle === 'fin' || h.cle === 'regard');
-                const origine = 'x' in choisi ? { x: choisi.x, y: choisi.y } : { x: 0, y: 0 };
-                const k = echelleEffective(echelle);
-                const anneauMax = fin && maxChoisi !== undefined && choisi.type === 'capacite' && choisi.zone && choisi.zone.forme !== 'trajet' && choisi.zone.forme !== 'cercle';
+              }
+              if (!fantome || !editable) return null;
+              if (outil === 'agent')
                 return (
-                  <>
-                    {anneauMax ? <Circle x={origine.x} y={origine.y} radius={(maxChoisi as number) * k} stroke="#fde68a" strokeWidth={1.5 * parPixel} dash={[6 * parPixel, 6 * parPixel]} opacity={0.6} listening={false} /> : null}
-                    {fin ? <Line points={[origine.x, origine.y, fin.x, fin.y]} stroke="#ffffff" strokeWidth={2.5 * parPixel} dash={[7 * parPixel, 5 * parPixel]} opacity={0.9} listening={false} /> : null}
-                  </>
+                  <Group opacity={0.6} listening={false}>
+                    {pionApercu(fantome.x, fantome.y)}
+                  </Group>
                 );
-              })()}
-              {mesPoignees.map(h => (
-                <Group key={h.cle}>
+              if (outil !== 'capacite' || !p.capacite) return null;
+              const z = zonePourPose(fantome);
+              const st = styleCapacite(z, p.capacite.donnees, p.capacite.nom);
+              return (
+                <Group opacity={0.55} listening={false}>
+                  {z ? (
+                    <Group x={fantome.x} y={fantome.y}>
+                      <FormeCapacite id="apercu" zone={z} x={fantome.x} y={fantome.y} genre={st.genre} couleur={couleurPose} ultime={st.ultime} chaud={st.chaud} creux={false} segments={segmentsMur(p.capacite.donnees)} echelle={echelle} d={1} />
+                    </Group>
+                  ) : null}
+                  <Circle x={fantome.x} y={fantome.y} radius={5 * parPixel} fill={couleurPose} stroke="#ffffff" strokeWidth={1.5 * parPixel} />
+                  {z ? <Halo x={fantome.x} y={fantome.y - 30 * parPixel} texte={cote(z)} taille={14 * parPixel} couleur={T.cote} rotation={-rotation} /> : null}
+                </Group>
+              );
+            })()}
+            {/* Étiquette de la capacité survolée ou choisie : nom, taille réelle, durée. */}
+            {(() => {
+              const o = (choisi?.type === 'capacite' ? choisi : undefined) ?? (survole?.type === 'capacite' ? survole : undefined);
+              const texte = etiquetteDe(o);
+              if (!o || !texte || visee) return null;
+              const ancre = mesPoignees.length && choisi?.id === o.id ? (mesPoignees.find(h => h.cle === 'fin') ?? mesPoignees[mesPoignees.length - 1]) : undefined;
+              const pt = ancre ? { x: ancre.x, y: ancre.y + 30 * parPixel } : { x: o.x, y: o.y - 30 * parPixel };
+              return <Halo x={pt.x} y={pt.y} texte={`${texte}${choisi?.id === o.id && maxChoisi !== undefined ? ` (max ${maxChoisi} m)` : ''}`} taille={13.5 * parPixel} couleur={T.cote} rotation={-rotation} largeur={420 * parPixel} />;
+            })()}
+            {choisi && mesPoignees.length ? (
+              <Group>
+                {(() => {
+                  // Repères du geste : tige de l'origine à la poignée de direction, cercle de la longueur réelle.
+                  const fin = mesPoignees.find(h => h.cle === 'fin' || h.cle === 'regard');
+                  const origine = 'x' in choisi ? { x: choisi.x, y: choisi.y } : { x: 0, y: 0 };
+                  const k = echelleEffective(echelle);
+                  const anneauMax = fin && maxChoisi !== undefined && choisi.type === 'capacite' && choisi.zone && choisi.zone.forme !== 'trajet' && choisi.zone.forme !== 'cercle';
+                  return (
+                    <>
+                      {anneauMax ? <Circle x={origine.x} y={origine.y} radius={(maxChoisi as number) * k} stroke={T.cote} strokeWidth={1.5 * parPixel} dash={[6 * parPixel, 6 * parPixel]} opacity={0.6} listening={false} /> : null}
+                      {fin ? <Line points={[origine.x, origine.y, fin.x, fin.y]} stroke="#ffffff" strokeWidth={2 * parPixel} dash={[7 * parPixel, 5 * parPixel]} opacity={0.85} listening={false} /> : null}
+                    </>
+                  );
+                })()}
+                {mesPoignees.map(h => (
                   <Circle
+                    key={h.cle}
                     name="poignee"
-                    testID={`poignee-${h.cle}`}
                     x={h.x}
                     y={h.y}
                     radius={RAYON_POIGNEE_PX * parPixel}
                     fill={h.cle === 'courbe' ? '#f59e0b' : h.cle === 'debut' ? '#38bdf8' : h.cle.startsWith('p') ? '#86efac' : '#ffffff'}
-                    stroke="#0b0f17"
+                    stroke={T.halo}
                     strokeWidth={2.5 * parPixel}
                     hitStrokeWidth={2 * (PRISE_POIGNEE_PX - RAYON_POIGNEE_PX) * parPixel}
-                    shadowColor="#000000"
-                    shadowBlur={6 * parPixel}
-                    shadowOpacity={0.5}
+                    perfectDrawEnabled={false}
                     draggable
                     onMouseEnter={() => {
                       const c = scene.current?.container();
@@ -933,19 +1126,28 @@ export default function CanevasStrat(p: PropsCanevas) {
                     }}
                     onMouseLeave={() => {
                       const c = scene.current?.container();
-                      if (c) c.style.cursor = '';
+                      if (c) c.style.cursor = curseur;
                     }}
                     onDragStart={ev => {
                       ev.cancelBubble = true;
+                      annulerAppuiLong();
+                      p.onOccupe?.(true);
                     }}
                     onDragMove={ev => poigneeBouge(h.cle, ev)}
                     onDragEnd={ev => poigneeFin(h.cle, ev)}
                   />
-                </Group>
-              ))}
-            </Tourne>
-          </Layer>
-        ) : null}
+                ))}
+              </Group>
+            ) : null}
+            {trainee.length > 1 ? (
+              <Group listening={false}>
+                <Line points={trainee.flatMap(t => [t.x, t.y])} stroke="#ff2d2d" strokeWidth={12 * parPixel} opacity={0.25} lineCap="round" lineJoin="round" tension={0.4} />
+                <Line points={trainee.flatMap(t => [t.x, t.y])} stroke="#ff5a5a" strokeWidth={4 * parPixel} lineCap="round" lineJoin="round" tension={0.4} />
+              </Group>
+            ) : null}
+            {trainee.length ? <Circle x={trainee[trainee.length - 1].x} y={trainee[trainee.length - 1].y} radius={6 * parPixel} fill="#ffffff" stroke="#ff2d2d" strokeWidth={3 * parPixel} listening={false} /> : null}
+          </Tourne>
+        </Layer>
       </Stage>
     </div>
   );

@@ -3,7 +3,7 @@
  * (390 × 844 et 360 × 800). Parcourt Dashboard, Teams, Membres, Administration (chaque sous-onglet : Tickets et sa
  * configuration, Statistiques, Jeux, Rôles et permissions, Bot Esport HQ et chacune de ses sections, Événements, Devblog), Notifications, l'espace CM (chaque
  * groupe et chaque sous-onglet), la page de la team (chaque section et chaque module ; bulles du calendrier et de l'heure
- * du formulaire du Planning), les Réglages de la team
+ * du formulaire du Planning ; l'atelier de strats plein écran : lecture, édition, menu, tiroir, présentation), les Réglages de la team
  * et ceux du hub. Mesure `document.documentElement.scrollWidth > window.innerWidth` ; en cas d'échec, liste les
  * éléments qui dépassent à droite. Code de sortie 1 au moindre débordement.
  *
@@ -96,6 +96,23 @@ const GROUPES = {
   'module-meeting_summaries': 'equipe', 'module-goals_tasks': 'equipe', 'module-player_notes': 'equipe', 'module-cm': 'equipe', membres: 'equipe',
   parametres: 'reglages', 'module-discord': 'reglages', journal: 'reglages',
 };
+
+/** Une strat dans la team des graines (créée une fois par l'API) : l'atelier s'ouvre dessus. */
+let stratDemo;
+async function stratDeDemonstration() {
+  if (stratDemo !== undefined) return stratDemo;
+  stratDemo = null;
+  try {
+    const appel = async (chemin, jeton, corps) => (await fetch(`${esport.url}${chemin}`, { method: corps ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}` }, body: corps ? JSON.stringify(corps) : undefined })).json();
+    const session = (await appel('/session', JETON, {})).session;
+    const teams = (await appel('/teams', session)).teams ?? [];
+    const team = teams.find(t => t.slug === 'faucons-valorant');
+    if (team) stratDemo = (await appel(`/teams/${team.id}/strats`, session, { titre: 'Démonstration', type: 'default', carte: { cle: 'ascent', nom: 'Ascent', image: null }, side: 'attaque' })).id ?? null;
+  } catch {
+    stratDemo = null;
+  }
+  return stratDemo;
+}
 
 async function ouvrirEsport(page) {
   if (await page.getByTestId('app-esport').count()) await page.getByTestId('retour-hub').first().click();
@@ -276,6 +293,32 @@ async function parcourir(page, taille) {
         }
       }
       if (await present(page, 'esport-lineups-vue-grille', 1500)) await page.getByTestId('esport-lineups-vue-grille').first().click();
+    }
+    // Strats : l'atelier plein écran (lecture, puis « Modifier », menu « Plus », tiroir en feuille, présentation).
+    if (id === 'module-strat_editor') {
+      const stratId = await stratDeDemonstration();
+      if (stratId && (await present(page, `esport-strat-ouvrir-${stratId}`, 8000))) {
+        await page.getByTestId(`esport-strat-ouvrir-${stratId}`).first().click();
+        await page.locator('[data-testid="esport-canevas"] canvas').first().waitFor({ timeout: 30_000 });
+        await controler(page, 'team-strats-atelier', taille);
+        await page.getByTestId('esport-atelier-mode-edition').first().click();
+        await controler(page, 'team-strats-atelier-edition', taille);
+        await page.getByTestId('esport-editeur-plus').first().click();
+        await controler(page, 'team-strats-atelier-plus', taille);
+        await page.getByTestId('esport-bulle-plus-fond').first().click({ position: { x: 8, y: 8 } });
+        await page.getByTestId('esport-etape-note-ouvrir').first().click();
+        await controler(page, 'team-strats-atelier-tiroir', taille);
+        await page.getByTestId('esport-tiroir-fermer').first().click();
+        await page.getByTestId('esport-editeur-presentation').first().click();
+        await page.getByTestId('esport-presentation').waitFor({ timeout: 15_000 });
+        await controler(page, 'team-strats-presentation', taille);
+        await page.getByTestId('esport-presentation-fermer').first().click();
+        await page.getByTestId('esport-editeur-retour').first().click();
+        await page.getByTestId('esport-atelier-hote').waitFor({ state: 'detached', timeout: 20_000 });
+      } else {
+        echecs++;
+        console.log('  ECHEC strat de démonstration introuvable (atelier non contrôlé)');
+      }
     }
     // Disponibilités : aussi le mode « Planning différent chaque semaine » (choix de la semaine, bandeau, actions).
     if (id === 'module-availability' && (await present(page, 'esport-dispos-mode-semaine', 1500))) {

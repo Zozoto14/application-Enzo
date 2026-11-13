@@ -1,6 +1,6 @@
 /**
- * Éditeur de strats par modèle (panneaux testables sans canevas) : frise des étapes (phases du modèle,
- * durée, lecture animée), ordre des utilitaires, joueurs (3 pour The Finals), inspecteur (dimensions en
+ * Éditeur de strats par modèle (panneaux testables sans canevas ; la frise des étapes et l'onglet « Étape » du
+ * tiroir sont dans StratsAtelier.test.tsx) : ordre des utilitaires, joueurs (3 pour The Finals), inspecteur (dimensions en
  * mètres, marqueurs d'équipes adverses, étages), fiche d'une capacité « à vérifier » ; profils de jeu
  * précis : modèle de strat, pré-remplissage, capacités d'un personnage, détails d'une map (calibrage,
  * callouts, repères) ; liste des strats selon le modèle du jeu de la team.
@@ -11,7 +11,7 @@ import { Pressable, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { themeHub } from '../hub/themes';
 import { documentVide, appliquer, executer, historique, type Action, type DocumentStrat, type Historique, type ObjetStrat } from './strats/document';
-import { Chronologie, FicheCapacite, Inspecteur, ListeUtilitaires, PanneauJoueurs } from './ui/strats/Panneaux';
+import { FicheCapacite, Inspecteur, ListeUtilitaires, PanneauJoueurs } from './ui/strats/Panneaux';
 import { CapacitesPersonnage, DetailsCarte, ImportCartes, ModeleProfil } from './ui/jeux/DetailsJeu';
 import type { CarteJeu, DonneesJeu, PersonnageJeu } from './jeux/api';
 import { donneesVides } from './jeux/profil';
@@ -51,38 +51,6 @@ function banc(doc: DocumentStrat) {
   });
   return { etat, faire };
 }
-
-describe('frise des étapes et lecture', () => {
-  it('phases du modèle Valorant, durée, ajout d’étape ; boutons de lecture', async () => {
-    const { etat, faire } = banc(documentVide(ASCENT));
-    const onEtape = jest.fn();
-    const onLire = jest.fn();
-    await render(<Chronologie theme={theme} doc={etat.h.present} etape={0} onEtape={onEtape} faire={faire} modifiable enLecture={false} onLire={onLire} onPause={jest.fn()} onArreter={jest.fn()} />);
-    await fireEvent.press(screen.getByTestId('esport-etape-phase-post-plant'));
-    expect(etat.h.present.etapes[0].phase).toBe('post-plant');
-    await fireEvent.changeText(screen.getByTestId('esport-etape-duree'), '12');
-    expect(etat.h.present.etapes[0].duree).toBe(12);
-    await fireEvent.press(screen.getByTestId('esport-etape-ajouter'));
-    expect(etat.h.present.etapes).toHaveLength(2);
-    expect(etat.h.present.etapes[1].phase).toBe('post-plant');
-    expect(onEtape).toHaveBeenCalledWith(1);
-    await fireEvent.press(screen.getByTestId('esport-lecture-lire'));
-    expect(onLire).toHaveBeenCalled();
-    expect(screen.queryByTestId('esport-etape-phase-prise')).toBeNull();
-  });
-
-  it('The Finals : phases propres (prise, vol…), lecture en cours : temps et barre de progression', async () => {
-    const doc = documentVide(ASCENT, 'attaque', 'the-finals', 'thefinals');
-    const onPause = jest.fn();
-    await render(<Chronologie theme={theme} doc={doc} etape={0} onEtape={jest.fn()} faire={jest.fn()} modifiable temps={2.5} enLecture onLire={jest.fn()} onPause={onPause} onArreter={jest.fn()} />);
-    expect(screen.getByTestId('esport-etape-phase-prise')).toBeTruthy();
-    expect(screen.getByTestId('esport-etape-phase-vol')).toBeTruthy();
-    expect(screen.queryByTestId('esport-etape-phase-post-plant')).toBeNull();
-    expect(screen.getByTestId('esport-lecture-temps').props.children).toMatch(/2\.5/);
-    await fireEvent.press(screen.getByTestId('esport-lecture-pause'));
-    expect(onPause).toHaveBeenCalled();
-  });
-});
 
 describe('utilitaires, joueurs, inspecteur', () => {
   const cap = (id: string, ordre: number): ObjetStrat => ({ id, type: 'capacite', x: 0, y: 0, agent: 'omen', capacite: 'Ability2', nom: `Smoke ${id}`, icone: null, joueur: 0, couleur: '#ef4444', zone: { forme: 'cercle', rayon: 4.1 }, ordre });

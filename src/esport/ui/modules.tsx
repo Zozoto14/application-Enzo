@@ -26,6 +26,8 @@ export interface PropsModule {
   /** Review à ouvrir directement (ex. « Ouvrir en review vidéo » depuis le scouting). */
   reviewId?: string;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+  /** Ouvrir Administration › Jeux (profils de jeu : maps, échelle) ; absent : ce compte n'y a pas accès. */
+  onAdminJeux?(): void;
 }
 
 export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactElement> = {

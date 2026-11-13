@@ -140,7 +140,8 @@ export function apiStrats(client: ClientEsport) {
     detail: (teamId: string, id: string) => client.requete<Strat>(s(teamId, id)),
     creer: (teamId: string, corps: { titre: string; type: TypeStrat; carte: { cle: string; nom: string; image: string | null }; side: Side; tags?: string[]; visibilite?: 'team' | 'privee' }) =>
       client.requete<Strat>(`${t(teamId)}/strats`, 'POST', corps),
-    enregistrer: (teamId: string, id: string, corps: { revision: number; donnees?: DocumentStrat; miniature?: string; titre?: string; type?: TypeStrat; tags?: string[]; notes?: string }) =>
+    /** `auto` : enregistrement automatique de l'atelier (le serveur regroupe ces versions au lieu d'en empiler une par frappe). */
+    enregistrer: (teamId: string, id: string, corps: { revision: number; donnees?: DocumentStrat; miniature?: string; titre?: string; type?: TypeStrat; tags?: string[]; notes?: string; auto?: boolean }) =>
       client.requete<Strat>(s(teamId, id), 'PUT', corps),
     modifier: (teamId: string, id: string, corps: { titre?: string; type?: TypeStrat; tags?: string[]; notes?: string; visibilite?: 'team' | 'privee' }) => client.requete<Strat>(s(teamId, id), 'PATCH', corps),
     dupliquer: (teamId: string, id: string, titre?: string) => client.requete<Strat>(`${s(teamId, id)}/dupliquer`, 'POST', titre ? { titre } : {}),

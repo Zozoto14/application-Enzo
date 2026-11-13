@@ -29,6 +29,9 @@ import { completerIcones } from './svg.mjs';
 
 export const MODULE_STRATS = 'strat_editor';
 export const VERSIONS_GARDEES = 30;
+/** Versions de l'enregistrement automatique : identifiant préfixé, regroupées par personne sur cette durée. */
+export const PREFIXE_VERSION_AUTO = 'auto-';
+export const REGROUPEMENT_AUTO_MS = 5 * 60_000;
 export const DUREE_CORBEILLE_STRATS_MS = 30 * 86_400_000;
 export const TAILLE_MAX_MINIATURE = 256 * 1024;
 export const DUREE_LIEN_MINIATURE_MS = 60 * 60 * 1000;
@@ -283,10 +286,20 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     const revision = Number(s.revision) + 1;
     const miniature = await preparerMiniature(ctx, id, corps.miniature, s.miniature_id, t);
     const champs = Object.keys(m);
+    // Enregistrement AUTOMATIQUE de l'atelier (`auto`) : les versions automatiques d'une même personne se regroupent
+    // (celle de moins de 5 minutes avance au lieu d'en empiler une par pause de frappe) ; un « Enregistrer »
+    // explicite garde toujours sa version dans l'historique.
+    let versionAuto = null;
+    if (corps.auto === true) {
+      const derniere = await base.premier('SELECT id, cree_par, cree_le FROM strat_versions WHERE strat_id = ? AND revision = ?', [id, Number(s.revision)]);
+      if (derniere && String(derniere.id).startsWith(PREFIXE_VERSION_AUTO) && derniere.cree_par === acteur.compte && t - Date.parse(derniere.cree_le) < REGROUPEMENT_AUTO_MS) versionAuto = derniere;
+    }
     try {
       await base.lot([
         // D'abord la version : l'unicité (strat, révision) refuse un enregistrement concurrent.
-        { sql: 'INSERT INTO strat_versions (id, strat_id, team_id, revision, donnees, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)', params: [nouvelId(), id, teamId, revision, texte, acteur.compte, iso(t)] },
+        versionAuto
+          ? { sql: 'UPDATE strat_versions SET revision = ?, donnees = ? WHERE id = ? AND revision = ?', params: [revision, texte, versionAuto.id, Number(s.revision)] }
+          : { sql: 'INSERT INTO strat_versions (id, strat_id, team_id, revision, donnees, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?)', params: [`${corps.auto === true ? PREFIXE_VERSION_AUTO : ''}${nouvelId()}`.slice(0, 64), id, teamId, revision, texte, acteur.compte, iso(t)] },
         ...miniature.instructions,
         {
           sql: `UPDATE strats SET donnees = ?, version_document = ?, carte = ?, carte_nom = ?, side = ?, jeu = ?, revision = ?, miniature_id = ?, maj_par = ?, maj_le = ?${champs.map(c => `, ${c} = ?`).join('')} WHERE id = ? AND revision = ?`,

@@ -38,7 +38,7 @@ import { trLu } from '../../i18n/lineups';
 /** Seules les images du CDN Riot entrent dans un document (une image déposée se lit dans le profil, lien signé). */
 const imageDocument = (url: string | null): string | null => (url && /^https:\/\/media\.valorant-api\.com\//.test(url) ? url : null);
 
-export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
+export function Strats({ theme, client, detail, large, onAller, onAdminJeux }: PropsModule) {
   const teamId = detail.team.id;
   const api = useMemo(() => apiStrats(client), [client]);
   // Maps et agents du profil de jeu de la team (Valorant : avec les images Riot).
@@ -100,6 +100,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         large={large}
         assets={assets}
         onRetour={() => setOuverte(undefined)}
+        onAdminJeux={onAdminJeux}
         onOuvrir={id => setOuverte(id)}
         onSupprimee={x => {
           setOuverte(undefined);
