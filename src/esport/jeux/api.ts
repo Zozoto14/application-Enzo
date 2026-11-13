@@ -111,6 +111,8 @@ export interface CapaciteJeu {
   /** Mur double : deux lignes parallèles écartées de la largeur (Fast Lane de Neon). */
   double?: boolean;
   notes?: string;
+  /** Accent propre à la capacité (#rrggbb), quand il diffère de celui du personnage. */
+  couleur?: string;
   /** Données pré-remplies, à vérifier par le Fondateur. */
   aVerifier: boolean;
 }
@@ -137,6 +139,8 @@ export interface PersonnageJeu {
   classe: string | null;
   image: string | null;
   actif: boolean;
+  /** Accent du personnage (#rrggbb) : couleur de ses capacités dans une strat réglée sur « Couleur : agent ». */
+  couleur?: string;
   capacites?: CapaciteJeu[];
   /** Portrait importé (lien signé dans `ProfilJeu.images`) et son origine. */
   fichier?: string;

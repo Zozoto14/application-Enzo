@@ -28,6 +28,7 @@
  *   personnages[].source    { fournisseur, url, le, empreinte }                    origine du portrait
  *   personnages[].officielles [{ touche, slot, nom, description, fichier, url }]   capacités officielles (icônes)
  *   classes[].fichier       icône du rôle importée
+ *   personnages[].couleur   accent du personnage (#rrggbb) : couleur de ses capacités dans une strat
  *   personnages[].capacites [{ cle, nom, touche, categorie, forme, rayon, longueur, largeur, ouverture,
  *                      portee, duree, charges, cout, courbable, double, notes, aVerifier }]   dimensions en mètres
  * Ces champs sont propres au club (images déposées, calibrages, données vérifiées par le Fondateur) :
@@ -60,7 +61,7 @@ export const TYPES_REPERES = ['site', 'spawn-attaque', 'spawn-defense', 'cashout
 export const METHODES_ECHELLE = ['manuel', 'import', 'approx'];
 export const MAX_DETAILS = { capacites: 40, zones: 150, pointsZone: 48, reperes: 120, niveaux: 12, officielles: 8 };
 /** Champs propres au club, jamais proposés par l'IA. */
-export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux', 'source'], personnages: ['capacites', 'fichier', 'source', 'officielles'], classes: ['fichier'] };
+export const CHAMPS_LOCAUX = { cartes: ['fichier', 'echelle', 'zones', 'reperes', 'niveaux', 'source'], personnages: ['capacites', 'couleur', 'fichier', 'source', 'officielles'], classes: ['fichier'] };
 export const MAX_ELEMENTS = { formats: 20, modes: 40, cartes: 80, classes: 20, personnages: 200, rolesJoueurs: 30, champs: 40, sources: 20 };
 /** Taille max d'un profil sérialisé (octets UTF-8). */
 export const TAILLE_MAX_PROFIL = 1024 * 1024;
@@ -179,6 +180,8 @@ const ELEMENTS = {
       image: imageCtx(v.image, `${c}.image`, ctx),
       actif: booleen(v.actif),
       ...(capacites.length ? { capacites } : {}),
+      // Accent du personnage (#rrggbb) : couleur de ses capacités dans une strat réglée sur « Couleur : agent ».
+      ...(typeof v.couleur === 'string' && MOTIF_COULEUR.test(v.couleur) ? { couleur: v.couleur.toLowerCase() } : {}),
       ...fichierFacultatif(v.fichier, `${c}.fichier`),
       ...(source ? { source } : {}),
       ...(officielles.length ? { officielles } : {}),
@@ -283,6 +286,8 @@ function lireCapacite(v, c) {
   if (booleen(v.double, false)) sortie.double = true;
   const notes = texteLong(v.notes, 300);
   if (notes) sortie.notes = notes;
+  // Accent propre à la capacité (#rrggbb), quand il diffère de celui du personnage.
+  if (typeof v.couleur === 'string' && MOTIF_COULEUR.test(v.couleur)) sortie.couleur = v.couleur.toLowerCase();
   sortie.aVerifier = booleen(v.aVerifier, false);
   return sortie;
 }

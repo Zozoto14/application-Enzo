@@ -412,7 +412,7 @@ function Puce({ o, couleur, icone, images, selectionne, rotation, ultime, vie }:
 
 // ------------------------------------------------------------------ Marqueurs
 
-const LETTRES: Partial<Record<GenreMarqueur, string>> = { plant: 'P', defuse: 'D', spawn: 'S', info: 'i', rotation: 'R', cashout: '$', coffre: 'C', danger: '!', tiers: '3', objectif: '' };
+const LETTRES: Partial<Record<GenreMarqueur, string>> = T.lettresMarqueur;
 
 /** Glyphe d'un marqueur selon son genre, avec sa lettre ; mur ou sol à casser : carré fissuré. */
 function Marqueur({ genre, couleur }: { genre: GenreMarqueur; couleur: string }) {

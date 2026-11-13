@@ -420,6 +420,7 @@ export function EditeurProfil({
                     personnage={p}
                     modele={modeleStrat ?? 'generique'}
                     onCapacites={capacites => setD(x => ({ ...x, personnages: x.personnages.map((e, j) => (j === i ? (capacites?.length ? { ...e, capacites } : (({ capacites: _, ...reste }) => reste)(e)) : e)) }))}
+                    onCouleur={couleur => setD(x => ({ ...x, personnages: x.personnages.map((e, j) => (j === i ? (couleur ? { ...e, couleur } : (({ couleur: _, ...reste }) => reste)(e)) : e)) }))}
                     testID={`${testID}-personnage-${i}-capacites`}
                   />
                 ) : null}

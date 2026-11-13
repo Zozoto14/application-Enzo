@@ -15,7 +15,7 @@ import type { ClientEsport } from '../client';
 import { SLOTS, cleRole, type AgentAsset, type Assets, type CapaciteAsset, type CarteAsset } from '../strats/assets';
 import { modeleDuJeu } from '../strats/modeles';
 import { apiJeux, type CapaciteJeu, type CapaciteOfficielle, type DonneesJeu, type FormatJeu, type ProfilJeu } from './api';
-import { capacitesPrereplies, modeleTheFinals } from './modeles';
+import { accentPrerempli, capacitesPrereplies, modeleTheFinals } from './modeles';
 
 /** « 5v5 », « 3v3v3v3 » ; au-delà de 4 équipes « 20 × 3 ». */
 export function libelleFormat(f: Pick<FormatJeu, 'equipes' | 'joueursParEquipe'>): string {
@@ -97,6 +97,8 @@ export function assetsDepuisProfil(profil: ProfilJeu, riot?: Assets, maintenant 
       iconeDoc: p.source?.url ?? r?.iconeDoc ?? r?.icone ?? null,
       capacites: fusionnerCapacites(officielles, donnees),
       actif: p.actif,
+      // Accent : celui du profil (Administration › Jeux), sinon le pré-rempli du modèle (« à vérifier »).
+      couleur: p.couleur ?? accentPrerempli(modele, p) ?? null,
     };
   });
   return { jeu: valorant ? 'valorant' : profil.cle, modele, source: riot && valorant ? riot.source : 'profil', cartes, agents, majLe: maintenant };
@@ -130,13 +132,13 @@ export function fusionnerCapacites(riot: CapaciteAsset[], donnees: CapaciteJeu[]
       const x = donnees.find(y => y.touche && y.touche.toUpperCase() === c.touche.toUpperCase() && !utilisees.has(y));
       if (x) utilisees.add(x);
       // Repli générique sans réseau (« Capacité E », sans icône) : le nom du profil est plus parlant.
-      return x ? { ...c, nom: c.icone ? c.nom : x.nom, donnees: x } : c;
+      return x ? { ...c, nom: c.icone ? c.nom : x.nom, donnees: x, couleur: x.couleur ?? null } : c;
     });
     // Capacités du profil sans équivalent Riot (gadgets, ajouts du Fondateur).
-    for (const x of donnees) if (!utilisees.has(x)) sortie.push({ cle: x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x });
+    for (const x of donnees) if (!utilisees.has(x)) sortie.push({ cle: x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x, couleur: x.couleur ?? null });
     return sortie;
   }
-  return donnees.map(x => ({ cle: SLOTS[x.touche.toUpperCase()] ?? x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x }));
+  return donnees.map(x => ({ cle: SLOTS[x.touche.toUpperCase()] ?? x.cle, nom: x.nom, icone: null, touche: x.touche, donnees: x, couleur: x.couleur ?? null }));
 }
 
 /** Maps du pool (actives), plus celle déjà choisie (une strat sur une map sortie du pool reste éditable). */

@@ -109,11 +109,13 @@ export interface StyleCapacite {
   chaud: boolean;
 }
 
-const FUMEES = /smoke|fum[ée]e|cloud|nuage|cover|voile|nebul|n[ée]bul|ruse|cove\b|crique|cloudburst|averse|sky ?smoke|poison cloud|toxic|vanishing/i;
-const FEUX = /incend|molly|snake ?bite|morsure|nanoswarm|nano-?essaim|hot ?hands|mains br[ûu]lantes|pyro|fire|feu|flam|gas\b|gaz|mosh|paint ?shells|frag|shock|aftershock|r[ée]plique|blast|orbital|frappe/i;
-const PIEGES = /mine\b|trap|pi[èe]ge|sensor|capteur|alarm|turret|tourelle|trademark|marque d[ée]pos[ée]e|proximity|gravnet|razorvine|ronce|tripwire|cyber ?cage|glitch trap|aps/i;
-const BLOBS = /\bgoo\b/i;
-const FLASHS = /flash|aveugl|blind|curveball|balle courbe|leer|[œoe]illade|paranoi|guiding|lumi[èe]re|dizzy|drive/i;
+// Mots qui donnent le genre d'après le nom : dans les jetons partagés (la page de partage du serveur lit les mêmes).
+const motif = (cle: 'fumees' | 'feux' | 'pieges' | 'blobs' | 'flashs') => new RegExp(PLATEAU.motifs[cle], 'i');
+const FUMEES = motif('fumees');
+const FEUX = motif('feux');
+const PIEGES = motif('pieges');
+const BLOBS = motif('blobs');
+const FLASHS = motif('flashs');
 
 /** Genre graphique d'une zone posée, d'après sa forme, le nom et les caractéristiques de la capacité (profil de jeu). */
 export function styleCapacite(zone: Zone | null | undefined, donnees?: CapaciteJeu, nom?: string): StyleCapacite {

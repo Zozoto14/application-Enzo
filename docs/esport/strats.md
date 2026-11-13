@@ -166,6 +166,11 @@ thèmes de la map.
   inconnu), ombre portée, cône de regard, nom du joueur en pastille ; sélection = anneau blanc extérieur (la couleur
   ne change pas) ; taille à l'écran bornée (19 à 34 px de rayon) quel que soit le zoom.
 - **Tracés** : déplacement (plein, effilé), rotation (tirets), regard (pointillés fins), avec le minutage.
+- **Couleur des capacités** : celle du joueur (défaut) ou l'**accent de l'agent** (tiroir, onglet Joueurs,
+  « Couleur : joueur / agent », enregistré dans la strat). L'accent vient du profil de jeu (Administration › Jeux,
+  capacités du personnage : « Couleur d'accent », et au besoin une couleur par capacité) ; sans saisie, Valorant
+  utilise une couleur **pré-remplie « à vérifier »** par agent (`src/esport/jeux/modeles/valorant.ts`, de mémoire,
+  sans requête réseau).
 - Performance : trois couches (fond, objets, dessus), objets mémoïsés, tailles à l'écran appliquées sans
   re-rendu, glisser et zoom regroupés par image ; fluide avec 150 objets.
 
@@ -186,6 +191,25 @@ affichés. The Finals (pas de portraits officiels) : initiales, sans message. Le
 l'adresse CDN Riot (`iconeDoc`) ; la page publique de partage (CSP `img-src https://media.valorant-api.com data:`)
 complète un pion posé sans icône avec l'adresse CDN gardée dans le profil, jamais un lien signé. Le site statique ne
 pose pas de CSP (bureau/public/_headers) : rien à ouvrir.
+
+### Page de partage et composant de carte
+
+- **Page publique de partage** (`esport/noyau/strats/svg.mjs`, SVG sans script) : même langage visuel, à partir des
+  MÊMES jetons : minimap rendue en plateau par un filtre SVG sur son alpha (sol teinté, liseré clair, fond sombre,
+  vignettage), utilitaires par genre (genre déduit de la forme et du nom, mêmes mots que l'app : `motifs` des
+  jetons), icône de la capacité dans sa puce avec le numéro d'ordre et « X » pour un ultime, pions avec la photo
+  découpée en rond (initiales dessous), nom du joueur, ennemi inconnu « ? », tracés selon leur usage, pions
+  toujours au-dessus des zones et des flèches. Une strat en « Couleur : agent » y prend l'accent saisi dans le
+  profil. CSP inchangée (images du CDN officiel seulement).
+- **`CarteJeu`** (`src/esport/ui/cartes/CarteJeu.web.tsx`, version native `CarteJeu.tsx`, propriétés dans
+  `types.ts`) : la map en plateau pour TOUT écran (lineups, plans de match, miniatures, aperçus), sans Konva.
+  Propriétés : `carte` (map du profil : image, dimensions, zones, repères), `image` (adresse ou sources dans
+  l'ordre), `images` (cache), `taille` (sinon toute la largeur), `themeCarte`, `attenuation`, `reperes`,
+  `etiquettes`, `niveau`, `rotation`, `rayon`, `filigrane`, et `children` : contenu posé par-dessus, nœud ou
+  fonction `({ px, taille }) => …` où `px` convertit une coordonnée du repère (0 à 1000) en pixels. Premier
+  usage : les vignettes du sélecteur de map de l'atelier.
+- **Lineups liés** : quand le module Lineups est ouvert au rôle, l'onglet « Étape » du tiroir liste les lineups liés
+  à la strat (même bloc que dans la liste des strats) ; ouvrir une fiche enregistre d'abord ce qui reste.
 
 ### Lecture, présentation, comparaison, export
 
@@ -253,7 +277,9 @@ canevas, dock, étapes et reprise, sélection multiple, menu contextuel, enregis
 ligne, Échap et raccourcis, téléphone, présentation), `src/esport/StratsBarres.test.tsx` (portraits et repli en
 initiales, rôles, ordre des capacités, curseur ; « Supprimer tout » ; import des agents),
 `src/esport/StratsEditeurPanneaux.test.tsx` (panneaux de l'éditeur, Jeux précis), `esport/test/strats-atelier.test.mjs`
-(champs du document ajoutés, versions automatiques regroupées, verrou optimiste ; SQLite et PostgreSQL), `esport/test/import-agents.test.mjs`
+(champs du document ajoutés, versions automatiques regroupées, verrou optimiste, page de partage au rendu du
+plateau, accents du profil ; SQLite et PostgreSQL), `src/esport/StratsAccents.test.tsx` (accents pré-remplis et
+leur contraste, saisie dans Administration › Jeux, `CarteJeu`), `esport/test/import-agents.test.mjs`
 (import serveur des agents, mur tracé et double dans le document et la page de partage),
 `esport/test/import-agents-auto.test.mjs` (import automatique : premier affichage en tâche de fond et single-flight,
 cron une fois par jour, réimport après 7 jours, portrait déposé à la main gardé, page publique ; SQLite et PostgreSQL),

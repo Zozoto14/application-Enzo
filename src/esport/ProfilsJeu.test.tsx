@@ -93,7 +93,7 @@ test('libellés de formats et assets des modules depuis le profil (Valorant avec
   expect(f.jeu).toBe('the-finals');
   // Autre jeu : pas de fond de carte ni d'icône (le document d'une strat n'accepte que le CDN Riot), pas de capacités.
   expect(f.cartes.map(c => [c.cle, c.minimap, c.vignette])).toEqual([['carte-a', null, 'https://images-exemple.fr/a.png'], ['carte-b', null, null]]);
-  expect(f.agents).toEqual([{ cle: 'build-leger', nom: 'Build léger', role: 'Light', roleCle: 'light', icone: null, iconeDoc: null, capacites: [], actif: true }]);
+  expect(f.agents).toEqual([{ cle: 'build-leger', nom: 'Build léger', role: 'Light', roleCle: 'light', icone: null, iconeDoc: null, capacites: [], actif: true, couleur: null }]);
 });
 
 test('notifications des profils de jeu (globales, sans team)', () => {

@@ -7,13 +7,49 @@
   "selection": "#ffffff",
   "ennemi": "#ef4444",
   "puce": "#0b1220",
-  "typo": { "xs": 11, "s": 13, "m": 16, "l": 20, "xl": 26 },
-  "trait": { "fin": 1.5, "normal": 2.5, "fort": 4 },
-  "pion": { "rayon": 21, "anneau": 4, "ecranMinPx": 19, "ecranMaxPx": 34, "regard": 46, "ouvertureRegard": 50 },
-  "capacite": { "puceRayon": 12.5, "ecranMinPx": 12, "ecranMaxPx": 19, "remplissage": 0.3, "bord": 0.92, "ultimeBord": 3.5 },
-  "marqueur": { "rayon": 15 },
-  "etiquette": { "seuilZoomPx": 0.62, "opaciteSousObjet": 0.28, "espacement": 1.2 },
-  "animation": { "deploiement": 0.35, "fondu": 0.5, "transition": 0.8, "bascule": 0.38, "pulsation": 1.6 },
+  "typo": {
+    "xs": 11,
+    "s": 13,
+    "m": 16,
+    "l": 20,
+    "xl": 26
+  },
+  "trait": {
+    "fin": 1.5,
+    "normal": 2.5,
+    "fort": 4
+  },
+  "pion": {
+    "rayon": 21,
+    "anneau": 4,
+    "ecranMinPx": 19,
+    "ecranMaxPx": 34,
+    "regard": 46,
+    "ouvertureRegard": 50
+  },
+  "capacite": {
+    "puceRayon": 12.5,
+    "ecranMinPx": 12,
+    "ecranMaxPx": 19,
+    "remplissage": 0.3,
+    "bord": 0.92,
+    "ultimeBord": 3.5
+  },
+  "marqueur": {
+    "rayon": 15
+  },
+  "etiquette": {
+    "seuilZoomPx": 0.62,
+    "opaciteSousObjet": 0.28,
+    "espacement": 1.2
+  },
+  "animation": {
+    "deploiement": 0.35,
+    "fondu": 0.5,
+    "transition": 0.8,
+    "bascule": 0.38,
+    "pulsation": 1.6
+  },
   "themes": {
     "tactique": {
       "fond": "#080c14",
@@ -64,5 +100,32 @@
       "grille": "#ffffff"
     }
   },
-  "reperes": { "site": "#f59e0b", "plant": "#f59e0b", "cashout": "#22c55e", "coffre": "#22c55e", "spawn": "#94a3b8", "autre": "#94a3b8" }
+  "reperes": {
+    "site": "#f59e0b",
+    "plant": "#f59e0b",
+    "cashout": "#22c55e",
+    "coffre": "#22c55e",
+    "spawn": "#94a3b8",
+    "autre": "#94a3b8"
+  },
+  "motifs": {
+    "fumees": "smoke|fum[ée]e|cloud|nuage|cover|voile|nebul|n[ée]bul|ruse|cove\\b|crique|cloudburst|averse|sky ?smoke|poison cloud|toxic|vanishing",
+    "feux": "incend|molly|snake ?bite|morsure|nanoswarm|nano-?essaim|hot ?hands|mains br[ûu]lantes|pyro|fire|feu|flam|gas\\b|gaz|mosh|paint ?shells|frag|shock|aftershock|r[ée]plique|blast|orbital|frappe",
+    "pieges": "mine\\b|trap|pi[èe]ge|sensor|capteur|alarm|turret|tourelle|trademark|marque d[ée]pos[ée]e|proximity|gravnet|razorvine|ronce|tripwire|cyber ?cage|glitch trap|aps",
+    "blobs": "\\bgoo\\b",
+    "flashs": "flash|aveugl|blind|curveball|balle courbe|leer|[œoe]illade|paranoi|guiding|lumi[èe]re|dizzy|drive",
+    "_": "Mots (expressions régulières, sans casse) qui donnent le genre graphique d'une capacité d'après son nom."
+  },
+  "lettresMarqueur": {
+    "plant": "P",
+    "defuse": "D",
+    "spawn": "S",
+    "info": "i",
+    "rotation": "R",
+    "cashout": "$",
+    "coffre": "C",
+    "danger": "!",
+    "tiers": "3",
+    "objectif": ""
+  }
 }

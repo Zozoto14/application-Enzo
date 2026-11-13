@@ -28,6 +28,7 @@ import { trSs } from '../../../i18n/stratsSuppr';
 import { ETAPES_MAX } from '../../../strats/document';
 import type { Marges } from '../../../strats/geometrie';
 import type { PropsCanevas } from '../canevas/types';
+import CarteJeu from '../../cartes/CarteJeu';
 import { MentionRiot } from '../commun';
 import { ConfirmationSuppression } from '../Suppression';
 import { BarreHaut } from './BarreHaut';
@@ -133,6 +134,7 @@ export function Atelier({ theme, a, canevas, comparaison, impression, pleinEcran
     <LigneMenu
       key={c.cle}
       theme={theme}
+      avant={<CarteJeu theme={theme} carte={c} images={a.propsCanevas?.images} taille={38} rayon={7} reperes={false} filigrane={false} themeCarte={a.prefs.themeCarte} testID={`esport-editeur-carte-${c.cle}-apercu`} />}
       texte={c.nom}
       coche={c.cle === doc.carte.cle}
       onPress={puis(() => a.faire({ type: 'carte', carte: { cle: c.cle, nom: c.nom, image: c.minimap && /^https:\/\/media\.valorant-api\.com\//.test(c.minimap) ? c.minimap : null, echelle: c.echelle ?? null } }))}

@@ -5,7 +5,7 @@
 
 import type { CapaciteJeu, DonneesJeu } from '../api';
 import { capacitesTheFinals, modeleTheFinals } from './thefinals';
-import { capacitesValorant } from './valorant';
+import { accentValorant, capacitesValorant } from './valorant';
 
 export { capacitesTheFinals, capacitesValorant, modeleTheFinals };
 
@@ -15,6 +15,9 @@ export function capacitesPrereplies(modele: string | undefined, personnage: { cl
   if (modele === 'thefinals') return capacitesTheFinals(personnage.classe ?? personnage.cle);
   return [];
 }
+
+/** Accent pré-rempli d'un personnage (Valorant : teinte de l'agent, « à vérifier ») ; undefined : aucun (couleur du joueur). */
+export const accentPrerempli = (modele: string | undefined, personnage: { cle: string }): string | undefined => (modele === 'valorant' ? accentValorant(personnage.cle) : undefined);
 
 /** Ajoute les capacités pré-remplies aux personnages qui n'en ont pas. Rend les données et le nombre de personnages complétés. */
 export function preremplirCapacites(d: DonneesJeu, modele: string | undefined): { donnees: DonneesJeu; n: number } {

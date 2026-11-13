@@ -89,6 +89,8 @@ export function Strats({ theme, client, detail, large, onAller, onAdminJeux }: P
   ) : null;
 
   if (ouverte) {
+    // Lineups liés à la strat ouverte : dans le tiroir de l'atelier (onglet « Étape »).
+    const stratOuverte = strats?.find(s => s.id === ouverte);
     return (
       <>
       <Editeur
@@ -101,6 +103,11 @@ export function Strats({ theme, client, detail, large, onAller, onAdminJeux }: P
         assets={assets}
         onRetour={() => setOuverte(undefined)}
         onAdminJeux={onAdminJeux}
+        extrasTiroir={
+          voitLineups && stratOuverte
+            ? sortir => <LineupsLies theme={theme} client={client} teamId={teamId} strat={stratOuverte} assets={assets} onOuvrirLineups={() => sortir(() => onAller('module:lineups'))} />
+            : undefined
+        }
         onOuvrir={id => setOuverte(id)}
         onSupprimee={x => {
           setOuverte(undefined);

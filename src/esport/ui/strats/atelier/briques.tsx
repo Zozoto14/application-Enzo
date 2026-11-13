@@ -217,7 +217,7 @@ export function Bascule<T extends string>({ theme, valeur, options, onChoisir, t
 }
 
 /** Ligne d'un menu (bulle, menu contextuel) : icône, texte, raccourci, état coché. */
-export function LigneMenu({ theme, icone, texte, raccourci, onPress, testID, danger, coche, desactive }: { theme: ThemeHub; icone?: string; texte: string; raccourci?: string; onPress(): void; testID: string; danger?: boolean; coche?: boolean; desactive?: boolean }) {
+export function LigneMenu({ theme, icone, avant, texte, raccourci, onPress, testID, danger, coche, desactive }: { theme: ThemeHub; icone?: string; /** Vignette à la place de l'icône (aperçu d'une map). */ avant?: React.ReactNode; texte: string; raccourci?: string; onPress(): void; testID: string; danger?: boolean; coche?: boolean; desactive?: boolean }) {
   return (
     <Pressable
       testID={testID}
@@ -235,7 +235,7 @@ export function LigneMenu({ theme, icone, texte, raccourci, onPress, testID, dan
         backgroundColor: etat.hovered || etat.focused ? teinteTransparente(theme.accent, 0.14) : 'transparent',
         opacity: desactive ? 0.4 : 1,
       })}>
-      <View style={{ width: 18, alignItems: 'center' }}>{icone ? <Glyphe valeur={icone} style={{ color: danger ? theme.critique : theme.attenue, fontSize: 15 }} /> : null}</View>
+      {avant ?? <View style={{ width: 18, alignItems: 'center' }}>{icone ? <Glyphe valeur={icone} style={{ color: danger ? theme.critique : theme.attenue, fontSize: 15 }} /> : null}</View>}
       <Text style={{ ...texteAtelier(theme, 13), color: danger ? theme.critique : theme.texte, flex: 1 }} numberOfLines={1}>
         {texte}
       </Text>

@@ -131,3 +131,64 @@ test('enregistrement automatique : verrou optimiste (409), droits et validation 
   assert.equal(r.corps.code, 'strat-invalide');
   assert.deepEqual(await versions(), [2, 1]);
 });
+
+test('page de partage : même langage visuel que l’atelier (plateau, genres des utilitaires, pions au-dessus)', async () => {
+  const { genreCapacite, svgEtape, CSP_PAGE_STRAT } = await import('../noyau/strats/svg.mjs');
+  const { default: T } = await import('../noyau/strats/plateau.json', { with: { type: 'json' } });
+  const cap = (nom, zone, plus = {}) => ({ type: 'capacite', nom, zone, capacite: 'Ability2', ...plus });
+  assert.equal(genreCapacite(cap('Dark Cover', { forme: 'cercle', rayon: 4.1 })).genre, 'fumee');
+  assert.deepEqual(genreCapacite(cap('Incendiary', { forme: 'cercle', rayon: 4.5 })), { genre: 'zone', ultime: false, chaud: true });
+  assert.equal(genreCapacite(cap('Alarmbot', { forme: 'cercle', rayon: 5 })).genre, 'piege');
+  assert.equal(genreCapacite(cap('Goo Grenade', { forme: 'cercle', rayon: 3 })).genre, 'blob');
+  assert.equal(genreCapacite(cap('Flashpoint', { forme: 'cone', angle: 0, ouverture: 110, portee: 18 })).genre, 'eclair');
+  assert.equal(genreCapacite(cap('Recon Bolt', { forme: 'trajet', dx: 1, dy: 1, rayon: 10 })).genre, 'recon');
+  assert.equal(genreCapacite(cap('Trapwire', { forme: 'ligne', angle: 0, longueur: 10 })).genre, 'fil');
+  assert.equal(genreCapacite(cap('Orbital Strike', { forme: 'cercle', rayon: 9 }, { capacite: 'Ultimate' })).ultime, true);
+  assert.equal(genreCapacite(cap('Dark Cover', null)).genre, 'icone');
+
+  const d = docExemple();
+  d.etapes[0].objets[1].creux = true;
+  d.etapes[0].objets[1].ordre = 2;
+  d.etapes[0].objets[2].usage = 'regard';
+  d.etapes[0].objets.push({ id: 'x1', type: 'agent', x: 700, y: 300, agent: 'inconnu', nom: '?', icone: null, joueur: null, couleur: '#ef4444' });
+  const svg = svgEtape(validerDocument(d), 0);
+  // Map en plateau : filtre sur l'alpha de la minimap, couleurs du thème « Tactique sombre » des jetons.
+  assert.match(svg, /<filter id="plateau"/);
+  assert.match(svg, /<image href="https:\/\/media\.valorant-api\.com\/maps\/7eaecc1b\/displayicon\.png"[^>]*filter="url\(#plateau\)"/);
+  assert.ok(svg.includes(`fill="${T.themes.tactique.fond}"`) && svg.includes(`flood-color="${T.themes.tactique.sol}"`) && svg.includes(`flood-color="${T.themes.tactique.contour}"`));
+  // Portrait découpé en rond par-dessus les initiales ; nom du joueur sous son pion ; ennemi inconnu : « ? ».
+  assert.match(svg, /<clipPath id="rond-a1">.*<image href="https:\/\/media\.valorant-api\.com\/agents\/8e253930\/displayicon\.png"[^>]*clip-path="url\(#rond-a1\)"/);
+  assert.ok(svg.includes('>Joueur 2</text>'));
+  assert.ok(svg.includes('>?</text>'));
+  // Fumée creuse (sans dégradé plein), numéro d'ordre, tracé « regard » en pointillés.
+  assert.ok(!svg.includes('id="g-c1"'));
+  assert.match(svg, />2<\/text>/);
+  assert.match(svg, /<polyline[^>]*stroke-dasharray="2\.0 9\.5"/);
+  // Les pions sont dessinés après les zones et les tracés.
+  assert.ok(svg.indexOf('rond-a1') > svg.indexOf('<polyline'));
+  // Rien d'externe en dehors des images du CDN officiel : la CSP de la page ne change pas.
+  assert.ok(!/<script|javascript:|url\(https?:/i.test(svg));
+  assert.match(CSP_PAGE_STRAT, /img-src https:\/\/media\.valorant-api\.com data:/);
+});
+
+test('profil de jeu : accent d’un personnage et d’une capacité gardés (#rrggbb seulement) ; page de partage en « Couleur : agent »', async () => {
+  const { validerDonnees } = await import('../noyau/jeux/schema.mjs');
+  const { completerIcones } = await import('../noyau/strats/svg.mjs');
+  const { donnees } = validerDonnees({
+    personnages: [
+      { cle: 'omen', nom: 'Omen', classe: null, image: null, actif: true, couleur: '#6D5BD0', capacites: [{ cle: 'cover', nom: 'Dark Cover', touche: 'E', categorie: 'basique', forme: 'cercle', rayon: 4.1, couleur: '#112233', aVerifier: true }, { cle: 'step', nom: 'Shrouded Step', touche: 'C', categorie: 'basique', forme: 'point', couleur: 'violet', aVerifier: true }] },
+      { cle: 'sova', nom: 'Sova', classe: null, image: null, actif: true, couleur: 'bleu' },
+    ],
+  });
+  const [omen, sova] = donnees.personnages;
+  assert.equal(omen.couleur, '#6d5bd0');
+  assert.equal(omen.capacites[0].couleur, '#112233');
+  assert.equal('couleur' in omen.capacites[1], false);
+  assert.equal('couleur' in sova, false);
+  // Page publique : seulement quand la strat le demande ; la capacité E prend son accent propre.
+  const d = validerDocument(docExemple());
+  assert.equal(completerIcones(d, donnees).etapes[0].objets[1].couleur, '#3b82f6');
+  const parAgent = completerIcones({ ...d, couleurs: 'agent' }, donnees);
+  assert.equal(parAgent.etapes[0].objets[1].couleur, '#112233');
+  assert.equal(parAgent.etapes[0].objets[0].couleur, '#3b82f6', 'le pion garde la couleur du joueur');
+});

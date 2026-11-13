@@ -59,3 +59,40 @@ export function capacitesValorant(agent: string): CapaciteJeu[] {
 
 /** Agents couverts par le jeu de données. */
 export const AGENTS_PREREMPLIS = Object.keys(AGENTS);
+
+/**
+ * Accent de chaque agent (#rrggbb), PRÉ-REMPLI de mémoire à partir de sa teinte dominante en jeu : « à vérifier »
+ * par le Fondateur (Administration › Jeux, capacités de l'agent), où il se corrige. Aucune requête réseau.
+ */
+const ACCENTS: Record<string, string> = {
+  astra: '#a855f7',
+  breach: '#f97316',
+  brimstone: '#f59e0b',
+  chamber: '#d4a94c',
+  clove: '#ec4899',
+  cypher: '#cbd5e1',
+  deadlock: '#7dd3fc',
+  fade: '#6366f1',
+  gekko: '#a3e635',
+  harbor: '#14b8a6',
+  iso: '#8b5cf6',
+  jett: '#7dd3fc',
+  'kay-o': '#38bdf8',
+  kayo: '#38bdf8',
+  killjoy: '#facc15',
+  neon: '#3b82f6',
+  omen: '#6d5bd0',
+  phoenix: '#fb923c',
+  raze: '#f97316',
+  reyna: '#c026d3',
+  sage: '#2dd4bf',
+  skye: '#4ade80',
+  sova: '#3b82f6',
+  tejo: '#f59e0b',
+  viper: '#22c55e',
+  vyse: '#a78bfa',
+  waylay: '#fbbf24',
+  yoru: '#2563eb',
+};
+/** Accent pré-rempli d'un agent Valorant (« à vérifier ») ; undefined : agent inconnu de la table. */
+export const accentValorant = (agent: string): string | undefined => ACCENTS[agent.toLowerCase()] ?? ACCENTS[agent.toLowerCase().replace(/[^a-z0-9]/g, '')];

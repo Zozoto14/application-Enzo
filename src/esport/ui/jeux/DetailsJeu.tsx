@@ -7,7 +7,7 @@
  *  - `CapacitesPersonnage` : capacités d'un personnage (forme, dimensions en mètres, durée, charges, coût).
  */
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { type ThemeHub } from '../../../hub/themes';
@@ -15,7 +15,7 @@ import { CATEGORIES_CAPACITE, FORMES_CAPACITE, TYPES_REPERES, type CapaciteJeu, 
 import { cleDe } from '../../jeux/profil';
 import { ajouterNiveau, ajouterRepere, ajouterZone, avecEchelle, avecImage, echelleDepuis, retirer, renommer } from '../../jeux/cartes';
 import { trSt } from '../../i18n/strats2';
-import { capacitesPrereplies, fusionnerTheFinals, preremplirCapacites } from '../../jeux/modeles';
+import { accentPrerempli, capacitesPrereplies, fusionnerTheFinals, preremplirCapacites } from '../../jeux/modeles';
 import type { ModeleStrat } from '../../strats/modeles';
 import { trJc, type CleJc } from '../../i18n/jeuxCartes';
 import { Choix, styles } from '../commun';
@@ -271,7 +271,40 @@ function ListeElements({ theme, titre, elements, onRenommer, onRetirer, testID }
 
 // ------------------------------------------------------------------ Capacités d'un personnage
 
-export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites, testID }: { theme: ThemeHub; personnage: PersonnageJeu; modele: ModeleStrat; onCapacites(c: CapaciteJeu[] | undefined): void; testID: string }) {
+/** Couleur saisie (« #rrggbb », avec ou sans dièse) ; undefined : vide ou invalide. */
+const couleurSaisie = (v: string): string | undefined => {
+  const t = v.trim().toLowerCase();
+  const h = t.startsWith('#') ? t : `#${t}`;
+  return /^#[0-9a-f]{6}$/.test(h) ? h : undefined;
+};
+
+/** Champ d'une couleur d'accent : pastille, saisie hexadécimale ; vide = valeur par défaut (`defaut`, « à vérifier »). */
+function ChampAccent({ theme, libelle, valeur, defaut, onChanger, testID }: { theme: ThemeHub; libelle: string; valeur: string | undefined; defaut?: string; onChanger(c: string | undefined): void; testID: string }) {
+  const [saisie, setSaisie] = useState(valeur ?? '');
+  useEffect(() => setSaisie(valeur ?? ''), [valeur]);
+  const montree = couleurSaisie(saisie) ?? valeur ?? defaut;
+  return (
+    <View style={[styles.ligne, { gap: 6, alignItems: 'flex-end' }]}>
+      <View style={{ width: 28, height: 28, borderRadius: 14, marginBottom: 6, backgroundColor: montree ?? 'transparent', borderWidth: 2, borderColor: theme.ligne }} testID={`${testID}-pastille`} accessibilityLabel={montree ?? trJc('accent.aucun')} />
+      <Champ
+        theme={theme}
+        libelle={libelle}
+        valeur={saisie}
+        placeholder={defaut ?? '#rrggbb'}
+        onChanger={v => {
+          setSaisie(v);
+          if (!v.trim()) onChanger(undefined);
+          else if (couleurSaisie(v)) onChanger(couleurSaisie(v));
+        }}
+        maxLength={7}
+        style={{ width: 130 }}
+        testID={testID}
+      />
+    </View>
+  );
+}
+
+export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites, onCouleur, testID }: { theme: ThemeHub; personnage: PersonnageJeu; modele: ModeleStrat; onCapacites(c: CapaciteJeu[] | undefined): void; /** Accent du personnage (absent : champ non proposé). */ onCouleur?(c: string | undefined): void; testID: string }) {
   const liste = p.capacites ?? [];
   const maj = (i: number, champs: Partial<CapaciteJeu>) => onCapacites(liste.map((c, j) => (j === i ? { ...c, ...champs } : c)));
   const prerempli = capacitesPrereplies(modele, p);
@@ -283,6 +316,15 @@ export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites,
         {aVerifier ? <Badge theme={theme} texte={trJc('capacites.n_a_verifier', { n: aVerifier })} ton="alerte" testID={`${testID}-a-verifier`} /> : null}
       </View>
       <Text style={attenue(theme, 12)}>{trJc('capacites.aide')}</Text>
+      {onCouleur ? (
+        <View style={{ gap: 4 }} testID={`${testID}-accent-bloc`}>
+          <View style={[styles.ligne, { gap: 8, alignItems: 'flex-end' }]}>
+            <ChampAccent theme={theme} libelle={trJc('accent.personnage')} valeur={p.couleur} defaut={accentPrerempli(modele, p)} onChanger={onCouleur} testID={`${testID}-accent`} />
+            {!p.couleur && accentPrerempli(modele, p) ? <Badge theme={theme} texte={trJc('accent.a_verifier')} ton="alerte" testID={`${testID}-accent-a-verifier`} /> : null}
+          </View>
+          <Text style={attenue(theme, 12)}>{trJc('accent.aide')}</Text>
+        </View>
+      ) : null}
       {liste.map((c, i) => (
         <View key={`${c.cle}-${i}`} style={{ gap: 6, borderLeftWidth: 3, borderLeftColor: c.aVerifier ? theme.alerte : theme.ok, paddingLeft: 8 }} testID={`${testID}-${i}`}>
           <View style={[styles.ligne, { gap: 6, alignItems: 'flex-end' }]}>
@@ -309,6 +351,7 @@ export function CapacitesPersonnage({ theme, personnage: p, modele, onCapacites,
             <Case theme={theme} coche={c.aVerifier} libelle={trJc('capacites.a_verifier')} onChanger={v => maj(i, { aVerifier: v })} testID={`${testID}-${i}-a-verifier`} />
             <Text style={texte(theme, 13)}>{trJc('capacites.a_verifier')}</Text>
           </View>
+          {onCouleur ? <ChampAccent theme={theme} libelle={trJc('accent.capacite')} valeur={c.couleur} defaut={p.couleur ?? accentPrerempli(modele, p)} onChanger={couleur => maj(i, { couleur })} testID={`${testID}-${i}-accent`} /> : null}
         </View>
       ))}
       <View style={[styles.ligne, { gap: 8 }]}>

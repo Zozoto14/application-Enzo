@@ -270,6 +270,11 @@ function AtelierWeb({ hote, ...props }: PropsEditeur & { hote: HTMLDivElement })
     [theme],
   );
   const { doc, strat } = a;
+  /** Quitter l'atelier vers un autre écran : ce qui reste à enregistrer part d'abord ; en cas d'échec, l'atelier demande. */
+  const sortir = (suite: () => void) => {
+    if (!a.peutModifier) suite();
+    else void a.enregistrer({ auto: true }).then(ok => (ok ? suite() : a.setConfirmation('quitter')));
+  };
   return (
     <Atelier
       theme={theme}
@@ -280,15 +285,8 @@ function AtelierWeb({ hote, ...props }: PropsEditeur & { hote: HTMLDivElement })
       pleinEcran={pleinEcran}
       onPleinEcran={basculerPleinEcran}
       copier={texte => void navigator.clipboard?.writeText(texte).catch(() => undefined)}
-      onAdminJeux={
-        props.onAdminJeux
-          ? () => {
-              // Ce qui reste à enregistrer part d'abord ; en cas d'échec, l'atelier demande avant de partir.
-              if (!a.peutModifier) props.onAdminJeux?.();
-              else void a.enregistrer({ auto: true }).then(ok => (ok ? props.onAdminJeux?.() : a.setConfirmation('quitter')));
-            }
-          : undefined
-      }
+      onAdminJeux={props.onAdminJeux ? () => sortir(() => props.onAdminJeux?.()) : undefined}
+      extrasTiroir={props.extrasTiroir?.(sortir)}
     />
   );
 }

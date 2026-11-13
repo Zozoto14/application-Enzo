@@ -63,6 +63,11 @@ des caractéristiques pré-remplies) et télécharge dans son stockage, avec le 
 - ses **capacités officielles** (emplacements Grenade, Ability1, Ability2, Ultimate → touches C, Q, E, X ; la passive
   est ignorée) : nom, description, icône importée et adresse CDN d'origine → `personnages[].officielles` ;
 - l'**icône de chaque rôle** → `classes[].fichier` (classe ajoutée si elle manque).
+
+Couleur d'accent : `personnages[].couleur` et, au besoin, `personnages[].capacites[].couleur` (`#rrggbb`, champs
+facultatifs, jamais proposés par l'assistant IA ni touchés par l'import) : saisis dans les capacités du personnage ;
+sans saisie, l'éditeur de strats utilise pour Valorant une couleur pré-remplie « à vérifier » (voir strats.md).
+
 Un agent absent du profil est ajouté (actif, avec son rôle). Les **caractéristiques** des capacités (formes, dimensions
 « à vérifier ») ne sont **jamais** touchées : l'éditeur rapproche capacités officielles et caractéristiques par la
 touche. Idempotent (empreintes) ; un portrait déposé à la main n'est remplacé qu'avec la case « Remplacer aussi… ».
