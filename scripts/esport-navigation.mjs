@@ -20,6 +20,7 @@ export const GROUPES_TEAM = {
   'module-strat_editor': 'jeu',
   'module-playbook': 'jeu',
   'module-lineups': 'jeu',
+  'module-plans_match': 'jeu',
   'module-resources': 'jeu',
   'module-video_review': 'jeu',
   'module-scouting': 'jeu',

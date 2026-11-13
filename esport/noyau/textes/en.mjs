@@ -78,6 +78,8 @@ export const EN = {
   'var.un_membre': 'A member',
   'var.toute_la_team': 'the whole team',
   'var.pour_le': ', due {date}',
+  'var.contre': ' against {nom}',
+  'var.plan_pour_le': ', for {date}',
   'var.en_retard': 'overdue',
   'var.echeance_proche': 'due soon',
   'var.defense': 'Defense',

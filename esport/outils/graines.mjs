@@ -24,6 +24,7 @@ import { semerPlanning } from './graines-planning.mjs';
 import { semerReview } from './graines-review.mjs';
 import { semerStrats, semerTheFinals } from './graines-strats.mjs';
 import { semerLineups, semerLineupsFinals } from './graines-lineups.mjs';
+import { semerPlans, semerPlansFinals } from './graines-plans.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -114,6 +115,9 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await semerLineups(base, team.id, { maintenant, noyau: s, stockage, stratIds });
   await semerLineupsFinals(base, teamFinals, { maintenant, noyau: s, stockage });
   await semerCompetition(base, team.id, { maintenant, noyau: s });
+  // Plans de match (migration 0083) : après les strats, les lineups et le planning.
+  await semerPlans(base, team.id, { maintenant, noyau: s, stockage });
+  await semerPlansFinals(base, teamFinals, { maintenant, noyau: s, stockage });
   // DATA › Ressources de l'espace CM : un lien et un fichier (migration 0051).
   await semerRessources(base, { maintenant, stockage });
   // Suivi des joueurs : quelques notes du Coach (une épinglée, une partagée avec Léa).

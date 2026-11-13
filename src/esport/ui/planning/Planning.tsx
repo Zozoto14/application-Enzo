@@ -41,6 +41,7 @@ import { useTempsReel } from '../../tempsReel/hooks';
 import { ChampDate, ChampHeure } from '../../../ui/dates';
 import { ZoneEcriture } from '../ecriture/ZoneEcriture';
 import { useCible } from '../notifications/Cible';
+import { BoutonPlanMatch } from '../plans/Raccourcis';
 import type { CibleNotification } from '../../notifications/cibles';
 
 type Vue = 'mois' | 'semaine' | 'liste';
@@ -75,7 +76,7 @@ async function copier(texte: string): Promise<boolean> {
   }
 }
 
-export function Planning({ theme, client, detail, large, brouillon, onExporter }: PropsModule) {
+export function Planning({ theme, client, detail, large, brouillon, onExporter, onAller }: PropsModule) {
   const teamId = detail.team.id;
   const api = useMemo(() => apiPlanning(client, teamId), [client, teamId]);
   const f = useFuseau(detail.team.fuseau);
@@ -186,6 +187,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         presenceActive={Boolean(donnees?.modules.presence)}
         adversaires={adversaires}
         noms={noms}
+        apres={<BoutonPlanMatch theme={theme} client={client} detail={detail} evenementId={selection.evenementId} occurrence={selection.cle} type={selection.type} onOuvrir={() => onAller('module:plans_match')} />}
         onRepondre={avecRsvp ? repondre(selection) : undefined}
         onAnnoncer={avecRsvp ? annoncer(selection) : undefined}
         onRetour={() => setSelection(undefined)}
@@ -466,6 +468,7 @@ function DetailOccurrence({
   fuseau,
   adversaires,
   noms = {},
+  apres,
 }: {
   theme: ThemeHub;
   api: ApiPlanning;
@@ -480,6 +483,8 @@ function DetailOccurrence({
   fuseau: string;
   adversaires?: Array<{ id: string; nom: string }>;
   noms?: Record<string, string>;
+  /** Sous la carte de l'événement (bouton « Plan de match »). */
+  apres?: React.ReactNode;
 }) {
   const [evenement, setEvenement] = useState<DetailEvenement | undefined>();
   const { erreur, avis, agir } = useAgir();
@@ -530,6 +535,7 @@ function DetailOccurrence({
             {tr('planning.planning.vous_n_etes_pas')}</Text>
         ) : null}
       </Panneau>
+      {apres}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-evenement" />
 
       {onRepondre && o.concerneMoi !== false && !o.termine && o.monRsvp !== null && o.monRsvp !== undefined ? (

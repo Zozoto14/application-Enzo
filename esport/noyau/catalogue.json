@@ -13,6 +13,7 @@
     { "cle": "strat_editor", "nom": "Strats", "phase": 6, "description": "Éditeur de stratégies sur la carte." },
     { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats par carte, side et type." },
     { "cle": "lineups", "nom": "Lineups", "phase": 11, "description": "Lineups et placements par map, personnage et capacité : images, vidéo courte, points sur la minimap." },
+    { "cle": "plans_match", "nom": "Plan de match", "phase": 11, "description": "Préparation d’un match : veto, compositions par map, strats par round, lineups clés, checklist." },
     { "cle": "player_notes", "nom": "Suivi joueurs", "phase": 7, "description": "Notes du staff sur chaque joueur, partage note par note." },
     { "cle": "resources", "nom": "Ressources", "phase": 8, "description": "Canal de ressources : liens, vidéos, fichiers et notes, par catégorie." },
     { "cle": "tournois", "nom": "Tournois", "phase": 9, "description": "Tournois : fiche, inscription et check-in, roster, parcours, matchs au planning, classement et gains." },
@@ -159,6 +160,15 @@
       ]
     },
     {
+      "cle": "plans_match",
+      "nom": "Plan de match",
+      "module": "plans_match",
+      "permissions": [
+        { "cle": "plans.voir", "action": "voir", "libelle": "Voir les plans prêts" },
+        { "cle": "plans.editer", "action": "modifier", "libelle": "Préparer, publier et supprimer" }
+      ]
+    },
+    {
       "cle": "player_notes",
       "nom": "Suivi joueurs",
       "module": "player_notes",
@@ -231,6 +241,7 @@
         "discord.manage",
         "video_review.view", "video_review.react", "scouting.view", "strats.view", "playbook.view",
         "lineups.voir", "lineups.proposer", "lineups.gerer",
+        "plans.voir", "plans.editer",
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
         "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
@@ -255,6 +266,7 @@
         "strats.view", "strats.create", "strats.update", "strats.delete", "strats.share",
         "playbook.view", "playbook.manage",
         "lineups.voir", "lineups.proposer", "lineups.gerer",
+        "plans.voir", "plans.editer",
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
         "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
@@ -277,6 +289,7 @@
         "strats.view", "strats.create", "strats.update", "strats.share",
         "playbook.view", "playbook.manage",
         "lineups.voir", "lineups.proposer",
+        "plans.voir",
         "player_notes.view", "player_notes.write",
         "resources.view", "resources.post", "resources.manage",
         "tournois.voir", "resultats.voir", "resultats.saisir",
@@ -297,6 +310,7 @@
         "video_review.view", "video_review.annotate", "video_review.react",
         "strats.view", "playbook.view",
         "lineups.voir", "lineups.proposer",
+        "plans.voir",
         "resources.view",
         "tournois.voir", "resultats.voir",
         "cm.clips.proposer"
@@ -307,7 +321,7 @@
       "nom": "Remplaçant / Invité",
       "couleur": "#8b8b9a",
       "description": "Lecture limitée.",
-      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "lineups.voir", "resources.view", "tournois.voir", "resultats.voir", "cm.clips.proposer"]
+      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "lineups.voir", "plans.voir", "resources.view", "tournois.voir", "resultats.voir", "cm.clips.proposer"]
     }
   ],
   "presets": [
@@ -315,7 +329,7 @@
       "cle": "valorant_complet",
       "nom": "Team Valorant complète",
       "description": "Tous les modules.",
-      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "lineups", "player_notes", "resources", "tournois", "resultats", "cm"]
+      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "lineups", "plans_match", "player_notes", "resources", "tournois", "resultats", "cm"]
     },
     { "cle": "minimal", "nom": "Minimal", "description": "Journal, planning et disponibilités.", "modules": ["activity_log", "planning", "availability"] },
     { "cle": "personnalise", "nom": "Personnalisé", "description": "Vous choisissez chaque module.", "modules": null }
@@ -415,6 +429,8 @@
     "lineups.voir": {"categorie":"jeu","fr":"Lineups : voir les lineups et placements de la team (grille, vue par map, fiches).","en":"Lineups: see the team’s lineups and placements (grid, map view, cards)."},
     "lineups.proposer": {"categorie":"jeu","fr":"Lineups : proposer un lineup (images, vidéo, points sur la minimap) et corriger ses propositions tant qu’elles ne sont pas validées.","en":"Lineups: propose a lineup (images, video, points on the minimap) and edit your own proposals until they are approved."},
     "lineups.gerer": {"categorie":"jeu","fr":"Lineups : valider, corriger et supprimer tous les lineups (corbeille de 30 jours), les lier aux strats.","en":"Lineups: approve, edit and delete every lineup (30-day bin), link them to strats."},
+    "plans.voir": {"categorie":"jeu","fr":"Plan de match : lire les plans prêts et joués de la team.","en":"Match plan: read the team’s ready and played plans."},
+    "plans.editer": {"categorie":"jeu","fr":"Plan de match : préparer les plans (brouillons, modèles), les marquer prêts ou joués, les dupliquer et les supprimer.","en":"Match plan: prepare plans (drafts, templates), mark them ready or played, duplicate and delete them."},
     "player_notes.view": {"categorie":"jeu","fr":"Suivi joueurs : lire les notes du staff sur les joueurs.","en":"Player tracking: read staff notes about players.","sensible":true},
     "player_notes.write": {"categorie":"jeu","fr":"Suivi joueurs : écrire des notes.","en":"Player tracking: write notes."},
     "player_notes.delete": {"categorie":"jeu","fr":"Suivi joueurs : supprimer des notes.","en":"Player tracking: delete notes.","sensible":true},

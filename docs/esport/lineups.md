@@ -9,6 +9,8 @@ gadgets, défenses de cashout) et les mots suivent le jeu : « Classe », « Gad
 > externe** (aucun bouton de l'assistant d'écriture sur leurs champs, et le serveur refuse : voir « Confidentialité »)
 > et **jamais publiés sur Discord**.
 
+Les lineups clés d'un match se rangent dans son [plan de match](plans-match.md).
+
 ## Pour un joueur
 
 - **Grille** : une carte par lineup, l'image d'abord, le personnage et la capacité en pastilles, le side, la

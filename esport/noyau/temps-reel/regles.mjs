@@ -31,6 +31,7 @@ export const LECTURE_MODULE = Object.freeze({
   strat_editor: 'strats.view',
   playbook: 'playbook.view',
   lineups: 'lineups.voir',
+  plans_match: 'plans.voir',
   player_notes: 'player_notes.view',
   resources: 'resources.view',
   tournois: 'tournois.voir',
@@ -99,7 +100,7 @@ const IGNORES = [
 ];
 
 /** Sous-chemins d'une collection qui ne sont pas des objets (`/teams/:t/planning/reglages`…). */
-const RESERVES = new Set(['accueil', 'reglages', 'export.ics', 'export.csv', 'ical', 'types', 'miens', 'envois', 'vu', 'apercu', 'categories', 'corbeille', 'supprimer', 'formulaire', 'adversaires', 'matchs', 'moi', 'boite', 'reglages-transcription', 'ordre', 'images', 'donnees', 'fichiers', 'import', 'etat', 'a-valider', 'calendrier', 'recherche', 'stats', 'historique', 'a-marquer', 'joueurs', 'carte', 'multi', 'teams', 'creneaux', 'equipe', 'comptes', 'statut', 'dispos', 'rdv', 'export.ics', 'taches']);
+const RESERVES = new Set(['accueil', 'reglages', 'export.ics', 'export.csv', 'ical', 'types', 'miens', 'envois', 'vu', 'apercu', 'categories', 'corbeille', 'supprimer', 'formulaire', 'adversaires', 'matchs', 'moi', 'boite', 'reglages-transcription', 'ordre', 'images', 'donnees', 'fichiers', 'import', 'etat', 'a-valider', 'calendrier', 'recherche', 'stats', 'historique', 'a-marquer', 'joueurs', 'carte', 'multi', 'teams', 'creneaux', 'equipe', 'comptes', 'statut', 'dispos', 'rdv', 'export.ics', 'taches', 'prochain', 'liens', 'evenement']);
 
 /**
  * Objet d'une route de team : `[module, prefixe de clé, sous-chemin de l'objet]` (objet = premier segment
@@ -115,6 +116,7 @@ const COLLECTIONS_TEAM = {
   strats: { module: 'strat_editor', cle: 'strat', sonde: true },
   playbook: { module: 'playbook', cle: 'playbook' },
   lineups: { module: 'lineups', cle: 'lineup', sonde: true },
+  plans: { module: 'plans_match', cle: 'plan_match', sonde: true },
   review: { module: 'video_review', cle: 'review', sonde: true },
   scouting: { module: 'scouting', cle: 'adversaire', sonde: true, sous: 'adversaires' },
   suivi: { module: 'player_notes', cle: 'suivi', sonde: true },
@@ -241,6 +243,7 @@ const MODULES_EVENEMENTS = [
   [/^strat\./, ['strat_editor']],
   [/^playbook\./, ['playbook']],
   [/^lineup\./, ['lineups']],
+  [/^plan_match\./, ['plans_match']],
   [/^player_note\./, ['player_notes']],
   [/^(?:resource|resource_category|resources)\./, ['resources']],
   [/^tournoi\./, ['tournois']],

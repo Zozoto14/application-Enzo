@@ -91,7 +91,7 @@ async function controler(page, nom, [largeur, hauteur]) {
 
 const GROUPES = {
   accueil: 'accueil', 'module-planning': 'agenda', 'module-availability': 'agenda', 'module-attendance': 'agenda',
-  'module-strat_editor': 'jeu', 'module-playbook': 'jeu', 'module-lineups': 'jeu', 'module-resources': 'jeu', 'module-video_review': 'jeu', 'module-scouting': 'jeu',
+  'module-strat_editor': 'jeu', 'module-playbook': 'jeu', 'module-lineups': 'jeu', 'module-plans_match': 'jeu', 'module-resources': 'jeu', 'module-video_review': 'jeu', 'module-scouting': 'jeu',
   'module-tournois': 'competition', 'module-resultats': 'competition',
   'module-meeting_summaries': 'equipe', 'module-goals_tasks': 'equipe', 'module-player_notes': 'equipe', 'module-cm': 'equipe', membres: 'equipe',
   parametres: 'reglages', 'module-discord': 'reglages', journal: 'reglages',
@@ -318,6 +318,24 @@ async function parcourir(page, taille) {
       } else {
         echecs++;
         console.log('  ECHEC strat de démonstration introuvable (atelier non contrôlé)');
+      }
+    }
+    // Plan de match : page d'un plan (résumé, veto, map, checklist) et éditeur.
+    if (id === 'module-plans_match' && (await present(page, 'esport-plans', 1500))) {
+      const ouvrir = page.locator('[data-testid^="esport-plan-ouvrir-"]').first();
+      if (await ouvrir.count()) {
+        await ouvrir.click();
+        if (await present(page, 'esport-plan-resume', 5000)) {
+          await controler(page, 'team-plans-page', taille);
+          if (await present(page, 'esport-plan-modifier', 1000)) {
+            await page.getByTestId('esport-plan-modifier').first().click();
+            if (await present(page, 'esport-plan-form', 5000)) {
+              await controler(page, 'team-plans-editeur', taille);
+              await page.getByTestId('esport-plan-form-annuler').first().click();
+            }
+          }
+          if (await present(page, 'esport-plan-retour', 1500)) await page.getByTestId('esport-plan-retour').first().click();
+        }
       }
     }
     // Disponibilités : aussi le mode « Planning différent chaque semaine » (choix de la semaine, bandeau, actions).

@@ -140,6 +140,10 @@ export const REGLES = Object.freeze({
   'playbook.*': { categorie: 'jeu', acces: 'team:playbook.view', lien: TEAM('module:playbook') },
   // Lineups (migration 0082) : contenu tactique, visible de ceux qui voient les lineups de la team.
   'lineup.*': { categorie: 'jeu', acces: 'team:lineups.voir', lien: TEAM('module:lineups') },
+  // Plans de match (migration 0083) : la team voit « prêt » et « joué » ; le reste (brouillons, modèles) est au staff.
+  'plan_match.ready': { categorie: 'jeu', acces: 'team:plans.voir', lien: TEAM('module:plans_match') },
+  'plan_match.played': { categorie: 'jeu', acces: 'team:plans.voir', lien: TEAM('module:plans_match') },
+  'plan_match.*': { categorie: 'jeu', acces: 'team:plans.editer', lien: TEAM('module:plans_match') },
   'review.*': { categorie: 'jeu', acces: 'team:video_review.view', lien: TEAM('module:video_review') },
   'review.reaction_changed': AUCUN,
   'review.marker_updated': AUCUN,
@@ -280,7 +284,7 @@ export function categoriePerso(type) {
   if (t.startsWith('tournoi') || t.startsWith('match')) return /resultat/.test(t) ? 'resultats' : 'competition';
   if (t.startsWith('resultat')) return 'resultats';
   if (/^(evenement|event|convocation|presence|rappel|planning|seance)/.test(t)) return 'planning';
-  if (/^(review|ressource|strat|playbook|scouting|lineup)/.test(t)) return 'jeu';
+  if (/^(review|ressource|strat|playbook|scouting|lineup|plan_match|plan-pret)/.test(t)) return 'jeu';
   if (t.startsWith('discord')) return 'discord';
   return 'systeme';
 }

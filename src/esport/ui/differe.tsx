@@ -6,4 +6,4 @@
  * écran dans un fichier séparé, seulement quand on l'ouvre.
  */
 
-export { CmTeam, Discord, Disponibilites, EspaceCm, Jeux, Lineups, Planning, Playbook, Presence, Ressources, Resultats, Review, Scouting, Statistiques, Strats, SuiviJoueurs, Tournois, Trombinoscope, MaFicheTrombi, RolesPermissions, PageDevblog, PageTickets, PageBot, PageEvenements } from './ecransModules';
+export { CmTeam, Discord, Disponibilites, EspaceCm, Jeux, Lineups, Planning, Plans, Playbook, Presence, Ressources, Resultats, Review, Scouting, Statistiques, Strats, SuiviJoueurs, Tournois, Trombinoscope, MaFicheTrombi, RolesPermissions, PageDevblog, PageTickets, PageBot, PageEvenements } from './ecransModules';

@@ -1032,7 +1032,32 @@
   "Lineup introuvable dans la corbeille.": "Lineup not found in the bin.",
   "Fichier non reconnu : image (PNG, JPEG, WebP, GIF) ou vidéo courte (MP4, MOV, WebM).": "Unrecognised file: image (PNG, JPEG, WebP, GIF) or short video (MP4, MOV, WebM).",
   "Point hors de la map.": "Point outside the map.",
-  "Filtre statut inconnu.": "Unknown status filter."
+  "Filtre statut inconnu.": "Unknown status filter.",
+  "Action de veto : ban, pick ou decider.": "Veto action: ban, pick or decider.",
+  "Camp du veto : nous ou eux.": "Veto side: nous or eux.",
+  "Joueur illisible.": "Unreadable player.",
+  "Type de round inconnu.": "Unknown round type.",
+  "Side illisible.": "Unreadable side.",
+  "Une strat prévue a besoin d’une strat, d’une entrée du playbook ou d’un titre.": "A planned strat needs a strat, a playbook entry or a title.",
+  "Lineup illisible.": "Unreadable lineup.",
+  "Mode illisible.": "Unreadable mode.",
+  "Plan trop volumineux : raccourcissez les notes.": "Plan too large: shorten the notes.",
+  "Plan de match introuvable.": "Match plan not found.",
+  "Événement inconnu (match, scrim ou tournoi du planning).": "Unknown event (match, scrim or tournament from the schedule).",
+  "Date de l’événement inconnue.": "Unknown event date.",
+  "Cette date de l’événement est annulée.": "This date of the event is cancelled.",
+  "Un joueur de la composition n’est pas membre de la team.": "A player in the composition is not a member of the team.",
+  "Entrée du playbook inconnue.": "Unknown playbook entry.",
+  "Lineup inconnu.": "Unknown lineup.",
+  "Format : bo1, bo3, bo5 ou vide.": "Format: bo1, bo3, bo5 or empty.",
+  "Cet événement a déjà un plan de match.": "This event already has a match plan.",
+  "Date illisible (AAAA-MM-JJ).": "Unreadable date (YYYY-MM-DD).",
+  "Match de tournoi inconnu.": "Unknown tournament match.",
+  "Statut : brouillon, pret ou joue.": "Status: brouillon, pret or joue.",
+  "Liste de cases illisible.": "Unreadable list of boxes.",
+  "Un modèle n’a pas de debrief.": "A template has no debrief.",
+  "Le debrief de ce plan est déjà au planning.": "The debrief of this plan is already in the schedule.",
+  "Identifiant illisible.": "Unreadable identifier."
  },
  "motifs": [
   [
@@ -1570,6 +1595,10 @@
   [
    "^(\\d+) images au plus par lineup\\.$",
    "$1 images at most per lineup."
+  ],
+  [
+   "^Liste illisible ou trop longue \\((\\d+) au plus\\)\\.$",
+   "Unreadable or too long list ($1 at most)."
   ]
  ]
 }

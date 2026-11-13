@@ -66,6 +66,8 @@ export const TABLES = [
   ['lineup_medias', 'id'],
   ['lineup_favoris', 'lineup_id, compte_id'],
   ['strat_lineups', 'strat_id, lineup_id'],
+  // Plans de match (migration 0083).
+  ['plans_match', 'id'],
   // Migration 0009 : demandes de compte.
   ['demandes_compte', 'id'],
   // Bot Discord (migration 0011) : identifiants Discord publics, empreintes des codes.

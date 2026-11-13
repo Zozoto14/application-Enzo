@@ -23,6 +23,7 @@ import { TYPES_PLANNING, abonnePlanning } from './planning/bus.mjs';
 import { TYPES_REVIEW, abonneReview } from './review/bus.mjs';
 import { TYPES_STRATS, abonneStrats } from './strats/bus.mjs';
 import { TYPES_LINEUPS, abonneLineups } from './lineups/bus.mjs';
+import { TYPES_PLANS, abonnePlans } from './plans/bus.mjs';
 import { TYPES_RESSOURCES, abonneRessources } from './ressources/bus.mjs';
 import { TYPES_COMPETITION, abonneCompetition } from './competition/bus.mjs';
 import { TYPES_CM, TYPES_HORS_JOURNAL, abonneCm } from './cm/bus.mjs';
@@ -89,6 +90,8 @@ export const TYPES_EVENEMENTS = [
   ...TYPES_STRATS,
   // Lineups (migration 0082) : contenu tactique, jamais annoncé sur Discord.
   ...TYPES_LINEUPS,
+  // Plans de match (migration 0083) : la charge ne porte que le titre, l'adversaire et la date.
+  ...TYPES_PLANS,
   // Suivi des joueurs (notes du staff) : la charge ne contient que le joueur concerné, jamais le contenu.
   'player_note.created',
   'player_note.updated',
@@ -272,7 +275,7 @@ export async function abonneNotifications(base, ev) {
 // Centre de notifications (migration 0038) : TOUJOURS le dernier (il relie le fil aux notifications personnelles
 // que les abonnés précédents viennent d'écrire pour le même événement, et les annonce en direct).
 // Le temps réel vient juste après : il annonce aussi les notifications que le centre vient d'écrire.
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneLineups, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi, abonneTickets, abonneAlertes, abonneCentre, abonneTempsReel];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneLineups, abonnePlans, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi, abonneTickets, abonneAlertes, abonneCentre, abonneTempsReel];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

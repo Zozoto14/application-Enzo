@@ -3,7 +3,7 @@
  *
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
- *  - Jeu : Strats, Playbook, Lineups, Ressources, Review vidéo, Scouting ;
+ *  - Jeu : Strats, Playbook, Lineups, Plan de match, Ressources, Review vidéo, Scouting ;
  *  - Compétition : Tournois, Résultats (sur petite largeur : rangés dans Agenda,
  *    la barre basse reste à cinq sections) ;
  *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
@@ -28,6 +28,7 @@ import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTea
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
 import { AccueilCompetition } from './AccueilCompetition';
+import { ProchainPlan } from './plans/Raccourcis';
 import { MonSuivi } from './MonSuivi';
 import { CadreEsport, EntreeLaterale, SiBarreEtendue, type OngletEsport } from './CadreEsport';
 import { Journal } from './Journal';
@@ -75,7 +76,7 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
       return tr('assistant.jeu');
     }, glyphe: 'viseur', get description() {
       return tr('pageTeam.jeu_strats_playbook_review');
-    }, sections: ['module:strat_editor', 'module:playbook', 'module:lineups', 'module:resources', 'module:video_review', 'module:scouting'] },
+    }, sections: ['module:strat_editor', 'module:playbook', 'module:lineups', 'module:plans_match', 'module:resources', 'module:video_review', 'module:scouting'] },
   { id: 'competition', get libelle() {
       return tr('pageTeam.competition');
     }, glyphe: 'trophee', get description() {
@@ -467,6 +468,7 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
       <View style={large ? { flexDirection: 'row', gap: ESP.l, alignItems: 'flex-start' } : { gap: ESP.m }}>
         {/* Planning d'abord : sur iPhone, répondre doit se faire sans défiler. */}
         <View style={{ gap: ESP.m, flex: large ? 1.6 : undefined, minWidth: 0 }}>
+          <ProchainPlan theme={theme} client={client} detail={detail} onOuvrir={() => onAller('module:plans_match')} />
           <AccueilPlanning theme={theme} client={client} detail={detail} onAller={onAller} />
           <MonSuivi theme={theme} client={client} detail={detail} />
           <AccueilCompetition theme={theme} client={client} detail={detail} onAller={onAller} />

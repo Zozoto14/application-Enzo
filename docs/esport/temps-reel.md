@@ -111,7 +111,7 @@ Les strats gardent en plus leur `revision` (inchangée), les cartes CM leur `ver
 `useTempsReel(client, sujets, relire)` : tableaux, calendrier et file de validation du CM (`useEtatCm` : plus de
 relecture toutes les 12 s en direct, 60 s de secours sinon), fiche d'une carte CM (verrou, présence, bandeau),
 planning et présences, Drive, Visuels, Sponsors, Réseaux, trombinoscope et badges, tournois, résultats, strats et
-playbook (liste), lineups (liste, sujet `team:<t>:lineups`), objectifs et tâches, agenda des réunions CM, cloche et compteur du centre de notifications, teams (accueil, page d'une team). Pastille « En direct » /
+playbook (liste), lineups (liste, sujet `team:<t>:lineups`), plans de match (liste et page, sujet `team:<t>:plans_match`), objectifs et tâches, agenda des réunions CM, cloche et compteur du centre de notifications, teams (accueil, page d'une team). Pastille « En direct » /
 « Reconnexion… » en bas à droite de l'Esport. Les autres écrans (review, scouting, ressources, suivi)
 reçoivent déjà les messages : un appel à `useTempsReel` suffit pour les brancher.
 

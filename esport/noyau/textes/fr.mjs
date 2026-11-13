@@ -79,6 +79,8 @@ export const FR = {
   'var.un_membre': 'Un membre',
   'var.toute_la_team': 'toute la team',
   'var.pour_le': ', pour le {date}',
+  'var.contre': ' contre {nom}',
+  'var.plan_pour_le': ', pour le {date}',
   'var.en_retard': 'en retard',
   'var.echeance_proche': 'échéance proche',
   'var.defense': 'Défense',

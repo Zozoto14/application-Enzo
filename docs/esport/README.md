@@ -24,6 +24,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
 | [strats.md](strats.md) | Coach, Analyste, Fondateur | Strats par modèle de jeu (Valorant, The Finals), capacités à l'échelle, lecture animée, exports |
 | [lineups.md](lineups.md) | Coach, Analyste, joueurs | Lineups (« Lineups et placements » pour The Finals) : grille et filtres rapides, vue par map (pins, trajectoire), fiche avec images et vidéo, proposition par les joueurs et validation par le staff, liens avec les strats |
+| [plans-match.md](plans-match.md) | Coach, Manager, joueurs | Plan de match : veto, compositions par map, strats par side et type de round, lineups clés, checklist ; brouillon → prêt (team notifiée) → joué ; vue du joueur « Mon rôle », modèles, impression, debrief |
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
@@ -75,7 +76,7 @@ Esport
 │       ├── Accueil      prochains événements (réponse en un appui), derniers résumés, tâches en retard,
 │       │                l'équipe, notifications, statistiques
 │       ├── Agenda       Planning · Disponibilités · Présence
-│       ├── Jeu          Strats · Playbook · Lineups · Ressources · Review vidéo · Scouting
+│       ├── Jeu          Strats · Playbook · Lineups · Plan de match · Ressources · Review vidéo · Scouting
 │       ├── Compétition  Tournois · Résultats
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
@@ -116,7 +117,7 @@ Chaque membre a **un rôle par team** (on peut être Coach dans une team et Joue
 | --- | --- |
 | **Propriétaire** | Tout, y compris supprimer la team et choisir ses modules |
 | **Manager** | Membres, rôles, invitations, planning, résumés, Discord, journal |
-| **Coach** | Planning, présence, review, strats, playbook, lineups (création, validation), scouting, objectifs, ressources, tournois, résultats |
+| **Coach** | Planning, présence, review, strats, playbook, lineups (création, validation), plans de match, scouting, objectifs, ressources, tournois, résultats |
 | **Analyste** | Review, strats, playbook, scouting, saisie des résultats ; propose des lineups ; lit le planning et les tournois |
 | **Joueur** | Lit la team (tournois et résultats compris), donne ses disponibilités, répond aux événements où il est convoqué, dépose des réunions, commente les reviews |
 | **Remplaçant** | Lecture limitée |
@@ -272,6 +273,9 @@ team sont déjà là (Dashboard et Teams), aucun code à saisir. Riot ID et Disc
 - **Lineups** : retrouvez un lineup par map, personnage ou capacité, ou sur la **vue par map** (touchez un pin
   pour voir d'où le lancer) ; mettez vos préférés en favori, proposez les vôtres (validés par le staff). Voir
   [lineups.md](lineups.md).
+- **Plan de match** : quand le staff marque un plan « prêt », vous êtes prévenu ; le plan montre **Mon rôle** (ce
+  que vous jouez sur chaque map), le veto, les strats prévues et les lineups clés. Voir
+  [plans-match.md](plans-match.md).
 - **Ressources** (section Jeu) : guides, vidéos de pros, lineups, outils… publiés par le staff ; réagissez,
   commentez, gardez vos favoris ; si la team l'ouvre, proposez les vôtres (validées par le staff). Voir
   [ressources.md](ressources.md).

@@ -9,7 +9,7 @@
 export const VERSION_CIBLE = 1;
 
 /** Genres de cibles (version 1) : la même liste que le serveur (vérifié par esport/test/notifications-cibles.test.mjs). */
-export const GENRES_CIBLES = ['ticket', 'carte_cm', 'clip_cm', 'lien_cm', 'drive', 'reunion_cm', 'evenement', 'tache', 'objectif', 'reunion', 'strat', 'playbook', 'lineup', 'review', 'ressource', 'adversaire', 'tournoi', 'resultat', 'membre', 'demande_compte', 'sponsor', 'jeu', 'devblog', 'avis_ticket', 'salon_match', 'alerte_discord'] as const;
+export const GENRES_CIBLES = ['ticket', 'carte_cm', 'clip_cm', 'lien_cm', 'drive', 'reunion_cm', 'evenement', 'tache', 'objectif', 'reunion', 'strat', 'playbook', 'lineup', 'plan_match', 'review', 'ressource', 'adversaire', 'tournoi', 'resultat', 'membre', 'demande_compte', 'sponsor', 'jeu', 'devblog', 'avis_ticket', 'salon_match', 'alerte_discord'] as const;
 export type GenreCible = (typeof GENRES_CIBLES)[number];
 
 /** Identifiants permis par genre (mêmes listes que le serveur). */
@@ -27,6 +27,7 @@ export const CHAMPS_CIBLES: Record<GenreCible, readonly string[]> = {
   strat: ['strat', 'team'],
   playbook: ['entree', 'team'],
   lineup: ['lineup', 'team'],
+  plan_match: ['plan', 'team'],
   review: ['review', 'repere', 'team'],
   ressource: ['ressource', 'team'],
   adversaire: ['adversaire', 'team'],
@@ -91,6 +92,7 @@ const SECTIONS_TEAM: Partial<Record<GenreCible, string>> = {
   strat: 'module:strat_editor',
   playbook: 'module:playbook',
   lineup: 'module:lineups',
+  plan_match: 'module:plans_match',
   review: 'module:video_review',
   ressource: 'module:resources',
   adversaire: 'module:scouting',

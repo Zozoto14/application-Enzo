@@ -27,6 +27,7 @@ export function PastillesFiltre({
   options,
   tout,
   dense = false,
+  sansTout = false,
   onChoisir,
   testID,
 }: {
@@ -37,6 +38,8 @@ export function PastillesFiltre({
   /** Nom du choix « tout » (« Tous », « Toutes »). */
   tout: string;
   dense?: boolean;
+  /** Choix obligatoire (onglets d'une page) : pas de pastille « tout ». */
+  sansTout?: boolean;
   onChoisir(id: string): void;
   testID: string;
 }) {
@@ -45,7 +48,7 @@ export function PastillesFiltre({
   return (
     <View accessibilityRole="radiogroup" accessibilityLabel={libelle} style={{ flexDirection: 'row', alignItems: 'center', gap: dense ? 4 : 6, flexWrap: 'wrap', maxWidth: '100%' }}>
       <Text style={{ ...attenue(theme, 11), fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginRight: 4 }}>{libelle}</Text>
-      {[{ id: '', nom: tout } as OptionPastille, ...options].map(o => {
+      {(sansTout ? options : [{ id: '', nom: tout } as OptionPastille, ...options]).map(o => {
         const actif = o.id === valeur;
         return (
           <Pressable

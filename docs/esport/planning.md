@@ -370,3 +370,8 @@ Ajouter `?format=json` aux exports pour recevoir `{ nom, type, contenu }` (utili
   `esport/test/presence-notes.test.mjs`, `src/esport/planning/planning.test.tsx`, `src/esport/planning/presence.test.tsx`,
   e2e `scripts/e2e-esport-planning.mjs`, `scripts/e2e-esport-convocations.mjs` et `scripts/e2e-esport-presence-notes.mjs`.
 - Migrations : numéros croissants, **trous permis** (une autre branche peut livrer `0003` avant `0002`).
+
+## Plan de match
+
+Un événement Match, Scrim ou Tournoi porte un bouton **Plan de match** : il ouvre le plan de ce match, ou le crée
+(staff). Voir [plans-match.md](plans-match.md).

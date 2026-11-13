@@ -18,6 +18,7 @@
     { "id": "team.jeu.strat_editor", "module": "strat_editor" },
     { "id": "team.jeu.playbook", "module": "playbook" },
     { "id": "team.jeu.lineups", "module": "lineups" },
+    { "id": "team.jeu.plans_match", "module": "plans_match" },
     { "id": "team.jeu.resources", "module": "resources" },
     { "id": "team.jeu.video_review", "module": "video_review" },
     { "id": "team.jeu.scouting", "module": "scouting" },

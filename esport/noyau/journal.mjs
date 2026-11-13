@@ -47,6 +47,7 @@ export const ACTIONS_PAR_MODULE = {
   strat_editor: ['strat'],
   playbook: ['playbook'],
   lineups: ['lineup'],
+  plans_match: ['plan_match'],
   player_notes: ['player_note'],
   resources: ['resource', 'resource_category', 'resources'],
   tournois: ['tournoi'],

@@ -178,6 +178,17 @@ export const EVENEMENTS_DISCORD = [
     variables: variables({ titre: 'Titre de la strat', carte: 'Carte', side: 'Attaque ou Défense', acteur: 'Qui l’a créée' }),
   },
   {
+    // Contenu tactique : l'annonce ne porte QUE l'adversaire et la date (jamais le titre, les maps, les strats ni les notes).
+    cle: 'plan_match_ready',
+    libelle: 'Plan de match prêt',
+    description: 'Un plan de match passe au statut « prêt » (module Plan de match). Le message ne contient aucun contenu du plan : seulement l’adversaire, la date et un lien vers l’app.',
+    types: ['plan_match.ready'],
+    modules: ['plans_match'],
+    defaut: false,
+    modele: 'Le plan de match{contre} est prêt{pourLe}. À lire dans l’app.',
+    variables: variables({ contre: 'Adversaire (« contre Karmine », vide sans adversaire)', pourLe: 'Date du match (« , pour le 14 novembre », vide sans date)' }),
+  },
+  {
     cle: 'playbook_validated',
     libelle: 'Entrée du playbook validée',
     description: 'Une entrée du playbook passe au statut « validée » (module Playbook, phase 6).',
@@ -409,6 +420,12 @@ const TEXTES_EN = {
     description: 'A strat is created in the editor (Strats module).',
     modele: '**New strat**: {titre} ({carte}, {side}), by {acteur}.',
     variables: { titre: 'Strat title', carte: 'Map', side: 'Attack or Defense', acteur: 'Who created it' },
+  },
+  plan_match_ready: {
+    libelle: 'Match plan ready',
+    description: 'A match plan moves to the “ready” status (Match plan module). The message holds none of the plan’s content: only the opponent, the date and a link to the app.',
+    modele: 'The match plan{contre} is ready{pourLe}. Read it in the app.',
+    variables: { contre: 'Opponent (“ against Karmine”, empty without an opponent)', pourLe: 'Match date (“, for 14 November”, empty without a date)' },
   },
   playbook_validated: {
     libelle: 'Playbook entry validated',

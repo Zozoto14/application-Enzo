@@ -34,6 +34,7 @@ import { effacementUsage } from './usage/collecte.mjs';
 import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
 import { effacementCompetition } from './competition/rgpd.mjs';
 import { effacementLineups, exportLineups } from './lineups/rgpd.mjs';
+import { effacementPlans, exportPlans } from './plans/rgpd.mjs';
 import { effacementCm, exportCm } from './cm/rgpd.mjs';
 import { effacementSponsors, exportSponsors } from './sponsors/rgpd.mjs';
 import { effacementReseaux, exportReseaux } from './reseaux/rgpd.mjs';
@@ -964,6 +965,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
       // Lineups (migration 0082) : ceux qu'il a proposés, ses favoris.
       ...(await exportLineups(base, compte)),
+      // Plans de match (migration 0083) : ceux qu'il a créés, les compositions qui le désignent.
+      ...(await exportPlans(base, compte)),
       // Section CM (migration 0023) : rôles CM, cartes créées ou assignées, commentaires, clips proposés, fichiers déposés.
       ...(await exportCm(base, compte)),
       // Rôles du club (migration 0033).
@@ -1076,6 +1079,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementCompetition(compte),
       // Lineups (migration 0082) : favoris effacés ; ce qu'il a proposé reste pour la team, sans auteur.
       ...effacementLineups(compte),
+      // Plans de match (migration 0083) : ils restent à la team, sans auteur ; il sort des compositions.
+      ...(await effacementPlans(base, compte)),
       // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
       ...(await effacementCm(base, compte)),
       // Sponsors (migration 0024) : plus responsable de rien ; ce qu'il a écrit reste, sans auteur.

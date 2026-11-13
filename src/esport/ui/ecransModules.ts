@@ -9,6 +9,7 @@ export { Scouting } from './scouting/Scouting';
 export { Playbook } from './strats/Playbook';
 export { Strats } from './strats/Strats';
 export { Lineups } from './lineups/Lineups';
+export { Plans } from './plans/Plans';
 export { SuiviJoueurs } from './suivi/SuiviJoueurs';
 export { Statistiques } from './Statistiques';
 export { Jeux } from './jeux/Jeux';

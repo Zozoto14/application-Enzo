@@ -167,6 +167,13 @@ async function variablesDe(base, ev, cle, charge, team, L) {
       if (!s || s.visibilite !== 'team') return null;
       return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: T(L, charge.side === 'defense' ? 'var.defense' : 'var.attaque'), acteur: await pseudo(ev.acteur_id) };
     }
+    case 'plan_match_ready': {
+      // Contenu tactique : rien du plan ne part, seulement l'adversaire et la date (relus dans la base, pas dans la charge).
+      const p = await base.premier("SELECT adversaire_nom, date_match FROM plans_match WHERE id = ? AND team_id = ? AND statut = 'pret' AND est_modele = 0 AND supprime_le IS NULL", [ev.entite_id, ev.team_id]);
+      if (!p) return null;
+      const jour = p.date_match ? formaterInstant(team.fuseau, `${p.date_match}T12:00:00.000Z`, L).date : '';
+      return { ...base_, contre: p.adversaire_nom ? T(L, 'var.contre', { nom: p.adversaire_nom }) : '', pourLe: jour ? T(L, 'var.plan_pour_le', { date: jour }) : '', _plan: ev.entite_id };
+    }
     case 'playbook_validated':
       return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? T(L, 'var.sur_carte', { carte: charge.carte }) : '', acteur: await pseudo(ev.acteur_id) };
     case 'resource_created': {
@@ -502,6 +509,15 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
     const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
     const embed = embedCompetition({ cle: ligne.cle, resume: r, texte: contenu, lien: lienApp, maintenant: t, langue });
     return { charge: construireCharge(contenu, { roleId, nomTeam: team.nom, embed, composants: boutonsCompetition(r.tournoi?.lien ?? r.lien, lienApp, langue), maintenant: t, langue }) };
+  }
+  if (ligne.cle === 'plan_match_ready') {
+    // Relu au moment de l'envoi : supprimé ou repassé en brouillon entre-temps → rien ne part. Lien direct vers le plan.
+    const p = await base.premier("SELECT id FROM plans_match WHERE id = ? AND team_id = ? AND statut = 'pret' AND supprime_le IS NULL", [variables._plan ?? '', ligne.team_id]);
+    if (!p) return { abandon: 'Plan supprimé ou repassé en brouillon', silencieux: true };
+    const lien = lienProfond(lienApp, { v: 1, g: 'plan_match', plan: p.id, team: ligne.team_id }) || lienApp;
+    const contenu = rendreModele(ligne.modele, { ...variables, lien });
+    const def = evenementDiscord(ligne.cle);
+    return { charge: construireCharge(contenu, { roleId, nomTeam: team.nom, logoTeam: team.logo_url, cle: ligne.cle, titre: def ? textesEvenement(def, langue).libelle : T(langue, 'message.titre_defaut'), lien, composants: boutonLien(lien, undefined, langue), maintenant: t, langue }) };
   }
   if (!occurrence) {
     const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });

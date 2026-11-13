@@ -2,7 +2,8 @@
 
 > Modèles de strat par jeu (Valorant, The Finals, générique), capacités à l'échelle, phases, lecture animée,
 > exports PDF : voir [strats.md](strats.md). Lineups de la team (images, vue par map, liens avec les strats) :
-> voir [lineups.md](lineups.md).
+> voir [lineups.md](lineups.md). Préparation d'un match (veto, compositions, strats par round) : voir
+> [plans-match.md](plans-match.md).
 
 Deux modules de la phase 6, activables par team (Paramètres de la team) :
 

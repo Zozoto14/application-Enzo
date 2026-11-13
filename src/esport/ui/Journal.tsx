@@ -30,6 +30,7 @@ export const ACTIONS_PAR_MODULE: Record<string, readonly string[]> = {
   strat_editor: ['strat'],
   playbook: ['playbook'],
   lineups: ['lineup'],
+  plans_match: ['plan_match'],
 };
 
 type Periode = 'tout' | '7' | '30' | '90' | 'dates';

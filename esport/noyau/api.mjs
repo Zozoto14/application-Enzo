@@ -42,6 +42,8 @@ import { routePubliqueStrats, routesStrats } from './strats/routes.mjs';
 import { servicesStrats } from './strats/service.mjs';
 import { servicesLineups } from './lineups/service.mjs';
 import { routesLineups } from './lineups/routes.mjs';
+import { servicesPlans } from './plans/service.mjs';
+import { routesPlans } from './plans/routes.mjs';
 import { routesSuivi, servicesSuivi } from './suivi/service.mjs';
 import { configMedias, servicesMedias } from './medias/service.mjs';
 import { routesRessources } from './ressources/routes.mjs';
@@ -223,6 +225,8 @@ export function creerApi({
   const pb = servicesPlaybook({ base, maintenant, socle: s, strats: st });
   // Lineups et placements (migration 0082) : médias par envoi par morceaux (usage « lineup »), liens avec les strats.
   const lu = servicesLineups({ base, stockage, cleSession, maintenant, socle: s, medias: md, strats: st });
+  // Plans de match (migration 0083) : liés au planning, au scouting, aux strats, au playbook et aux lineups.
+  const pm = servicesPlans({ base, maintenant, socle: s, strats: st, planning: p });
   const jr = servicesJournal({ base, maintenant, socle: s });
   const stt = servicesStats({ base, maintenant, socle: s });
   // Suivi des joueurs (notes du staff) : le résumé de la fiche reprend la présence du planning.
@@ -589,6 +593,8 @@ export function creerApi({
     // Avant les strats : `/teams/:t/strats/:id/lineups` (lineups d'une strat) est servie par le module Lineups.
     const lineups = await routesLineups({ lineups: lu, medias: md, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max) });
     if (lineups !== undefined) return lineups;
+    const plans = await routesPlans({ plans: pm, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
+    if (plans !== undefined) return plans;
     const stratsPlaybook = await routesStrats({ strats: st, playbook: pb, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
     if (stratsPlaybook !== undefined) return stratsPlaybook;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+)(?:\/([a-z]+))?)?(?:\/.*)?)?$/.exec(chemin);
