@@ -1,0 +1,21 @@
+{
+  "_lisezmoi": "Dossier d'assets remplaçable de l'éditeur de strats. Copiez ce fichier en manifeste.json (même dossier) pour qu'il passe AVANT valorant-api.com. Images : chemins relatifs « esport-assets/… » (fichiers posés dans ce dossier) ou adresses https://media.valorant-api.com/…. Sans manifeste.json, l'éditeur charge valorant-api.com, puis son cache local, puis un repli générique (formes et initiales). Voir docs/esport/strats-playbook.md.",
+  "jeu": "valorant",
+  "cartes": [
+    { "cle": "ascent", "nom": "Ascent", "minimap": "esport-assets/cartes/ascent.png", "vignette": null }
+  ],
+  "agents": [
+    {
+      "cle": "omen",
+      "nom": "Omen",
+      "role": "Contrôleur",
+      "icone": "esport-assets/agents/omen.png",
+      "capacites": [
+        { "cle": "Grenade", "nom": "Shrouded Step", "icone": null, "touche": "C" },
+        { "cle": "Ability1", "nom": "Paranoia", "icone": null, "touche": "Q" },
+        { "cle": "Ability2", "nom": "Dark Cover", "icone": null, "touche": "E" },
+        { "cle": "Ultimate", "nom": "From the Shadows", "icone": null, "touche": "X" }
+      ]
+    }
+  ]
+}

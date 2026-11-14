@@ -1,0 +1,1 @@
+import{m as t}from"./socle-D9B3DB3j.js";import{gs as e,gt as i}from"./index-ULphstpr.js";t.create({bloc:{borderWidth:t.hairlineWidth,overflow:"hidden"},entete:{minHeight:i.hauteur+4,flexDirection:"row",alignItems:"center",gap:e.s,paddingHorizontal:e.m,paddingVertical:e.xs},corps:{paddingHorizontal:e.m,paddingBottom:e.m,gap:e.s}});

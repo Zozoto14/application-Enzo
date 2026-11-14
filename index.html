@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>AppDashboard</title>
+    <!-- Site de secours : s'ajoute à l'écran d'accueil de l'iPhone comme une app.
+         Pas de start_url dans le manifeste : l'icône garde l'adresse complète,
+         code de liaison compris. Sans effet dans l'application de bureau. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- Connexions ouvertes d'avance vers le relais et le serveur Esport (DNS + TLS, plusieurs centaines de ms en
+         4G) : le déverrouillage et l'Esport ne les attendent plus. Sans effet si une autre adresse est configurée
+         (relais.json, esport.json) ou dans l'application de bureau. docs/performance.md -->
+    <link rel="preconnect" href="https://relais.appdashboard.fr" crossorigin />
+    <link rel="preconnect" href="https://esport.appdashboard.fr" crossorigin />
+    <link rel="apple-touch-icon" href="./icone-192.png" />
+    <link rel="icon" type="image/png" sizes="256x256" href="./icone-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AppDashboard" />
+    <!-- Couleur de la barre du navigateur : celle du thème Nuit (par défaut), puis celle du thème
+         affiché (posée par l'application, et ci-dessous dès le chargement). -->
+    <meta name="theme-color" content="#0B0F17" />
+    <style>
+      html, body, #racine { height: 100%; margin: 0; }
+      /* La fenêtre ne défile jamais : chaque écran fait défiler son propre
+         contenu, et la barre latérale reste en place. */
+      html, body { overflow: hidden; }
+      #racine { display: flex; flex-direction: column; box-sizing: border-box; }
+      /* Site ajouté à l'écran d'accueil (barre d'état « black-translucent ») : en affichage large
+         (iPad, iPhone tourné), rien sous la barre d'état ni sous l'encoche. Sous 768 px, le mode
+         téléphone pose lui-même ses marges (en-tête, barre basse). Ailleurs, env() vaut 0. */
+      @media (min-width: 768px) {
+        #racine {
+          padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+            env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        }
+      }
+      /* Polices du thème (Paramètres › Général). Sans thème à police, les
+         variables sont absentes et chaque texte garde la sienne. */
+      body * { font-family: var(--police-texte) !important; }
+      [data-police="titre"], [data-police="titre"] * { font-family: var(--police-titre, var(--police-texte)) !important; }
+      body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+    </style>
+    <script>
+      /* Avant tout rendu : la page prend le fond du dernier thème appliqué (mémorisé par
+         l'application, non sensible), pour ne pas passer par un fond par défaut au lancement. */
+      try {
+        var fond = localStorage.getItem('applibourse.fond');
+        if (fond && /^#[0-9a-fA-F]{6}$/.test(fond)) {
+          document.documentElement.style.backgroundColor = fond;
+          document.documentElement.setAttribute('data-fond', fond);
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', fond);
+          addEventListener('DOMContentLoaded', function () { document.body.style.backgroundColor = fond; });
+        }
+      } catch (e) { /* stockage indisponible : le thème s'applique au premier rendu */ }
+    </script>
+    <script type="module" crossorigin src="./assets/index-ULphstpr.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/socle-D9B3DB3j.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-D_QxR98y.css">
+  </head>
+  <body>
+    <div id="racine"></div>
+  </body>
+</html>
