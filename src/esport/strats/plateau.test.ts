@@ -20,6 +20,7 @@ import {
   luminance,
   melanger,
   opaciteEtiquette,
+  reglagesCarte,
   rvb,
   segmentsMur,
   styleCapacite,
@@ -185,5 +186,14 @@ describe('tracés, tailles à l’écran, étiquettes', () => {
       expect(r).toBeGreaterThan(40 * 0.8);
       expect(r).toBeLessThan(40 * 1.15);
     }
+  });
+});
+
+describe('reglagesCarte', () => {
+  it('Valorant : toujours l’image d’origine, réglages enregistrés ignorés', () => {
+    expect(reglagesCarte('valorant', 'contraste', 2)).toEqual({ themeCarte: 'origine', attenuation: 0 });
+  });
+  it('autres jeux : réglages de l’utilisateur', () => {
+    expect(reglagesCarte('thefinals', 'clair', 1)).toEqual({ themeCarte: 'clair', attenuation: 1 });
   });
 });

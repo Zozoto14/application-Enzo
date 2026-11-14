@@ -161,12 +161,6 @@ async function variablesDe(base, ev, cle, charge, team, L) {
       return { ...base_, membre: await pseudo(charge.compte), de: role(charge.de ?? ''), vers: role(charge.vers ?? ''), acteur: await pseudo(ev.acteur_id) };
     case 'review_created':
       return { ...base_, titre: charge.titre ?? '', acteur: await pseudo(ev.acteur_id) };
-    case 'strat_created': {
-      // Une strat privée (brouillon de son auteur) n'est jamais annoncée.
-      const s = await base.premier('SELECT visibilite FROM strats WHERE id = ? AND team_id = ?', [ev.entite_id, ev.team_id]);
-      if (!s || s.visibilite !== 'team') return null;
-      return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: T(L, charge.side === 'defense' ? 'var.defense' : 'var.attaque'), acteur: await pseudo(ev.acteur_id) };
-    }
     case 'plan_match_ready': {
       // Contenu tactique : rien du plan ne part, seulement l'adversaire et la date (relus dans la base, pas dans la charge).
       const p = await base.premier("SELECT adversaire_nom, date_match FROM plans_match WHERE id = ? AND team_id = ? AND statut = 'pret' AND est_modele = 0 AND supprime_le IS NULL", [ev.entite_id, ev.team_id]);

@@ -16,6 +16,7 @@
  * Finals (3 joueurs, Cashout / Final Round, classes, spécialisations et gadgets, étages), générique (pions).
  */
 
+import { reglagesCarte } from '../../strats/plateau';
 import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Text, View } from 'react-native';
@@ -337,8 +338,7 @@ function Comparaison({ theme, a, api, teamId, strat, doc, zone }: { theme: Theme
     onAction: () => undefined,
     images: cacheImages,
     agents: a.assets?.agents,
-    themeCarte: a.prefs.themeCarte,
-    attenuation: a.prefs.attenuation,
+    ...reglagesCarte(a.doc?.modele, a.prefs.themeCarte, a.prefs.attenuation),
     noms: a.prefs.noms,
     largeur: l,
     hauteur: h,

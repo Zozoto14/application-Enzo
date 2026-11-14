@@ -624,7 +624,7 @@ test('fuites : rien de sensible dans le journal ni vers Discord (réunion staff,
   const { b, A } = await preparer({ fetchDiscord: async (url, init) => (envois.push(texteCharge(JSON.parse(init.body))), new Response(null, { status: 204 })) });
   const own = A.sessions.own12345;
   await b.appel(`/teams/${A.teamId}/discord/webhook`, { methode: 'PUT', jeton: own, corps: { url: URL_TEST } });
-  for (const cle of ['summary_submitted', 'strat_created']) await b.appel(`/teams/${A.teamId}/discord/parametres/${cle}`, { methode: 'PUT', jeton: own, corps: { actif: true } });
+  for (const cle of ['summary_submitted']) await b.appel(`/teams/${A.teamId}/discord/parametres/${cle}`, { methode: 'PUT', jeton: own, corps: { actif: true } });
   envois.length = 0;
   // Réunion d'un type « staff » : son titre ne part pas sur le salon de la team.
   const types = (await b.appel(`/teams/${A.teamId}/resumes/types`, { jeton: own })).corps.types;
@@ -632,14 +632,14 @@ test('fuites : rien de sensible dans le journal ni vers Discord (réunion staff,
   const publique = types.find(t => t.visibilite === 'team');
   await b.appel(`/teams/${A.teamId}/resumes`, { methode: 'POST', jeton: own, corps: { lien: 'https://exemple.fr/r1', typeId: staff.id, dateReunion: '2026-10-19', titre: 'Recrutement confidentiel' } });
   await b.appel(`/teams/${A.teamId}/resumes`, { methode: 'POST', jeton: own, corps: { lien: 'https://exemple.fr/r2', typeId: publique.id, dateReunion: '2026-10-19', titre: 'Hebdo ouverte' } });
-  // Strat privée : jamais annoncée ; strat de team : annoncée.
+  // Les strats ne sont jamais annoncées sur Discord (privée ou de team).
   await b.appel(`/teams/${A.teamId}/strats`, { methode: 'POST', jeton: own, corps: { titre: 'Brouillon secret', type: 'execute', carte: ASCENT, side: 'attaque', visibilite: 'privee' } });
   await b.appel(`/teams/${A.teamId}/strats`, { methode: 'POST', jeton: own, corps: { titre: 'Exec publique', type: 'execute', carte: ASCENT, side: 'attaque' } });
   const tout = envois.join('\n');
   assert.ok(!tout.includes('Recrutement confidentiel'), tout);
   assert.ok(!tout.includes('Brouillon secret'), tout);
   assert.ok(tout.includes('Hebdo ouverte'), tout);
-  assert.ok(tout.includes('Exec publique'), tout);
+  assert.ok(!tout.includes('Exec publique'), tout);
   // Journal : ni session, ni code, ni adresse de webhook, ni IP.
   const journal = JSON.stringify(await b.base.tous('SELECT * FROM journal', []));
   for (const secret of [own, URL_TEST, 'es1.', 'esp_']) assert.ok(!journal.includes(secret), secret);

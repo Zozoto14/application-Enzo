@@ -209,25 +209,30 @@ function Calques({ theme, a }: { theme: ThemeHub; a: EtatAtelier }) {
 export function Affichage({ theme, a }: { theme: ThemeHub; a: EtatAtelier }) {
   return (
     <View style={{ gap: 10 }} testID="esport-atelier-affichage">
-      <TitreSection theme={theme}>{trAt('affichage.theme')}</TitreSection>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel={trAt('affichage.theme')}>
-        {THEMES_CARTE.map(id => {
-          const t = themeCarte(id);
-          const actif = a.prefs.themeCarte === id;
-          return (
-            <Pressable key={id} testID={`esport-theme-carte-${id}`} accessibilityRole="radio" accessibilityState={{ checked: actif }} accessibilityLabel={trAt(`theme.${id}` as CleAt)} onPress={() => a.setPrefs({ themeCarte: id })} style={{ width: 72, gap: 4, alignItems: 'center' }}>
-              <View style={{ width: 72, height: 44, borderRadius: 8, backgroundColor: t.fond, borderWidth: 2, borderColor: actif ? theme.accent : theme.ligne, alignItems: 'center', justifyContent: 'center' }}>
-                <View style={{ width: 40, height: 22, borderRadius: 5, backgroundColor: id === 'origine' ? '#9aa4b2' : t.sol, borderWidth: 1.5, borderColor: id === 'origine' ? '#cbd5e1' : t.contour }} />
-              </View>
-              <Text style={{ ...texteAtelier(theme, 10, actif), textAlign: 'center' }} numberOfLines={2}>
-                {trAt(`theme.${id}` as CleAt)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <TitreSection theme={theme}>{trAt('affichage.attenuer')}</TitreSection>
-      <Bascule theme={theme} libelle={trAt('affichage.attenuer')} valeur={String(a.prefs.attenuation)} options={[['0', trAt('attenuer.0')], ['1', trAt('attenuer.1')], ['2', trAt('attenuer.2')]] as const} onChoisir={v => a.setPrefs({ attenuation: Number(v) as Attenuation })} testID="esport-attenuer" hauteur={28} />
+      {/* Valorant : toujours l'image d'origine de la map (thèmes et atténuation masquaient zones et boîtes). */}
+      {a.doc?.modele !== 'valorant' ? (
+        <>
+          <TitreSection theme={theme}>{trAt('affichage.theme')}</TitreSection>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityRole="radiogroup" accessibilityLabel={trAt('affichage.theme')}>
+            {THEMES_CARTE.map(id => {
+              const t = themeCarte(id);
+              const actif = a.prefs.themeCarte === id;
+              return (
+                <Pressable key={id} testID={`esport-theme-carte-${id}`} accessibilityRole="radio" accessibilityState={{ checked: actif }} accessibilityLabel={trAt(`theme.${id}` as CleAt)} onPress={() => a.setPrefs({ themeCarte: id })} style={{ width: 72, gap: 4, alignItems: 'center' }}>
+                  <View style={{ width: 72, height: 44, borderRadius: 8, backgroundColor: t.fond, borderWidth: 2, borderColor: actif ? theme.accent : theme.ligne, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: 40, height: 22, borderRadius: 5, backgroundColor: id === 'origine' ? '#9aa4b2' : t.sol, borderWidth: 1.5, borderColor: id === 'origine' ? '#cbd5e1' : t.contour }} />
+                  </View>
+                  <Text style={{ ...texteAtelier(theme, 10, actif), textAlign: 'center' }} numberOfLines={2}>
+                    {trAt(`theme.${id}` as CleAt)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <TitreSection theme={theme}>{trAt('affichage.attenuer')}</TitreSection>
+          <Bascule theme={theme} libelle={trAt('affichage.attenuer')} valeur={String(a.prefs.attenuation)} options={[['0', trAt('attenuer.0')], ['1', trAt('attenuer.1')], ['2', trAt('attenuer.2')]] as const} onChoisir={v => a.setPrefs({ attenuation: Number(v) as Attenuation })} testID="esport-attenuer" hauteur={28} />
+        </>
+      ) : null}
       <Case theme={theme} coche={a.prefs.noms} libelle={trAt('affichage.noms')} onChanger={noms => a.setPrefs({ noms })} testID="esport-affichage-noms" />
       <Case theme={theme} coche={a.prefs.legende} libelle={trAt('affichage.legende')} onChanger={legende => a.setPrefs({ legende })} testID="esport-affichage-legende" />
       {a.peutModifier ? <Case theme={theme} coche={a.prefs.fantome} libelle={trAt('affichage.fantome')} onChanger={fantome => a.setPrefs({ fantome })} testID="esport-affichage-fantome" /> : null}

@@ -168,16 +168,6 @@ export const EVENEMENTS_DISCORD = [
     variables: variables({ titre: 'Titre de la review', acteur: 'Qui l’a créée' }),
   },
   {
-    cle: 'strat_created',
-    libelle: 'Strat créée',
-    description: 'Une strat est créée dans l’éditeur (module Strats, phase 6).',
-    types: ['strat.created'],
-    modules: ['strat_editor'],
-    defaut: false,
-    modele: '**Nouvelle strat** : {titre} ({carte}, {side}), par {acteur}.',
-    variables: variables({ titre: 'Titre de la strat', carte: 'Carte', side: 'Attaque ou Défense', acteur: 'Qui l’a créée' }),
-  },
-  {
     // Contenu tactique : l'annonce ne porte QUE l'adversaire et la date (jamais le titre, les maps, les strats ni les notes).
     cle: 'plan_match_ready',
     libelle: 'Plan de match prêt',
@@ -414,12 +404,6 @@ const TEXTES_EN = {
     description: 'A video review is created (Video review module).',
     modele: '**New review**: {titre}, by {acteur}.',
     variables: { titre: 'Review title', acteur: 'Who created it' },
-  },
-  strat_created: {
-    libelle: 'Strat created',
-    description: 'A strat is created in the editor (Strats module).',
-    modele: '**New strat**: {titre} ({carte}, {side}), by {acteur}.',
-    variables: { titre: 'Strat title', carte: 'Map', side: 'Attack or Defense', acteur: 'Who created it' },
   },
   plan_match_ready: {
     libelle: 'Match plan ready',

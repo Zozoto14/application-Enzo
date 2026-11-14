@@ -35,7 +35,7 @@ import {
 } from '../../../strats/document';
 import { aligner, repartir, type Alignement } from '../../../strats/geometrie';
 import { COULEURS_EQUIPES, definitionPour, type DefinitionModele, type GenreMarqueur } from '../../../strats/modeles';
-import { PLATEAU, idThemeCarte, type Attenuation, type IdThemeCarte } from '../../../strats/plateau';
+import { PLATEAU, idThemeCarte, reglagesCarte, type Attenuation, type IdThemeCarte } from '../../../strats/plateau';
 import { agentsActifs } from '../../../jeux/profil';
 import { tr } from '../../../i18n';
 import { trAt } from '../../../i18n/atelier';
@@ -895,8 +895,7 @@ export function useAtelier(props: OptionsAtelier) {
         onAction: peutModifier ? faire : () => undefined,
         images,
         onPret: surPret,
-        themeCarte: prefs.themeCarte,
-        attenuation: prefs.attenuation,
+        ...reglagesCarte(doc?.modele, prefs.themeCarte, prefs.attenuation),
         noms: prefs.noms,
         fantome: prefs.fantome,
         surligne,

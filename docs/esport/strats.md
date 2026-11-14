@@ -146,12 +146,14 @@ Tout le dessin part d'UN fichier de jetons de design, `esport/noyau/strats/plate
 l'app, `src/esport/strats/plateau.ts`) : couleurs, échelle typographique, tailles des jetons, durées d'animation,
 thèmes de la map.
 
-- **Map** (`src/esport/cartes/rendu.web.ts`, `analyse.ts`) : une minimap à fond transparent (Valorant) est rendue
-  comme un **plateau dessiné** à partir de son alpha (sol sombre teinté en dégradé, liseré clair net, ombre
-  intérieure légère, halo, fond sombre et vignettage, pas de grille) ; composition 2D seulement, sans filtre CSS :
-  même rendu dans Chromium, Safari et l'export PNG. Une vue de dessus opaque (The Finals) est gardée telle quelle ;
-  « **Atténuer la map** » (assombrie et désaturée, puis légèrement floutée) la met en retrait. **Thèmes** par
-  utilisateur : Tactique sombre (défaut), Clair, Contraste élevé, Image d'origine. Zones nommées en aplats doux,
+- **Map** (`src/esport/cartes/rendu.web.ts`, `analyse.ts`) : **Valorant affiche TOUJOURS l'image d'origine de la
+  minimap** (éditeur, présentation, page de partage, export, miniatures de `CarteJeu`) : le plateau redessiné et
+  les thèmes masquaient les zones et les boîtes de sites. Le sélecteur de thème et « Atténuer la map » sont donc
+  absents pour Valorant, et les valeurs déjà enregistrées sont ignorées (`reglagesCarte`, `plateau.ts` ; côté
+  serveur, `svg.mjs` n'applique plus le filtre « plateau » aux strats Valorant). Pour les autres jeux (The Finals,
+  vue de dessus opaque, gardée telle quelle), « **Atténuer la map** » (assombrie et désaturée, puis légèrement
+  floutée) et les **thèmes** par utilisateur (Tactique sombre par défaut, Clair, Contraste élevé, Image d'origine)
+  restent proposés. Zones nommées en aplats doux,
   repères (sites, spawns, cashouts…) en pastilles avec leur lettre, **callouts** en petites capitales à halo
   sombre, cachés sous un seuil de zoom et atténués sous un objet. Attaque / défense : bascule animée.
 - **Utilitaires** (`canevas/dessins.web.tsx`, genre déduit par `styleCapacite` de la forme, du nom et des données) :

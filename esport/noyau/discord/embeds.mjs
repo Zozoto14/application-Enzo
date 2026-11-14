@@ -60,7 +60,6 @@ const MESSAGES = {
   member_joined: { emoji: '👋', couleur: ACCENT },
   role_changed: { emoji: '🎖️', couleur: ACCENT },
   review_created: { emoji: '🎬', couleur: '#7c3aed' },
-  strat_created: { emoji: '🗺️', couleur: '#7c3aed' },
   playbook_validated: { emoji: '📘', couleur: '#16a34a' },
   resource_created: { emoji: '📚', couleur: '#0d9488' },
   tournament_registered: { emoji: '📝', couleur: '#d97706' },

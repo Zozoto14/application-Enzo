@@ -145,8 +145,8 @@ jamais rien (404).
 
 `strat.created`, `strat.updated`, `strat.duplicated`, `strat.deleted`, `strat.share_created`,
 `strat.share_revoked`, `playbook.created`, `playbook.updated`, `playbook.validated`, `playbook.archived`,
-`playbook.deleted` : tous au journal. Discord : « Strat créée » et « Entrée du playbook validée » (désactivés
-par défaut, à activer dans l'onglet Discord).
+`playbook.deleted` : tous au journal. Discord : seulement « Entrée du playbook validée » (désactivé par
+défaut, à activer dans l'onglet Discord) ; plus de message « Strat créée ».
 
 ## API
 

@@ -1,7 +1,7 @@
 /**
  * Événements de domaine des strats et du playbook (phase 6), et leur abonné
  * « notifications in-app ». Le journal d'activité reçoit déjà tout événement
- * (abonneJournal) ; Discord s'abonne à `strat.created` et
+ * (abonneJournal) ; Discord s'abonne à
  * `playbook.validated` (discord/catalogue.mjs, désactivés par défaut).
  *
  * Ce fichier n'importe pas evenements.mjs (c'est lui qui nous importe).

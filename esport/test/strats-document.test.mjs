@@ -98,6 +98,14 @@ test('migration : un document version 1 (une seule frame) devient une étape de 
   assert.equal(v.joueurs.length, 5);
 });
 
+test('page de partage Valorant : image d\u2019origine de la map, sans filtre « plateau »', () => {
+  const d = validerDocument(docExemple());
+  const v = svgEtape({ ...d, modele: 'valorant' }, 0);
+  assert.ok(!v.includes('url(#plateau)') && !v.includes('id="plateau"'), 'Valorant : image telle quelle');
+  assert.match(v, /<image href="https:\/\/media\.valorant-api\.com\/maps\//);
+  assert.match(svgEtape({ ...d, modele: 'thefinals' }, 0), /filter="url\(#plateau\)"/);
+});
+
 test('rendu SVG et page publique : textes échappés, images Riot seules, mention Riot', () => {
   const d = validerDocument(docExemple());
   d.etapes[0].objets[3].texte = '<img src=x onerror=alert(1)>';

@@ -191,7 +191,7 @@ test('réglages : un type de message par événement du plan, valeurs par défau
   const { parametres } = (await p.api(p.d, p.s.max12345)).corps;
   assert.deepEqual(
     parametres.map(x => x.cle),
-    ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_relance', 'rsvp_missing', 'summary_published', 'summary_submitted', 'task_assigned', 'task_due', 'member_joined', 'account_requested', 'role_changed', 'review_created', 'strat_created', 'plan_match_ready', 'playbook_validated', 'resource_created', 'tournament_registered', 'match_announced', 'match_result', 'tournament_final'],
+    ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_relance', 'rsvp_missing', 'summary_published', 'summary_submitted', 'task_assigned', 'task_due', 'member_joined', 'account_requested', 'role_changed', 'review_created', 'plan_match_ready', 'playbook_validated', 'resource_created', 'tournament_registered', 'match_announced', 'match_result', 'tournament_final'],
   );
   const creation = parametres.find(x => x.cle === 'event_created');
   assert.deepEqual([creation.actif, creation.personnalise, creation.roleMention, creation.disponible], [true, false, null, true]);

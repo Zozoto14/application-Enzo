@@ -343,6 +343,8 @@ export function svgEtape(doc, index = 0) {
     .map(c => `<marker id="pointe-${c.slice(1)}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${c}"/></marker>`)
     .join('');
   const fond = imageDistante(doc.carte.image);
+  // Valorant : toujours l'image d'origine de la minimap (le filtre « plateau » masquait zones et boîtes de sites).
+  const filtre = fond && doc.modele !== 'valorant';
   const visibles = etape.objets.filter(o => doc.calques?.[calqueDe(o)]?.visible !== false);
   const ordre = ['vision', 'utilitaires', 'marqueurs', 'dessins', 'texte'];
   const k = echelleEffective(doc.carte.echelle);
@@ -351,10 +353,10 @@ export function svgEtape(doc, index = 0) {
   visibles.sort((a, b) => rang(a) - rang(b));
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="${echapper(`${doc.carte.nom}, ${etape.titre}`)}">`,
-    `<defs>${pointes}${fond ? FILTRE_PLATEAU : ''}<radialGradient id="vignette" cx="50%" cy="50%" r="72%"><stop offset="0.55" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="${THEME.vignette}"/></radialGradient></defs>`,
+    `<defs>${pointes}${filtre ? FILTRE_PLATEAU : ''}<radialGradient id="vignette" cx="50%" cy="50%" r="72%"><stop offset="0.55" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="${THEME.vignette}"/></radialGradient></defs>`,
     `<rect width="1000" height="1000" fill="${THEME.fond}"/>`,
     `<text x="500" y="520" text-anchor="middle" font-size="64" font-family="${POLICE}" font-weight="700" fill="${THEME.sol}">${echapper(doc.carte.nom)}</text>`,
-    fond && doc.calques?.fond?.visible !== false ? `<image href="${echapper(fond)}" x="0" y="0" width="1000" height="1000" filter="url(#plateau)"/>` : '',
+    fond && doc.calques?.fond?.visible !== false ? `<image href="${echapper(fond)}" x="0" y="0" width="1000" height="1000"${filtre ? ' filter="url(#plateau)"' : ''}/>` : '',
     '<rect width="1000" height="1000" fill="url(#vignette)"/>',
     visibles.map(o => objetSvg(o, k, doc)).join(''),
     '</svg>',

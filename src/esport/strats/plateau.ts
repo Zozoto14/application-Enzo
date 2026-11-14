@@ -41,7 +41,14 @@ export interface ThemeCarte {
 export const themeCarte = (id: string | null | undefined): ThemeCarte => (PLATEAU.themes as Record<string, ThemeCarte>)[id ?? ''] ?? PLATEAU.themes.tactique;
 export const idThemeCarte = (id: unknown): IdThemeCarte => ((THEMES_CARTE as readonly unknown[]).includes(id) ? (id as IdThemeCarte) : 'tactique');
 
-/** « Atténuer la map » (images de type photo) : 0 non, 1 assombrie et désaturée, 2 en plus légèrement floutée. */
+/**
+ * Réglages de map effectifs : Valorant affiche TOUJOURS l'image d'origine de la minimap (les thèmes et
+ * l'atténuation masquaient les zones et les boîtes de sites) ; les réglages enregistrés sont alors ignorés.
+ */
+export const reglagesCarte = (modele: string | null | undefined, theme: IdThemeCarte, attenuation: Attenuation): { themeCarte: IdThemeCarte; attenuation: Attenuation } =>
+  modele === 'valorant' ? { themeCarte: 'origine', attenuation: 0 } : { themeCarte: theme, attenuation };
+
+/** « Atténuer la map" (images de type photo) : 0 non, 1 assombrie et désaturée, 2 en plus légèrement floutée. */
 export type Attenuation = 0 | 1 | 2;
 
 // ------------------------------------------------------------------ Couleurs

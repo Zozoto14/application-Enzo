@@ -11,8 +11,8 @@
  *                enregistrement automatique, étape ajoutée (reprise des pions à la fin de leur trajet),
  *                sélection multiple et déplacement de groupe, menu contextuel, glisser un portrait du dock sur
  *                la map, présentation ; recharger, exporter un PNG, playbook, lien de lecture seule révoqué ;
- *  - visuel    : strat Valorant aux 14 capacités variées (callouts et sites du profil), à 100 % et 300 %, quatre
- *                thèmes de map, 1920 × 1080 ;
+ *  - visuel    : strat Valorant aux 14 capacités variées (callouts et sites du profil), à 100 % et 300 %, image
+ *                d'origine de la map (pas de thème), 1920 × 1080 ;
  *  - thefinals : strat The Finals (image de type photo, gadgets, étages), « Atténuer la map » ; jeu générique ;
  *  - ipad      : iPad portrait 820 × 1180 et 1024 × 1366 (tactile) : canevas ≥ 60 %, agent posé au doigt, poignée
  *                de regard tirée au doigt, repli hors ligne ;
@@ -724,7 +724,7 @@ try {
   } else log('profil Valorant illisible : pas de callouts dans les captures', JSON.stringify(profil).slice(0, 200));
 
   if (PARTIES.has('visuel')) {
-    log('Visuel : strat aux 14 capacités, 100 % et 300 %, thèmes de la map, 1920 × 1080');
+    log('Visuel : strat aux 14 capacités, 100 % et 300 %, image d’origine de la map, 1920 × 1080');
     await pc.reload();
     teamOuverte.delete(pc);
     await pc.locator('[data-testid="hub"]:visible, [data-testid="app-esport"]').first().waitFor({ state: 'attached', timeout: 15_000 }).catch(() => deverrouiller(pc, MDP, secrets.get(pc), 'app-esport'));
@@ -755,14 +755,11 @@ try {
     await pc.mouse.dblclick(vide.x + vide.width - 30, vide.y + vide.height - 30);
     await pause(300);
     verifier((await pc.getByTestId('esport-canevas').getAttribute('data-zoom')) === '100', 'double-clic sur le vide : map entière');
-    // Thèmes de la map (réglage par utilisateur).
-    for (const theme of ['clair', 'contraste', 'origine', 'tactique']) {
-      await pc.getByTestId('esport-editeur-plus').click();
-      await pc.getByTestId('esport-plus-affichage').click();
-      await pc.getByTestId(`esport-theme-carte-${theme}`).click();
-      await pc.keyboard.press('Escape');
-      if (theme !== 'tactique') await capture(pc, `23-visuel-theme-${theme}`);
-    }
+    // Valorant : toujours l'image d'origine de la map, ni thème ni atténuation proposés.
+    await pc.getByTestId('esport-editeur-plus').click();
+    await pc.getByTestId('esport-plus-affichage').click();
+    verifier((await pc.getByTestId('esport-theme-carte-clair').count()) === 0 && (await pc.getByTestId('esport-attenuer-1').count()) === 0, 'Valorant : pas de thème ni d’atténuation de la map');
+    await pc.keyboard.press('Escape');
     // Lecture animée : déploiement, anneaux de durée, trajets.
     await pc.getByTestId('esport-barre-lecture').click();
     await pause(2600);

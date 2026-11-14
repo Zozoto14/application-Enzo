@@ -15,6 +15,7 @@
  * dans les tests).
  */
 
+import { reglagesCarte } from '../../../strats/plateau';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { BoutonHub, Champ } from '../../../../hub/admin/ui/commun';
@@ -134,7 +135,7 @@ export function Atelier({ theme, a, canevas, comparaison, impression, pleinEcran
     <LigneMenu
       key={c.cle}
       theme={theme}
-      avant={<CarteJeu theme={theme} carte={c} images={a.propsCanevas?.images} taille={38} rayon={7} reperes={false} filigrane={false} themeCarte={a.prefs.themeCarte} testID={`esport-editeur-carte-${c.cle}-apercu`} />}
+      avant={<CarteJeu theme={theme} carte={c} images={a.propsCanevas?.images} taille={38} rayon={7} reperes={false} filigrane={false} themeCarte={reglagesCarte(doc.modele, a.prefs.themeCarte, a.prefs.attenuation).themeCarte} attenuation={reglagesCarte(doc.modele, a.prefs.themeCarte, a.prefs.attenuation).attenuation} testID={`esport-editeur-carte-${c.cle}-apercu`} />}
       texte={c.nom}
       coche={c.cle === doc.carte.cle}
       onPress={puis(() => a.faire({ type: 'carte', carte: { cle: c.cle, nom: c.nom, image: c.minimap && /^https:\/\/media\.valorant-api\.com\//.test(c.minimap) ? c.minimap : null, echelle: c.echelle ?? null } }))}

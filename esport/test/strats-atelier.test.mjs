@@ -152,10 +152,13 @@ test('page de partage : même langage visuel que l’atelier (plateau, genres de
   d.etapes[0].objets[2].usage = 'regard';
   d.etapes[0].objets.push({ id: 'x1', type: 'agent', x: 700, y: 300, agent: 'inconnu', nom: '?', icone: null, joueur: null, couleur: '#ef4444' });
   const svg = svgEtape(validerDocument(d), 0);
-  // Map en plateau : filtre sur l'alpha de la minimap, couleurs du thème « Tactique sombre » des jetons.
-  assert.match(svg, /<filter id="plateau"/);
-  assert.match(svg, /<image href="https:\/\/media\.valorant-api\.com\/maps\/7eaecc1b\/displayicon\.png"[^>]*filter="url\(#plateau\)"/);
-  assert.ok(svg.includes(`fill="${T.themes.tactique.fond}"`) && svg.includes(`flood-color="${T.themes.tactique.sol}"`) && svg.includes(`flood-color="${T.themes.tactique.contour}"`));
+  // Map en plateau (hors Valorant) : filtre sur l'alpha de la minimap, couleurs du thème « Tactique sombre » des jetons.
+  const plateau = svgEtape({ ...validerDocument(d), modele: 'thefinals' }, 0);
+  assert.match(plateau, /<filter id="plateau"/);
+  assert.match(plateau, /<image href="https:\/\/media\.valorant-api\.com\/maps\/7eaecc1b\/displayicon\.png"[^>]*filter="url\(#plateau\)"/);
+  assert.ok(plateau.includes(`fill="${T.themes.tactique.fond}"`) && plateau.includes(`flood-color="${T.themes.tactique.sol}"`) && plateau.includes(`flood-color="${T.themes.tactique.contour}"`));
+  // Valorant : image d'origine de la map, sans filtre.
+  assert.ok(!svg.includes('url(#plateau)'));
   // Portrait découpé en rond par-dessus les initiales ; nom du joueur sous son pion ; ennemi inconnu : « ? ».
   assert.match(svg, /<clipPath id="rond-a1">.*<image href="https:\/\/media\.valorant-api\.com\/agents\/8e253930\/displayicon\.png"[^>]*clip-path="url\(#rond-a1\)"/);
   assert.ok(svg.includes('>Joueur 2</text>'));

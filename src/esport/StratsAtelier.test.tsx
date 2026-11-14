@@ -436,11 +436,11 @@ describe('sélection multiple et tiroir', () => {
     expect(doc().calques.utilitaires.visible).toBe(false);
     await fireEvent.press(screen.getByTestId('esport-calque-marqueurs-verrou'));
     expect(doc().calques.marqueurs.verrou).toBe(true);
-    expect(canevas().themeCarte).toBe('tactique');
-    await fireEvent.press(screen.getByTestId('esport-theme-carte-contraste'));
-    expect(canevas().themeCarte).toBe('contraste');
-    await fireEvent.press(screen.getByTestId('esport-attenuer-2'));
-    expect(canevas().attenuation).toBe(2);
+    // Valorant : toujours l'image d'origine de la map, ni thèmes ni atténuation.
+    expect(canevas().themeCarte).toBe('origine');
+    expect(canevas().attenuation).toBe(0);
+    expect(screen.queryByTestId('esport-theme-carte-contraste')).toBeNull();
+    expect(screen.queryByTestId('esport-attenuer-2')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-affichage-noms'));
     expect(canevas().noms).toBe(false);
     expect(screen.queryByTestId('esport-atelier-legende')).toBeNull();
@@ -448,8 +448,19 @@ describe('sélection multiple et tiroir', () => {
     expect(screen.getByTestId('esport-atelier-legende')).toBeTruthy();
     expect(screen.getByTestId('esport-legende-c')).toBeTruthy();
     // Réglages d'affichage : gardés pour cet utilisateur, jamais dans le document.
-    expect(JSON.parse((globalThis as unknown as { localStorage: { getItem(c: string): string | null } }).localStorage.getItem('esport.strats.atelier.v1') as string)).toMatchObject({ themeCarte: 'contraste', attenuation: 2, noms: false, legende: true, tiroir: 'ouvert' });
+    expect(JSON.parse((globalThis as unknown as { localStorage: { getItem(c: string): string | null } }).localStorage.getItem('esport.strats.atelier.v1') as string)).toMatchObject({ noms: false, legende: true, tiroir: 'ouvert' });
     expect(JSON.stringify(doc())).not.toContain('contraste');
+  });
+
+  it('autres jeux (The Finals) : thème de la map et atténuation au choix, par utilisateur', async () => {
+    await ouvrir(documentVide({ cle: 'monaco', nom: 'Monaco', image: null }, 'attaque', 'the-finals', 'thefinals'), { assets: { ...ASSETS, jeu: 'the-finals', modele: 'thefinals', agents: [] } as Assets });
+    await fireEvent.press(screen.getByTestId('esport-editeur-tiroir'));
+    await fireEvent.press(screen.getByTestId('esport-tiroir-onglet-calques'));
+    expect(canevas().themeCarte).toBe('tactique');
+    await fireEvent.press(screen.getByTestId('esport-theme-carte-contraste'));
+    expect(canevas().themeCarte).toBe('contraste');
+    await fireEvent.press(screen.getByTestId('esport-attenuer-2'));
+    expect(canevas().attenuation).toBe(2);
   });
 
   it('options de l’outil : usage d’une flèche (déplacement, rotation, regard), trajet du joueur', async () => {
