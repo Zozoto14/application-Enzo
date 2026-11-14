@@ -137,6 +137,10 @@ const T = {
     staff_absent: 'absent du serveur',
     staff_sans_discord: 'pas de Discord lié',
     maj_staff: 'staff assigné',
+    mapban: 'Le map ban a été envoyé au capitaine de chaque équipe (message privé Discord). Suivez le map ban du match ici : {lien}',
+    mapban_premier: '{nom} commence le map ban (tirage au sort).',
+    mapban_fin_1: 'Map ban terminé. Map jouée : {liste}.',
+    mapban_fin_n: 'Map ban terminé. Maps jouées, dans l’ordre : {liste}.',
     ancre_absente: 'Attention staff : le salon repère « Placer sous le salon » a été supprimé sur Discord ; les salons de match sont créés dans la catégorie choisie. Choisissez un autre salon dans l’app (Administration › Événements).',
     heure: 'Horaire',
     a_definir: 'à définir',
@@ -180,6 +184,10 @@ const T = {
     staff_absent: 'not on the server',
     staff_sans_discord: 'no linked Discord',
     maj_staff: 'assigned staff',
+    mapban: 'The map ban was sent to each team captain (Discord direct message). Follow the match map ban here: {lien}',
+    mapban_premier: '{nom} starts the map ban (coin toss).',
+    mapban_fin_1: 'Map ban complete. Map to play: {liste}.',
+    mapban_fin_n: 'Map ban complete. Maps to play, in order: {liste}.',
     ancre_absente: 'Staff, heads up: the “Place below channel” anchor was deleted on Discord; match channels are created in the chosen category. Pick another channel in the app (Administration › Events).',
     heure: 'Time',
     a_definir: 'to be decided',
@@ -300,6 +308,35 @@ function titreDe(m, l) {
   return [phase, tl(l, 'round', { n: m.round }), tl(l, 'match', { n: m.position })].filter(Boolean).join(' · ');
 }
 
+const URL_SITE = 'https://lz.appdashboard.fr';
+const json = v => {
+  if (typeof v !== 'string') return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Map ban d'un match ou lobby, tel que l'annonce du salon en a besoin : `{ mapban: { id, lien, premierId, termine,
+ * maps } }` (ou rien). `lien` : page PUBLIQUE de suivi du site, sans jeton (les liens des capitaines, qui permettent de
+ * jouer leur tour, ne quittent jamais leurs messages privés ; la vue du site ne les expose pas non plus). `maps` : les
+ * maps à jouer une fois le map ban terminé, dans l'ordre (picks, puis map restante).
+ */
+export function mapbanDe(lignes, col, id, urlSite = URL_SITE) {
+  const l = (lignes ?? []).find(x => x[col] === id && /^[A-Za-z0-9_-]{6,40}$/.test(String(x.mapban_id ?? '')));
+  if (!l) return {};
+  const pool = Array.isArray(json(l.pool)) ? json(l.pool) : [];
+  const actions = Array.isArray(json(l.actions)) ? json(l.actions) : [];
+  const termine = Boolean(l.termine_le);
+  const nom = mid => String(pool.find(p => p.id === mid)?.nom ?? '').slice(0, 60);
+  const restantes = pool.filter(p => !actions.some(a => a.map === p.id));
+  const maps = termine ? [...actions.filter(a => a.type === 'pick').map(a => nom(a.map)), ...(restantes.length === 1 ? [nom(restantes[0].id)] : [])].filter(Boolean) : [];
+  const base = /^https?:\/\//.test(String(urlSite)) ? String(urlSite).replace(/\/$/, '') : URL_SITE;
+  return { mapban: { id: String(l.mapban_id), lien: `${base}/mapban/${l.mapban_id}`, premierId: l.premier_team_id ?? null, termine, maps } };
+}
+
 /**
  * Lit les matchs et lobbies du tournoi lié (pont signé, lecture seule). Rend `{ matchs, equipes }` : `matchs` =
  * [{ cle, genre, siteId, round, position, groupe, bracket, label, phase, equipes: [teamId], statut, prevu, stream,
@@ -309,13 +346,15 @@ function titreDe(m, l) {
 export async function lireMatchsSite(site, tournoiId) {
   const parT = [{ col: 'tournament_id', op: 'eq', val: tournoiId }];
   const ordre = [{ col: 'round', asc: true }, { col: 'position', asc: true }];
-  const [m1, lobbies, equipesS, phases, staffS] = await Promise.all([
+  const [m1, lobbies, equipesS, phases, staffS, mapbans] = await Promise.all([
     site.lister('tournament_matches', parT, ordre),
     site.lister('tournament_lobbies', parT, ordre),
     site.lister('tournament_teams', parT),
     site.lister('tournament_stages', parT).catch(() => []),
     // Staff assigné (site à jour, migration 0008) : nom affiché et Discord ID ; ancien site : aucun.
     site.lister('tournament_match_staff_discord', parT).catch(() => []),
+    // Map ban lancé (site à jour, migration 0010) : identifiant, équipe qui commence, maps ; ancien site : aucun.
+    site.lister('tournament_match_mapban', parT).catch(() => []),
   ]);
   const staffDe = (col, id) =>
     staffS
@@ -360,6 +399,7 @@ export async function lireMatchsSite(site, tournoiId) {
       prevu: m.scheduled_at ? new Date(m.scheduled_at).toISOString() : null,
       stream: typeof m.stream_url === 'string' && /^https:\/\//.test(m.stream_url) ? m.stream_url : null,
       staff: staffDe('match_id', m.id),
+      ...mapbanDe(mapbans, 'match_id', m.id, site.urlSite),
       resultat: fini ? { scores: [{ equipe: m.team_a_id, score: m.score_a ?? null }, { equipe: m.team_b_id, score: m.score_b ?? null }].filter(x => x.equipe), vainqueur: m.winner_id ?? null } : null,
     });
   }
@@ -383,6 +423,7 @@ export async function lireMatchsSite(site, tournoiId) {
       prevu: l.scheduled_at ? new Date(l.scheduled_at).toISOString() : null,
       stream: typeof l.stream_url === 'string' && /^https:\/\//.test(l.stream_url) ? l.stream_url : null,
       staff: staffDe('lobby_id', l.id),
+      ...mapbanDe(mapbans, 'lobby_id', l.id, site.urlSite),
       resultat: fini ? { classement: es.map(e => ({ equipe: e.team_id, placement: e.placement ?? null, points: Number(e.points ?? 0), dnf: Boolean(e.dnf) })) } : null,
     });
   }
@@ -1024,6 +1065,23 @@ export function creerSalonsMatch({ base, site, fetch: fetchDiscord, jetonBot, bo
         ...(ch.horaire ? { rappel10_le: reste <= 10 * MINUTE ? iso(t) : null } : {}),
       });
       await avertirSansRole(evt, ligne, equipes, mode, m);
+    }
+    // Map ban : lancement (lien de suivi, équipe qui commence) puis fin (maps jouées), un message chacun, une seule fois.
+    if (m.mapban && !fini) {
+      const ops = [];
+      const champs = {};
+      const k = m.mapban;
+      const premier = equipes.find(e => e.id === k.premierId)?.nom;
+      // Map ban déjà terminé à la première lecture : seul le message de fin part (pas deux messages d'affilée).
+      if (ligne.mapban_annonce !== k.id) {
+        champs.mapban_annonce = k.id;
+        if (!k.termine) ops.push({ genre: 'mapban', corps: { content: bilingue(l => [tl(l, 'mapban', { lien: `<${k.lien}>` }), ...(premier ? [tl(l, 'mapban_premier', { nom: premier })] : [])].join('\n'), { mode, max: 1900 }), allowed_mentions: { parse: [] } } });
+      }
+      if (k.termine && ligne.mapban_fin !== k.id && k.maps.length) {
+        champs.mapban_fin = k.id;
+        ops.push({ genre: 'mapban_fin', corps: { content: tx(mode, k.maps.length > 1 ? 'mapban_fin_n' : 'mapban_fin_1', { liste: k.maps.length > 1 ? k.maps.map((x, i) => `${i + 1}. ${x}`).join(', ') : k.maps[0] }).slice(0, 2000), allowed_mentions: { parse: [] } } });
+      }
+      if (ops.length || Object.keys(champs).length) await appliquer(ligne, ops, champs);
     }
     // Rappel 10 minutes avant (une seule fois).
     if (reglages.rappels && m.prevu && !fini && m.statut === 'pending') {

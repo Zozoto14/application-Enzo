@@ -75,6 +75,8 @@ const COLONNES = {
   tournament_lobby_entries: 'id,lobby_id,team_id,placement,points,dnf,sort_order',
   tournament_stages: 'id,tournament_id,kind,name,sort_order',
   tournament_match_staff_discord: 'match_id,lobby_id,display_name,discord_id',
+  // Map ban des matchs et lobbies (vue du site, migration 0010 : jamais les jetons des capitaines).
+  tournament_match_mapban: 'mapban_id,match_id,lobby_id,format,pool,sequence,actions,termine_le,created_at,premier_team_id',
 };
 
 /**
@@ -118,6 +120,10 @@ export function clientSite(config, fetchSite = (...a) => globalThis.fetch(...a),
   return {
     get configure() {
       return Boolean(conf().clePont || conf().cle);
+    },
+    /** Adresse publique du site (sans /api) : base des liens de suivi du map ban. */
+    get urlSite() {
+      return String(conf().url ?? '').replace(/\/api\/?$/, '').replace(/\/$/, '');
     },
     get signe() {
       return Boolean(conf().clePont);

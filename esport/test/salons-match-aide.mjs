@@ -41,6 +41,7 @@ export function fauxSite() {
     tournament_matches: [{ id: M1, tournament_id: T1, stage_id: null, bracket: 'winner', round: 1, position: 1, group_label: null, team_a_id: EA, team_b_id: EB, score_a: null, score_b: null, winner_id: null, status: 'pending', scheduled_at: '2026-10-20T12:00:00.000Z', stream_url: null }],
     tournament_lobbies: [{ id: L1, tournament_id: T1, round: 1, position: 1, label: null, status: 'pending', scheduled_at: '2026-10-20T14:00:00.000Z', stream_url: null }],
     tournament_match_staff_discord: [],
+    tournament_match_mapban: [],
     tournament_lobby_entries: [
       { id: 'e1', lobby_id: L1, team_id: EA, placement: null, points: 0, dnf: false, sort_order: 0 },
       { id: 'e2', lobby_id: L1, team_id: EB, placement: null, points: 0, dnf: false, sort_order: 1 },
@@ -52,6 +53,7 @@ export function fauxSite() {
   return {
     tables,
     configure: true,
+    urlSite: 'https://lz.appdashboard.fr',
     lectures: [],
     async lister(t, filters = []) {
       this.lectures.push(t);

@@ -140,13 +140,25 @@ terminé en gardant son **historique dans l'app**.
   **Intégrer des liens** (embeds), Joindre des fichiers, Lire l'historique ; « Gérer les messages » pour la donner au
   staff (sinon le staff écrit sans pouvoir modérer) ; « Mentionner @everyone, @here et tous les rôles » pour que la
   mention d'un rôle d'équipe notifie (sans elle, les joueurs sont mentionnés un par un).
+- **Map ban du match** (migration 0084) : quand le staff lance le map ban d'un match ou d'un lobby sur le site, le salon
+  reçoit UN message (aucune mention) : « le map ban a été envoyé au capitaine de chaque équipe », le lien de suivi du
+  match, et l'équipe qui commence. Cette équipe est **tirée au sort par le site à la création** (pile ou face équitable,
+  côté serveur, figée dans la séquence du map ban : un rechargement ne la change jamais ; l'ordre des tours ensuite est
+  inchangé). Le lien est la page **publique** de suivi (`/mapban/<id>`, sans jeton) : les liens personnels des capitaines
+  (qui permettent de jouer leur tour) ne quittent jamais leurs messages privés, et la vue du site lue par le pont n'expose
+  aucun jeton. À la fin du map ban, UN second message donne la ou les maps jouées, dans l'ordre (picks puis map
+  restante). Chaque message part une seule fois par map ban (`mapban_annonce`, `mapban_fin` de `club_salons_match`) ; un
+  map ban relancé par le staff est annoncé de nouveau. Rien de tactique : pas de détail des bans, seulement le résultat
+  déjà public sur la page du map ban. Site pas à jour (vue absente) : aucun effet.
 - Code : `esport/noyau/evenements-club/salons-match.mjs`, `boucle-salons.mjs`, `esport/noyau/site-lz/poussee.mjs`,
   `src/esport/ui/evenements/SalonsMatch.tsx`. Migrations 0073 (`club_evenements.salons_match`, table
-  `club_salons_match`) et 0079 (file `club_salons_match_envois`, avis `site_lz_pousses`, nonces `site_lz_nonces`).
-  Côté site : lecture des matchs, lobbies, résultats et phases, et du staff assigné (vue
+  `club_salons_match`), 0079 (file `club_salons_match_envois`, avis `site_lz_pousses`, nonces `site_lz_nonces`) et 0084
+  (annonces du map ban). Côté site : lecture des matchs, lobbies, résultats et phases, et du staff assigné (vue
   `tournament_match_staff_discord` : nom et Discord ID) ouverte à la clé du pont (`api/serveur/cles.mjs`, migration
-  0008 du site) ; avis poussés (`api/serveur/pousse.mjs`, migration 0009 du site). Tests :
-  `esport/test/salons-match.test.mjs`, `esport/test/salons-match-fiables.test.mjs`, `src/esport/Evenements.test.tsx`.
+  0008 du site) ; avis poussés (`api/serveur/pousse.mjs`, migration 0009 du site) ; map ban (vue
+  `tournament_match_mapban`, migration 0010 du site : équipe qui commence, maps, jamais de jeton ; avis poussé au
+  lancement et à la fin du map ban). Tests : `esport/test/salons-match.test.mjs`, `esport/test/salons-match-fiables.test.mjs`,
+  `esport/test/salons-match-mapban.test.mjs`, `src/esport/Evenements.test.tsx`.
 
 ### Synchronisation poussée (site → AppDashboard)
 
